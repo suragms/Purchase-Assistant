@@ -177,12 +177,26 @@ class SessionNotifier extends Notifier<Session?> {
     final cur = state;
     if (cur == null) return;
     state = Session(
-        accessToken: access, refreshToken: refresh, businesses: cur.businesses);
+      accessToken: access,
+      refreshToken: refresh,
+      businesses: cur.businesses,
+      isSuperAdmin: cur.isSuperAdmin,
+    );
+  }
+
+  Future<bool> _readIsSuperAdmin(HexaApi api) async {
+    try {
+      final p = await api.meProfile();
+      return p['is_super_admin'] == true;
+    } catch (_) {
+      return false;
+    }
   }
 
   Future<void> _persistSession(Session session) async {
     final cache = SessionCache(ref.read(sharedPreferencesProvider));
-    await cache.saveBusinesses(session.businesses);
+    await cache.saveBusinesses(session.businesses,
+        isSuperAdmin: session.isSuperAdmin);
   }
 
   /// Post-login bootstrap: does not block [restore] / [login] UI — runs after a microtask.
@@ -226,6 +240,7 @@ class SessionNotifier extends Notifier<Session?> {
           accessToken: state!.accessToken,
           refreshToken: state!.refreshToken,
           businesses: list,
+          isSuperAdmin: state!.isSuperAdmin,
         );
         await _persistSession(state!);
         if (_disposed) return;
@@ -278,10 +293,12 @@ class SessionNotifier extends Notifier<Session?> {
         authRefresh.value++;
         return;
       }
+      final isSa = await _readIsSuperAdmin(api);
       final session = Session(
           accessToken: t.access!,
           refreshToken: t.refresh!,
-          businesses: businesses);
+          businesses: businesses,
+          isSuperAdmin: isSa);
       state = session;
       await _persistSession(session);
       authRefresh.value++;
@@ -316,10 +333,12 @@ class SessionNotifier extends Notifier<Session?> {
             authRefresh.value++;
             return;
           }
+          final isSa = await _readIsSuperAdmin(api);
           final session = Session(
               accessToken: pair.access,
               refreshToken: pair.refresh,
-              businesses: businesses);
+              businesses: businesses,
+              isSuperAdmin: isSa);
           state = session;
           await _persistSession(session);
           authRefresh.value++;
@@ -353,7 +372,8 @@ class SessionNotifier extends Notifier<Session?> {
           state = Session(
               accessToken: t.access!,
               refreshToken: t.refresh!,
-              businesses: cached);
+              businesses: cached,
+              isSuperAdmin: cache.loadIsSuperAdmin());
           authRefresh.value++;
           _warmWorkspaceListCaches();
           return;
@@ -367,7 +387,8 @@ class SessionNotifier extends Notifier<Session?> {
         state = Session(
             accessToken: t.access!,
             refreshToken: t.refresh!,
-            businesses: cached);
+            businesses: cached,
+            isSuperAdmin: cache.loadIsSuperAdmin());
         authRefresh.value++;
         _warmWorkspaceListCaches();
         return;
@@ -380,7 +401,8 @@ class SessionNotifier extends Notifier<Session?> {
         state = Session(
             accessToken: t.access!,
             refreshToken: t.refresh!,
-            businesses: cached);
+            businesses: cached,
+            isSuperAdmin: cache.loadIsSuperAdmin());
         authRefresh.value++;
         _warmWorkspaceListCaches();
         return;
@@ -412,10 +434,12 @@ class SessionNotifier extends Notifier<Session?> {
     await store.write(access: tokens.access, refresh: tokens.refresh);
     api.setAuthToken(tokens.access);
     var businesses = await api.meBusinesses();
+    final isSa = await _readIsSuperAdmin(api);
     var session = Session(
         accessToken: tokens.access,
         refreshToken: tokens.refresh,
-        businesses: businesses);
+        businesses: businesses,
+        isSuperAdmin: isSa);
     state = session;
     await _persistSession(session);
     authRefresh.value++;
@@ -454,10 +478,12 @@ class SessionNotifier extends Notifier<Session?> {
     await store.write(access: tokens.access, refresh: tokens.refresh);
     api.setAuthToken(tokens.access);
     var businesses = await api.meBusinesses();
+    final isSa = await _readIsSuperAdmin(api);
     var session = Session(
         accessToken: tokens.access,
         refreshToken: tokens.refresh,
-        businesses: businesses);
+        businesses: businesses,
+        isSuperAdmin: isSa);
     state = session;
     await _persistSession(session);
     authRefresh.value++;
@@ -476,10 +502,12 @@ class SessionNotifier extends Notifier<Session?> {
     await store.write(access: tokens.access, refresh: tokens.refresh);
     api.setAuthToken(tokens.access);
     var businesses = await api.meBusinesses();
+    final isSa = await _readIsSuperAdmin(api);
     var session = Session(
         accessToken: tokens.access,
         refreshToken: tokens.refresh,
-        businesses: businesses);
+        businesses: businesses,
+        isSuperAdmin: isSa);
     state = session;
     await _persistSession(session);
     authRefresh.value++;
@@ -497,6 +525,7 @@ class SessionNotifier extends Notifier<Session?> {
       accessToken: cur.accessToken,
       refreshToken: cur.refreshToken,
       businesses: businesses,
+      isSuperAdmin: cur.isSuperAdmin,
     );
     await _persistSession(state!);
     authRefresh.value++;

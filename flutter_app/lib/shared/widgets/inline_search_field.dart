@@ -202,7 +202,7 @@ class _InlineSearchFieldState extends State<InlineSearchField> {
     }
     final byCount = optionCount * 56.0 + 48;
     final v = math.max(120.0, math.min(usable * 0.42, byCount));
-    return math.min(280.0, v);
+    return math.min(240.0, v);
   }
 
   @override
@@ -290,9 +290,25 @@ class _InlineSearchFieldState extends State<InlineSearchField> {
             ) {
               final opts = options.toList();
               if (opts.isEmpty) return const SizedBox.shrink();
+              final mq = MediaQuery.of(context);
+              final visibleHeight = mq.size.height - mq.viewInsets.bottom;
+              final fieldBox =
+                  _focus.context?.findRenderObject() as RenderBox?;
+              final panelH = _optionsMaxHeight(context, opts.length);
+              var lift = 0.0;
+              if (fieldBox != null && fieldBox.hasSize) {
+                final bottom =
+                    fieldBox.localToGlobal(Offset.zero).dy + fieldBox.size.height;
+                if (bottom > visibleHeight * 0.6 ||
+                    bottom + panelH > visibleHeight - 8) {
+                  lift = -(panelH + fieldBox.size.height + 8);
+                }
+              }
               return TapRegion(
                 groupId: _suggestionTapGroup,
-                child: Align(
+                child: Transform.translate(
+                  offset: Offset(0, lift),
+                  child: Align(
                   alignment: Alignment.topLeft,
                   child: Material(
                     elevation: 8,
@@ -396,6 +412,7 @@ class _InlineSearchFieldState extends State<InlineSearchField> {
                       ),
                     ),
                   ),
+                ),
                 ),
               );
             },

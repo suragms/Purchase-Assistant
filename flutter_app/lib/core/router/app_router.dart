@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../auth/session_notifier.dart';
+import 'post_auth_route.dart'
+    show authenticatedHomePath, sessionCanManageUsers, sessionIsStaff;
 import '../models/trade_purchase_models.dart';
 import 'page_transitions.dart';
 import '../../features/analytics/presentation/full_reports_page.dart';
@@ -17,11 +19,9 @@ import '../../features/catalog/presentation/catalog_page.dart';
 import '../../features/catalog/presentation/catalog_type_items_page.dart';
 import '../../features/catalog/presentation/quick_add_catalog_item_page.dart';
 import '../../features/catalog/presentation/batch_item_create_page.dart';
-import '../../features/assistant/presentation/assistant_chat_page.dart';
 import '../../features/auth/presentation/forgot_password_page.dart';
 import '../../features/auth/presentation/login_page.dart';
 import '../../features/auth/presentation/reset_password_page.dart';
-import '../../features/auth/presentation/signup_page.dart';
 import '../../features/contacts/presentation/broker_detail_page.dart';
 import '../../features/contacts/presentation/broker_wizard_page.dart';
 import '../../features/contacts/presentation/category_items_page.dart';
@@ -47,14 +47,34 @@ import '../../features/notifications/presentation/notifications_page.dart';
 import '../../features/settings/presentation/business_profile_page.dart';
 import '../../features/settings/presentation/maintenance_history_page.dart';
 import '../../features/settings/presentation/settings_page.dart';
+import '../../features/settings/presentation/user_management_page.dart';
+import '../../features/settings/presentation/user_detail_page.dart';
 import '../../features/settings/presentation/backup_page.dart';
 import '../../features/search/presentation/search_page.dart';
+import '../../features/barcode/presentation/barcode_print_page.dart';
+import '../../features/barcode/presentation/bulk_barcode_print_page.dart';
+import '../../features/barcode/presentation/barcode_scan_page.dart';
+import '../../features/stock/presentation/stock_page.dart';
+import '../../features/stock/presentation/stock_history_page.dart';
+import '../../features/staff/presentation/staff_home_page.dart';
+import '../../features/staff/presentation/staff_shell_screen.dart';
+import '../../features/staff/presentation/staff_activity_page.dart';
 import '../../features/shell/shell_screen.dart';
 import '../../features/splash/presentation/splash_page.dart';
+import '../../features/admin/presentation/super_admin_page.dart';
 import '../../features/get_started/presentation/get_started_page.dart';
 import '../../features/voice/presentation/voice_page.dart';
 
 final _rootNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'root');
+
+bool _isOwnerShellTab(String loc) {
+  if (loc == '/home' || loc.startsWith('/home/')) return true;
+  if (loc == '/stock') return true;
+  if (loc == '/reports') return true;
+  if (loc == '/purchase') return true;
+  if (loc == '/search') return true;
+  return false;
+}
 
 final appRouterProvider = Provider<GoRouter>((ref) {
   return GoRouter(
@@ -77,7 +97,6 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       final public = loc == '/splash' ||
           loc == '/get-started' ||
           loc == '/login' ||
-          loc == '/signup' ||
           loc == '/forgot-password' ||
           loc == '/reset-password';
 
@@ -93,6 +112,9 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       final session = container.read(sessionProvider);
       // No session → only public auth/onboarding routes. (JWT may still be restoring in main(); splash handles that.)
       if (session == null) {
+        if (loc == '/signup') {
+          return '/login?tab=signin&notice=owner_only';
+        }
         if (public) return null;
         return '/login';
       }
@@ -105,8 +127,32 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       if (loc == '/forgot-password') {
         return null;
       }
+      if (loc == '/signup') {
+        return '/login?tab=signin&notice=owner_only';
+      }
+      if (loc == '/assistant' || loc == '/ai') {
+        return authenticatedHomePath(session);
+      }
+      if (loc == '/admin' && !session.isSuperAdmin) {
+        return '/settings';
+      }
+      if (loc.startsWith('/settings/users') &&
+          !sessionCanManageUsers(session)) {
+        return '/settings';
+      }
+      if (sessionIsStaff(session)) {
+        if (loc.startsWith('/staff')) return null;
+        if (_isOwnerShellTab(loc)) {
+          if (loc == '/stock') return '/staff/stock';
+          if (loc == '/search') return '/staff/search';
+          if (loc == '/home' || loc.startsWith('/home/')) return '/staff/home';
+          return '/staff/home';
+        }
+      } else {
+        if (loc.startsWith('/staff')) return '/home';
+      }
       // Signed in → skip other auth / onboarding screens.
-      if (public) return '/home';
+      if (public) return authenticatedHomePath(session);
       return null;
     },
     routes: [
@@ -133,13 +179,6 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         pageBuilder: (context, state) => iosPushPage(
           key: state.pageKey,
           child: const LoginPage(),
-        ),
-      ),
-      GoRoute(
-        path: '/signup',
-        pageBuilder: (context, state) => iosPushPage(
-          key: state.pageKey,
-          child: const SignupPage(),
         ),
       ),
       GoRoute(
@@ -177,6 +216,33 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         ),
       ),
       GoRoute(
+        path: '/barcode/scan',
+        name: 'barcode_scan',
+        pageBuilder: (context, state) => iosPushPage(
+          key: state.pageKey,
+          child: const BarcodeScanPage(),
+        ),
+      ),
+      GoRoute(
+        path: '/barcode/print/:itemId',
+        name: 'barcode_print',
+        pageBuilder: (context, state) {
+          final itemId = state.pathParameters['itemId']!;
+          return iosPushPage(
+            key: state.pageKey,
+            child: BarcodePrintPage(itemId: itemId),
+          );
+        },
+      ),
+      GoRoute(
+        path: '/barcode/bulk-print',
+        name: 'barcode_bulk_print',
+        pageBuilder: (context, state) => iosPushPage(
+          key: state.pageKey,
+          child: const BulkBarcodePrintPage(),
+        ),
+      ),
+      GoRoute(
         path: '/catalog/quick-add',
         name: 'catalog_quick_add',
         pageBuilder: (context, state) => iosPushPage(
@@ -206,9 +272,14 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         pageBuilder: (context, state) {
           final cid = state.pathParameters['categoryId']!;
           final tid = state.pathParameters['typeId']!;
+          final sid = state.uri.queryParameters['defaultSupplierId']?.trim();
           return iosPushPage(
             key: state.pageKey,
-            child: CatalogAddItemPage(categoryId: cid, typeId: tid),
+            child: CatalogAddItemPage(
+              categoryId: cid,
+              typeId: tid,
+              defaultSupplierId: sid != null && sid.isNotEmpty ? sid : null,
+            ),
           );
         },
       ),
@@ -219,6 +290,17 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           return iosPushPage(
             key: state.pageKey,
             child: CatalogItemDetailPage(itemId: id),
+          );
+        },
+      ),
+      GoRoute(
+        path: '/stock/:itemId/history',
+        pageBuilder: (context, state) {
+          final id = state.pathParameters['itemId']!;
+          final name = state.uri.queryParameters['name'];
+          return iosPushPage(
+            key: state.pageKey,
+            child: StockHistoryPage(itemId: id, itemName: name),
           );
         },
       ),
@@ -370,15 +452,40 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         ),
       ),
       GoRoute(
-        path: '/ai',
-        redirect: (context, state) => '/assistant',
-      ),
-      GoRoute(
-        path: '/assistant',
-        name: 'assistant_chat',
+        path: '/settings/users',
+        name: 'settings_users',
         pageBuilder: (context, state) => iosPushPage(
           key: state.pageKey,
-          child: const AssistantChatPage(),
+          child: const UserManagementPage(),
+        ),
+        routes: [
+          GoRoute(
+            path: ':userId',
+            name: 'settings_user_detail',
+            pageBuilder: (context, state) {
+              final id = state.pathParameters['userId']!;
+              return iosPushPage(
+                key: state.pageKey,
+                child: UserDetailPage(userId: id),
+              );
+            },
+          ),
+        ],
+      ),
+      GoRoute(
+        path: '/admin',
+        name: 'super_admin',
+        pageBuilder: (context, state) => iosPushPage(
+          key: state.pageKey,
+          child: const SuperAdminPage(),
+        ),
+      ),
+      GoRoute(
+        path: '/staff/activity',
+        name: 'staff_activity',
+        pageBuilder: (context, state) => iosPushPage(
+          key: state.pageKey,
+          child: const StaffActivityPage(),
         ),
       ),
       GoRoute(
@@ -584,7 +691,17 @@ final appRouterProvider = Provider<GoRouter>((ref) {
               ),
             ],
           ),
-          // Branch 1 — Reports (full analytics UI)
+          // Branch 1 — Stock list
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/stock',
+                name: 'stock_tab',
+                builder: (context, state) => const StockPage(),
+              ),
+            ],
+          ),
+          // Branch 2 — Reports (full analytics UI)
           StatefulShellBranch(
             routes: [
               GoRoute(
@@ -594,7 +711,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
               ),
             ],
           ),
-          // Branch 2 — History (purchase list)
+          // Branch 3 — History (purchase list)
           StatefulShellBranch(
             routes: [
               GoRoute(
@@ -604,7 +721,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
               ),
             ],
           ),
-          // Branch 3 — Global search (tab); Assistant is `/assistant` full-screen push.
+          // Branch 4 — Global search (tab); Assistant is `/assistant` full-screen push.
           StatefulShellBranch(
             routes: [
               GoRoute(
@@ -612,6 +729,58 @@ final appRouterProvider = Provider<GoRouter>((ref) {
                 name: 'search_tab',
                 builder: (context, state) =>
                     const SearchPage(embeddedInShell: true),
+              ),
+            ],
+          ),
+        ],
+      ),
+      StatefulShellRoute.indexedStack(
+        pageBuilder: (context, state, navigationShell) =>
+            NoTransitionPage<void>(
+          key: state.pageKey,
+          name: state.name ?? state.path,
+          restorationId: state.pageKey.value,
+          child: SizedBox.expand(
+            child: StaffShellScreen(navigationShell: navigationShell),
+          ),
+        ),
+        branches: [
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/staff/home',
+                name: 'staff_home',
+                builder: (context, state) => const StaffHomePage(),
+              ),
+            ],
+          ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/staff/stock',
+                name: 'staff_stock',
+                builder: (context, state) => const StockPage(),
+              ),
+            ],
+          ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/staff/scan',
+                name: 'staff_scan',
+                builder: (context, state) => const BarcodeScanPage(),
+              ),
+            ],
+          ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/staff/search',
+                name: 'staff_search',
+                builder: (context, state) => const SearchPage(
+                  embeddedInShell: true,
+                  staffShellEmbedded: true,
+                ),
               ),
             ],
           ),
@@ -669,7 +838,7 @@ class GoRouterErrorScreen extends ConsumerWidget {
               FilledButton(
                 onPressed: () {
                   if (session != null) {
-                    context.go('/home');
+                    context.go(authenticatedHomePath(session));
                   } else {
                     context.go('/login');
                   }

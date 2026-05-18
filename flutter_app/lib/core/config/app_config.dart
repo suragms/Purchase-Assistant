@@ -95,4 +95,7 @@ class AppConfig {
     'CLOUD_UPI_PAYEE_NAME',
     defaultValue: 'Workspace billing',
   );
+
+  /// Keep in sync with `pubspec.yaml` `version:` (shown in Settings).
+  static const String packageVersion = '0.1.4+5';
 }

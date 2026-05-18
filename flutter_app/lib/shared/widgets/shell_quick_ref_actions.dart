@@ -2,11 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/auth/session_notifier.dart';
 import '../../core/providers/notifications_provider.dart';
+import '../../core/router/post_auth_route.dart';
 import '../../core/theme/hexa_colors.dart';
 import 'app_settings_action.dart';
 
-/// Catalog, Contacts, optional Refresh, Search tab, Assistant (push), Alerts, Settings.
+/// Catalog, Contacts, optional Refresh, Search tab, Alerts, Settings.
 class ShellQuickRefActions extends ConsumerWidget {
   const ShellQuickRefActions({
     super.key,
@@ -29,7 +31,10 @@ class ShellQuickRefActions extends ConsumerWidget {
       children: [
         IconButton(
           tooltip: 'Home',
-          onPressed: () => context.go('/home'),
+          onPressed: () {
+            final s = ref.read(sessionProvider);
+            if (s != null) context.go(authenticatedHomePath(s));
+          },
           icon: Icon(Icons.home_outlined, color: icon, size: 22),
           padding: const EdgeInsets.all(8),
         ),
@@ -59,12 +64,6 @@ class ShellQuickRefActions extends ConsumerWidget {
             icon: Icon(Icons.search_rounded, color: icon, size: 22),
             padding: const EdgeInsets.all(8),
           ),
-        IconButton(
-          tooltip: 'Assistant',
-          onPressed: () => context.push('/assistant'),
-          icon: Icon(Icons.chat_bubble_outline_rounded, color: icon, size: 22),
-          padding: const EdgeInsets.all(8),
-        ),
         _AlertsIconButton(icon: icon),
         const AppSettingsAction(),
         const SizedBox(width: 4),

@@ -10,6 +10,7 @@ import 'package:share_plus/share_plus.dart';
 import '../../../core/utils/snack.dart';
 
 import '../../../core/auth/session_notifier.dart';
+import '../../../core/router/post_auth_route.dart';
 import '../../../core/errors/user_facing_errors.dart';
 import '../../../core/models/trade_purchase_models.dart';
 import '../../../core/providers/analytics_kpi_provider.dart';
@@ -1005,7 +1006,10 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
         leading: IconButton(
           tooltip: 'Home',
           icon: const Icon(Icons.home_outlined),
-          onPressed: () => context.go('/home'),
+          onPressed: () {
+            final s = ref.read(sessionProvider);
+            if (s != null) context.go(authenticatedHomePath(s));
+          },
         ),
         title: const Text('Reports'),
         backgroundColor: HexaColors.brandBackground,

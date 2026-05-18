@@ -95,6 +95,7 @@ class TradePurchaseLineIn(DecimalModel):
     weight_per_tin: Decimal | None = Field(None, gt=0)
     discount: Decimal | None = Field(None, ge=0)
     tax_percent: Decimal | None = Field(None, ge=0)
+    tax_mode: str | None = Field(default="exclusive", pattern="^(exclusive|inclusive|none)$")
     payment_days: int | None = Field(None, ge=0, le=3650)
     hsn_code: str | None = Field(None, max_length=32)
     item_code: str | None = Field(None, max_length=64)

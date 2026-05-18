@@ -31,6 +31,12 @@ from app.schemas.trade_purchases import (
 )
 from app.read_cache_generation import bump_trade_read_caches_for_business
 from app.services import decimal_precision as dp
+from app.services.stock_inventory import apply_confirmed_purchase_stock
+
+
+def _line_tax_mode(li: TradePurchaseLineIn) -> str:
+    tm = (getattr(li, "tax_mode", None) or "exclusive").strip().lower()
+    return tm if tm in ("exclusive", "inclusive", "none") else "exclusive"
 from app.services.aggregate_totals_service import aggregate_landing_selling_profit
 from app.services.line_totals_service import (
     line_gross_base as _line_gross_base,
@@ -891,6 +897,7 @@ async def create_trade_purchase(
                 selling_cost=dp.rate(li.selling_cost) if li.selling_cost is not None else None,
                 discount=dp.percent(li.discount) if li.discount is not None else None,
                 tax_percent=dp.percent(li.tax_percent) if li.tax_percent is not None else None,
+                tax_mode=_line_tax_mode(li),
                 payment_days=li.payment_days,
                 hsn_code=(li.hsn_code.strip() if (li.hsn_code and li.hsn_code.strip()) else None),
                 item_code=(li.item_code.strip() if (li.item_code and str(li.item_code).strip()) else None),
@@ -898,6 +905,14 @@ async def create_trade_purchase(
             )
         )
     await _sync_purchase_memory(db, business_id, body, trade_purchase_id=tp.id)
+    if initial_status == "confirmed":
+        await apply_confirmed_purchase_stock(
+            db,
+            business_id,
+            user_id,
+            body.lines,
+            purchase_human_id=human_id,
+        )
     await db.commit()
     bump_trade_read_caches_for_business(business_id)
     res = await db.execute(
@@ -935,6 +950,7 @@ async def update_trade_purchase(
     tp = res.scalar_one_or_none()
     if not tp:
         return None
+    prev_status = (tp.status or "").lower()
     if (tp.status or "").lower() == "deleted":
         raise ValueError("Cannot edit a deleted purchase")
     if (tp.status or "").lower() == "cancelled":
@@ -1016,6 +1032,7 @@ async def update_trade_purchase(
                 selling_cost=dp.rate(li.selling_cost) if li.selling_cost is not None else None,
                 discount=dp.percent(li.discount) if li.discount is not None else None,
                 tax_percent=dp.percent(li.tax_percent) if li.tax_percent is not None else None,
+                tax_mode=_line_tax_mode(li),
                 payment_days=li.payment_days,
                 hsn_code=(li.hsn_code.strip() if (li.hsn_code and li.hsn_code.strip()) else None),
                 item_code=(li.item_code.strip() if (li.item_code and str(li.item_code).strip()) else None),
@@ -1029,6 +1046,14 @@ async def update_trade_purchase(
         tp.paid_amount = dp.money(total_dec)
     tp.updated_at = utcnow()
     await _sync_purchase_memory(db, business_id, body, trade_purchase_id=tp.id)
+    if new_status == "confirmed" and prev_status not in ("confirmed",):
+        await apply_confirmed_purchase_stock(
+            db,
+            business_id,
+            tp.user_id,
+            body.lines,
+            purchase_human_id=tp.human_id,
+        )
     await db.commit()
     bump_trade_read_caches_for_business(business_id)
     res2 = await db.execute(

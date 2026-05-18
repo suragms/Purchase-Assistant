@@ -1,3 +1,4 @@
+import '../services/smart_unit_service.dart';
 import 'smart_unit_classifier.dart';
 
 class LineValidationIssue {
@@ -9,6 +10,10 @@ class LineValidationIssue {
 /// Lightweight client-side checks; backend must re-validate all money fields.
 class SmartValidationEngine {
   SmartValidationEngine._();
+
+  /// Catalog add-item hint: `bag` | `box` | `kg` | `tin` | `piece`, or null.
+  static String? detectUnitFromName(String itemName) =>
+      SmartUnitService.detectFromName(itemName)?.catalogUnit;
 
   static List<LineValidationIssue> validateLine({
     required double qty,

@@ -9,6 +9,7 @@ import 'package:speech_to_text/speech_to_text.dart' as stt;
 
 import '../../../core/auth/auth_error_messages.dart';
 import '../../../core/auth/session_notifier.dart';
+import '../../../core/router/post_auth_route.dart';
 import '../../../core/services/offline_store.dart';
 import '../../../core/providers/health_provider.dart';
 import 'assistant_chat_theme.dart';
@@ -564,6 +565,10 @@ class _AssistantChatPageState extends ConsumerState<AssistantChatPage> {
               title: 'Assistant',
               subtitle: _subtitleRow(),
               onMenu: () => _showAssistantMenu(context),
+              onFallbackPop: () {
+                final s = ref.read(sessionProvider);
+                if (s != null) context.go(authenticatedHomePath(s));
+              },
             ),
             Expanded(
               child: ListView.builder(
@@ -822,7 +827,8 @@ class _AssistantChatPageState extends ConsumerState<AssistantChatPage> {
                 title: const Text('Home'),
                 onTap: () {
                   ctx.pop();
-                  context.go('/home');
+                  final s = ref.read(sessionProvider);
+                  if (s != null) context.go(authenticatedHomePath(s));
                 },
               ),
               SwitchListTile.adaptive(
@@ -864,11 +870,13 @@ class _GradientAppBar extends StatelessWidget {
     required this.title,
     required this.subtitle,
     required this.onMenu,
+    required this.onFallbackPop,
   });
 
   final String title;
   final Widget subtitle;
   final VoidCallback onMenu;
+  final VoidCallback onFallbackPop;
 
   @override
   Widget build(BuildContext context) {
@@ -907,7 +915,7 @@ class _GradientAppBar extends StatelessWidget {
                     context.pop();
                     return;
                   }
-                  context.go('/home');
+                  onFallbackPop();
                 },
               ),
             ),

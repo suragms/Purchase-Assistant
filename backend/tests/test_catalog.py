@@ -176,3 +176,51 @@ def test_catalog_item_create_box_with_items_per_box():
     assert r.status_code == 201, r.text
     assert r.json()["default_items_per_box"] == 12.0
     assert r.json()["default_supplier_ids"] == [sid]
+
+
+def test_catalog_fuzzy_check():
+    h, bid = _auth_and_business()
+    r = client.post(
+        f"/v1/businesses/{bid}/item-categories",
+        json={"name": "TestCat"},
+        headers=h,
+    )
+    assert r.status_code == 201, r.text
+    cid = r.json()["id"]
+    r = client.get(
+        f"/v1/businesses/{bid}/item-categories/{cid}/category-types",
+        headers=h,
+    )
+    assert r.status_code == 200
+    tid = r.json()[0]["id"]
+    sup = client.post(
+        f"/v1/businesses/{bid}/suppliers",
+        json={"name": "S1", "phone": "9111111111", "gst_number": "22AAAAA0000A1Z5"},
+        headers=h,
+    )
+    assert sup.status_code == 201, sup.text
+    sid = sup.json()["id"]
+    r = client.post(
+        f"/v1/businesses/{bid}/catalog-items",
+        json={
+            "category_id": cid,
+            "type_id": tid,
+            "name": "Toor Dal Premium",
+            "default_unit": "kg",
+            "default_supplier_ids": [sid],
+        },
+        headers=h,
+    )
+    assert r.status_code == 201, r.text
+    r = client.get(
+        f"/v1/businesses/{bid}/catalog/fuzzy-check",
+        params={"name": "Toor Dal Prem", "type_id": tid},
+        headers=h,
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert "hits" in body
+    assert len(body["hits"]) >= 1
+    top = body["hits"][0]
+    assert top["score"] >= 0.65
+    assert "Toor" in top["name"]

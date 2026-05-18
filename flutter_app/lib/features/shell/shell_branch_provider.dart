@@ -4,10 +4,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 /// [app_router.dart] and the bottom bar in [ShellScreen].
 abstract final class ShellBranch {
   static const int home = 0;
-  static const int reports = 1;
-  static const int history = 2;
+  static const int stock = 1;
+  static const int reports = 2;
+  static const int history = 3;
   /// Global search (replaces former Assistant tab — Assistant opens from toolbar).
-  static const int search = 3;
+  static const int search = 4;
 }
 
 /// Last-selected main shell tab. Providers defer heavy network work until the

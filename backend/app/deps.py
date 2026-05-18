@@ -139,6 +139,31 @@ async def require_owner_membership(
     return membership
 
 
+def require_role(*roles: str):
+    """RBAC: membership.role must be one of [roles] (or user is super_admin)."""
+
+    async def _dep(
+        membership: Annotated[Membership, Depends(require_membership)],
+        user: Annotated[User, Depends(get_current_user)],
+    ) -> Membership:
+        if user.is_super_admin:
+            return membership
+        if membership.role not in roles:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Access denied. Required roles: {list(roles)}",
+            )
+        return membership
+
+    return _dep
+
+
+async def get_current_user_role(
+    membership: Annotated[Membership, Depends(require_membership)],
+) -> str:
+    return membership.role
+
+
 async def require_super_admin(
     user: Annotated[User, Depends(get_current_user)],
 ) -> User:

@@ -9,14 +9,21 @@ class SessionCache {
   SessionCache(this._prefs);
 
   static const _k = 'session_businesses_cache_json';
+  static const _kSuper = 'session_is_super_admin';
 
   final SharedPreferences _prefs;
 
-  Future<void> saveBusinesses(List<BusinessBrief> list) async {
+  Future<void> saveBusinesses(List<BusinessBrief> list,
+      {bool? isSuperAdmin}) async {
     if (list.isEmpty) return;
     final encoded = jsonEncode(list.map((e) => e.toJson()).toList());
     await _prefs.setString(_k, encoded);
+    if (isSuperAdmin != null) {
+      await _prefs.setBool(_kSuper, isSuperAdmin);
+    }
   }
+
+  bool loadIsSuperAdmin() => _prefs.getBool(_kSuper) ?? false;
 
   List<BusinessBrief>? loadBusinesses() {
     final s = _prefs.getString(_k);
@@ -34,5 +41,6 @@ class SessionCache {
 
   Future<void> clear() async {
     await _prefs.remove(_k);
+    await _prefs.remove(_kSuper);
   }
 }

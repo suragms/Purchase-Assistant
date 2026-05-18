@@ -1,6 +1,9 @@
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../../core/pricing/tax_mode.dart';
 import '../domain/purchase_draft.dart' show RateTaxBasis;
+
+const _kLineTaxMode = 'pref_purchase_line_tax_mode_v1';
 
 const _kPurchaseGlobal = 'pref_gst_purchase_rate_basis_v1';
 const _kSellingGlobal = 'pref_gst_selling_rate_basis_v1';
@@ -49,4 +52,15 @@ class GstRateBasisPrefs {
 
   static Future<void> saveSelling(SharedPreferences p, RateTaxBasis basis) =>
       p.setString(_kSellingGlobal, _basisToPref(basis));
+}
+
+/// Last-selected GST basis for purchase line preview (exclusive / inclusive / none).
+class PurchaseLineTaxModePrefs {
+  PurchaseLineTaxModePrefs._();
+
+  static TaxMode read(SharedPreferences p) =>
+      taxModeFromWire(p.getString(_kLineTaxMode)) ?? TaxMode.exclusive;
+
+  static Future<void> save(SharedPreferences p, TaxMode mode) =>
+      p.setString(_kLineTaxMode, taxModeToWire(mode));
 }

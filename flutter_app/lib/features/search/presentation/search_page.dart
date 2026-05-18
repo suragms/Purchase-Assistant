@@ -8,9 +8,11 @@ import 'package:intl/intl.dart';
 import '../../../core/auth/session_notifier.dart';
 import '../../../core/providers/recent_unified_search_provider.dart';
 import '../../../core/router/navigation_ext.dart';
+import '../../../core/router/post_auth_route.dart';
 import '../../../core/widgets/friendly_load_error.dart';
 import '../../../shared/widgets/trade_intel_cards.dart';
 import '../../shell/shell_branch_provider.dart';
+import '../../staff/staff_shell_branch_provider.dart';
 
 const Duration _unifiedSearchTtl = Duration(seconds: 12);
 const int _unifiedSearchCacheMaxEntries = 40;
@@ -165,10 +167,17 @@ Widget _purchaseLineSummaryRich(BuildContext context, Map<String, dynamic> line)
 }
 
 class SearchPage extends ConsumerStatefulWidget {
-  const SearchPage({super.key, this.embeddedInShell = false});
+  const SearchPage({
+    super.key,
+    this.embeddedInShell = false,
+    this.staffShellEmbedded = false,
+  });
 
   /// When true (main shell tab), hide back affordance and refocus search when tab is selected.
   final bool embeddedInShell;
+
+  /// Staff shell tab — refocus when [StaffShellBranch.search] is selected.
+  final bool staffShellEmbedded;
 
   @override
   ConsumerState<SearchPage> createState() => _SearchPageState();
@@ -361,6 +370,15 @@ class _SearchPageState extends ConsumerState<SearchPage> {
         }
       });
     }
+    if (widget.staffShellEmbedded) {
+      ref.listen<int>(staffShellCurrentBranchProvider, (prev, next) {
+        if (next == StaffShellBranch.search) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) _focus.requestFocus();
+          });
+        }
+      });
+    }
     final cs = Theme.of(context).colorScheme;
     final tt = Theme.of(context).textTheme;
     final q = _debounced.toLowerCase();
@@ -371,9 +389,9 @@ class _SearchPageState extends ConsumerState<SearchPage> {
 
     final listPadding = EdgeInsets.fromLTRB(
       16,
-      widget.embeddedInShell ? 4 : 12,
+      (widget.embeddedInShell || widget.staffShellEmbedded) ? 4 : 12,
       16,
-      (widget.embeddedInShell ? 96 : 32) +
+      ((widget.embeddedInShell || widget.staffShellEmbedded) ? 96 : 32) +
           MediaQuery.viewPaddingOf(context).bottom,
     );
 
@@ -607,7 +625,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                           ),
                         ),
                       ),
-                    if (!widget.embeddedInShell) ...[
+                    if (!(widget.embeddedInShell || widget.staffShellEmbedded)) ...[
                       SingleChildScrollView(
                         scrollDirection: Axis.horizontal,
                         child: Row(
@@ -1110,7 +1128,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
       );
     }
 
-    if (widget.embeddedInShell) {
+    if (widget.embeddedInShell || widget.staffShellEmbedded) {
       return Scaffold(
         resizeToAvoidBottomInset: true,
         body: SafeArea(
@@ -1131,7 +1149,11 @@ class _SearchPageState extends ConsumerState<SearchPage> {
       appBar: AppBar(
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_rounded),
-          onPressed: () => context.popOrGo('/home'),
+          onPressed: () {
+            final s = ref.read(sessionProvider);
+            context.popOrGo(
+                s != null ? authenticatedHomePath(s) : '/login');
+          },
         ),
         title: const Text('Search'),
       ),

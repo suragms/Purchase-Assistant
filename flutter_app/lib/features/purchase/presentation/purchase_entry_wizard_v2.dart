@@ -2134,7 +2134,7 @@ class _PurchaseEntryWizardV2State extends ConsumerState<PurchaseEntryWizardV2>
                   controller: _wizardBodyScrollController,
                   keyboardDismissBehavior:
                       ScrollViewKeyboardDismissBehavior.manual,
-                  padding: EdgeInsets.fromLTRB(16, 12, 16, kbInset > 0 ? 100 : 100),
+                  padding: EdgeInsets.fromLTRB(16, 12, 16, kbInset > 0 ? 250 : 100),
                   child: stepContent,
                 );
           return Column(

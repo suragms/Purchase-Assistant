@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import Settings, get_settings
 from app.database import get_db
 from app.models import Business, Membership, User
+from app.models.user_session import UserSession
 from app.models.password_reset import PasswordResetToken, hash_reset_token, new_reset_token_raw
 from app.schemas.auth import (
     ForgotPasswordRequest,
@@ -54,6 +55,15 @@ async def register(
     settings: Annotated[Settings, Depends(get_settings)],
     body: RegisterRequest,
 ):
+    if not settings.allow_public_registration:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=(
+                "Self-registration is disabled. Ask your workspace owner to create "
+                "your account from Settings → Users."
+            ),
+        )
+
     ex = await db.execute(
         select(User.id).where(or_(User.email == body.email, User.username == body.username))
     )
@@ -186,6 +196,23 @@ async def login(
             or not verify_password(body.password, user.password_hash)
         ):
             raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail="Invalid email or password")
+        if not user.is_active:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Account is inactive")
+
+        now = datetime.now(timezone.utc)
+        user.last_login_at = now
+        user.last_active_at = now
+        mem_q = await db.execute(select(Membership).where(Membership.user_id == user.id).limit(1))
+        mem = mem_q.scalar_one_or_none()
+        db.add(
+            UserSession(
+                user_id=user.id,
+                business_id=mem.business_id if mem else None,
+                login_at=now,
+                is_active=True,
+            )
+        )
+        await db.flush()
 
         try:
             access = create_access_token(user.id, settings)

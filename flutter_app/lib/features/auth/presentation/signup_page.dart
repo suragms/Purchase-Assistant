@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/auth/auth_error_messages.dart';
 import '../../../core/auth/session_notifier.dart';
+import '../../../core/router/post_auth_route.dart';
 import '../../../core/theme/hexa_colors.dart';
 import 'widgets/auth_input_styles.dart';
 import 'widgets/auth_network_error_banner.dart';
@@ -148,7 +149,10 @@ class _SignupPageState extends ConsumerState<SignupPage> {
             password: _passCtrl.text,
             name: _nameCtrl.text.trim(),
           );
-      if (mounted) context.go('/home');
+      if (mounted) {
+        final s = ref.read(sessionProvider);
+        if (s != null) context.go(authenticatedHomePath(s));
+      }
     } on DioException catch (e) {
       if (!mounted) return;
       if (isDioNoConnectionError(e)) {

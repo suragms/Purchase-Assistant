@@ -7,7 +7,7 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field, field_validator, model_validator
-from sqlalchemy import and_, case, delete, desc, func, select
+from sqlalchemy import and_, case, delete, desc, exists, func, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import load_only
@@ -30,6 +30,7 @@ from app.models.catalog import CatalogItemDefaultBroker, CatalogItemDefaultSuppl
 from app.models.contacts import Broker, Supplier
 from app.models.supplier_item_default import SupplierItemDefault
 from app.services import trade_query as tq
+from app.services.fuzzy_catalog import rank_ids_by_token_sort
 from app.services.unit_resolution_service import (
     merge_unit_resolution_into_catalog_row,
     resolve_for_catalog_item,
@@ -85,6 +86,16 @@ class CategoryTypeIndexOut(BaseModel):
     category_id: uuid.UUID
     category_name: str
     name: str
+
+
+class CatalogFuzzyCheckHitOut(BaseModel):
+    id: uuid.UUID
+    name: str
+    score: float = Field(..., ge=0, le=1, description="RapidFuzz token_sort_ratio / 100")
+
+
+class CatalogFuzzyCheckOut(BaseModel):
+    hits: list[CatalogFuzzyCheckHitOut]
 
 
 _UNIT_PATTERN = "^(kg|box|piece|bag|tin)$"
@@ -1341,6 +1352,51 @@ async def delete_category_type(
             )
     await db.delete(t)
     await db.commit()
+
+
+@router.get("/catalog/fuzzy-check", response_model=CatalogFuzzyCheckOut)
+async def catalog_fuzzy_check(
+    business_id: uuid.UUID,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    _m: Annotated[Membership, Depends(require_membership)],
+    name: Annotated[str, Query(min_length=1, max_length=512)],
+    supplier_id: Annotated[uuid.UUID | None, Query()] = None,
+    category_id: Annotated[uuid.UUID | None, Query()] = None,
+    type_id: Annotated[uuid.UUID | None, Query()] = None,
+):
+    """Debounced duplicate hints for catalog item create UIs (token-sort fuzzy)."""
+    del _m
+    stmt = select(CatalogItem.id, CatalogItem.name).where(
+        CatalogItem.business_id == business_id,
+        CatalogItem.deleted_at.is_(None),
+    )
+    if category_id is not None:
+        stmt = stmt.where(CatalogItem.category_id == category_id)
+    if type_id is not None:
+        stmt = stmt.where(CatalogItem.type_id == type_id)
+    if supplier_id is not None:
+        stmt = stmt.where(
+            exists(
+                select(1).where(
+                    CatalogItemDefaultSupplier.catalog_item_id == CatalogItem.id,
+                    CatalogItemDefaultSupplier.supplier_id == supplier_id,
+                )
+            )
+        )
+    r = await db.execute(stmt)
+    pairs: list[tuple[uuid.UUID, str]] = []
+    for iid, nm in r.all():
+        if nm and str(nm).strip():
+            pairs.append((iid, str(nm).strip()))
+    ranked = rank_ids_by_token_sort(name.strip(), pairs, limit=12, score_cutoff=55)
+    id_to_name = dict(pairs)
+    hits: list[CatalogFuzzyCheckHitOut] = []
+    for uid, sc in ranked:
+        nm = id_to_name.get(uid)
+        if nm is None:
+            continue
+        hits.append(CatalogFuzzyCheckHitOut(id=uid, name=nm, score=round(sc / 100.0, 4)))
+    return CatalogFuzzyCheckOut(hits=hits)
 
 
 @router.get("/catalog-items", response_model=list[CatalogItemOut])

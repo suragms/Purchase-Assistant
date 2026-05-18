@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/auth/session_notifier.dart';
+import '../../../core/router/post_auth_route.dart';
 import '../../../core/theme/hexa_colors.dart';
 import '../../../core/theme/theme_context_ext.dart';
 
@@ -53,7 +54,7 @@ class _SplashPageState extends ConsumerState<SplashPage>
     if (!mounted) return;
     final s = ref.read(sessionProvider);
     if (s != null) {
-      context.go('/home');
+      context.go(authenticatedHomePath(s));
       return;
     }
     ({String? access, String? refresh}) t;

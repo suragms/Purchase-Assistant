@@ -112,6 +112,27 @@ class UnitClassifier {
     );
   }
 
+  /// Maps common wholesale label tokens to catalog `default_unit`
+  /// (`bag` | `box` | `kg` | `tin` | `piece`). Returns null when unclear.
+  static String? detectUnitFromName(String rawName) {
+    final name = rawName.toUpperCase().trim();
+    if (name.isEmpty) return null;
+    if (RegExp(r'\d+\s*X\s*\d+', caseSensitive: false).hasMatch(name)) {
+      return 'box';
+    }
+    if (RegExp(r'\d+(?:\.\d+)?\s*KG\b', caseSensitive: false).hasMatch(name)) {
+      return 'bag';
+    }
+    if (RegExp(r'\d+(?:\.\d+)?\s*ML\b', caseSensitive: false).hasMatch(name) ||
+        RegExp(r'\d+(?:\.\d+)?\s*L(?:\b|TR)', caseSensitive: false).hasMatch(name)) {
+      return 'box';
+    }
+    if (RegExp(r'\d+(?:\.\d+)?\s*GM\b', caseSensitive: false).hasMatch(name)) {
+      return 'piece';
+    }
+    return null;
+  }
+
   static bool _isBagOrSackUnit(String effU) {
     return effU == 'BAG' || effU == 'SACK';
   }

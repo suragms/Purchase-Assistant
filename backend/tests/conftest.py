@@ -12,6 +12,8 @@ if str(_root) not in sys.path:
 # see the same schema without touching user temp/OneDrive folders.
 # Force test mode so Settings prefers env over .env (see app/config.py settings_customise_sources).
 os.environ["APP_ENV"] = "test"
+# Tests bootstrap users via POST /v1/auth/register (disabled in production by default).
+os.environ["ALLOW_PUBLIC_REGISTRATION"] = "1"
 os.environ["DATABASE_URL"] = "sqlite+aiosqlite:///file:hexa_pytest?mode=memory&cache=shared&uri=true"
 # `database.py` prefers DATABASE_POOLER_URL over DATABASE_URL when set — force single test DB.
 os.environ["DATABASE_POOLER_URL"] = ""

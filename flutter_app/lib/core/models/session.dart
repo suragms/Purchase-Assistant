@@ -65,11 +65,15 @@ class Session {
     required this.accessToken,
     required this.refreshToken,
     required this.businesses,
+    this.isSuperAdmin = false,
   });
 
   final String accessToken;
   final String refreshToken;
   final List<BusinessBrief> businesses;
+
+  /// Platform super-admin (JWT claim via `/v1/me/profile`), not workspace role.
+  final bool isSuperAdmin;
 
   BusinessBrief get primaryBusiness => businesses.first;
 }

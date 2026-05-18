@@ -1,3 +1,4 @@
+import 'pricing/tax_mode.dart';
 import 'strict_decimal.dart';
 import 'utils/unit_classifier.dart';
 
@@ -77,6 +78,7 @@ class TradeCalcRequest {
     this.freightType,
     this.billtyRate,
     this.deliveredRate,
+    this.lineTaxMode = TaxMode.exclusive,
   });
 
   final List<TradeCalcLine> lines;
@@ -94,6 +96,9 @@ class TradeCalcRequest {
   final double? billtyRate;
   /// Fixed-rupee delivered charge (matches backend [TradePurchaseCreateRequest.delivered_rate]).
   final double? deliveredRate;
+
+  /// How line GST is interpreted for [lineMoneyDecimal] / [computeTradeTotals].
+  final TaxMode lineTaxMode;
 }
 
 class TradeCalcTotals {
@@ -134,16 +139,40 @@ StrictDecimal lineTaxableAfterLineDiscDecimal(TradeCalcLine li) {
 double lineTaxableAfterLineDisc(TradeCalcLine li) =>
     lineTaxableAfterLineDiscDecimal(li).toDouble();
 
-/// Per-line amount after line discount and tax multiplier (matches backend).
-StrictDecimal lineMoneyDecimal(TradeCalcLine li) {
+/// Pre-tax net amount for GST split (same as [lineTaxableAfterLineDiscDecimal] for exclusive; backed out for inclusive).
+StrictDecimal lineNetTaxableDecimal(TradeCalcLine li, {TaxMode taxMode = TaxMode.exclusive}) {
   final afterDisc = lineTaxableAfterLineDiscDecimal(li);
+  if (taxMode == TaxMode.none || taxMode == TaxMode.exclusive) {
+    return afterDisc;
+  }
   final tax = li.taxPercent != null
       ? _dec(li.taxPercent).clamp(max: _thousand)
       : StrictDecimal.zero();
+  if (!tax.isPositive) return afterDisc;
+  final denom = StrictDecimal.parse('1') + tax.divide(_hundred, scale: 8);
+  return afterDisc.divide(denom, scale: 6);
+}
+
+/// Per-line amount after line discount and tax multiplier (matches backend for [TaxMode.exclusive]).
+StrictDecimal lineMoneyDecimal(TradeCalcLine li, {TaxMode taxMode = TaxMode.exclusive}) {
+  final afterDisc = lineTaxableAfterLineDiscDecimal(li);
+  if (taxMode == TaxMode.none) {
+    return afterDisc;
+  }
+  final tax = li.taxPercent != null
+      ? _dec(li.taxPercent).clamp(max: _thousand)
+      : StrictDecimal.zero();
+  if (!tax.isPositive) {
+    return afterDisc;
+  }
+  if (taxMode == TaxMode.inclusive) {
+    return afterDisc;
+  }
   return afterDisc + afterDisc.percentOf(tax);
 }
 
-double lineMoney(TradeCalcLine li) => lineMoneyDecimal(li).toDouble();
+double lineMoney(TradeCalcLine li, {TaxMode taxMode = TaxMode.exclusive}) =>
+    lineMoneyDecimal(li, taxMode: taxMode).toDouble();
 
 /// Per-line freight + delivered + billty (matches backend `line_item_freight_charges`).
 StrictDecimal lineItemFreightChargesDecimal(TradeCalcLine li) {
@@ -264,11 +293,12 @@ double classifierTotalItems({
   }
 }
 
-/// Tax component of [lineMoney] (difference between inclusive and taxable).
-StrictDecimal lineTaxAmountDecimal(TradeCalcLine li) =>
-    lineMoneyDecimal(li) - lineTaxableAfterLineDiscDecimal(li);
+/// Tax component of [lineMoney] for the given [taxMode].
+StrictDecimal lineTaxAmountDecimal(TradeCalcLine li, {TaxMode taxMode = TaxMode.exclusive}) =>
+    lineMoneyDecimal(li, taxMode: taxMode) - lineNetTaxableDecimal(li, taxMode: taxMode);
 
-double lineTaxAmount(TradeCalcLine li) => lineTaxAmountDecimal(li).toDouble();
+double lineTaxAmount(TradeCalcLine li, {TaxMode taxMode = TaxMode.exclusive}) =>
+    lineTaxAmountDecimal(li, taxMode: taxMode).toDouble();
 
 /// Broker commission rupees added to the bill total (matches backend `_header_commission_rupees`).
 StrictDecimal headerCommissionAddOnDecimal({
@@ -353,7 +383,7 @@ TradeCalcTotals computeTradeTotals(TradeCalcRequest req) {
   final hasLineCharges = tradeCalcLinesHaveItemLevelCharges(req.lines);
   for (final li in req.lines) {
     qtySum += _dec(li.qty);
-    amtSum += lineMoneyDecimal(li) + lineItemFreightChargesDecimal(li);
+    amtSum += lineMoneyDecimal(li, taxMode: req.lineTaxMode) + lineItemFreightChargesDecimal(li);
   }
 
   final headerDisc =

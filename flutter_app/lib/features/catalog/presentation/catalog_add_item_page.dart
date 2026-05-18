@@ -8,12 +8,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/auth/session_notifier.dart';
-import '../../../core/providers/brokers_list_provider.dart';
 import '../../../core/providers/business_aggregates_invalidation.dart';
 import '../../../core/providers/catalog_providers.dart';
 import '../../../core/providers/prefs_provider.dart';
 import '../../../core/providers/suppliers_list_provider.dart';
-import '../../../core/search/catalog_fuzzy.dart';
+import '../../../core/services/duplicate_detection_service.dart';
+import '../../../core/services/smart_unit_service.dart';
+import '../../../core/unit_engine/smart_validation_engine.dart';
 import '../../../core/design_system/hexa_ds_tokens.dart';
 import '../../../core/theme/hexa_colors.dart';
 import '../../../core/widgets/form_feedback.dart';
@@ -21,6 +22,10 @@ import '../../../core/widgets/form_field_scroll.dart';
 import '../../../shared/widgets/bag_default_unit_hint.dart';
 import '../../../shared/widgets/inline_search_field.dart';
 import '../../../shared/widgets/keyboard_safe_form_viewport.dart';
+
+const _kPrefLastCategory = 'catalog_last_category_id';
+const _kPrefLastType = 'catalog_last_type_id';
+const _kPrefLastSupplier = 'catalog_last_supplier_id';
 
 const _kUnits = <String>['bag', 'box', 'kg', 'tin', 'piece'];
 
@@ -30,10 +35,13 @@ class CatalogAddItemPage extends ConsumerStatefulWidget {
     super.key,
     required this.categoryId,
     required this.typeId,
+    this.defaultSupplierId,
   });
 
   final String categoryId;
   final String typeId;
+  /// Optional deep-link / query param — pre-selects a default supplier chip.
+  final String? defaultSupplierId;
 
   @override
   ConsumerState<CatalogAddItemPage> createState() => _CatalogAddItemPageState();
@@ -49,13 +57,11 @@ class _CatalogAddItemPageState extends ConsumerState<CatalogAddItemPage> {
   final _itemCode = TextEditingController();
   final _tax = TextEditingController();
   final _supplierSearch = TextEditingController();
-  final _brokerSearch = TextEditingController();
 
   String? _categoryId;
   String? _typeId;
   String? _unit;
   final _supplierIds = <String>[];
-  final _brokerIds = <String>[];
 
   bool _saving = false;
   bool _touched = false;
@@ -65,6 +71,10 @@ class _CatalogAddItemPageState extends ConsumerState<CatalogAddItemPage> {
   String? _kgErr;
   String? _boxErr;
   String? _tinErr;
+
+  CatalogDuplicateDebouncer? _dupDebouncer;
+  List<Map<String, dynamic>> _fuzzyDupHits = const [];
+  final Set<String> _dismissedDupIds = {};
 
   static const _fieldPad = EdgeInsets.symmetric(horizontal: 14, vertical: 12);
 
@@ -78,11 +88,14 @@ class _CatalogAddItemPageState extends ConsumerState<CatalogAddItemPage> {
     super.initState();
     _categoryId = widget.categoryId;
     _typeId = widget.typeId;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    _dupDebouncer = CatalogDuplicateDebouncer(ref.read(hexaApiProvider));
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
       ScaffoldMessenger.of(context).clearSnackBars();
+      await _offerResumeDraft();
+      if (!mounted) return;
+      await _applySavedDefaults();
     });
-    WidgetsBinding.instance.addPostFrameCallback((_) => unawaited(_offerResumeDraft()));
   }
 
   String get _activeDraftKey =>
@@ -127,11 +140,6 @@ class _CatalogAddItemPageState extends ConsumerState<CatalogAddItemPage> {
             ..clear()
             ..addAll((m['supplierIds'] as List).map((e) => e.toString()));
         }
-        if (m['brokerIds'] is List) {
-          _brokerIds
-            ..clear()
-            ..addAll((m['brokerIds'] as List).map((e) => e.toString()));
-        }
         _step = ((m['step'] as num?)?.toInt() ?? 0).clamp(0, 5);
       });
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -162,9 +170,46 @@ class _CatalogAddItemPageState extends ConsumerState<CatalogAddItemPage> {
         'categoryId': _categoryId,
         'typeId': _typeId,
         'supplierIds': _supplierIds,
-        'brokerIds': _brokerIds,
         'step': _step,
       }),
+    );
+  }
+
+  Future<void> _applySavedDefaults() async {
+    final prefs = ref.read(sharedPreferencesProvider);
+    final param = widget.defaultSupplierId?.trim();
+    final sid = (param != null && param.isNotEmpty)
+        ? param
+        : prefs.getString(_kPrefLastSupplier)?.trim();
+    if (sid != null && sid.isNotEmpty && mounted) {
+      setState(() {
+        if (!_supplierIds.contains(sid)) _supplierIds.add(sid);
+      });
+    }
+    final lc = prefs.getString(_kPrefLastCategory)?.trim();
+    final lt = prefs.getString(_kPrefLastType)?.trim();
+    if (lc != null && lc == widget.categoryId && lt != null && lt.isNotEmpty) {
+      final types = await ref.read(categoryTypesListProvider(lc).future);
+      if (!mounted) return;
+      if (types.any((t) => t['id']?.toString() == lt)) {
+        setState(() => _typeId = lt);
+      }
+    }
+  }
+
+  void _scheduleDupCheck() {
+    final session = ref.read(sessionProvider);
+    if (session == null) return;
+    _dupDebouncer?.schedule(
+      businessId: session.primaryBusiness.id,
+      name: _name.text,
+      supplierId: _supplierIds.isNotEmpty ? _supplierIds.first : null,
+      categoryId: _categoryId,
+      typeId: _typeId,
+      onResult: (hits) {
+        if (!mounted) return;
+        setState(() => _fuzzyDupHits = hits);
+      },
     );
   }
 
@@ -179,7 +224,7 @@ class _CatalogAddItemPageState extends ConsumerState<CatalogAddItemPage> {
     _itemCode.dispose();
     _tax.dispose();
     _supplierSearch.dispose();
-    _brokerSearch.dispose();
+    _dupDebouncer?.dispose();
     super.dispose();
   }
 
@@ -249,6 +294,7 @@ class _CatalogAddItemPageState extends ConsumerState<CatalogAddItemPage> {
       ),
     );
     if (id != null) setState(() => _typeId = id);
+    _scheduleDupCheck();
   }
 
   bool get _isValid {
@@ -337,7 +383,7 @@ class _CatalogAddItemPageState extends ConsumerState<CatalogAddItemPage> {
             name: _name.text.trim(),
             defaultUnit: _unit!,
             defaultSupplierIds: List<String>.from(_supplierIds),
-            defaultBrokerIds: List<String>.from(_brokerIds),
+            defaultBrokerIds: const [],
             hsnCode: hsn.isEmpty ? null : hsn,
             itemCode: ic.isEmpty ? null : ic,
             taxPercent: taxPct,
@@ -348,6 +394,12 @@ class _CatalogAddItemPageState extends ConsumerState<CatalogAddItemPage> {
           );
       final nid = created['id']?.toString() ?? '';
       await ref.read(sharedPreferencesProvider).remove(_activeDraftKey);
+      final prefs = ref.read(sharedPreferencesProvider);
+      await prefs.setString(_kPrefLastCategory, _categoryId!);
+      await prefs.setString(_kPrefLastType, _typeId!);
+      if (_supplierIds.isNotEmpty) {
+        await prefs.setString(_kPrefLastSupplier, _supplierIds.first);
+      }
       ref.invalidate(catalogItemsListProvider);
       invalidateBusinessAggregates(ref);
       if (mounted) {
@@ -394,7 +446,6 @@ class _CatalogAddItemPageState extends ConsumerState<CatalogAddItemPage> {
   List<Widget> _reviewLines(
     BuildContext context, {
     required List<Map<String, dynamic>> supplierRows,
-    required List<Map<String, dynamic>> brokerRows,
   }) {
     final tt = Theme.of(context).textTheme;
     final name = _name.text.trim().isEmpty ? '—' : _name.text.trim();
@@ -416,16 +467,6 @@ class _CatalogAddItemPageState extends ConsumerState<CatalogAddItemPage> {
           for (final s in supplierRows) {
             if (s['id']?.toString() == id) {
               return s['name']?.toString() ?? id;
-            }
-          }
-          return id;
-        })
-        .toList();
-    final broNames = _brokerIds
-        .map((id) {
-          for (final b in brokerRows) {
-            if (b['id']?.toString() == id) {
-              return b['name']?.toString() ?? id;
             }
           }
           return id;
@@ -480,15 +521,6 @@ class _CatalogAddItemPageState extends ConsumerState<CatalogAddItemPage> {
           style: tt.bodySmall?.copyWith(color: const Color(0xFF64748B)),
         ),
       ],
-      if (broNames.isNotEmpty) ...[
-        const SizedBox(height: 2),
-        Text(
-          'Brokers: ${broNames.join(', ')}',
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
-          style: tt.bodySmall?.copyWith(color: const Color(0xFF64748B)),
-        ),
-      ],
     ];
   }
 
@@ -503,6 +535,7 @@ class _CatalogAddItemPageState extends ConsumerState<CatalogAddItemPage> {
     if (types.isNotEmpty) {
       setState(() => _typeId = types.first['id']?.toString());
     }
+    _scheduleDupCheck();
   }
 
   Widget _supplierChips(List<Map<String, dynamic>> allRows) {
@@ -554,20 +587,6 @@ class _CatalogAddItemPageState extends ConsumerState<CatalogAddItemPage> {
     ];
   }
 
-  List<InlineSearchItem> _brokerPickItems(List<Map<String, dynamic>> list) {
-    return [
-      for (final b in list)
-        if (!_brokerIds.contains(b['id']?.toString()))
-          InlineSearchItem(
-            id: b['id']?.toString() ?? '',
-            label: b['name']?.toString() ?? 'Broker',
-            subtitle: (b['phone']?.toString() ?? '').trim().isEmpty
-                ? null
-                : b['phone']?.toString(),
-          ),
-    ];
-  }
-
   bool _canAdvanceFromStep() {
     switch (_step) {
       case 0:
@@ -588,9 +607,9 @@ class _CatalogAddItemPageState extends ConsumerState<CatalogAddItemPage> {
         }
         return true;
       case 3:
-        return true;
-      case 4:
         return _supplierIds.isNotEmpty;
+      case 4:
+        return true;
       default:
         return _isValid;
     }
@@ -618,39 +637,6 @@ class _CatalogAddItemPageState extends ConsumerState<CatalogAddItemPage> {
     }
   }
 
-  Widget _brokerChips(List<Map<String, dynamic>> allRows) {
-    final nameById = {
-      for (final b in allRows)
-        if ((b['id']?.toString() ?? '').isNotEmpty)
-          b['id'].toString(): b['name']?.toString() ?? '',
-    };
-    if (_brokerIds.isEmpty) {
-      return Text(
-        'Optional default brokers for purchases.',
-        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-            ),
-      );
-    }
-    return Wrap(
-      spacing: 8,
-      runSpacing: 8,
-      children: [
-        for (final id in _brokerIds)
-          InputChip(
-            label: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 200),
-              child: Text(
-                nameById[id] ?? id,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-            onDeleted: () => setState(() => _brokerIds.remove(id)),
-          ),
-      ],
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final categoriesAsync = ref.watch(itemCategoriesListProvider);
@@ -671,20 +657,11 @@ class _CatalogAddItemPageState extends ConsumerState<CatalogAddItemPage> {
         ) ??
         '';
 
-    final items = ref.watch(catalogItemsListProvider).maybeWhen(
-          data: (x) => x,
-          orElse: () => <Map<String, dynamic>>[],
-        );
-    final sameType = items
-        .where((it) => it['type_id']?.toString() == _typeId)
+    final dupAlerts = _fuzzyDupHits
+        .where((h) =>
+            fuzzyHitScore(h) >= 0.75 &&
+            !_dismissedDupIds.contains(h['id']?.toString() ?? ''))
         .toList();
-    final similar = catalogFuzzyRank(
-      _name.text,
-      sameType,
-      (it) => it['name']?.toString() ?? '',
-      minScore: 55,
-      limit: 4,
-    ).where((it) => (it['name']?.toString() ?? '').toLowerCase() != _name.text.trim().toLowerCase());
 
     final nameErr = _touched && _name.text.trim().isEmpty;
     final unitErr = _touched && (_unit == null || _unit!.isEmpty);
@@ -693,10 +670,7 @@ class _CatalogAddItemPageState extends ConsumerState<CatalogAddItemPage> {
           data: (raw) => raw.map((e) => Map<String, dynamic>.from(e as Map)).toList(),
           orElse: () => <Map<String, dynamic>>[],
         );
-    final broRows = ref.watch(brokersListProvider).maybeWhen(
-          data: (raw) => raw.map((e) => Map<String, dynamic>.from(e as Map)).toList(),
-          orElse: () => <Map<String, dynamic>>[],
-        );
+    final detectedUnit = SmartValidationEngine.detectUnitFromName(_name.text);
 
     return PopScope(
       canPop: false,
@@ -886,12 +860,38 @@ class _CatalogAddItemPageState extends ConsumerState<CatalogAddItemPage> {
                     borderSide: const BorderSide(color: HexaColors.loss, width: 1.5),
                   ),
                 ),
-                onChanged: (_) => setState(() {}),
+                onChanged: (_) {
+                  _dismissedDupIds.clear();
+                  setState(() {});
+                  _scheduleDupCheck();
+                },
               ),
-              if (_name.text.trim().length >= 2 && similar.isNotEmpty) ...[
+              if (detectedUnit != null &&
+                  detectedUnit.isNotEmpty &&
+                  (_unit == null || _unit != detectedUnit)) ...[
+                const SizedBox(height: 8),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: ActionChip(
+                    avatar: const Icon(Icons.auto_awesome, size: 18),
+                    label: Text(
+                      SmartUnitService.detectFromName(_name.text)?.label ??
+                          'Use detected unit: ${detectedUnit.toUpperCase()}',
+                      style: const TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                    onPressed: () => setState(() {
+                      _unit = detectedUnit;
+                      _kgErr = null;
+                      _boxErr = null;
+                      _tinErr = null;
+                    }),
+                  ),
+                ),
+              ],
+              if (_name.text.trim().length >= 2 && dupAlerts.isNotEmpty) ...[
                 const SizedBox(height: 8),
                 Material(
-                  color: const Color(0xFFFFF7ED),
+                  color: const Color(0xFFFEF9C3),
                   borderRadius: BorderRadius.circular(10),
                   child: Padding(
                     padding: const EdgeInsets.all(10),
@@ -899,17 +899,42 @@ class _CatalogAddItemPageState extends ConsumerState<CatalogAddItemPage> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'Similar in this subcategory',
+                          'Possible duplicate in catalog',
                           style: Theme.of(context).textTheme.labelSmall?.copyWith(
                                 fontWeight: FontWeight.w800,
-                                color: const Color(0xFF9A3412),
+                                color: const Color(0xFF854D0E),
                               ),
                         ),
-                        for (final it in similar)
+                        for (final h in dupAlerts)
                           Text(
-                            '· ${it['name']}',
+                            '· ${h['name']?.toString() ?? ''} (${(fuzzyHitScore(h) * 100).round()}% match)',
                             style: Theme.of(context).textTheme.bodySmall,
                           ),
+                        const SizedBox(height: 8),
+                        Wrap(
+                          spacing: 8,
+                          children: [
+                            TextButton(
+                              onPressed: () {
+                                final id = dupAlerts.first['id']?.toString();
+                                if (id == null || id.isEmpty) return;
+                                context.push('/catalog/item/$id');
+                              },
+                              child: const Text('Use existing'),
+                            ),
+                            TextButton(
+                              onPressed: () => setState(() {
+                                for (final h in dupAlerts) {
+                                  final id = h['id']?.toString();
+                                  if (id != null && id.isNotEmpty) {
+                                    _dismissedDupIds.add(id);
+                                  }
+                                }
+                              }),
+                              child: const Text('Ignore, create new'),
+                            ),
+                          ],
+                        ),
                       ],
                     ),
                   ),
@@ -1024,59 +1049,6 @@ class _CatalogAddItemPageState extends ConsumerState<CatalogAddItemPage> {
                 ),
               ],
               if (_step == 3) ...[
-              Text('Product code, HSN & tax', style: HexaDsType.formSectionLabel),
-              const SizedBox(height: 6),
-              Text(
-                'Match your price list: code, hsn, tax_rate (optional).',
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
-              ),
-              const SizedBox(height: 8),
-              TextField(
-                controller: _itemCode,
-                keyboardType: TextInputType.text,
-                decoration: InputDecoration(
-                  labelText: 'Product / item code (optional)',
-                  hintText: 'e.g. 2104',
-                  contentPadding: _fieldPad,
-                  border: _fieldBorder(context),
-                  enabledBorder: _fieldBorder(context),
-                  labelStyle: const TextStyle(fontWeight: FontWeight.w600),
-                ),
-                onChanged: (_) => setState(() {}),
-              ),
-              const SizedBox(height: 8),
-              TextField(
-                controller: _hsn,
-                keyboardType: TextInputType.text,
-                textCapitalization: TextCapitalization.characters,
-                decoration: InputDecoration(
-                  labelText: 'HSN / SAC (optional)',
-                  hintText: 'e.g. 11010000',
-                  contentPadding: _fieldPad,
-                  border: _fieldBorder(context),
-                  enabledBorder: _fieldBorder(context),
-                  labelStyle: const TextStyle(fontWeight: FontWeight.w600),
-                ),
-                onChanged: (_) => setState(() {}),
-              ),
-              const SizedBox(height: 8),
-              TextField(
-                controller: _tax,
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                decoration: InputDecoration(
-                  labelText: 'Default tax % (optional, GST)',
-                  hintText: 'e.g. 5 or 0',
-                  contentPadding: _fieldPad,
-                  border: _fieldBorder(context),
-                  enabledBorder: _fieldBorder(context),
-                  labelStyle: const TextStyle(fontWeight: FontWeight.w600),
-                ),
-                onChanged: (_) => setState(() {}),
-              ),
-              ],
-              if (_step == 4) ...[
               Text('Default suppliers *', style: HexaDsType.formSectionLabel),
               const SizedBox(height: 4),
               if (supErr)
@@ -1138,6 +1110,7 @@ class _CatalogAddItemPageState extends ConsumerState<CatalogAddItemPage> {
                                   }
                                   _supplierSearch.clear();
                                 });
+                                _scheduleDupCheck();
                               },
                             ),
                           ] else
@@ -1151,59 +1124,59 @@ class _CatalogAddItemPageState extends ConsumerState<CatalogAddItemPage> {
                       );
                     },
                   ),
-              const SizedBox(height: 12),
-              Text('Default brokers (optional)', style: HexaDsType.formSectionLabel),
-              const SizedBox(height: 4),
-              ref.watch(brokersListProvider).when(
-                    skipLoadingOnReload: true,
-                    loading: () => const LinearProgressIndicator(),
-                    error: (_, __) => const Text('Could not load brokers'),
-                    data: (rows) {
-                      final list =
-                          rows.map((e) => Map<String, dynamic>.from(e as Map)).toList();
-                      if (list.isEmpty) {
-                        return const Text('No brokers yet — you can skip.');
-                      }
-                      final pick = _brokerPickItems(list);
-                      return Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          _brokerChips(list),
-                          const SizedBox(height: 6),
-                          if (pick.isNotEmpty) ...[
-                            Text(
-                              'Search and pick broker (optional)',
-                              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                                  ),
-                            ),
-                            const SizedBox(height: 4),
-                            InlineSearchField(
-                              key: ValueKey('bro_srch_${_brokerIds.length}'),
-                              items: pick,
-                              controller: _brokerSearch,
-                              placeholder: 'Type to search…',
-                              minQueryLength: 1,
-                              onSelected: (it) {
-                                setState(() {
-                                  if (it.id.isNotEmpty && !_brokerIds.contains(it.id)) {
-                                    _brokerIds.add(it.id);
-                                  }
-                                  _brokerSearch.clear();
-                                });
-                              },
-                            ),
-                          ] else
-                            Text(
-                              _brokerIds.isEmpty
-                                  ? '—'
-                                  : 'All available brokers are already added',
-                              style: Theme.of(context).textTheme.bodySmall,
-                            ),
-                        ],
-                      );
-                    },
-                  ),
+              ],
+              if (_step == 4) ...[
+              Text('Product code, HSN & tax', style: HexaDsType.formSectionLabel),
+              const SizedBox(height: 6),
+              Text(
+                'Match your price list: code, hsn, tax_rate (optional).',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: _itemCode,
+                keyboardType: TextInputType.text,
+                decoration: InputDecoration(
+                  labelText: 'Product / item code (optional)',
+                  hintText: 'e.g. 2104',
+                  contentPadding: _fieldPad,
+                  border: _fieldBorder(context),
+                  enabledBorder: _fieldBorder(context),
+                  labelStyle: const TextStyle(fontWeight: FontWeight.w600),
+                ),
+                onChanged: (_) => setState(() {}),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: _hsn,
+                keyboardType: TextInputType.text,
+                textCapitalization: TextCapitalization.characters,
+                decoration: InputDecoration(
+                  labelText: 'HSN / SAC (optional)',
+                  hintText: 'e.g. 11010000',
+                  contentPadding: _fieldPad,
+                  border: _fieldBorder(context),
+                  enabledBorder: _fieldBorder(context),
+                  labelStyle: const TextStyle(fontWeight: FontWeight.w600),
+                ),
+                onChanged: (_) => setState(() {}),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: _tax,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                decoration: InputDecoration(
+                  labelText: 'Default tax % (optional, GST)',
+                  hintText: 'e.g. 5 or 0',
+                  contentPadding: _fieldPad,
+                  border: _fieldBorder(context),
+                  enabledBorder: _fieldBorder(context),
+                  labelStyle: const TextStyle(fontWeight: FontWeight.w600),
+                ),
+                onChanged: (_) => setState(() {}),
+              ),
               ],
               if (_step == 5) ...[
                 Text('Review', style: HexaDsType.formSectionLabel),
@@ -1211,7 +1184,6 @@ class _CatalogAddItemPageState extends ConsumerState<CatalogAddItemPage> {
                 ..._reviewLines(
                   context,
                   supplierRows: supRows,
-                  brokerRows: broRows,
                 ),
                 const SizedBox(height: 2),
                 Text(

@@ -430,4 +430,33 @@ class LocalNotificationsService {
       body: body,
     );
   }
+
+  static const _stockAlertId = 93001;
+
+  /// Immediate alert (e.g. new in-app notification while app is backgrounded).
+  Future<void> showStockOrInAppAlert({
+    required String title,
+    required String body,
+    String payload = 'notifications',
+  }) async {
+    if (kIsWeb || !_inited) return;
+    const details = NotificationDetails(
+      android: AndroidNotificationDetails(
+        'stock_alerts',
+        'Stock & alerts',
+        channelDescription: 'Low stock and owner alerts.',
+        importance: Importance.high,
+        priority: Priority.high,
+      ),
+      iOS: DarwinNotificationDetails(),
+      windows: WindowsNotificationDetails(),
+    );
+    await _p.show(
+      id: _stockAlertId,
+      title: title,
+      body: body,
+      notificationDetails: details,
+      payload: payload,
+    );
+  }
 }

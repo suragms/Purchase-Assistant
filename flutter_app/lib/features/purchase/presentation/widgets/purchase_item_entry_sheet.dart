@@ -10,6 +10,7 @@ import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../../core/calc_engine.dart';
+import '../../../../core/pricing/tax_mode.dart';
 import '../../../../core/widgets/form_field_scroll.dart';
 import '../../../../core/errors/user_facing_errors.dart';
 import '../../../../core/json_coerce.dart';
@@ -25,6 +26,7 @@ import '../../../../shared/widgets/keyboard_safe_form_viewport.dart';
 import 'item_entry/item_entry_minimal_form.dart';
 import 'item_entry/item_entry_payload.dart';
 import 'party_inline_suggest_field.dart';
+import '../../pricing/purchase_tax_prefs.dart';
 import '../../../../core/utils/currency_utils.dart';
 
 String _stripKgSuffixForCatalogDisplay(String name) => name
@@ -137,8 +139,9 @@ class _PurchaseItemEntrySheetState extends State<PurchaseItemEntrySheet> with Pu
   /// Discount / tax % / freight / notes — expanded when user opens or when save needs Tax %.
   bool _moreSectionExpanded = false;
 
-  /// Primary UX: Tax OFF forces `tax_percent = 0` on save; Tax ON uses item/catalog %.
-  bool _taxOn = true;
+  /// Primary UX: [TaxMode.none] forces `tax_percent = 0` on save; other modes use item/catalog %.
+  TaxMode _taxMode = TaxMode.exclusive;
+  late final ValueNotifier<TaxMode> _taxModeNotifier;
 
   /// Extra bottom inset so fields clear pinned preview + IME when scrolling into view.
   static const double _kPinnedPreviewReserve = 310;
@@ -368,8 +371,14 @@ class _PurchaseItemEntrySheetState extends State<PurchaseItemEntrySheet> with Pu
 
       final d = coerceToDoubleNullable(init['discount']);
       _discCtrl.text = d != null && d > 0 ? d.toString() : '';
+      final parsedMode = taxModeFromWire(init['tax_mode']?.toString());
+      if (parsedMode != null) {
+        _taxMode = parsedMode;
+      } else {
+        final t0 = coerceToDoubleNullable(init['tax_percent']);
+        _taxMode = (t0 != null && t0 > 0) ? TaxMode.exclusive : TaxMode.none;
+      }
       final t = coerceToDoubleNullable(init['tax_percent']);
-      _taxOn = t != null && t > 0;
       _taxCtrl.text = t != null && t > 0 ? t.toString() : '';
       final hsn = init['hsn_code']?.toString().trim() ?? '';
       _hsnCode = hsn.isEmpty ? null : hsn;
@@ -388,6 +397,7 @@ class _PurchaseItemEntrySheetState extends State<PurchaseItemEntrySheet> with Pu
       _boxFixedWeight = (init['box_mode']?.toString() != 'items_per_box');
     }
     _syncKgStateFromCatalogRow();
+    _taxModeNotifier = ValueNotifier(_taxMode);
     _lineTotalsListenable = Listenable.merge([
       _qtyCtrl,
       _unitCtrl,
@@ -404,6 +414,7 @@ class _PurchaseItemEntrySheetState extends State<PurchaseItemEntrySheet> with Pu
       _weightPerTinCtrl,
       _kgPerBagCtrl,
       _lineNotesCtrl,
+      _taxModeNotifier,
     ]);
     _rebuildCatalogSearchItems();
     _storeFieldBaseline();
@@ -420,6 +431,14 @@ class _PurchaseItemEntrySheetState extends State<PurchaseItemEntrySheet> with Pu
     _sellingFocus.addListener(_onSellingFocusScroll);
     _kgManualFocus.addListener(_onKgManualFocusScroll);
     _itemFocus.addListener(_onItemFocusScroll);
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (widget.initial != null || !mounted) return;
+      final p = widget.gstPrefs ?? await SharedPreferences.getInstance();
+      if (!mounted) return;
+      final saved = PurchaseLineTaxModePrefs.read(p);
+      setState(() => _taxMode = saved);
+      _taxModeNotifier.value = saved;
+    });
   }
 
   void _syncKgStateFromCatalogRow() {
@@ -448,6 +467,7 @@ class _PurchaseItemEntrySheetState extends State<PurchaseItemEntrySheet> with Pu
     _kgManualFocus.removeListener(_onKgManualFocusScroll);
     _itemCtrl.removeListener(_onItemTextChanged);
     _kgPerBagCtrl.removeListener(_onKgPerBagChanged);
+    _taxModeNotifier.dispose();
     _defaultsDebounceTimer?.cancel();
     _scrollController.dispose();
     _itemCtrl.dispose();
@@ -1221,9 +1241,9 @@ class _PurchaseItemEntrySheetState extends State<PurchaseItemEntrySheet> with Pu
     return _numD(row['tax_percent']);
   }
 
-  /// Effective tax % for preview + [TradeCalcLine] math (0 when Tax OFF).
+  /// Effective tax % for preview + [TradeCalcLine] math (0 when [TaxMode.none]).
   double _effectiveTaxPercentForLine() {
-    if (!_taxOn) return 0;
+    if (_taxMode == TaxMode.none) return 0;
     final typed = _parseD(_taxCtrl.text);
     if (typed != null && typed > 0) return typed;
     return (_numericTaxFromCatalogRow() ?? 0).clamp(0.0, 100.0);
@@ -1841,10 +1861,11 @@ class _PurchaseItemEntrySheetState extends State<PurchaseItemEntrySheet> with Pu
     }
     applyTaxPercentToPurchaseLineMap(
       m,
-      taxOn: _taxOn,
+      taxOn: _taxMode != TaxMode.none,
       typedTaxPercent: _parseD(_taxCtrl.text),
       catalogTaxPercent: _numericTaxFromCatalogRow(),
     );
+    m['tax_mode'] = taxModeToWire(_taxMode);
     if (sellSt.isNotEmpty) {
       final sellIn = _sellingParsedAsPerKg() ?? _parseD(sellSt)!;
       final sellParsed = sellIn;
@@ -2100,46 +2121,66 @@ class _PurchaseItemEntrySheetState extends State<PurchaseItemEntrySheet> with Pu
     );
   }
 
-  Widget _buildTaxOnOffToggle(ThemeData theme) {
+  Widget _buildTaxModeChips(ThemeData theme) {
+    String chipLabel(TaxMode m) => switch (m) {
+          TaxMode.exclusive => 'Exclusive',
+          TaxMode.inclusive => 'Inclusive',
+          TaxMode.none => 'None',
+        };
+
+    Future<void> onPick(TaxMode m) async {
+      if (m == _taxMode) return;
+      setState(() {
+        _taxMode = m;
+        if (m == TaxMode.none) {
+          _taxCtrl.clear();
+        } else {
+          final rowTax = _numericTaxFromCatalogRow();
+          if (rowTax != null &&
+              rowTax > 0 &&
+              _taxCtrl.text.trim().isEmpty) {
+            _taxCtrl.text = StrictDecimal.fromObject(rowTax).format(2);
+          }
+        }
+      });
+      _taxModeNotifier.value = m;
+      final p = widget.gstPrefs ?? await SharedPreferences.getInstance();
+      await PurchaseLineTaxModePrefs.save(p, m);
+      if (mounted) _schedulePreviewRebuild();
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Text(
-          'Tax',
+          'Tax mode',
           style: TextStyle(
             fontSize: 13,
             fontWeight: FontWeight.w800,
             color: theme.colorScheme.onSurface,
           ),
         ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 6,
+          children: [
+            for (final m in TaxMode.values)
+              FilterChip(
+                selected: _taxMode == m,
+                label: Text(chipLabel(m)),
+                showCheckmark: false,
+                onSelected: (_) => unawaited(onPick(m)),
+              ),
+          ],
+        ),
         const SizedBox(height: 6),
-        SizedBox(
-          height: 44,
-          child: SegmentedButton<bool>(
-            segments: const [
-              ButtonSegment<bool>(value: false, label: Text('OFF')),
-              ButtonSegment<bool>(value: true, label: Text('ON')),
-            ],
-            selected: <bool>{_taxOn},
-            showSelectedIcon: false,
-            onSelectionChanged: (Set<bool> s) {
-              if (s.isEmpty) return;
-              setState(() {
-                _taxOn = s.first;
-                if (!_taxOn) {
-                  _taxCtrl.clear();
-                } else {
-                  final rowTax = _numericTaxFromCatalogRow();
-                  if (rowTax != null &&
-                      rowTax > 0 &&
-                      _taxCtrl.text.trim().isEmpty) {
-                    _taxCtrl.text =
-                        StrictDecimal.fromObject(rowTax).format(2);
-                  }
-                }
-              });
-              _schedulePreviewRebuild();
-            },
+        Text(
+          'Exclusive adds GST on the line base. Inclusive treats your rate as GST-included. None clears GST.',
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+            color: theme.hintColor,
           ),
         ),
       ],
@@ -2529,7 +2570,7 @@ class _PurchaseItemEntrySheetState extends State<PurchaseItemEntrySheet> with Pu
         }
       }
 
-      if (_taxOn) {
+      if (_taxMode != TaxMode.none) {
         final tax = _numD(row['tax_percent']);
         _taxCtrl.text =
             tax != null && tax > 0 ? StrictDecimal.fromObject(tax).format(2) : '';
@@ -2607,7 +2648,7 @@ class _PurchaseItemEntrySheetState extends State<PurchaseItemEntrySheet> with Pu
           _kgPerBagCtrl.text = _fmtQty(kpu);
         }
       }
-      if (_taxOn) {
+      if (_taxMode != TaxMode.none) {
         if (taxPercent != null && taxPercent >= 0) {
           _taxCtrl.text = taxPercent > 0
               ? StrictDecimal.fromObject(taxPercent).format(2)
@@ -2853,7 +2894,7 @@ class _PurchaseItemEntrySheetState extends State<PurchaseItemEntrySheet> with Pu
         : _parseD(_sellingCtrl.text);
     if (q > 0 && sell != null && sell > 0) {
       final profit = _profitPreview();
-      final lm = lineMoney(_currentLine());
+      final lm = lineMoney(_currentLine(), taxMode: _taxMode);
       final threshold = math.max(50.0, lm * 0.01);
       if (profit < threshold) {
         out.add(
@@ -2878,8 +2919,8 @@ class _PurchaseItemEntrySheetState extends State<PurchaseItemEntrySheet> with Pu
 
     final warnings =
         _moreSectionExpanded ? _gstSoftWarningMessages() : const <String>[];
-    final gst = lineTaxAmount(line);
-    final total = lineMoney(line);
+    final gst = lineTaxAmount(line, taxMode: _taxMode);
+    final total = lineMoney(line, taxMode: _taxMode);
 
     if (kbd) {
       // In keyboard mode, we return an empty widget and move the logic to the unified footer row.
@@ -2974,7 +3015,36 @@ class _PurchaseItemEntrySheetState extends State<PurchaseItemEntrySheet> with Pu
         preferVerticalRates: false,
       ),
       SizedBox(height: widget.fullPage ? 10 : 8),
-      _buildTaxOnOffToggle(theme),
+      _buildTaxModeChips(theme),
+      SizedBox(height: widget.fullPage ? 10 : 8),
+      ListenableBuilder(
+        listenable: _lineTotalsListenable,
+        builder: (ctx, _) {
+          final l = _currentLine();
+          final net = lineNetTaxableDecimal(l, taxMode: _taxMode).toDouble();
+          final tax = lineTaxAmount(l, taxMode: _taxMode);
+          final tot = lineMoney(l, taxMode: _taxMode);
+          return Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: const Color(0xFFEFFAF9),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: const Color(0xFF99F6E4)),
+            ),
+            child: Text(
+              'Live preview · Net ${formatRupee(net, decimals: true)} · '
+              'GST ${formatRupee(tax, decimals: true)} · '
+              'Line total ${formatRupee(tot, decimals: true)}',
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: Color(0xFF0F172A),
+              ),
+            ),
+          );
+        },
+      ),
     ];
 
     final formChildren = <Widget>[
@@ -3033,7 +3103,7 @@ class _PurchaseItemEntrySheetState extends State<PurchaseItemEntrySheet> with Pu
                   maxMatches: 8,
                   dense: true,
                   minFieldHeight: widget.fullPage ? 52 : 0,
-                  suggestionsAsOverlay: widget.fullPage,
+                  suggestionsAsOverlay: true,
                   items: _catalogSearchItems,
                   textInputAction: TextInputAction.next,
                   onSubmitted: () =>
@@ -3965,7 +4035,7 @@ class _PurchaseItemEntrySheetState extends State<PurchaseItemEntrySheet> with Pu
       listenable: _lineTotalsListenable,
       builder: (context, _) {
         final l = _currentLine();
-        final t = lineMoney(l);
+        final t = lineMoney(l, taxMode: _taxMode);
         final p = _profitPreview();
         final s = _ratesPerKgEconomics ? _sellingParsedAsPerKg() : _parseD(_sellingCtrl.text);
         final qStr = _qtyAndUnitWeightSummaryLine();
@@ -3982,9 +4052,16 @@ class _PurchaseItemEntrySheetState extends State<PurchaseItemEntrySheet> with Pu
                     Text('PROFIT: ${s != null && s > 0 ? formatRupee(p) : "—"}', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w800, color: p >= 0 ? const Color(0xFF059669) : const Color(0xFFDC2626))),
                     const SizedBox(width: 8),
                     Builder(builder: (context) {
-                      final taxable = lineTaxableAfterLineDisc(l);
-                      final tax = t - taxable;
-                      return Text('TAX: ${formatRupee(tax)}', style: const TextStyle(fontSize: 9, fontWeight: FontWeight.w800, color: Color(0xFF64748B)));
+                      final taxable =
+                          lineNetTaxableDecimal(l, taxMode: _taxMode).toDouble();
+                      final tax = lineTaxAmount(l, taxMode: _taxMode);
+                      return Text(
+                        'NET ${formatRupee(taxable)} · TAX ${formatRupee(tax)}',
+                        style: const TextStyle(
+                            fontSize: 9,
+                            fontWeight: FontWeight.w800,
+                            color: Color(0xFF64748B)),
+                      );
                     }),
                   ],
                 ),

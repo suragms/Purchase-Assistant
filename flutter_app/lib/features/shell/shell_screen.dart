@@ -7,6 +7,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/providers/connectivity_provider.dart';
+import '../../core/providers/home_owner_dashboard_providers.dart';
+import '../../core/providers/stock_providers.dart';
 import '../../core/providers/home_breakdown_tab_providers.dart';
 import '../../core/providers/home_dashboard_provider.dart';
 import '../../core/providers/reports_provider.dart';
@@ -16,7 +18,7 @@ import '../../core/design_system/hexa_ds_tokens.dart';
 import '../../core/theme/hexa_colors.dart';
 import 'shell_branch_provider.dart';
 
-/// Shell: Home | Reports | History | Search in one row, then [+] (no overlap).
+/// Shell: Home | Stock | Reports | History | Search in one row, then [+] (no overlap).
 class ShellScreen extends ConsumerStatefulWidget {
   const ShellScreen({super.key, required this.navigationShell});
 
@@ -51,6 +53,10 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
           case ShellBranch.reports:
             ref.invalidate(reportsPurchasesPayloadProvider);
             break;
+          case ShellBranch.stock:
+            ref.invalidate(stockListProvider);
+            ref.invalidate(stockLowCountProvider);
+            break;
           default:
             break;
         }
@@ -60,6 +66,7 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
     final conn = ref.watch(connectivityResultsProvider);
     final offline =
         conn.valueOrNull != null && isOfflineResult(conn.valueOrNull!);
+    final stockAlertN = ref.watch(stockLowCountProvider).valueOrNull ?? 0;
 
     void go(int branch) {
       HapticFeedback.selectionClick();
@@ -67,8 +74,7 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
     }
 
     final loc = routePath;
-    final hideShellChrome = loc.startsWith('/assistant') ||
-        loc == '/reports' ||
+    final hideShellChrome = loc == '/reports' ||
         loc.startsWith('/reports/') ||
         loc == '/purchase';
 
@@ -124,6 +130,7 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
             if (!hideShellChrome)
               _ShellBottomBar(
                 selectedIndex: idx,
+                stockBadgeCount: stockAlertN,
                 onDestinationSelected: go,
               ),
           ],
@@ -136,10 +143,12 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
 class _ShellBottomBar extends StatelessWidget {
   const _ShellBottomBar({
     required this.selectedIndex,
+    required this.stockBadgeCount,
     required this.onDestinationSelected,
   });
 
   final int selectedIndex;
+  final int stockBadgeCount;
   final ValueChanged<int> onDestinationSelected;
 
   static const _fabOuter = 60.0;
@@ -170,9 +179,10 @@ class _ShellBottomBar extends StatelessWidget {
                       child: LayoutBuilder(
                         builder: (context, constraints) {
                           final maxW = constraints.maxWidth;
-                          final per = maxW > 0 ? maxW / 4 : 0.0;
+                          const nTabs = 5;
+                          final per = maxW > 0 ? maxW / nTabs : 0.0;
                           var w = math.max(42.0, per);
-                          if (w * 4 > maxW) {
+                          if (w * nTabs > maxW) {
                             w = per;
                           }
                           return Row(
@@ -191,9 +201,10 @@ class _ShellBottomBar extends StatelessWidget {
                                 width: w,
                                 child: _ShellNavTile(
                                   selected: selectedIndex == 1,
-                                  icon: Icons.bar_chart_outlined,
-                                  selectedIcon: Icons.bar_chart_rounded,
-                                  label: 'Reports',
+                                  icon: Icons.inventory_2_outlined,
+                                  selectedIcon: Icons.inventory_2_rounded,
+                                  label: 'Stock',
+                                  badgeCount: stockBadgeCount,
                                   onTap: () => onDestinationSelected(1),
                                 ),
                               ),
@@ -201,9 +212,9 @@ class _ShellBottomBar extends StatelessWidget {
                                 width: w,
                                 child: _ShellNavTile(
                                   selected: selectedIndex == 2,
-                                  icon: Icons.receipt_long_outlined,
-                                  selectedIcon: Icons.receipt_long_rounded,
-                                  label: 'History',
+                                  icon: Icons.bar_chart_outlined,
+                                  selectedIcon: Icons.bar_chart_rounded,
+                                  label: 'Reports',
                                   onTap: () => onDestinationSelected(2),
                                 ),
                               ),
@@ -211,10 +222,20 @@ class _ShellBottomBar extends StatelessWidget {
                                 width: w,
                                 child: _ShellNavTile(
                                   selected: selectedIndex == 3,
+                                  icon: Icons.receipt_long_outlined,
+                                  selectedIcon: Icons.receipt_long_rounded,
+                                  label: 'History',
+                                  onTap: () => onDestinationSelected(3),
+                                ),
+                              ),
+                              SizedBox(
+                                width: w,
+                                child: _ShellNavTile(
+                                  selected: selectedIndex == 4,
                                   icon: Icons.search_rounded,
                                   selectedIcon: Icons.manage_search_rounded,
                                   label: 'Search',
-                                  onTap: () => onDestinationSelected(3),
+                                  onTap: () => onDestinationSelected(4),
                                 ),
                               ),
                             ],
@@ -247,6 +268,7 @@ class _ShellNavTile extends StatelessWidget {
     required this.selectedIcon,
     required this.label,
     required this.onTap,
+    this.badgeCount = 0,
   });
 
   final bool selected;
@@ -254,6 +276,7 @@ class _ShellNavTile extends StatelessWidget {
   final IconData selectedIcon;
   final String label;
   final VoidCallback onTap;
+  final int badgeCount;
 
   @override
   Widget build(BuildContext context) {
@@ -277,10 +300,17 @@ class _ShellNavTile extends StatelessWidget {
                     : Colors.transparent,
                 borderRadius: BorderRadius.circular(16),
               ),
-              child: Icon(
-                ic,
-                size: 24,
-                color: selected ? HexaColors.brandPrimary : cs.onSurfaceVariant,
+              child: Badge(
+                isLabelVisible: badgeCount > 0,
+                label: Text(
+                  badgeCount > 99 ? '99+' : '$badgeCount',
+                  style: const TextStyle(fontSize: 9, fontWeight: FontWeight.w800),
+                ),
+                child: Icon(
+                  ic,
+                  size: 24,
+                  color: selected ? HexaColors.brandPrimary : cs.onSurfaceVariant,
+                ),
               ),
             ),
             const SizedBox(height: 2),
@@ -304,10 +334,78 @@ class _ShellNavTile extends StatelessWidget {
 class _FabButton extends StatelessWidget {
   const _FabButton();
 
+  void _openQuickActions(BuildContext context) {
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (ctx) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(8, 0, 8, 12),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                ListTile(
+                  leading: Icon(Icons.add_shopping_cart_outlined,
+                      color: HexaColors.brandPrimary),
+                  title: Text('New purchase',
+                      style: HexaDsType.body(16,
+                          color: HexaDsColors.textPrimary,
+                          weight: FontWeight.w700)),
+                  onTap: () {
+                    Navigator.of(ctx).pop();
+                    context.push('/purchase/new');
+                  },
+                ),
+                ListTile(
+                  leading: Icon(Icons.qr_code_scanner_rounded,
+                      color: HexaColors.brandPrimary),
+                  title: Text('Scan barcode',
+                      style: HexaDsType.body(16,
+                          color: HexaDsColors.textPrimary,
+                          weight: FontWeight.w700)),
+                  onTap: () {
+                    Navigator.of(ctx).pop();
+                    context.push('/barcode/scan');
+                  },
+                ),
+                ListTile(
+                  leading: Icon(Icons.document_scanner_outlined,
+                      color: HexaColors.brandPrimary),
+                  title: Text('Scan bill',
+                      style: HexaDsType.body(16,
+                          color: HexaDsColors.textPrimary,
+                          weight: FontWeight.w700)),
+                  onTap: () {
+                    Navigator.of(ctx).pop();
+                    context.push('/purchase/scan');
+                  },
+                ),
+                ListTile(
+                  leading: Icon(Icons.inventory_outlined,
+                      color: HexaColors.brandPrimary),
+                  title: Text('Add catalog item',
+                      style: HexaDsType.body(16,
+                          color: HexaDsColors.textPrimary,
+                          weight: FontWeight.w700)),
+                  onTap: () {
+                    Navigator.of(ctx).pop();
+                    context.push('/catalog/quick-add');
+                  },
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Semantics(
-      label: 'New purchase',
+      label: 'Quick add',
       button: true,
       enabled: true,
       excludeSemantics: true,
@@ -327,7 +425,7 @@ class _FabButton extends StatelessWidget {
             customBorder: const CircleBorder(),
             onTap: () {
               HapticFeedback.mediumImpact();
-              context.push('/purchase/new');
+              _openQuickActions(context);
             },
             child: const Icon(Icons.add_rounded, size: 26, color: Colors.white),
           ),

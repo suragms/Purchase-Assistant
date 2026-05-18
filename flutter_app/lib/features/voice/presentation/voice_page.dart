@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/auth/session_notifier.dart';
+import '../../../core/router/post_auth_route.dart';
 import '../../../core/config/app_config.dart';
 import '../../../core/providers/tenant_branding_provider.dart';
 import '../../../core/theme/hexa_colors.dart';
@@ -579,7 +580,12 @@ class _VoicePageState extends ConsumerState<VoicePage>
                         avatar: const Icon(Icons.home_outlined,
                             size: 18, color: HexaColors.primaryMid),
                         label: const Text('Home'),
-                        onPressed: () => context.go('/home'),
+                        onPressed: () {
+                          final s = ref.read(sessionProvider);
+                          if (s != null) {
+                            context.go(authenticatedHomePath(s));
+                          }
+                        },
                       ),
                     ],
                   ),

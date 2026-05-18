@@ -1,15 +1,13 @@
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../../../core/models/session.dart';
 import '../../../../core/auth/session_notifier.dart';
-import '../../../../core/theme/hexa_colors.dart';
 import '../../../../core/providers/brokers_list_provider.dart';
 import '../../../../core/providers/suppliers_list_provider.dart';
 import '../../../../shared/widgets/inline_search_field.dart';
+import '../../../../shared/widgets/date_picker_button.dart';
 import '../../state/purchase_draft_provider.dart';
 import '../widgets/party_inline_suggest_field.dart';
 
@@ -106,102 +104,42 @@ class PurchasePartyStep extends ConsumerWidget {
   final String Function(Map<String, dynamic>) brokerRowId;
   final String Function(Map<String, dynamic>) brokerMapLabel;
 
-  Future<void> _pickDate(BuildContext context, WidgetRef ref) async {
-    final draft = ref.read(purchaseDraftProvider);
-    DateTime sel = draft.purchaseDate ?? DateTime.now();
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    DateTime provisional = sel;
-    final chosen = await showCupertinoModalPopup<DateTime>(
-      context: context,
-      builder: (ctx) {
-        final bg = CupertinoColors.systemBackground.resolveFrom(ctx);
-        return Container(
-          height: 300,
-          color: bg,
-          child: SafeArea(
-            top: false,
-            child: Column(
-              children: [
-                SizedBox(
-                  height: 44,
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      CupertinoButton(
-                        child: const Text('Cancel'),
-                        onPressed: () => ctx.pop(),
-                      ),
-                      CupertinoButton(
-                        child: const Text('Done'),
-                        onPressed: () => ctx.pop(provisional),
-                      ),
-                    ],
-                  ),
-                ),
-                Expanded(
-                  child: CupertinoDatePicker(
-                    mode: CupertinoDatePickerMode.date,
-                    initialDateTime: sel.isAfter(today)
-                        ? today
-                        : (sel.isBefore(DateTime(2020)) ? DateTime(2020) : sel),
-                    minimumDate: DateTime(2020),
-                    maximumDate: today,
-                    onDateTimeChanged: (dt) =>
-                        provisional = DateTime(dt.year, dt.month, dt.day),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-    if (chosen == null || !context.mounted) return;
-    ref.read(purchaseDraftProvider.notifier).setPurchaseDate(chosen);
-    onDraftChanged();
-  }
-
   Widget _compactMeta(BuildContext context, WidgetRef ref) {
     final draft = ref.watch(purchaseDraftProvider);
-    final dateTxt =
-        DateFormat('dd MMM yy').format(draft.purchaseDate ?? DateTime.now());
     final idVal = isEdit ? (editHumanId ?? '—') : (previewHumanId ?? 'Auto');
     final sub = Theme.of(context).colorScheme.onSurfaceVariant;
 
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.baseline,
-      textBaseline: TextBaseline.alphabetic,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
       children: [
-        InkWell(
-          onTap: () => _pickDate(context, ref),
-          borderRadius: BorderRadius.circular(4),
-          child: Padding(
-            padding: const EdgeInsets.only(right: 8, bottom: 2),
-            child: Text(
-              dateTxt,
-              style: const TextStyle(
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              'Invoice Ref',
+              style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+            ),
+            Text(
+              idVal,
+              style: TextStyle(
                 fontSize: 13,
-                fontWeight: FontWeight.w600,
-                height: 1.1,
-                color: HexaColors.brandPrimary,
+                fontWeight: FontWeight.w700,
+                color: isEdit ? Colors.black87 : sub,
               ),
             ),
-          ),
+          ],
         ),
-        Expanded(
-          child: Text(
-            idVal,
-            textAlign: TextAlign.end,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              height: 1.15,
-              color: isEdit ? Colors.black87 : sub,
-            ),
-          ),
+        const SizedBox(height: 8),
+        DatePickerButton(
+          value: draft.purchaseDate,
+          onChanged: (dt) {
+            ref.read(purchaseDraftProvider.notifier).setPurchaseDate(dt);
+            onDraftChanged();
+          },
+          label: 'Select Purchase Date',
         ),
       ],
     );

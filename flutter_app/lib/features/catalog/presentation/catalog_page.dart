@@ -129,6 +129,18 @@ class _CatalogPageState extends ConsumerState<CatalogPage> {
           onPressed: () => context.popOrGo('/home'),
         ),
         title: const Text('Catalog'),
+        actions: [
+          IconButton(
+            tooltip: 'Stock list',
+            icon: const Icon(Icons.inventory_2_outlined),
+            onPressed: () => context.go('/stock'),
+          ),
+          IconButton(
+            tooltip: 'Scan barcode',
+            icon: const Icon(Icons.qr_code_scanner_rounded),
+            onPressed: () => context.push('/barcode/scan'),
+          ),
+        ],
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => context.push('/catalog/new-category').then((_) {

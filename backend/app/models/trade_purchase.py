@@ -117,6 +117,7 @@ class TradePurchaseLine(Base):
     selling_cost: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
     discount: Mapped[Decimal | None] = mapped_column(Numeric(5, 2), nullable=True)
     tax_percent: Mapped[Decimal | None] = mapped_column(Numeric(5, 2), nullable=True)
+    tax_mode: Mapped[str | None] = mapped_column(String(16), nullable=True, default="exclusive")
     payment_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
     hsn_code: Mapped[str | None] = mapped_column(String(32), nullable=True)
     # Snapshot or override; falls back to catalog item_code in API when unset.

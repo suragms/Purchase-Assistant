@@ -30,6 +30,11 @@ from app.models.admin_audit_log import AdminAuditLog
 from app.models.platform_monthly_expense import PlatformMonthlyExpense
 from app.models.cloud_expense import CloudExpense, CloudPaymentHistory
 from app.models.whatsapp_report_schedule import WhatsAppReportSchedule
+from app.models.stock_audit import StockAudit, StockAuditItem
+from app.models.stock_adjustment import StockAdjustmentLog
+from app.models.user_session import StaffActivityLog, UserSession
+from app.models.notification import AppNotification
+from app.models.reorder_list import ReorderListEntry
 
 __all__ = [
     "Base",
@@ -74,4 +79,11 @@ __all__ = [
     "FeatureFlag",
     "PlatformIntegration",
     "WhatsAppReportSchedule",
+    "StockAudit",
+    "StockAuditItem",
+    "StockAdjustmentLog",
+    "UserSession",
+    "StaffActivityLog",
+    "AppNotification",
+    "ReorderListEntry",
 ]

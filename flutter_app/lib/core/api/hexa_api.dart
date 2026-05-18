@@ -370,6 +370,131 @@ class HexaApi {
         .toList();
   }
 
+  Future<Map<String, dynamic>> meProfile() async {
+    final res = await _dio.get<Map<String, dynamic>>('/v1/me/profile');
+    return Map<String, dynamic>.from(res.data ?? const {});
+  }
+
+  Future<List<Map<String, dynamic>>> listAppNotifications({
+    required String businessId,
+    int page = 1,
+    int perPage = 50,
+  }) async {
+    final res = await _dio.get<dynamic>(
+      '/v1/businesses/$businessId/notifications',
+      queryParameters: {'page': page, 'per_page': perPage},
+    );
+    final data = res.data;
+    if (data is! List) return [];
+    return data.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+  }
+
+  Future<int> appNotificationUnreadCount({required String businessId}) async {
+    final res = await _dio.get<Map<String, dynamic>>(
+      '/v1/businesses/$businessId/notifications/unread-count',
+    );
+    final u = res.data?['unread'];
+    if (u is int) return u;
+    if (u is num) return u.round();
+    return 0;
+  }
+
+  Future<Map<String, dynamic>> patchAppNotificationRead({
+    required String businessId,
+    required String notificationId,
+    bool read = true,
+  }) async {
+    final res = await _dio.patch<Map<String, dynamic>>(
+      '/v1/businesses/$businessId/notifications/$notificationId',
+      data: {'read': read},
+    );
+    return Map<String, dynamic>.from(res.data ?? const {});
+  }
+
+  Future<List<Map<String, dynamic>>> listActivityLog({
+    required String businessId,
+    String period = 'today',
+    int page = 1,
+    int perPage = 50,
+    String? userId,
+  }) async {
+    final res = await _dio.get<dynamic>(
+      '/v1/businesses/$businessId/activity-log',
+      queryParameters: {
+        'period': period,
+        'page': page,
+        'per_page': perPage,
+        if (userId != null && userId.isNotEmpty) 'user_id': userId,
+      },
+    );
+    final data = res.data;
+    if (data is! List) return [];
+    return data.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+  }
+
+  Future<List<Map<String, dynamic>>> listBusinessUsers(
+      {required String businessId}) async {
+    final res = await _dio.get<dynamic>('/v1/businesses/$businessId/users');
+    final data = res.data;
+    if (data is! List) return [];
+    return data.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+  }
+
+  /// Creates staff/manager login. Response may include `generated_password`.
+  Future<Map<String, dynamic>> createBusinessUser({
+    required String businessId,
+    required String fullName,
+    required String phone,
+    required String role,
+    String? password,
+    bool isActive = true,
+  }) async {
+    final res = await _dio.post<Map<String, dynamic>>(
+      '/v1/businesses/$businessId/users',
+      data: {
+        'full_name': fullName.trim(),
+        'phone': phone.trim(),
+        'role': role,
+        'is_active': isActive,
+        if (password != null && password.trim().isNotEmpty) 'password': password.trim(),
+      },
+    );
+    return res.data ?? {};
+  }
+
+  Future<Map<String, dynamic>> getBusinessUser({
+    required String businessId,
+    required String userId,
+  }) async {
+    final res = await _dio.get<Map<String, dynamic>>(
+      '/v1/businesses/$businessId/users/$userId',
+    );
+    return Map<String, dynamic>.from(res.data ?? const {});
+  }
+
+  Future<Map<String, dynamic>> resetBusinessUserPassword({
+    required String businessId,
+    required String userId,
+  }) async {
+    final res = await _dio.post<Map<String, dynamic>>(
+      '/v1/businesses/$businessId/users/$userId/reset-password',
+    );
+    return Map<String, dynamic>.from(res.data ?? const {});
+  }
+
+  Future<Map<String, dynamic>> superAdminHealth() async {
+    final res = await _dio.get<Map<String, dynamic>>('/v1/admin/health');
+    return Map<String, dynamic>.from(res.data ?? const {});
+  }
+
+  Future<Map<String, dynamic>> superAdminBusinessesOverview({int limit = 100}) async {
+    final res = await _dio.get<Map<String, dynamic>>(
+      '/v1/admin/businesses-overview',
+      queryParameters: {'limit': limit},
+    );
+    return Map<String, dynamic>.from(res.data ?? const {});
+  }
+
   /// Idempotent: ensure default workspace + catalog/supplier seed (single-tenant).
   /// Returns body JSON: `business_id`, `created_business`, `seeded`, optional `seed_stats`.
   /// Returns null when the server has no route (older API: 404/501) so session boot can continue.
@@ -1566,6 +1691,35 @@ class HexaApi {
     return data.map((e) => Map<String, dynamic>.from(e as Map)).toList();
   }
 
+  /// Token-sort fuzzy matches for catalog duplicate hints (create-item UIs).
+  Future<List<Map<String, dynamic>>> catalogFuzzyCheck({
+    required String businessId,
+    required String name,
+    String? supplierId,
+    String? categoryId,
+    String? typeId,
+  }) async {
+    final q = name.trim();
+    if (q.isEmpty) return [];
+    final res = await _dio.get<dynamic>(
+      '/v1/businesses/$businessId/catalog/fuzzy-check',
+      queryParameters: {
+        'name': q,
+        if (supplierId != null && supplierId.isNotEmpty) 'supplier_id': supplierId,
+        if (categoryId != null && categoryId.isNotEmpty) 'category_id': categoryId,
+        if (typeId != null && typeId.isNotEmpty) 'type_id': typeId,
+      },
+    );
+    final data = res.data;
+    if (data is! Map) return [];
+    final hits = data['hits'];
+    if (hits is! List) return [];
+    return hits
+        .map((e) => e is Map ? Map<String, dynamic>.from(e) : null)
+        .whereType<Map<String, dynamic>>()
+        .toList();
+  }
+
   Future<Map<String, dynamic>> createCatalogItem({
     required String businessId,
     required String categoryId,
@@ -1661,6 +1815,192 @@ class HexaApi {
     final res = await _dio.get<Map<String, dynamic>>(
         '/v1/businesses/$businessId/catalog-items/$itemId');
     return res.data ?? {};
+  }
+
+  /// Stock list with filters (server-side pagination).
+  Future<Map<String, dynamic>> listStock({
+    required String businessId,
+    int page = 1,
+    int perPage = 50,
+    String q = '',
+    String category = '',
+    String subcategory = '',
+    String status = 'all',
+    String sort = 'name',
+  }) async {
+    final res = await _dio.get<Map<String, dynamic>>(
+      '/v1/businesses/$businessId/stock/list',
+      queryParameters: {
+        'page': page,
+        'per_page': perPage,
+        'q': q,
+        'category': category,
+        'subcategory': subcategory,
+        'status': status,
+        'sort': sort,
+      },
+    );
+    return res.data ??
+        <String, dynamic>{
+          'items': <dynamic>[],
+          'total': 0,
+          'page': page,
+          'per_page': perPage,
+        };
+  }
+
+  /// Low-stock list (current below reorder when reorder is set), sorted by urgency.
+  Future<Map<String, dynamic>> listStockLow({
+    required String businessId,
+    int page = 1,
+    int perPage = 50,
+  }) async {
+    final res = await _dio.get<Map<String, dynamic>>(
+      '/v1/businesses/$businessId/stock/low',
+      queryParameters: {
+        'page': page,
+        'per_page': perPage,
+      },
+    );
+    return res.data ??
+        <String, dynamic>{
+          'items': <dynamic>[],
+          'total': 0,
+          'page': page,
+          'per_page': perPage,
+        };
+  }
+
+  Future<List<Map<String, dynamic>>> listStockAuditRecent({
+    required String businessId,
+    int limit = 12,
+  }) async {
+    final res = await _dio.get<dynamic>(
+      '/v1/businesses/$businessId/stock/audit/recent',
+      queryParameters: {'limit': limit},
+    );
+    final data = res.data;
+    if (data is! List) return [];
+    return [
+      for (final e in data)
+        if (e is Map<String, dynamic>) e
+        else if (e is Map) Map<String, dynamic>.from(e),
+    ];
+  }
+
+  Future<List<Map<String, dynamic>>> listActiveSessions({
+    required String businessId,
+  }) async {
+    final res = await _dio.get<dynamic>(
+      '/v1/businesses/$businessId/users/active-sessions',
+    );
+    final data = res.data;
+    if (data is! List) return [];
+    return [
+      for (final e in data)
+        if (e is Map<String, dynamic>) e
+        else if (e is Map) Map<String, dynamic>.from(e),
+    ];
+  }
+
+  /// Resolve catalog item by barcode / item code.
+  Future<Map<String, dynamic>> barcodeStockLookup({
+    required String businessId,
+    required String code,
+  }) async {
+    final res = await _dio.get<Map<String, dynamic>>(
+      '/v1/businesses/$businessId/stock/barcode/lookup',
+      queryParameters: {'code': code.trim()},
+    );
+    return res.data ?? {};
+  }
+
+  /// Stock + recent purchases for one item.
+  Future<Map<String, dynamic>> getStockItem({
+    required String businessId,
+    required String itemId,
+  }) async {
+    final res = await _dio.get<Map<String, dynamic>>(
+      '/v1/businesses/$businessId/stock/$itemId',
+    );
+    return res.data ?? {};
+  }
+
+  /// Alert owners/managers about a catalog item (in-app notifications).
+  Future<void> notifyOwnerStockItem({
+    required String businessId,
+    required String itemId,
+  }) async {
+    await _dio.post<void>(
+      '/v1/businesses/$businessId/stock/$itemId/notify-owner',
+    );
+  }
+
+  /// Add item to business reorder list (pending).
+  Future<void> addItemToReorderList({
+    required String businessId,
+    required String itemId,
+  }) async {
+    await _dio.post<void>(
+      '/v1/businesses/$businessId/stock/$itemId/reorder',
+    );
+  }
+
+  /// Authoritative stock adjustment (audit logged on server).
+  Future<List<Map<String, dynamic>>> listStockAuditForItem({
+    required String businessId,
+    required String itemId,
+  }) async {
+    final res = await _dio.get<List<dynamic>>(
+      '/v1/businesses/$businessId/stock/audit/$itemId',
+    );
+    return _parseJsonMapList(res.data);
+  }
+
+  Future<Map<String, dynamic>> patchStockItem({
+    required String businessId,
+    required String itemId,
+    required num newQty,
+    String adjustmentType = 'verification',
+    String? reason,
+  }) async {
+    final res = await _dio.patch<Map<String, dynamic>>(
+      '/v1/businesses/$businessId/stock/$itemId',
+      data: {
+        'new_qty': newQty,
+        'adjustment_type': adjustmentType,
+        if (reason != null && reason.trim().isNotEmpty) 'reason': reason.trim(),
+      },
+    );
+    return res.data ?? {};
+  }
+
+  Future<Map<String, dynamic>> getBarcodeLabel({
+    required String businessId,
+    required String itemId,
+  }) async {
+    final res = await _dio.get<Map<String, dynamic>>(
+      '/v1/businesses/$businessId/stock/barcode/$itemId',
+    );
+    return res.data ?? {};
+  }
+
+  Future<List<Map<String, dynamic>>> barcodeLabelBatch({
+    required String businessId,
+    required List<String> itemIds,
+  }) async {
+    final res = await _dio.post<Map<String, dynamic>>(
+      '/v1/businesses/$businessId/stock/barcode/batch',
+      data: {'item_ids': itemIds},
+    );
+    final labels = res.data?['labels'];
+    if (labels is List) {
+      return labels
+          .map((e) => e is Map ? Map<String, dynamic>.from(e) : null)
+          .whereType<Map<String, dynamic>>()
+          .toList();
+    }
+    return [];
   }
 
   /// Trade purchases only: latest price per supplier, last five landed prices, avg.

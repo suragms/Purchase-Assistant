@@ -102,6 +102,11 @@ class CatalogItem(Base):
     auto_detect_enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     ml_profile: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     validation_status: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    current_stock: Mapped[Decimal | None] = mapped_column(Numeric(12, 3), nullable=True, default=Decimal("0"))
+    reorder_level: Mapped[Decimal | None] = mapped_column(Numeric(12, 3), nullable=True, default=Decimal("0"))
+    rack_location: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    last_stock_updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_stock_updated_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
     archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 

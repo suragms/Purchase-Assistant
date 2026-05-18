@@ -7,14 +7,14 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
-from sqlalchemy import create_engine, func, select
+from sqlalchemy import create_engine, func, select, text
 from sqlalchemy.engine.url import make_url
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import sessionmaker
 
 from app.config import Settings, get_settings
 from app.database import get_db
-from app.deps import AdminCaller, require_admin_caller
+from app.deps import AdminCaller, require_admin_caller, require_super_admin
 from app.models import (
     AdminAuditLog,
     ApiUsageLog,
@@ -91,6 +91,49 @@ async def admin_login(settings: Annotated[Settings, Depends(get_settings)], body
     if not _password_matches(settings.admin_password, body.password):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
     return {"access_token": settings.admin_api_token, "token_type": "bearer"}
+
+
+@router.get("/health")
+async def admin_super_health(
+    _user: Annotated[User, Depends(require_super_admin)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    """Super-admin JWT probe (mobile); separate from machine-token admin routes."""
+    del _user
+    try:
+        await db.execute(text("SELECT 1"))
+        db_ok = True
+    except Exception:  # noqa: BLE001
+        db_ok = False
+    return {
+        "status": "ok" if db_ok else "degraded",
+        "database": "up" if db_ok else "down",
+        "as_of": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+@router.get("/businesses-overview")
+async def admin_super_businesses_overview(
+    _user: Annotated[User, Depends(require_super_admin)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+    limit: int = Query(100, ge=1, le=500),
+):
+    """Lightweight business directory for super-admin mobile (JWT), not admin_web token flows."""
+    del _user
+    r = await db.execute(select(Business.id, Business.name, Business.created_at).order_by(Business.created_at.desc()).limit(limit))
+    rows = r.all()
+    return {
+        "items": [
+            {
+                "id": str(row[0]),
+                "name": row[1],
+                "created_at": row[2].isoformat() if row[2] else None,
+            }
+            for row in rows
+        ],
+        "total_returned": len(rows),
+        "stub": True,
+    }
 
 
 @router.get("/stats")

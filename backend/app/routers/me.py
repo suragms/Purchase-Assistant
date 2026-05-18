@@ -29,6 +29,7 @@ class UserProfileOut(BaseModel):
     email: str
     username: str
     name: str | None = None
+    is_super_admin: bool = False
 
     model_config = {"from_attributes": False}
 
@@ -44,6 +45,7 @@ async def get_my_profile(user: Annotated[User, Depends(get_current_user)]):
         email=user.email,
         username=user.username,
         name=user.name,
+        is_super_admin=bool(user.is_super_admin),
     )
 
 
@@ -63,6 +65,7 @@ async def patch_my_profile(
         email=user.email,
         username=user.username,
         name=user.name,
+        is_super_admin=bool(user.is_super_admin),
     )
 
 

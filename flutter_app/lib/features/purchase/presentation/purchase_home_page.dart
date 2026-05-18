@@ -12,6 +12,7 @@ import 'package:share_plus/share_plus.dart';
 
 import '../../../core/auth/auth_error_messages.dart';
 import '../../../core/auth/session_notifier.dart';
+import '../../../core/router/post_auth_route.dart';
 import '../../../core/design_system/hexa_ds_tokens.dart';
 import '../../../core/search/catalog_fuzzy.dart';
 import '../../../core/models/trade_purchase_models.dart';
@@ -1142,7 +1143,8 @@ class _PurchaseHomePageState extends ConsumerState<PurchaseHomePage> {
                 _selected.clear();
               });
             } else {
-              context.go('/home');
+              final s = ref.read(sessionProvider);
+              if (s != null) context.go(authenticatedHomePath(s));
             }
           },
         ),

@@ -42,6 +42,8 @@ class Settings(BaseSettings):
         )
 
     app_env: str = "development"
+    # Harisree: staff accounts are created by the owner via POST /users — not self-registration.
+    allow_public_registration: bool = False
     app_name: str = "hexa-purchase-assistant"
     app_url: str = "http://localhost:8000"
     admin_url: str = "http://localhost:5173"

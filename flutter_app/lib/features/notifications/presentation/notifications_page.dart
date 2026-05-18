@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-
-import '../../../core/router/navigation_ext.dart';
 import 'package:intl/intl.dart';
 
+import '../../../core/auth/session_notifier.dart';
 import '../../../core/providers/notifications_provider.dart'
     show
         NotificationItem,
@@ -12,8 +11,11 @@ import '../../../core/providers/notifications_provider.dart'
         cloudCostNotificationItemsProvider,
         dismissedPurchaseAlertIdsProvider,
         maintenanceNotificationItemsProvider,
+        notificationItemFromServerRow,
         notificationsProvider,
         purchaseDueAlertItemsProvider;
+import '../../../core/providers/server_notifications_provider.dart';
+import '../../../core/router/navigation_ext.dart';
 import '../../../core/theme/hexa_colors.dart';
 import '../../../core/theme/theme_context_ext.dart';
 
@@ -38,7 +40,9 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
     switch (_filter) {
       case 'alerts':
         return n.type == NotificationType.priceAlert ||
-            n.type == NotificationType.profitLow;
+            n.type == NotificationType.profitLow ||
+            (n.type == NotificationType.serverInApp &&
+                n.serverKind == 'low_stock');
       case 'reminders':
         return n.type == NotificationType.reminder ||
             n.type == NotificationType.purchaseDue ||
@@ -47,7 +51,10 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
             n.type == NotificationType.maintenance;
       case 'system':
         return n.type == NotificationType.system ||
-            n.type == NotificationType.whatsapp;
+            n.type == NotificationType.whatsapp ||
+            (n.type == NotificationType.serverInApp &&
+                n.serverKind != null &&
+                n.serverKind != 'low_stock');
       default:
         return true;
     }
@@ -58,13 +65,19 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
     final tt = Theme.of(context).textTheme;
     final manual = ref.watch(notificationsProvider);
     final dismissed = ref.watch(dismissedPurchaseAlertIdsProvider);
+    final serverAsync = ref.watch(appNotificationsListProvider);
+    final serverRows = serverAsync.maybeWhen(
+      data: (rows) =>
+          rows.map((e) => notificationItemFromServerRow(e)).toList(),
+      orElse: () => const <NotificationItem>[],
+    );
     final tradeAlerts = ref
         .watch(purchaseDueAlertItemsProvider)
         .where((n) => !dismissed.contains(n.id))
         .toList();
     final cloudItems = ref.watch(cloudCostNotificationItemsProvider);
     final maintItems = ref.watch(maintenanceNotificationItemsProvider);
-    final items = [...cloudItems, ...maintItems, ...tradeAlerts, ...manual];
+    final items = [...serverRows, ...cloudItems, ...maintItems, ...tradeAlerts, ...manual];
     final filtered = items.where(_matchesFilter).toList();
     final q = _textSearch.text.trim().toLowerCase();
     final visible = q.isEmpty
@@ -137,6 +150,24 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          if (serverAsync.isLoading)
+            const LinearProgressIndicator(minHeight: 2),
+          if (serverAsync.hasError)
+            Material(
+              color: Theme.of(context).colorScheme.errorContainer.withValues(alpha: 0.35),
+              child: ListTile(
+                dense: true,
+                leading: Icon(Icons.warning_amber_rounded,
+                    color: Theme.of(context).colorScheme.error),
+                title: const Text('Could not refresh server notifications'),
+                subtitle: Text(
+                  serverAsync.error.toString(),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ),
+            ),
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
             child: TextField(
@@ -186,13 +217,25 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
             ),
           ),
           Expanded(
-            child: visible.isEmpty
-                ? Center(
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 32),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
+            child: RefreshIndicator(
+              onRefresh: () async {
+                ref.invalidate(appNotificationsListProvider);
+                ref.invalidate(appNotificationUnreadCountProvider);
+                await ref.read(appNotificationsListProvider.future);
+              },
+              child: visible.isEmpty
+                ? ListView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    children: [
+                      SizedBox(
+                        height: MediaQuery.sizeOf(context).height * 0.45,
+                        child: Center(
+                          child: Padding(
+                            padding:
+                                const EdgeInsets.symmetric(horizontal: 32),
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
                           Icon(
                             Icons.notifications_none_outlined,
                             size: 64,
@@ -244,11 +287,15 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
                               label: const Text('Record a purchase'),
                             ),
                           ],
-                        ],
+                              ],
+                            ),
+                          ),
+                        ),
                       ),
-                    ),
+                    ],
                   )
                 : ListView.builder(
+                    physics: const AlwaysScrollableScrollPhysics(),
                     padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
                     itemCount: visible.length,
                     itemBuilder: (context, i) {
@@ -263,6 +310,9 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
                         NotificationType.cloudCost => const Color(0xFF17A8A7),
                         NotificationType.maintenance =>
                             const Color(0xFF6366F1),
+                        NotificationType.serverInApp => n.serverKind == 'low_stock'
+                            ? HexaColors.warning
+                            : Theme.of(context).colorScheme.onSurfaceVariant,
                         NotificationType.system => Theme.of(context)
                             .colorScheme
                             .onSurfaceVariant,
@@ -279,7 +329,10 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
                             Icons.gavel_rounded,
                         NotificationType.cloudCost => Icons.cloud_outlined,
                         NotificationType.maintenance =>
-                            Icons.build_circle_outlined,
+                          Icons.build_circle_outlined,
+                        NotificationType.serverInApp => n.serverKind == 'low_stock'
+                            ? Icons.inventory_2_outlined
+                            : Icons.notifications_active_outlined,
                         NotificationType.system => Icons.info_outline_rounded,
                       };
                       return Padding(
@@ -289,15 +342,28 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
                           borderRadius: BorderRadius.circular(14),
                           child: InkWell(
                             borderRadius: BorderRadius.circular(14),
-                            onTap: () {
-                              if (n.id.startsWith('pur_') == false) {
+                            onTap: () async {
+                              final sid = n.serverNotificationId;
+                              if (sid != null && sid.isNotEmpty) {
+                                final session = ref.read(sessionProvider);
+                                if (session != null) {
+                                  try {
+                                    await ref.read(hexaApiProvider).patchAppNotificationRead(
+                                          businessId: session.primaryBusiness.id,
+                                          notificationId: sid,
+                                        );
+                                    ref.invalidate(appNotificationsListProvider);
+                                    ref.invalidate(appNotificationUnreadCountProvider);
+                                  } catch (_) {}
+                                }
+                              } else if (!n.id.startsWith('pur_')) {
                                 ref
                                     .read(notificationsProvider.notifier)
                                     .markRead(n.id);
                               }
                               final route = n.actionRoute;
                               if (route != null && route.isNotEmpty) {
-                                context.push(route);
+                                if (context.mounted) context.push(route);
                               }
                             },
                             child: ClipRRect(
@@ -358,7 +424,27 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
                                         color: Theme.of(context)
                                             .colorScheme
                                             .onSurfaceVariant,
-                                        onPressed: () {
+                                        onPressed: () async {
+                                          final sid = n.serverNotificationId;
+                                          if (sid != null && sid.isNotEmpty) {
+                                            final session = ref.read(sessionProvider);
+                                            if (session != null) {
+                                              try {
+                                                await ref
+                                                    .read(hexaApiProvider)
+                                                    .patchAppNotificationRead(
+                                                      businessId:
+                                                          session.primaryBusiness.id,
+                                                      notificationId: sid,
+                                                    );
+                                                ref.invalidate(
+                                                    appNotificationsListProvider);
+                                                ref.invalidate(
+                                                    appNotificationUnreadCountProvider);
+                                              } catch (_) {}
+                                            }
+                                            return;
+                                          }
                                           if (n.id.startsWith('pur_')) {
                                             final cur = ref.read(
                                                 dismissedPurchaseAlertIdsProvider);
@@ -391,6 +477,7 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
                       );
                     },
                   ),
+            ),
           ),
         ],
       ),

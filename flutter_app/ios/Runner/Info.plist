@@ -72,5 +72,7 @@
 	</array>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Hold the mic to dictate messages to the assistant</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Scan item barcodes to open catalog products and check stock.</string>
 </dict>
 </plist>

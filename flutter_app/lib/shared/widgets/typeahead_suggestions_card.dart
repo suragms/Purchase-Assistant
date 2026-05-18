@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../../core/theme/hexa_design_tokens.dart';
-
 /// Scrollable suggestion panel under a search field (Tally / POS style).
 ///
 /// Wraps a [ListView] or similar in a [Card] with a max height so the parent
@@ -10,7 +8,7 @@ import '../../core/theme/hexa_design_tokens.dart';
 class TypeaheadSuggestionsCard extends StatelessWidget {
   const TypeaheadSuggestionsCard({
     super.key,
-    this.maxHeight = HexaDesignTokens.suggestionsMaxHeight,
+    this.maxHeight = 240.0,
     this.margin = EdgeInsets.zero,
     required this.child,
     this.footer,
@@ -32,7 +30,9 @@ class TypeaheadSuggestionsCard extends StatelessWidget {
         children: [
           ConstrainedBox(
             constraints: BoxConstraints(maxHeight: maxHeight),
-            child: child,
+            child: SingleChildScrollView(
+              child: child,
+            ),
           ),
           if (footer != null) footer!,
         ],

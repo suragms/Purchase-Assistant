@@ -1,17 +1,23 @@
 import 'dart:math' as math;
 
+import 'package:barcode/barcode.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import 'package:qr_flutter/qr_flutter.dart';
+import 'package:share_plus/share_plus.dart';
 import '../../../core/models/trade_purchase_models.dart' show TradePurchaseLine;
 import '../../../core/router/navigation_ext.dart';
 import '../../../core/units/dynamic_unit_label_engine.dart' as unit_lbl;
 import '../../../core/utils/trade_purchase_rate_display.dart';
 import '../../../core/design_system/hexa_ds_tokens.dart';
+import '../../../core/theme/hexa_colors.dart';
 import '../../../core/auth/auth_error_messages.dart';
 import '../../../core/auth/session_notifier.dart';
+import '../../../core/router/post_auth_route.dart' show sessionIsStaff;
 import '../../../core/catalog/item_trade_history.dart';
 import '../../../core/providers/business_aggregates_invalidation.dart';
 import '../../../core/providers/business_profile_provider.dart';
@@ -19,7 +25,7 @@ import '../../../core/providers/business_write_revision.dart';
 import '../../../core/providers/catalog_providers.dart';
 import '../../../core/providers/suppliers_list_provider.dart';
 import '../../../core/providers/brokers_list_provider.dart';
-import '../../../core/providers/trade_purchases_provider.dart';
+import '../../../core/providers/stock_providers.dart';
 import '../../../core/services/reports_pdf.dart';
 import '../../../core/widgets/friendly_load_error.dart';
 import '../../../core/widgets/form_field_scroll.dart';
@@ -27,6 +33,8 @@ import '../../../core/widgets/list_skeleton.dart';
 import '../../../shared/widgets/bag_default_unit_hint.dart';
 import '../../../shared/widgets/trade_intel_cards.dart';
 import '../../../shared/widgets/search_picker_sheet.dart';
+import '../../../core/providers/trade_purchases_provider.dart';
+import '../../stock/presentation/update_stock_sheet.dart';
 
 class CatalogItemDetailPage extends ConsumerStatefulWidget {
   const CatalogItemDetailPage({super.key, required this.itemId});
@@ -50,6 +58,46 @@ class _CatalogItemDetailPageState extends ConsumerState<CatalogItemDetailPage> {
       symbol: '₹',
       decimalDigits: 0,
     ).format(n);
+  }
+
+  Future<void> _notifyOwner(String itemId, String itemName) async {
+    final session = ref.read(sessionProvider);
+    if (session == null) return;
+    try {
+      await ref.read(hexaApiProvider).notifyOwnerStockItem(
+            businessId: session.primaryBusiness.id,
+            itemId: itemId,
+          );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Owner notified about $itemName')),
+      );
+    } on DioException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(friendlyApiError(e))),
+      );
+    }
+  }
+
+  Future<void> _addToReorderList(String itemId, String itemName) async {
+    final session = ref.read(sessionProvider);
+    if (session == null) return;
+    try {
+      await ref.read(hexaApiProvider).addItemToReorderList(
+            businessId: session.primaryBusiness.id,
+            itemId: itemId,
+          );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Added $itemName to reorder list')),
+      );
+    } on DioException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(friendlyApiError(e))),
+      );
+    }
   }
 
   Future<void> _editItemDefaults(Map<String, dynamic> item) async {
@@ -173,6 +221,7 @@ class _CatalogItemDetailPageState extends ConsumerState<CatalogItemDetailPage> {
 
   Future<void> _refresh() async {
     ref.invalidate(catalogItemDetailProvider(widget.itemId));
+    ref.invalidate(stockItemDetailProvider(widget.itemId));
     ref.invalidate(tradePurchasesCatalogIntelProvider);
     await ref.read(catalogItemDetailProvider(widget.itemId).future);
   }
@@ -259,6 +308,7 @@ class _CatalogItemDetailPageState extends ConsumerState<CatalogItemDetailPage> {
     ref.listen<int>(businessDataWriteRevisionProvider, (prev, next) {
       if (prev != null && next > prev) {
         ref.invalidate(catalogItemDetailProvider(widget.itemId));
+        ref.invalidate(stockItemDetailProvider(widget.itemId));
         ref.invalidate(catalogItemTradeSupplierPricesProvider(widget.itemId));
         ref.invalidate(tradePurchasesCatalogIntelProvider);
       }
@@ -310,6 +360,11 @@ class _CatalogItemDetailPageState extends ConsumerState<CatalogItemDetailPage> {
               ref.invalidate(catalogItemDetailProvider(widget.itemId)),
         ),
         data: (item) {
+          final fromScan =
+              GoRouterState.of(context).uri.queryParameters['source'] ==
+                  'scan';
+          final session = ref.watch(sessionProvider);
+          final isStaff = session != null && sessionIsStaff(session);
           String? catName;
           if (catsAsync.hasValue) {
             final cid = item['category_id']?.toString();
@@ -320,8 +375,6 @@ class _CatalogItemDetailPageState extends ConsumerState<CatalogItemDetailPage> {
               }
             }
           }
-          final hsn = item['hsn_code']?.toString();
-
           return RefreshIndicator(
             onRefresh: _refresh,
             child: ListView(
@@ -331,31 +384,182 @@ class _CatalogItemDetailPageState extends ConsumerState<CatalogItemDetailPage> {
               ),
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
               children: [
-                Text(
-                  item['name']?.toString() ?? 'Item',
-                  style: HexaDsType.catalogItemHeroName,
-                ),
-                const SizedBox(height: 4),
-                InkWell(
-                  onTap: catName == null || catName.isEmpty
-                      ? null
-                      : () {
-                          final c = catName!;
-                          context.push(
-                            '/contacts/category?name=${Uri.encodeComponent(c)}',
-                          );
-                        },
-                  child: Text(
-                    [
-                      if (catName != null && catName.isNotEmpty) catName,
-                      item['type_name']?.toString(),
-                    ].whereType<String>().where((s) => s.isNotEmpty).join(' · '),
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: Theme.of(context).colorScheme.onSurfaceVariant,
-                          fontWeight: FontWeight.w600,
+                if (fromScan)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: Material(
+                      color: HexaColors.brandPrimary.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(10),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 10,
                         ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.qr_code_scanner_rounded,
+                              color: HexaColors.brandPrimary,
+                              size: 20,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                'Opened from barcode scan',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                  color: HexaColors.brandPrimary,
+                                  fontSize: 13,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
                   ),
+                Builder(
+                  builder: (context) {
+                    final stockAsync =
+                        ref.watch(stockItemDetailProvider(widget.itemId));
+                    return stockAsync.when(
+                      loading: () => _ItemWarehouseHeroHeader(
+                        item: item,
+                        categoryLabel: [
+                          if (catName != null && catName.isNotEmpty) catName,
+                          item['type_name']?.toString(),
+                        ].whereType<String>().where((s) => s.isNotEmpty).join(' · '),
+                      ),
+                      error: (_, __) => _ItemWarehouseHeroHeader(
+                        item: item,
+                        categoryLabel: [
+                          if (catName != null && catName.isNotEmpty) catName,
+                          item['type_name']?.toString(),
+                        ].whereType<String>().where((s) => s.isNotEmpty).join(' · '),
+                      ),
+                      data: (st) => Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          _ItemWarehouseHeroHeader(
+                            item: item,
+                            stock: st.isEmpty ? null : st,
+                            categoryLabel: [
+                              if (catName != null && catName.isNotEmpty) catName,
+                              item['type_name']?.toString(),
+                            ].whereType<String>().where((s) => s.isNotEmpty).join(' · '),
+                          ),
+                          if (st.isNotEmpty) ...[
+                            const SizedBox(height: 12),
+                            _WarehouseStockCard(stock: st),
+                          ],
+                        ],
+                      ),
+                    );
+                  },
                 ),
+                const SizedBox(height: 12),
+                Builder(
+                  builder: (context) {
+                    final st =
+                        ref.watch(stockItemDetailProvider(widget.itemId)).valueOrNull ??
+                            const <String, dynamic>{};
+                    final stockStatus =
+                        st['stock_status']?.toString() ?? 'healthy';
+                    final showNotifyOwner = isStaff &&
+                        (stockStatus == 'low' || stockStatus == 'critical');
+                    return Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    FilledButton.icon(
+                      onPressed: () => context.push(
+                        '/purchase/new?catalogItemId=${Uri.encodeComponent(widget.itemId)}',
+                      ),
+                      icon: const Icon(Icons.add_shopping_cart_rounded),
+                      label: const Text('New purchase'),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: const Color(0xFF17A8A7),
+                        foregroundColor: Colors.white,
+                      ),
+                    ),
+                    OutlinedButton.icon(
+                      onPressed: () async {
+                        final st = await ref.read(
+                          stockItemDetailProvider(widget.itemId).future,
+                        );
+                        if (!context.mounted) return;
+                        await showUpdateStockSheet(
+                          context: context,
+                          ref: ref,
+                          itemId: widget.itemId,
+                          itemName: item['name']?.toString() ?? 'Item',
+                          stockRow: st.isEmpty ? null : st,
+                        );
+                      },
+                      icon: const Icon(Icons.inventory_2_outlined),
+                      label: const Text('Update stock'),
+                    ),
+                    OutlinedButton.icon(
+                      onPressed: () => context.push('/barcode/scan'),
+                      icon: const Icon(Icons.qr_code_scanner_rounded),
+                      label: const Text('Scan'),
+                    ),
+                    if ((item['item_code']?.toString().trim().isNotEmpty) ?? false)
+                      OutlinedButton.icon(
+                        onPressed: () => context.push(
+                          '/barcode/print/${Uri.encodeComponent(widget.itemId)}',
+                        ),
+                        icon: const Icon(Icons.print_rounded),
+                        label: const Text('Print label'),
+                      ),
+                    OutlinedButton.icon(
+                      onPressed: () {
+                        final name = item['name']?.toString() ?? 'Item';
+                        final q = '?name=${Uri.encodeComponent(name)}';
+                        context.push('/stock/${widget.itemId}/history$q');
+                      },
+                      icon: const Icon(Icons.history_rounded),
+                      label: const Text('History'),
+                    ),
+                    OutlinedButton.icon(
+                      onPressed: () => _editItemDefaults(item),
+                      icon: const Icon(Icons.edit_outlined),
+                      label: const Text('Quick edit'),
+                    ),
+                    if (showNotifyOwner)
+                      OutlinedButton.icon(
+                        onPressed: () => _notifyOwner(
+                          widget.itemId,
+                          item['name']?.toString() ?? 'Item',
+                        ),
+                        icon: const Icon(Icons.notifications_active_outlined),
+                        label: const Text('Notify owner'),
+                      ),
+                    OutlinedButton.icon(
+                      onPressed: () => _addToReorderList(
+                        widget.itemId,
+                        item['name']?.toString() ?? 'Item',
+                      ),
+                      icon: const Icon(Icons.playlist_add_rounded),
+                      label: const Text('Reorder list'),
+                    ),
+                  ],
+                );
+                  },
+                ),
+                const SizedBox(height: 12),
+                _CatalogItemInfoGrid(item: item),
+                const SizedBox(height: 12),
+                _CatalogItemBarcodeSection(
+                  itemCode: item['item_code']?.toString(),
+                  itemName: item['name']?.toString() ?? 'Item',
+                  itemId: widget.itemId,
+                ),
+                const SizedBox(height: 12),
+                _RecentStockPurchasesSection(itemId: widget.itemId),
+                const SizedBox(height: 12),
+                _CatalogItemStockHistorySection(itemId: widget.itemId),
+                const SizedBox(height: 12),
                 // Enrich hero card with last-line qty/unit/kg from loaded purchases
                 // so "Last" shows bags/kg, not just rate.
                 Builder(builder: (ctx) {
@@ -408,28 +612,6 @@ class _CatalogItemDetailPageState extends ConsumerState<CatalogItemDetailPage> {
                   return _ItemTradeHeroCard(item: hero);
                 }),
                 const SizedBox(height: 12),
-                FilledButton.icon(
-                  onPressed: () => context.push(
-                    '/purchase/new?catalogItemId=${Uri.encodeComponent(widget.itemId)}',
-                  ),
-                  icon: const Icon(Icons.add_shopping_cart_rounded),
-                  label: const Text('New purchase'),
-                  style: FilledButton.styleFrom(
-                    backgroundColor: const Color(0xFF17A8A7),
-                    foregroundColor: Colors.white,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                if (hsn != null && hsn.isNotEmpty) ...[
-                  Text(
-                    'HSN $hsn',
-                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                          color:
-                              Theme.of(context).colorScheme.onSurfaceVariant,
-                        ),
-                  ),
-                  const SizedBox(height: 8),
-                ],
                 _CatalogItemDefaultParties(item: item, ref: ref),
                 const SizedBox(height: 12),
                 purchasesAsync.when(
@@ -626,6 +808,675 @@ class _CatalogItemDetailPageState extends ConsumerState<CatalogItemDetailPage> {
     );
   }
 
+}
+
+
+class _WarehouseStockCard extends StatelessWidget {
+  const _WarehouseStockCard({required this.stock});
+
+  final Map<String, dynamic> stock;
+
+  static String _fmtQty(dynamic v) {
+    if (v == null) return '—';
+    if (v is num) {
+      return v == v.roundToDouble() ? v.toInt().toString() : v.toString();
+    }
+    return '$v';
+  }
+
+  static (String label, Color fg, Color bg) _badge(
+    String st,
+    ColorScheme cs,
+  ) {
+    switch (st) {
+      case 'out':
+        return ('Out of stock', cs.onErrorContainer, cs.errorContainer);
+      case 'critical':
+        return ('Critical', const Color(0xFFB71C1C), const Color(0xFFFFEBEE));
+      case 'low':
+        return ('Low', const Color(0xFFE65100), const Color(0xFFFFF3E0));
+      case 'healthy':
+        return ('In stock', const Color(0xFF1B5E20), const Color(0xFFE8F5E9));
+      default:
+        return (st, cs.onSurfaceVariant, cs.surfaceContainerHighest);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final st = stock['stock_status']?.toString() ?? 'healthy';
+    final badge = _badge(st, cs);
+    final unit = (stock['unit'] ?? '').toString().trim();
+    final rack = (stock['rack_location'] ?? '').toString().trim();
+    final qty = _fmtQty(stock['current_stock']);
+    final ro = _fmtQty(stock['reorder_level']);
+    final updated = stock['last_stock_updated_at']?.toString();
+    final by = stock['last_stock_updated_by']?.toString();
+
+    return Material(
+      color: cs.surfaceContainerHighest.withValues(alpha: 0.45),
+      borderRadius: BorderRadius.circular(14),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(Icons.warehouse_outlined, color: cs.primary, size: 26),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Warehouse',
+                        style: theme.textTheme.labelLarge?.copyWith(
+                          fontWeight: FontWeight.w800,
+                          color: cs.onSurfaceVariant,
+                        ),
+                      ),
+                      if (rack.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 4),
+                          child: Text(
+                            'Rack / bin: $rack',
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: badge.$3,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    badge.$1,
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: badge.$2,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Text(
+              '$qty${unit.isNotEmpty ? ' $unit' : ''} on hand',
+              style: theme.textTheme.headlineSmall?.copyWith(
+                fontWeight: FontWeight.w900,
+                height: 1.1,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Reorder at $ro${unit.isNotEmpty ? ' $unit' : ''}',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: cs.onSurfaceVariant,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            if (updated != null && updated.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Text(
+                'Last update: ${_shortWhen(updated)}${(by != null && by.isNotEmpty) ? ' · $by' : ''}',
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: cs.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  static String _shortWhen(String iso) {
+    final d = DateTime.tryParse(iso);
+    if (d == null) return iso.split('T').first;
+    return DateFormat('d MMM yyyy, h:mm a').format(d.toLocal());
+  }
+}
+
+class _CatalogItemInfoGrid extends ConsumerWidget {
+  const _CatalogItemInfoGrid({required this.item});
+
+  final Map<String, dynamic> item;
+
+  static String _fmtWhen(String iso) {
+    final d = DateTime.tryParse(iso);
+    if (d == null) return iso.split('T').first;
+    return DateFormat('d MMM yyyy').format(d.toLocal());
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final id = item['id']?.toString() ?? '';
+    final stockAsync = ref.watch(stockItemDetailProvider(id));
+    final st = stockAsync.valueOrNull ?? {};
+
+    String cell(dynamic v) {
+      if (v == null) return '—';
+      final s = v.toString().trim();
+      return s.isEmpty ? '—' : s;
+    }
+
+    String? lastPurchaseDate;
+    final rp = st['recent_purchases'];
+    if (rp is List && rp.isNotEmpty) {
+      final first = rp.first;
+      if (first is Map) {
+        lastPurchaseDate = first['purchase_date']?.toString();
+      }
+    }
+
+    final rows = <(String, String)>[
+      if (st.isNotEmpty) ...[
+        ('Stock', cell(st['current_stock'])),
+        ('Reorder', cell(st['reorder_level'])),
+        ('Unit', cell(st['unit'] ?? item['default_unit'])),
+        ('Category', cell(st['category_name'] ?? item['category_name'])),
+        ('Subcategory', cell(st['subcategory_name'] ?? item['type_name'])),
+        ('Rack', cell(st['rack_location'])),
+        ('Supplier', cell(st['supplier_name'])),
+        ('Last purchase', lastPurchaseDate != null
+            ? _CatalogItemInfoGrid._fmtWhen(lastPurchaseDate)
+            : '—'),
+      ] else ...[
+        ('HSN', cell(item['hsn_code'])),
+        ('Tax %', cell(item['tax_percent'])),
+        ('Item code', cell(item['item_code'])),
+        ('Default unit', cell(item['default_unit'])),
+      ],
+    ];
+
+    return Material(
+      color: cs.surfaceContainerLowest.withValues(alpha: 0.35),
+      borderRadius: BorderRadius.circular(12),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              st.isNotEmpty ? 'Warehouse info' : 'Catalog info',
+              style: theme.textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            const SizedBox(height: 8),
+            LayoutBuilder(
+          builder: (context, c) {
+            final wide = c.maxWidth > 420;
+            final child = wide
+                ? Table(
+                    columnWidths: const {
+                      0: FlexColumnWidth(1.1),
+                      1: FlexColumnWidth(1.4),
+                    },
+                    children: [
+                      for (final r in rows)
+                        TableRow(
+                          children: [
+                            Padding(
+                              padding: const EdgeInsets.symmetric(
+                                vertical: 6,
+                                horizontal: 4,
+                              ),
+                              child: Text(
+                                r.$1,
+                                style: theme.textTheme.labelSmall?.copyWith(
+                                  color: cs.onSurfaceVariant,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                            Padding(
+                              padding: const EdgeInsets.symmetric(
+                                vertical: 6,
+                                horizontal: 4,
+                              ),
+                              child: Text(
+                                r.$2,
+                                style: theme.textTheme.bodyMedium?.copyWith(
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                    ],
+                  )
+                : Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      for (final r in rows)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 6),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              SizedBox(
+                                width: 118,
+                                child: Text(
+                                  r.$1,
+                                  style: theme.textTheme.labelSmall?.copyWith(
+                                    color: cs.onSurfaceVariant,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ),
+                              Expanded(
+                                child: Text(
+                                  r.$2,
+                                  style: theme.textTheme.bodyMedium?.copyWith(
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                    ],
+                  );
+            return child;
+          },
+        ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _CatalogItemStockHistorySection extends ConsumerWidget {
+  const _CatalogItemStockHistorySection({required this.itemId});
+
+  final String itemId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final auditAsync = ref.watch(stockItemAuditProvider(itemId));
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+
+    return auditAsync.when(
+      loading: () => const SizedBox(
+        height: 48,
+        child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+      ),
+      error: (_, __) => const SizedBox.shrink(),
+      data: (rows) {
+        if (rows.isEmpty) return const SizedBox.shrink();
+        final preview = rows.take(10).toList();
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Text(
+                  'Stock history',
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const Spacer(),
+                TextButton(
+                  onPressed: () {
+                    final name = ref.read(catalogItemDetailProvider(itemId)).valueOrNull?['name']?.toString();
+                    final q = name != null && name.isNotEmpty ? '?name=${Uri.encodeComponent(name)}' : '';
+                    context.push('/stock/$itemId/history$q');
+                  },
+                  child: const Text('View all'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            ...preview.map((r) {
+              final oldQ = (r['old_qty'] as num?)?.toDouble() ?? 0;
+              final newQ = (r['new_qty'] as num?)?.toDouble() ?? 0;
+              final diff = newQ - oldQ;
+              final dot = diff > 0
+                  ? const Color(0xFF2E7D32)
+                  : diff < 0
+                      ? cs.error
+                      : cs.outline;
+              return Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 8,
+                      height: 8,
+                      decoration: BoxDecoration(color: dot, shape: BoxShape.circle),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        '${diff >= 0 ? '+' : ''}${diff == diff.roundToDouble() ? diff.toInt() : diff.toStringAsFixed(1)} '
+                        '(${oldQ.toStringAsFixed(0)} → ${newQ.toStringAsFixed(0)}) · '
+                        '${r['adjustment_type'] ?? ''}',
+                        style: theme.textTheme.bodySmall,
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _CatalogItemBarcodeSection extends StatelessWidget {
+  const _CatalogItemBarcodeSection({
+    this.itemCode,
+    required this.itemName,
+    required this.itemId,
+  });
+
+  final String? itemCode;
+  final String itemName;
+  final String itemId;
+
+  Future<void> _shareCode(BuildContext context, String code) async {
+    await Share.share(
+      'Harisree Agency — $itemName\nBarcode: $code',
+      subject: itemName,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final code = itemCode?.trim() ?? '';
+    if (code.isEmpty) {
+      return Material(
+        color: cs.surfaceContainerHighest.withValues(alpha: 0.35),
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Text(
+            'No item code set — add a code in catalog to print a barcode label.',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: cs.onSurfaceVariant,
+            ),
+          ),
+        ),
+      );
+    }
+
+    final svg = Barcode.code128().toSvg(
+      code,
+      width: 280,
+      height: 72,
+      drawText: true,
+      fontHeight: 13,
+    );
+
+    return Material(
+      color: cs.surfaceContainerLowest.withValues(alpha: 0.4),
+      borderRadius: BorderRadius.circular(12),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              'Barcode',
+              style: theme.textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Column(
+                    children: [
+                      Center(
+                        child: SvgPicture.string(
+                          svg,
+                          width: 260,
+                          height: 68,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        code,
+                        textAlign: TextAlign.center,
+                        style: theme.textTheme.labelLarge?.copyWith(
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 12),
+                QrImageView(
+                  data: code,
+                  size: 80,
+                  backgroundColor: Colors.white,
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                FilledButton.icon(
+                  onPressed: () => context.push(
+                    '/barcode/print/${Uri.encodeComponent(itemId)}',
+                  ),
+                  icon: const Icon(Icons.print_rounded, size: 18),
+                  label: const Text('Print label'),
+                ),
+                OutlinedButton.icon(
+                  onPressed: () => _shareCode(context, code),
+                  icon: const Icon(Icons.share_outlined, size: 18),
+                  label: const Text('Share barcode'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ItemWarehouseHeroHeader extends StatelessWidget {
+  const _ItemWarehouseHeroHeader({
+    required this.item,
+    this.stock,
+    this.categoryLabel = '',
+  });
+
+  final Map<String, dynamic> item;
+  final Map<String, dynamic>? stock;
+  final String categoryLabel;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final name = item['name']?.toString() ?? 'Item';
+    final code = item['item_code']?.toString().trim() ?? '';
+    final st = stock?['stock_status']?.toString() ?? 'healthy';
+    final statusLabel = switch (st) {
+      'out' => 'Out',
+      'critical' => 'Critical',
+      'low' => 'Low',
+      _ => 'OK',
+    };
+    final statusColor = switch (st) {
+      'out' => cs.error,
+      'critical' => const Color(0xFFC62828),
+      'low' => const Color(0xFFE65100),
+      _ => const Color(0xFF2E7D32),
+    };
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: 80,
+          height: 80,
+          decoration: BoxDecoration(
+            color: HexaColors.primaryLight,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: HexaColors.brandBorder),
+          ),
+          child: Icon(
+            Icons.inventory_2_outlined,
+            size: 36,
+            color: HexaColors.brandPrimary,
+          ),
+        ),
+        const SizedBox(width: 14),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(name, style: HexaDsType.catalogItemHeroName),
+              if (categoryLabel.isNotEmpty) ...[
+                const SizedBox(height: 4),
+                Text(
+                  categoryLabel,
+                  style: HexaDsType.body(13, color: HexaDsColors.textMuted),
+                ),
+              ],
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 6,
+                children: [
+                  if (code.isNotEmpty)
+                    Chip(
+                      label: Text(
+                        code,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w800,
+                          fontSize: 12,
+                        ),
+                      ),
+                      visualDensity: VisualDensity.compact,
+                      padding: EdgeInsets.zero,
+                    ),
+                  Chip(
+                    label: Text(
+                      statusLabel,
+                      style: TextStyle(
+                        fontWeight: FontWeight.w800,
+                        fontSize: 12,
+                        color: statusColor,
+                      ),
+                    ),
+                    side: BorderSide(color: statusColor.withValues(alpha: 0.5)),
+                    visualDensity: VisualDensity.compact,
+                    padding: EdgeInsets.zero,
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _RecentStockPurchasesSection extends ConsumerWidget {
+  const _RecentStockPurchasesSection({required this.itemId});
+
+  final String itemId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final stockAsync = ref.watch(stockItemDetailProvider(itemId));
+
+    return stockAsync.when(
+      loading: () => const SizedBox(
+        height: 48,
+        child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+      ),
+      error: (_, __) => const SizedBox.shrink(),
+      data: (st) {
+        final raw = st['recent_purchases'];
+        if (raw is! List || raw.isEmpty) return const SizedBox.shrink();
+        final rows = [
+          for (final e in raw.take(5))
+            if (e is Map) Map<String, dynamic>.from(e),
+        ];
+        if (rows.isEmpty) return const SizedBox.shrink();
+
+        return Material(
+          color: theme.colorScheme.surfaceContainerLowest.withValues(alpha: 0.35),
+          borderRadius: BorderRadius.circular(12),
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  'Recent purchases',
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                for (final r in rows)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            _fmtPurchaseLine(r),
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  static String _fmtPurchaseLine(Map<String, dynamic> r) {
+    final at = DateTime.tryParse(r['purchase_date']?.toString() ?? '');
+    final date = at != null
+        ? DateFormat('d MMM yyyy').format(at.toLocal())
+        : '—';
+    final qty = r['qty']?.toString() ?? '—';
+    final unit = r['unit']?.toString() ?? '';
+    final rate = r['rate']?.toString() ?? '—';
+    final sup = r['supplier_name']?.toString() ?? '';
+    return '$date · $qty $unit · ₹$rate · $sup';
+  }
 }
 
 

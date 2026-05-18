@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 import os
@@ -46,6 +47,10 @@ from app.routers import (
     search,
     trade_purchases,
     whatsapp_reports,
+    stock,
+    stock_audits,
+    users,
+    notifications,
 )
 
 logger = logging.getLogger(__name__)
@@ -132,6 +137,31 @@ async def lifespan(app: FastAPI):
                 e,
             )
 
+    low_stock_task: asyncio.Task | None = None
+
+    async def _low_stock_notify_hourly() -> None:
+        """Best-effort hourly scan: items below reorder → per-user notification rows."""
+        await asyncio.sleep(60)
+        from app.services.low_stock_notifications import run_low_stock_notification_scan
+
+        while True:
+            try:
+                async with async_session_factory() as db:
+                    n = await run_low_stock_notification_scan(db)
+                    if n:
+                        logger.info("low_stock_notification_scan: queued %s new notifications", n)
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:  # noqa: BLE001
+                logger.warning("low_stock_notification_scan failed: %s", e, exc_info=True)
+            await asyncio.sleep(3600)
+
+    try:
+        low_stock_task = asyncio.create_task(_low_stock_notify_hourly())
+        logger.info("Background: low_stock hourly notification task started")
+    except Exception as e:  # noqa: BLE001
+        logger.warning("Background: low_stock task not started: %s", e)
+
     scheduler = None
     try:
         from zoneinfo import ZoneInfo
@@ -153,6 +183,14 @@ async def lifespan(app: FastAPI):
         logger.warning("APScheduler not started: %s", e)
 
     yield
+    if low_stock_task is not None:
+        low_stock_task.cancel()
+        try:
+            await low_stock_task
+        except asyncio.CancelledError:
+            pass
+        except Exception:  # noqa: BLE001
+            pass
     if scheduler is not None:
         try:
             scheduler.shutdown(wait=False)
@@ -381,9 +419,14 @@ app.include_router(cloud_expense.router)
 app.include_router(contacts.router)
 app.include_router(media.router)
 app.include_router(realtime.router)
+app.include_router(notifications.router)
 app.include_router(admin.router)
 app.include_router(billing.router)
 app.include_router(razorpay_webhook.router)
+app.include_router(stock_audits.router)
+app.include_router(stock.router)
+app.include_router(users.router)
+app.include_router(users.activity_router)
 
 
 _FAILSAFE_GET_TRADE_LIST = re.compile(r"^/v1/businesses/[^/]+/trade-purchases$")

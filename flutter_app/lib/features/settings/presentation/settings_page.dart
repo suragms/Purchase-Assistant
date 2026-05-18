@@ -18,6 +18,7 @@ import '../../../core/auth/session_notifier.dart';
 import '../../../core/errors/user_facing_errors.dart';
 import '../../../core/config/app_config.dart';
 import '../../../core/router/navigation_ext.dart';
+import '../../../core/router/post_auth_route.dart' show sessionCanManageUsers;
 import '../../../core/models/session.dart';
 import '../../../core/providers/business_aggregates_invalidation.dart';
 import '../../../core/maintenance/maintenance_payment_constants.dart';
@@ -63,6 +64,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   late final TextEditingController _waPhoneCtrl;
   bool _waSchedBusy = false;
   bool _waSendingTest = false;
+
+  int _superAdminGestureCount = 0;
+  DateTime? _superAdminGestureAnchor;
 
   @override
   void initState() {
@@ -560,6 +564,8 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       }
     });
     final isOwner = session?.primaryBusiness.role == 'owner';
+    final canManageUsers =
+        session != null && sessionCanManageUsers(session);
     final showBillingSection =
         isOwner && (ModalRoute.of(context)?.settings.name == '/settings/billing');
     final pb = session?.primaryBusiness;
@@ -875,6 +881,19 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                     trailing: const Icon(Icons.chevron_right_rounded),
                     onTap: () => context.push('/settings/business'),
                   ),
+                  if (canManageUsers) ...[
+                    const Divider(height: 1),
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: Icon(Icons.group_outlined, color: cs.primary),
+                      title: const Text('Users & roles'),
+                      subtitle: const Text(
+                        'Staff and manager logins for this workspace',
+                      ),
+                      trailing: const Icon(Icons.chevron_right_rounded),
+                      onTap: () => context.push('/settings/users'),
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -1121,6 +1140,31 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           ),
           ],
           const SizedBox(height: 28),
+          Center(
+            child: GestureDetector(
+              onLongPress: () {
+                if (session?.isSuperAdmin != true) return;
+                final now = DateTime.now();
+                final anchor = _superAdminGestureAnchor;
+                if (anchor == null ||
+                    now.difference(anchor) > const Duration(seconds: 4)) {
+                  _superAdminGestureCount = 0;
+                }
+                _superAdminGestureAnchor = now;
+                setState(() => _superAdminGestureCount++);
+                if (_superAdminGestureCount >= 3) {
+                  _superAdminGestureCount = 0;
+                  _superAdminGestureAnchor = null;
+                  context.push('/admin');
+                }
+              },
+              child: Text(
+                'Version ${AppConfig.packageVersion}',
+                style: tt.labelSmall?.copyWith(color: cs.onSurfaceVariant),
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
           FilledButton.tonalIcon(
             onPressed: () async {
               await ref.read(sessionProvider.notifier).logout();

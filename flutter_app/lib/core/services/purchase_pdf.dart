@@ -208,13 +208,16 @@ void _logPdfFailure(String op, Object e, StackTrace st) {
 Future<bool> sharePurchasePdf(TradePurchase p, BusinessProfile biz) async {
   try {
     final doc = await buildPurchaseDoc(p, biz);
+    debugPrint('PDF: Document built successfully');
     final bytes = await doc.save();
+    debugPrint('PDF: Saved bytes size: ${bytes.length}');
     final filename = buildPurchaseSharePdfFileName(p);
     try {
+      debugPrint('PDF: Attempting Printing.sharePdf...');
       await Printing.sharePdf(bytes: bytes, filename: filename);
       return true;
     } catch (printingError) {
-      debugPrint('Printing.sharePdf failed ($printingError), trying share_plus');
+      debugPrint('PDF: Printing.sharePdf failed ($printingError), trying share_plus');
       await Share.shareXFiles(
         [
           XFile.fromData(
@@ -225,13 +228,16 @@ Future<bool> sharePurchasePdf(TradePurchase p, BusinessProfile biz) async {
         ],
         subject: '${p.supplierName ?? 'Purchase'} — ${p.humanId}',
       );
+      debugPrint('PDF: share_plus completed');
       return true;
     }
   } catch (e, st) {
+    debugPrint('PDF: sharePurchasePdf exception: $e');
     _logPdfFailure('share', e, st);
     return false;
   }
 }
+
 
 Future<bool> printPurchasePdf(TradePurchase p, BusinessProfile biz) async {
   try {

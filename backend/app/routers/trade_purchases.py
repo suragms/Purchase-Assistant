@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.db_resilience import execute_with_retry
-from app.deps import get_current_user, require_membership
+from app.deps import get_current_user, require_membership, require_role
 from app.models import Membership, User
 from app.schemas.trade_purchases import (
     TradeDraftUpsertRequest,
@@ -353,7 +353,7 @@ async def delete_trade_purchase(
     purchase_id: uuid.UUID,
     user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
-    _m: Annotated[Membership, Depends(require_membership)],
+    _m: Annotated[Membership, Depends(require_role("owner", "manager", "super_admin"))],
 ):
     del user
     ok = await tps.delete_trade_purchase(db, business_id, purchase_id)

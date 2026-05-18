@@ -39,6 +39,9 @@ dependencies:
   shimmer: ^3.0.0
   image: ^4.3.0
   quick_actions: ^1.1.0
+  mobile_scanner: ^5.2.3
+  barcode: ^2.2.9
+  flutter_svg: ^2.0.17
 
 dev_dependencies:
   flutter_test:

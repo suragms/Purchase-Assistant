@@ -6,9 +6,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../../../core/theme/hexa_colors.dart';
-import '../../../../core/widgets/form_field_scroll.dart';
 import '../../../../shared/widgets/inline_search_field.dart';
 import '../../../../shared/widgets/smart_search_field.dart';
+import '../../../../shared/widgets/keyboard_aware_suggestion_overlay.dart';
 
 /// True if [qLower] is empty or matches [label] by **whole-label prefix** or
 /// **token prefix** (tokens split on non-alphanumeric).
@@ -238,8 +238,7 @@ class _PartyInlineSuggestFieldState extends State<PartyInlineSuggestField> {
 
   final GlobalKey _revealKey = GlobalKey(debugLabel: 'partyInlineSuggest');
   final GlobalKey _fieldMeasureKey = GlobalKey(debugLabel: 'partyInlineField');
-  final LayerLink _layerLink = LayerLink();
-  OverlayEntry? _suggestionOverlayEntry;
+  final OverlayPortalController _overlayController = OverlayPortalController();
 
   /// Groups the text field and overlay panel so [TapRegion.onTapOutside] does not
   /// fire when the user taps a suggestion (overlay is not a descendant of the field).
@@ -273,13 +272,12 @@ class _PartyInlineSuggestFieldState extends State<PartyInlineSuggestField> {
     }
     if (oldWidget.suggestionsAsOverlay != widget.suggestionsAsOverlay &&
         !widget.suggestionsAsOverlay) {
-      _removeSuggestionOverlay();
+      if (_overlayController.isShowing) _overlayController.hide();
     }
   }
 
   @override
   void dispose() {
-    _removeSuggestionOverlay();
     _overlaySuggestScroll.dispose();
     _inlineSuggestScroll.dispose();
     _filterDebounceTimer?.cancel();
@@ -737,11 +735,6 @@ class _PartyInlineSuggestFieldState extends State<PartyInlineSuggestField> {
     widget.onSubmitted?.call();
   }
 
-  void _removeSuggestionOverlay() {
-    _suggestionOverlayEntry?.remove();
-    _suggestionOverlayEntry = null;
-  }
-
   void _scheduleOverlaySync() {
     if (!widget.suggestionsAsOverlay) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -769,21 +762,15 @@ class _PartyInlineSuggestFieldState extends State<PartyInlineSuggestField> {
 
   void _syncSuggestionOverlay() {
     if (!widget.suggestionsAsOverlay) {
-      _removeSuggestionOverlay();
+      if (_overlayController.isShowing) _overlayController.hide();
       return;
     }
     if (!_panelVisibleForOverlay()) {
-      _removeSuggestionOverlay();
+      if (_overlayController.isShowing) _overlayController.hide();
       return;
     }
-    if (_suggestionOverlayEntry == null) {
-      _suggestionOverlayEntry = OverlayEntry(
-        maintainState: true,
-        builder: (ctx) => _buildOverlaySuggestions(ctx),
-      );
-      Overlay.of(context).insert(_suggestionOverlayEntry!);
-    } else {
-      _suggestionOverlayEntry!.markNeedsBuild();
+    if (!_overlayController.isShowing) {
+      _overlayController.show();
     }
   }
 
@@ -796,140 +783,99 @@ class _PartyInlineSuggestFieldState extends State<PartyInlineSuggestField> {
     final showAddFocused =
         widget.showAddRow && suggestInteractive && widget.onAddRow != null;
     final borderColor = widget.idleOutlineColor ?? Colors.grey.shade200;
-    final media = MediaQuery.of(overlayCtx);
-    final box =
-        _fieldMeasureKey.currentContext?.findRenderObject() as RenderBox?;
-    if (box == null || !box.hasSize) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _suggestionOverlayEntry?.markNeedsBuild();
-      });
-      return const SizedBox.shrink();
-    }
-    final sz = box.size;
-    final fieldTop = box.localToGlobal(Offset.zero).dy;
-    final fieldBottom = fieldTop + sz.height;
-    final kbBottom = media.viewInsets.bottom;
-    final safeBottom = media.padding.bottom;
-    final accessory = defaultTargetPlatform == TargetPlatform.iOS
-        ? kMobileFormKeyboardAccessoryAllowance
-        : 0.0;
-    final usableBottom = media.size.height - kbBottom - safeBottom - accessory;
-    final spaceBelowField = usableBottom - fieldBottom - 12;
-    final capByScreen = media.size.height * 0.35;
-    final double maxPanelH = math.max(
-      120.0,
-      math.min(
-        math.min(widget.maxPanelAbs.toDouble(), capByScreen),
-        math.max(120.0, spaceBelowField),
-      ),
-    );
+
     final showDivider = rows.isNotEmpty &&
         showAddFocused &&
         widget.onAddRow != null;
     final liveQ = widget.controller.text.trim().toLowerCase();
     final allHits = _allHitsForSheet(liveQ);
     final showSeeAll = allHits.length > rows.length;
-    return CompositedTransformFollower(
-      link: _layerLink,
-      showWhenUnlinked: false,
-      offset: Offset(0, sz.height + 4),
-      child: TapRegion(
-        groupId: _suggestionTapGroup,
-        child: Material(
-          elevation: 12,
+
+    return Material(
+      elevation: 12,
+      color: cs.surface,
+      shadowColor: Colors.black.withValues(alpha: 0.25),
+      borderRadius: BorderRadius.circular(12),
+      clipBehavior: Clip.antiAlias,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
           color: cs.surface,
-          shadowColor: Colors.black.withValues(alpha: 0.25),
           borderRadius: BorderRadius.circular(12),
-          clipBehavior: Clip.antiAlias,
-          child: SizedBox(
-            width: sz.width,
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                color: cs.surface,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: borderColor.withValues(alpha: 0.45)),
+          border: Border.all(color: borderColor.withValues(alpha: 0.45)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(8, 4, 4, 0),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      '${rows.length} of ${allHits.length}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: cs.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                  if (showSeeAll)
+                    TextButton(
+                      style: TextButton.styleFrom(
+                        visualDensity: VisualDensity.compact,
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                      ),
+                      onPressed: () async {
+                        await _openSeeAllSheet();
+                        if (mounted) setState(() {});
+                      },
+                      child: const Text('See more'),
+                    ),
+                  IconButton(
+                    tooltip: 'Close suggestions',
+                    visualDensity: VisualDensity.compact,
+                    icon: Icon(
+                      Icons.close_rounded,
+                      color: cs.onSurfaceVariant,
+                    ),
+                    onPressed: () {
+                      _overlayStayOpenUntilDismiss = false;
+                      widget.focusNode.unfocus();
+                      FocusManager.instance.primaryFocus?.unfocus();
+                      _overlayController.hide();
+                      if (mounted) setState(() {});
+                    },
+                  ),
+                ],
               ),
-              child: ConstrainedBox(
-                constraints: BoxConstraints(maxHeight: maxPanelH),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
+            ),
+            Expanded(
+              child: Scrollbar(
+                controller: _overlaySuggestScroll,
+                thumbVisibility: true,
+                interactive: true,
+                child: ListView(
+                  controller: _overlaySuggestScroll,
+                  shrinkWrap: false,
+                  primary: false,
+                  physics: const ClampingScrollPhysics(),
+                  padding: EdgeInsets.zero,
+                  clipBehavior: Clip.hardEdge,
                   children: [
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(8, 4, 4, 0),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              '${rows.length} of ${allHits.length}',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w700,
-                                color: cs.onSurfaceVariant,
-                              ),
-                            ),
-                          ),
-                          if (showSeeAll)
-                            TextButton(
-                              style: TextButton.styleFrom(
-                                visualDensity: VisualDensity.compact,
-                                padding: const EdgeInsets.symmetric(horizontal: 8),
-                              ),
-                              onPressed: () async {
-                                await _openSeeAllSheet();
-                                if (mounted) {
-                                  _suggestionOverlayEntry?.markNeedsBuild();
-                                }
-                              },
-                              child: const Text('See more'),
-                            ),
-                          IconButton(
-                            tooltip: 'Close suggestions',
-                            visualDensity: VisualDensity.compact,
-                            icon: Icon(
-                              Icons.close_rounded,
-                              color: cs.onSurfaceVariant,
-                            ),
-                            onPressed: () {
-                              _overlayStayOpenUntilDismiss = false;
-                              widget.focusNode.unfocus();
-                              FocusManager.instance.primaryFocus?.unfocus();
-                              _removeSuggestionOverlay();
-                              if (mounted) setState(() {});
-                            },
-                          ),
-                        ],
-                      ),
-                    ),
-                    Expanded(
-                      child: Scrollbar(
-                        controller: _overlaySuggestScroll,
-                        thumbVisibility: true,
-                        interactive: true,
-                        child: ListView(
-                        controller: _overlaySuggestScroll,
-                        shrinkWrap: false,
-                        primary: false,
-                        physics: const ClampingScrollPhysics(),
-                        padding: EdgeInsets.zero,
-                        clipBehavior: Clip.hardEdge,
-                        children: [
-                          for (final it in rows) _buildSuggestionTile(cs, it),
-                          if (showDivider)
-                            Divider(height: 1, thickness: 1, color: borderColor),
-                          if (showAddFocused && widget.onAddRow != null)
-                            _buildAddRowTile(cs),
-                        ],
-                      ),
-                      ),
-                    ),
+                    for (final it in rows) _buildSuggestionTile(cs, it),
+                    if (showDivider)
+                      Divider(height: 1, thickness: 1, color: borderColor),
+                    if (showAddFocused && widget.onAddRow != null)
+                      _buildAddRowTile(cs),
                   ],
                 ),
               ),
             ),
-          ),
+          ],
         ),
       ),
     );
@@ -1088,9 +1034,9 @@ class _PartyInlineSuggestFieldState extends State<PartyInlineSuggestField> {
 
     Widget fieldWrapped = innerInput;
     if (widget.suggestionsAsOverlay) {
-      // Full-width target so the overlay matches the padded card, not only the inner input.
-      fieldWrapped = CompositedTransformTarget(
-        link: _layerLink,
+      fieldWrapped = KeyboardAwareSuggestionOverlay(
+        controller: _overlayController,
+        overlayChild: _buildOverlaySuggestions(context),
         child: SizedBox(
           width: double.infinity,
           child: KeyedSubtree(
@@ -1223,8 +1169,6 @@ class _PartyInlineSuggestFieldState extends State<PartyInlineSuggestField> {
     );
     if (widget.suggestionsAsOverlay) {
       _scheduleOverlaySync();
-    } else if (_suggestionOverlayEntry != null) {
-      _removeSuggestionOverlay();
     }
     // Do not dismiss on outside tap — only close icon, sheet barrier, or row pick.
     return TapRegion(

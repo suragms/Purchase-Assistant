@@ -19,7 +19,6 @@ class _GetStartedPageState extends State<GetStartedPage>
   late final AnimationController _entryController;
   late final Animation<Offset> _contentSlide;
   late final Animation<double> _contentFade;
-  late final Animation<double> _buttonScaleIn;
   bool _didPrecache = false;
 
   @override
@@ -41,23 +40,6 @@ class _GetStartedPageState extends State<GetStartedPage>
     _contentFade = CurvedAnimation(
       parent: _entryController,
       curve: const Interval(0.0, 0.65, curve: Curves.easeOut),
-    );
-    _buttonScaleIn = TweenSequence<double>([
-      TweenSequenceItem(
-        tween: Tween(begin: 0.94, end: 1.02)
-            .chain(CurveTween(curve: Curves.easeOutCubic)),
-        weight: 55,
-      ),
-      TweenSequenceItem(
-        tween: Tween(begin: 1.02, end: 1.0)
-            .chain(CurveTween(curve: Curves.easeOutBack)),
-        weight: 45,
-      ),
-    ]).animate(
-      CurvedAnimation(
-        parent: _entryController,
-        curve: const Interval(0.45, 1.0, curve: Curves.easeOut),
-      ),
     );
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -194,49 +176,40 @@ class _GetStartedPageState extends State<GetStartedPage>
                                         CrossAxisAlignment.stretch,
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
-                                      ScaleTransition(
-                                        scale: _buttonScaleIn,
-                                        child: _PremiumLandingCta(
-                                          label: 'Get Started',
-                                          onPressed: () =>
-                                              context.go('/signup'),
+                                      FilledButton(
+                                        onPressed: () =>
+                                            context.go('/login?tab=signin'),
+                                        style: FilledButton.styleFrom(
+                                          backgroundColor:
+                                              HexaColors.brandPrimary,
+                                          foregroundColor: Colors.white,
+                                          minimumSize: const Size(
+                                            double.infinity,
+                                            52,
+                                          ),
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius:
+                                                BorderRadius.circular(12),
+                                          ),
+                                        ),
+                                        child: const Text(
+                                          'Sign In',
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.w800,
+                                            fontSize: 17,
+                                          ),
                                         ),
                                       ),
                                       const SizedBox(height: 12),
-                                      TextButton(
-                                        onPressed: () =>
-                                            context.go('/login?tab=signin'),
-                                        style: TextButton.styleFrom(
-                                          foregroundColor:
-                                              HexaColors.brandAccent,
-                                          padding: const EdgeInsets.symmetric(
-                                            vertical: 12,
-                                            horizontal: 12,
+                                      Text(
+                                        'New staff accounts are created by your owner in Settings → Users.',
+                                        textAlign: TextAlign.center,
+                                        style: TextStyle(
+                                          color: Colors.white.withValues(
+                                            alpha: 0.82,
                                           ),
-                                          minimumSize: const Size(48, 48),
-                                          tapTargetSize:
-                                              MaterialTapTargetSize.padded,
-                                        ),
-                                        child: const Text(
-                                          'Already have an account? Sign In',
-                                          textAlign: TextAlign.center,
-                                          maxLines: 2,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: TextStyle(
-                                            fontWeight: FontWeight.w700,
-                                            fontSize: 15,
-                                            decoration:
-                                                TextDecoration.underline,
-                                            decorationColor:
-                                                HexaColors.brandAccent,
-                                            shadows: [
-                                              Shadow(
-                                                offset: Offset(0, 1),
-                                                blurRadius: 8,
-                                                color: Color(0xB3000000),
-                                              ),
-                                            ],
-                                          ),
+                                          fontSize: 13,
+                                          height: 1.35,
                                         ),
                                       ),
                                     ],
@@ -259,95 +232,4 @@ class _GetStartedPageState extends State<GetStartedPage>
   }
 }
 
-class _PremiumLandingCta extends StatefulWidget {
-  const _PremiumLandingCta({
-    required this.label,
-    required this.onPressed,
-  });
 
-  final String label;
-  final VoidCallback onPressed;
-
-  @override
-  State<_PremiumLandingCta> createState() => _PremiumLandingCtaState();
-}
-
-class _PremiumLandingCtaState extends State<_PremiumLandingCta> {
-  bool _pressed = false;
-  bool _hover = false;
-
-  double get _scale {
-    if (_pressed) return 0.97;
-    if (_hover) return 1.01;
-    return 1.0;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return MouseRegion(
-      onEnter: (_) {
-        if (mounted) setState(() => _hover = true);
-      },
-      onExit: (_) {
-        if (mounted) setState(() => _hover = false);
-      },
-      child: AnimatedScale(
-        scale: _scale,
-        duration: Duration(milliseconds: _pressed ? 90 : 140),
-        curve: Curves.easeOutCubic,
-        child: SizedBox(
-          width: double.infinity,
-          height: 54,
-          child: Material(
-            color: Colors.transparent,
-            elevation: 0,
-            child: InkWell(
-              onTap: widget.onPressed,
-              borderRadius: BorderRadius.circular(14),
-              onTapDown: (_) {
-                if (mounted) setState(() => _pressed = true);
-              },
-              onTapUp: (_) {
-                if (mounted) setState(() => _pressed = false);
-              },
-              onTapCancel: () {
-                if (mounted) setState(() => _pressed = false);
-              },
-              splashColor: Colors.white.withValues(alpha: 0.22),
-              highlightColor: Colors.white.withValues(alpha: 0.10),
-              child: Ink(
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(14),
-                  gradient: HexaColors.ctaGradient,
-                  boxShadow: [
-                    BoxShadow(
-                      color: HexaColors.brandPrimary.withValues(alpha: 0.22),
-                      blurRadius: 14,
-                      offset: const Offset(0, 5),
-                    ),
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.08),
-                      blurRadius: 10,
-                      offset: const Offset(0, 3),
-                    ),
-                  ],
-                ),
-                child: Center(
-                  child: Text(
-                    widget.label,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w800,
-                      fontSize: 16,
-                      letterSpacing: 0.2,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}

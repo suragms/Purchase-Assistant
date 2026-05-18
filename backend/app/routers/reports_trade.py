@@ -16,7 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.async_budget import run_read_budget_bounded
 from app.database import get_db
 from app.db_resilience import execute_with_retry
-from app.deps import get_current_user, require_membership
+from app.deps import get_current_user, require_membership, require_role
 from app.models import CatalogItem, CategoryType, ItemCategory, Membership, TradePurchase, TradePurchaseLine, User
 from app.models.contacts import Supplier
 from app.read_cache_generation import trade_read_cache_generation
@@ -611,7 +611,7 @@ async def trade_last_supplier_autofill(
 @router.get("/trade-dashboard-snapshot")
 async def trade_dashboard_snapshot(
     business_id: uuid.UUID,
-    _m: Annotated[Membership, Depends(require_membership)],
+    _m: Annotated[Membership, Depends(require_role("owner", "manager", "super_admin"))],
     db: Annotated[AsyncSession, Depends(get_db)],
     date_from: date = Query(..., alias="from"),
     date_to: date = Query(..., alias="to"),
@@ -705,7 +705,7 @@ async def trade_purchase_summary(
     business_id: uuid.UUID,
     user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
-    _m: Annotated[Membership, Depends(require_membership)],
+    _m: Annotated[Membership, Depends(require_role("owner", "manager", "super_admin"))],
     date_from: date | None = Query(None, alias="from"),
     date_to: date | None = Query(None, alias="to"),
     supplier_id: uuid.UUID | None = Query(None),

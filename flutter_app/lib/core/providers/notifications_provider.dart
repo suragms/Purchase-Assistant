@@ -7,6 +7,7 @@ import 'package:hexa_purchase_assistant/core/maintenance/maintenance_ui_status.d
 import 'package:hexa_purchase_assistant/core/providers/maintenance_payment_provider.dart';
 
 import 'cloud_expense_provider.dart';
+import 'server_notifications_provider.dart';
 import 'trade_purchases_provider.dart';
 
 enum NotificationType {
@@ -19,6 +20,7 @@ enum NotificationType {
   purchaseOverdue,
   cloudCost,
   maintenance,
+  serverInApp,
 }
 
 class NotificationItem {
@@ -30,6 +32,8 @@ class NotificationItem {
     required this.createdAt,
     this.isRead = false,
     this.actionRoute,
+    this.serverNotificationId,
+    this.serverKind,
   });
 
   final String id;
@@ -39,6 +43,10 @@ class NotificationItem {
   final DateTime createdAt;
   final bool isRead;
   final String? actionRoute;
+  /// When set, row is persisted on the API (`PATCH …/notifications/{id}`).
+  final String? serverNotificationId;
+  /// API `kind` when [type] is [NotificationType.serverInApp].
+  final String? serverKind;
 }
 
 class NotificationsNotifier extends StateNotifier<List<NotificationItem>> {
@@ -70,6 +78,8 @@ class NotificationsNotifier extends StateNotifier<List<NotificationItem>> {
             createdAt: n.createdAt,
             isRead: true,
             actionRoute: n.actionRoute,
+            serverNotificationId: n.serverNotificationId,
+            serverKind: n.serverKind,
           )
         else
           n,
@@ -107,7 +117,8 @@ final notificationsUnreadCountProvider = Provider<int>((ref) {
   final tradeN = ref.watch(purchaseActionAlertCountProvider);
   final cloudN = ref.watch(cloudCostAlertCountProvider);
   final maintN = ref.watch(maintenanceAlertCountProvider);
-  return manual + tradeN + cloudN + maintN;
+  final serverN = ref.watch(appNotificationUnreadCountProvider).valueOrNull ?? 0;
+  return manual + tradeN + cloudN + maintN + serverN;
 });
 
 /// PUR bills that need attention (unpaid with due date approaching or past).
@@ -341,3 +352,39 @@ final maintenanceNotificationItemsProvider =
 final maintenanceAlertCountProvider = Provider<int>((ref) {
   return ref.watch(maintenanceNotificationItemsProvider).length;
 });
+
+NotificationItem notificationItemFromServerRow(Map<String, dynamic> row) {
+  final sid = row['id']?.toString() ?? '';
+  final kind = row['kind']?.toString() ?? '';
+  final readAt = row['read_at'];
+  final isRead = readAt != null;
+  DateTime created;
+  try {
+    created = DateTime.parse(row['created_at']?.toString() ?? '');
+  } catch (_) {
+    created = DateTime.now();
+  }
+  final title = row['title']?.toString() ?? 'Notice';
+  final body = row['body']?.toString() ?? '';
+  String? route;
+  if (kind == 'low_stock') {
+    final payload = row['payload'];
+    if (payload is Map) {
+      final iid = payload['item_id']?.toString();
+      if (iid != null && iid.isNotEmpty) {
+        route = '/catalog/item/$iid';
+      }
+    }
+  }
+  return NotificationItem(
+    id: 'srv_$sid',
+    type: NotificationType.serverInApp,
+    title: title,
+    subtitle: body,
+    createdAt: created,
+    isRead: isRead,
+    actionRoute: route,
+    serverNotificationId: sid.isEmpty ? null : sid,
+    serverKind: kind.isEmpty ? null : kind,
+  );
+}
