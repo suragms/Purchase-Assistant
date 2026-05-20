@@ -595,28 +595,33 @@ class _CatalogItemDetailPageState extends ConsumerState<CatalogItemDetailPage> {
                   itemId: widget.itemId,
                 ),
                 const SizedBox(height: 12),
-                _CatalogItemCatalogInfoSection(item: item),
-                const SizedBox(height: 12),
+                _CollapsibleDetailSection(
+                  title: 'Item details',
+                  icon: Icons.info_outline_rounded,
+                  child: _CatalogItemCatalogInfoSection(item: item),
+                ),
                 _CatalogItemStockSection(
                   itemId: widget.itemId,
                   item: item,
                 ),
-                const SizedBox(height: 12),
-                Builder(
-                  builder: (ctx) {
-                    final enriched = _CatalogItemDetailPageState
-                        ._itemWithLastTradeLine(
-                      item,
-                      purchasesAsync.valueOrNull,
-                      widget.itemId,
-                    );
-                    return _CatalogItemLastPurchaseSection(
-                      item: enriched,
-                      inr: _inr,
-                    );
-                  },
+                _CollapsibleDetailSection(
+                  title: 'Last purchase',
+                  icon: Icons.receipt_long_outlined,
+                  child: Builder(
+                    builder: (ctx) {
+                      final enriched = _CatalogItemDetailPageState
+                          ._itemWithLastTradeLine(
+                        item,
+                        purchasesAsync.valueOrNull,
+                        widget.itemId,
+                      );
+                      return _CatalogItemLastPurchaseSection(
+                        item: enriched,
+                        inr: _inr,
+                      );
+                    },
+                  ),
                 ),
-                const SizedBox(height: 12),
                 _CatalogItemSuppliersSection(
                   itemId: widget.itemId,
                   item: item,
@@ -674,12 +679,21 @@ class _CatalogItemDetailPageState extends ConsumerState<CatalogItemDetailPage> {
                     );
                   },
                 ),
-                const SizedBox(height: 12),
-                _RecentStockPurchasesSection(itemId: widget.itemId),
-                const SizedBox(height: 12),
-                _CatalogItemStockHistorySection(itemId: widget.itemId),
-                const SizedBox(height: 12),
-                purchasesAsync.when(
+                _CollapsibleDetailSection(
+                  title: 'Stock history',
+                  icon: Icons.history_rounded,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      _RecentStockPurchasesSection(itemId: widget.itemId),
+                      _CatalogItemStockHistorySection(itemId: widget.itemId),
+                    ],
+                  ),
+                ),
+                _CollapsibleDetailSection(
+                  title: 'Purchase history',
+                  icon: Icons.shopping_cart_outlined,
+                  child: purchasesAsync.when(
                   skipLoadingOnReload: true,
                   skipLoadingOnRefresh: true,
                   loading: () => const LinearProgressIndicator(),
@@ -823,6 +837,7 @@ class _CatalogItemDetailPageState extends ConsumerState<CatalogItemDetailPage> {
                     );
                   },
                 ),
+                ),
                 const SizedBox(height: 16),
 
                 // ── DEFAULTS ──────────────────────────────────────────────
@@ -894,6 +909,49 @@ class _CatalogItemDetailPageState extends ConsumerState<CatalogItemDetailPage> {
     );
   }
 
+}
+
+class _CollapsibleDetailSection extends StatefulWidget {
+  const _CollapsibleDetailSection({
+    required this.title,
+    required this.icon,
+    required this.child,
+    this.initiallyExpanded = false,
+  });
+
+  final String title;
+  final IconData icon;
+  final Widget child;
+  final bool initiallyExpanded;
+
+  @override
+  State<_CollapsibleDetailSection> createState() =>
+      _CollapsibleDetailSectionState();
+}
+
+class _CollapsibleDetailSectionState extends State<_CollapsibleDetailSection> {
+  @override
+  Widget build(BuildContext context) {
+    return ExpansionTile(
+      initiallyExpanded: widget.initiallyExpanded,
+      backgroundColor: Colors.transparent,
+      collapsedBackgroundColor: Colors.transparent,
+      tilePadding: const EdgeInsets.symmetric(horizontal: 0, vertical: 4),
+      childrenPadding: const EdgeInsets.only(bottom: 12),
+      iconColor: HexaColors.brandPrimary,
+      collapsedIconColor: HexaColors.brandPrimary,
+      leading: Icon(widget.icon, size: 20, color: HexaColors.brandPrimary),
+      title: Text(
+        widget.title.toUpperCase(),
+        style: const TextStyle(
+          fontSize: 13,
+          fontWeight: FontWeight.w800,
+          letterSpacing: 0.3,
+        ),
+      ),
+      children: [widget.child],
+    );
+  }
 }
 
 class _CatalogItemCatalogInfoSection extends StatelessWidget {

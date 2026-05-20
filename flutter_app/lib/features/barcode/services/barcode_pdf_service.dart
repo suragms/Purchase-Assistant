@@ -160,7 +160,7 @@ class BarcodePdfService {
 
   static PdfPageFormat _pageFormat(LabelSize size) => switch (size) {
         LabelSize.small =>
-          const PdfPageFormat(38 * PdfPageFormat.mm, 19 * PdfPageFormat.mm),
+          const PdfPageFormat(30 * PdfPageFormat.mm, 10 * PdfPageFormat.mm),
         LabelSize.large =>
           const PdfPageFormat(100 * PdfPageFormat.mm, 50 * PdfPageFormat.mm),
         LabelSize.medium =>
@@ -169,7 +169,7 @@ class BarcodePdfService {
 
   static (double titleSize, double codeSize, double bcHeight, double qrSize)
       _sizes(LabelSize size) => switch (size) {
-            LabelSize.small => (7.0, 6.0, 28.0, 0.0),
+            LabelSize.small => (5.0, 4.0, 12.0, 0.0),
             LabelSize.large => (10.0, 8.0, 40.0, 36.0),
             LabelSize.medium => (8.0, 7.0, 36.0, 28.0),
           };

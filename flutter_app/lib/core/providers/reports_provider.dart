@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -17,13 +18,22 @@ import 'analytics_kpi_provider.dart';
 import 'connectivity_provider.dart' show isOfflineResult;
 
 final Map<String, Future<List<TradePurchase>>> _reportsPurchasesInflight = {};
+DateTime? _reportsInflightLastBustAt;
 
 /// Throttle silent `/trade-purchases` refresh when the Reports tab is not active
 /// (avoids a refetch loop when [reportsPurchasesHiveCacheProvider] invalidates).
 const int _reportsSilentRefreshMinIntervalMs = 8000;
+const int _reportsInflightBustCooldownMs = 3000;
 final Map<String, int> _reportsSilentRefreshAt = {};
 
 void bustReportsPurchasesInflight() {
+  final now = DateTime.now();
+  if (_reportsInflightLastBustAt != null &&
+      now.difference(_reportsInflightLastBustAt!).inMilliseconds <
+          _reportsInflightBustCooldownMs) {
+    return;
+  }
+  _reportsInflightLastBustAt = now;
   _reportsPurchasesInflight.clear();
   _reportsSilentRefreshAt.clear();
 }
@@ -229,7 +239,15 @@ Future<List<TradePurchase>> _loadReportsPurchases(Ref ref) async {
             'for $fromStr..$toStr but none could be parsed (check API shape vs TradePurchase.fromJson)',
           );
         }
+        if (kDebugMode) {
+          debugPrint(
+            '[REPORTS] fetched ${items.length} purchases, range: $fromStr → $toStr',
+          );
+        }
         if (items.isEmpty) {
+          if (kDebugMode) {
+            debugPrint('[REPORTS] empty — running unfiltered fallback');
+          }
           final fb = await _tryReportsPurchasesFallbackUnfiltered(
             api: api,
             bid: bid,
@@ -267,7 +285,12 @@ Future<List<TradePurchase>> _loadReportsPurchases(Ref ref) async {
 
   return _reportsPurchasesInflight.putIfAbsent(
     key,
-    () => work().whenComplete(() => _reportsPurchasesInflight.remove(key)),
+    () => work().whenComplete(() {
+      Future<void>.delayed(
+        const Duration(milliseconds: _reportsInflightBustCooldownMs),
+        () => _reportsPurchasesInflight.remove(key),
+      );
+    }),
   );
 }
 

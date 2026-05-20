@@ -19,6 +19,7 @@ import '../../../core/widgets/friendly_load_error.dart';
 import '../../../core/widgets/list_skeleton.dart';
 import '../../../shared/widgets/operational_ui.dart';
 import 'update_stock_sheet.dart';
+import 'widgets/stock_filter_bottom_sheet.dart';
 
 class StockPage extends ConsumerStatefulWidget {
   const StockPage({super.key});
@@ -232,6 +233,31 @@ class _StockPageState extends ConsumerState<StockPage>
           mainAxisSize: MainAxisSize.min,
           children: [
             Text('Stock', style: HexaDsType.h2(context)),
+            const SizedBox(width: 8),
+            FadeTransition(
+              opacity: _livePulse,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 6,
+                    height: 6,
+                    decoration: const BoxDecoration(
+                      color: Color(0xFF2E7D32),
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    'LIVE',
+                    style: HexaDsType.label(10).copyWith(
+                      color: const Color(0xFF2E7D32),
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ],
+              ),
+            ),
             if (listTotal > 0) ...[
               const SizedBox(width: 8),
               Badge(
@@ -242,6 +268,16 @@ class _StockPageState extends ConsumerState<StockPage>
           ],
         ),
         actions: [
+          IconButton(
+            tooltip: 'Filter',
+            icon: const Icon(Icons.tune_rounded),
+            onPressed: () => showStockFilterBottomSheet(
+              context: context,
+              ref: ref,
+              initial: q,
+              subcategoryCtrl: _subcatCtrl,
+            ),
+          ),
           Padding(
             padding: const EdgeInsets.only(right: 4),
             child: Center(
@@ -386,136 +422,35 @@ class _StockPageState extends ConsumerState<StockPage>
                             );
                   },
                 ),
-                FilterChip(
-                  label: const Text('Recent'),
-                  selected: q.sort == 'recent',
-                  onSelected: (_) {
-                    ref.read(stockListQueryProvider.notifier).state =
-                        ref.read(stockListQueryProvider).copyWith(
-                              status: 'all',
-                              sort: 'recent',
-                              page: 1,
-                            );
-                  },
-                ),
               ],
             ),
           ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
-            child: Row(
-              children: [
-                Expanded(
-                  child: DropdownButtonFormField<String>(
-                    initialValue: q.sort,
-                    decoration: const InputDecoration(
-                      labelText: 'Sort',
-                      isDense: true,
-                      border: OutlineInputBorder(),
+          if (stockHasActiveFilters(q))
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 6, 16, 0),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      stockActiveFilterSummary(q),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
-                    items: const [
-                      DropdownMenuItem(value: 'name', child: Text('Name A–Z')),
-                      DropdownMenuItem(value: 'stock_asc', child: Text('Stock ↑')),
-                      DropdownMenuItem(value: 'stock_desc', child: Text('Stock ↓')),
-                      DropdownMenuItem(value: 'recent', child: Text('Recent update')),
-                    ],
-                    onChanged: (v) {
-                      if (v == null) return;
+                  ),
+                  TextButton(
+                    onPressed: () {
                       ref.read(stockListQueryProvider.notifier).state =
-                          ref.read(stockListQueryProvider).copyWith(sort: v, page: 1);
+                          const StockListQuery();
+                      _subcatCtrl.clear();
                     },
+                    child: const Text('Clear'),
                   ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: suppliersAsync.when(
-                    loading: () => const SizedBox.shrink(),
-                    error: (_, __) => const SizedBox.shrink(),
-                    data: (rows) {
-                      final names = [
-                        for (final s in rows)
-                          if ((s['name'] ?? '').toString().trim().isNotEmpty)
-                            s['name'].toString().trim(),
-                      ];
-                      return DropdownButtonFormField<String>(
-                        initialValue:
-                            q.supplier.isEmpty ? '__all__' : q.supplier,
-                        decoration: const InputDecoration(
-                          labelText: 'Supplier',
-                          isDense: true,
-                          border: OutlineInputBorder(),
-                        ),
-                        items: [
-                          const DropdownMenuItem(
-                            value: '__all__',
-                            child: Text('All'),
-                          ),
-                          for (final n in names)
-                            DropdownMenuItem(value: n, child: Text(n)),
-                        ],
-                        onChanged: (v) {
-                          ref.read(stockListQueryProvider.notifier).state =
-                              ref.read(stockListQueryProvider).copyWith(
-                                    supplier: v == null || v == '__all__'
-                                        ? ''
-                                        : v,
-                                    page: 1,
-                                  );
-                        },
-                      );
-                    },
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 4),
-          catsAsync.when(
-            loading: () => const SizedBox.shrink(),
-            error: (_, __) => const SizedBox.shrink(),
-            data: (cats) {
-              final names = [
-                'All',
-                for (final c in cats)
-                  if ((c['name'] ?? '').toString().trim().isNotEmpty)
-                    c['name'].toString().trim(),
-              ];
-              if (names.length <= 1) return const SizedBox.shrink();
-              return OperationalPillWrap(
-                labels: names,
-                selected: q.category.isEmpty ? 'All' : q.category,
-                onSelected: (name) {
-                  ref.read(stockListQueryProvider.notifier).state =
-                      ref.read(stockListQueryProvider).copyWith(
-                            category: name == 'All' ? '' : name,
-                            subcategory: '',
-                            page: 1,
-                          );
-                  _subcatCtrl.text = '';
-                },
-              );
-            },
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
-            child: TextField(
-              controller: _subcatCtrl,
-              decoration: const InputDecoration(
-                hintText: 'Subcategory / type filter',
-                isDense: true,
-                prefixIcon: Icon(Icons.filter_list_rounded, size: 20),
-                border: OutlineInputBorder(),
+                ],
               ),
-              textInputAction: TextInputAction.search,
-              onSubmitted: (v) {
-                ref.read(stockListQueryProvider.notifier).state =
-                    ref.read(stockListQueryProvider).copyWith(
-                          subcategory: v.trim(),
-                          page: 1,
-                        );
-              },
             ),
-          ),
           if (q.status == 'low' || q.status == 'critical')
             Material(
               color: const Color(0xFFFFF3E0),
@@ -606,8 +541,7 @@ class _StockPageState extends ConsumerState<StockPage>
                     ),
                     const _StockTableHeader(),
                     Expanded(
-                      child: Scrollbar(
-                        child: ListView.builder(
+                      child: ListView.builder(
                           controller: _scroll,
                           padding: EdgeInsets.zero,
                           itemCount: items.length + (_loadingMore ? 1 : 0),
@@ -738,7 +672,6 @@ class _StockPageState extends ConsumerState<StockPage>
                           },
                         ),
                       ),
-                    ),
                     SafeArea(
                       top: false,
                       child: Padding(
@@ -1023,8 +956,10 @@ class _StockTableHeader extends StatelessWidget {
           const SizedBox(width: 14),
           Expanded(flex: 5, child: Text('Item', style: style)),
           Expanded(flex: 2, child: Text('Stock', style: style, textAlign: TextAlign.end)),
-          Expanded(flex: 2, child: Text('Low', style: style, textAlign: TextAlign.end)),
-          Expanded(flex: 3, child: Text('Supplier', style: style, textAlign: TextAlign.end)),
+          SizedBox(
+            width: 56,
+            child: Text('Status', style: style, textAlign: TextAlign.end),
+          ),
         ],
       ),
     );
@@ -1056,8 +991,12 @@ class _StockTableRow extends StatelessWidget {
     final st = row['stock_status']?.toString() ?? 'healthy';
     final unit = row['unit']?.toString() ?? '';
     final cur = fmtQty(row['current_stock']);
-    final ro = fmtQty(row['reorder_level']);
-    final sup = row['supplier_name']?.toString() ?? '—';
+    final statusLabel = switch (st) {
+      'out' => 'Out',
+      'critical' => 'Crit',
+      'low' => 'Low',
+      _ => 'OK',
+    };
     final sub = [
       if ((row['category_name'] ?? '').toString().isNotEmpty)
         row['category_name'],
@@ -1139,27 +1078,28 @@ class _StockTableRow extends StatelessWidget {
                   ],
                 ),
               ),
-              Expanded(
-                flex: 2,
-                child: Text(
-                  ro,
-                  textAlign: TextAlign.end,
-                  style: HexaDsType.bodyPrimary(context).copyWith(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-              Expanded(
-                flex: 3,
-                child: Text(
-                  sup,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  textAlign: TextAlign.end,
-                  style: HexaDsType.bodySm(context).copyWith(
-                    fontWeight: FontWeight.w600,
-                  ),
+              SizedBox(
+                width: 56,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    Container(
+                      width: 6,
+                      height: 6,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: statusColor(st),
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      statusLabel,
+                      style: HexaDsType.bodySm(context).copyWith(
+                        fontWeight: FontWeight.w800,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],

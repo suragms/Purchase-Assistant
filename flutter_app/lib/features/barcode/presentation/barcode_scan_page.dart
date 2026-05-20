@@ -158,10 +158,13 @@ class _BarcodeScanPageState extends ConsumerState<BarcodeScanPage>
     }
     setState(() => _busy = true);
     try {
-      final row = await ref.read(hexaApiProvider).barcodeStockLookup(
+      final row = await ref
+          .read(hexaApiProvider)
+          .barcodeStockLookup(
             businessId: session.primaryBusiness.id,
             code: code,
-          );
+          )
+          .timeout(const Duration(seconds: 10));
       final id = row['id']?.toString();
       final name = row['name']?.toString() ?? code;
       if (id == null || id.isEmpty) {
@@ -174,6 +177,14 @@ class _BarcodeScanPageState extends ConsumerState<BarcodeScanPage>
       await HapticFeedback.mediumImpact();
       if (!mounted) return;
       context.push('/catalog/item/$id?source=scan');
+    } on TimeoutException {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Server is slow — try again'),
+        ),
+      );
+      await _resumeScan();
     } on DioException catch (e) {
       if (!mounted) return;
       if (e.response?.statusCode == 404) {

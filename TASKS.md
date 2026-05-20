@@ -1,6 +1,6 @@
 # Purchase Assistant — Living task board
 
-**Last updated:** 2026-05-19  
+**Last updated:** 2026-05-20  
 **App:** `hexa_purchase_assistant` (Flutter + FastAPI + Supabase)  
 **Product docs:** `docs/harisree/` (`MASTER_REFERENCE.md`, `FEATURES_DEEP_PLAN.md`)
 
@@ -20,6 +20,27 @@
 | 7 Device testing | Manual — checklist below |
 
 **Code plan:** closed. Remaining work is **device QA** (Section 7) and **deploy** (checklist below).
+
+---
+
+## May 20 screenshot pass (critical fixes + UX)
+
+| ID | Status | Notes |
+|----|--------|-------|
+| Session 0 | Done | Web item-pick overlay + `StaffActivityLogger` Ref fix |
+| FIX-01 | Done | Stock list: removed `Scrollbar` crash |
+| FIX-02 | Done | Friendly errors on home stock movement; catalog already had `FriendlyLoadError` |
+| FIX-03 | Done | Home throttle 5s; trimmed invalidations; reports inflight 3s cooldown |
+| FIX-04 | Done | Reports debug logs + existing empty fallback |
+| FIX-05 / UX-02 | Done | Stock filter bottom sheet; 3-col table; active filter pill |
+| FIX-06 / UX-01 | Done | Removed home catalog chips; 3-col quick actions; 2x2 stat cards |
+| FIX-07 | Verify | Broker commission UI exists when broker selected |
+| FIX-08 | Verify | Item entry sheet + overlay fix (device QA) |
+| FIX-09 | Done | Staff stock update invalidates activity + alert counts |
+| FIX-10 | Done | Barcode lookup 10s timeout + friendly slow message |
+| UX-03 | Partial | Reports PDF menu exists; tab compact labels optional follow-up |
+| UX-04 | Done | Item detail collapsible sections |
+| UX-05 | Done | 30x10mm small label preset + tuned fonts |
 
 ---
 

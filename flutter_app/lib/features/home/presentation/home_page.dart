@@ -6,7 +6,6 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/auth/session_notifier.dart';
-import '../../../core/design_system/hexa_ds_tokens.dart';
 import '../../../core/json_coerce.dart';
 import '../../../core/models/session.dart';
 import '../../../core/models/trade_purchase_models.dart';
@@ -22,8 +21,6 @@ import '../../../core/providers/home_owner_dashboard_providers.dart'
         homeTodayDashboardDataProvider,
         stockAlertCountsProvider,
         stockAuditDayProvider,
-        stockCriticalCountProvider,
-        stockLowCountProvider,
         stockLowTopHomeProvider,
         stockVariancesTodayProvider;
 import 'widgets/home_owner_dashboard_sections.dart';
@@ -37,13 +34,9 @@ import '../../../core/providers/notifications_provider.dart'
     show notificationsUnreadCountProvider;
 import '../../../core/providers/prefs_provider.dart';
 import '../../../core/providers/server_notifications_provider.dart';
-import '../../../core/providers/catalog_providers.dart';
 import '../../../core/providers/stock_providers.dart';
-import '../../../core/providers/suppliers_list_provider.dart';
-import '../../../core/providers/reports_provider.dart';
-import '../../../core/providers/trade_purchases_provider.dart'
-    show invalidateTradePurchaseCaches, invalidateTradePurchaseCachesFromContainer;
 import '../../../core/theme/hexa_colors.dart';
+import '../../../core/widgets/friendly_load_error.dart';
 import '../../../shared/widgets/operational_ui.dart';
 import '../../../shared/widgets/shell_quick_ref_actions.dart';
 import '../../purchase/presentation/widgets/purchase_saved_sheet.dart';
@@ -83,6 +76,35 @@ class _HomePageState extends ConsumerState<HomePage>
   AppLifecycleState _lifecycle = AppLifecycleState.resumed;
   late final AnimationController _livePulse;
   DateTime? _lastRefreshedAt;
+  DateTime? _lastThrottledInvalidate;
+
+  bool _throttleHomeInvalidate({bool force = false}) {
+    if (force) {
+      _lastThrottledInvalidate = DateTime.now();
+      return false;
+    }
+    final now = DateTime.now();
+    if (_lastThrottledInvalidate != null &&
+        now.difference(_lastThrottledInvalidate!).inSeconds < 5) {
+      return true;
+    }
+    _lastThrottledInvalidate = now;
+    return false;
+  }
+
+  void _invalidateHomeDataProviders() {
+    bustHomeDashboardVolatileCaches();
+    ref.invalidate(homeTodayDashboardDataProvider);
+    ref.invalidate(homeMonthDashboardDataProvider);
+    ref.invalidate(stockAlertCountsProvider);
+    ref.invalidate(stockLowTopHomeProvider);
+    ref.invalidate(stockAuditDayProvider(_todayDate()));
+    ref.invalidate(stockVariancesTodayProvider);
+    ref.invalidate(activeSessionsCountProvider);
+    ref.invalidate(activeStaffSessionsProvider);
+    ref.invalidate(homeRecentPurchasesCompactProvider);
+    ref.invalidate(homeRecentActivityFeedProvider);
+  }
 
   @override
   void initState() {
@@ -94,19 +116,8 @@ class _HomePageState extends ConsumerState<HomePage>
     _lastRefreshedAt = DateTime.now();
     WidgetsBinding.instance.addObserver(this);
     _poll = Timer.periodic(const Duration(minutes: 5), (_) {
-      if (!mounted) return;
-      bustHomeDashboardVolatileCaches();
-      invalidateTradePurchaseCaches(ref);
-      ref.invalidate(homeTodayDashboardDataProvider);
-      ref.invalidate(stockAlertCountsProvider);
-      ref.invalidate(stockLowTopHomeProvider);
-      ref.invalidate(stockAuditDayProvider(_todayDate()));
-      ref.invalidate(stockVariancesTodayProvider);
-      ref.invalidate(activeSessionsCountProvider);
-      ref.invalidate(activeStaffSessionsProvider);
-      ref.invalidate(homeMonthDashboardDataProvider);
-      ref.invalidate(homeRecentPurchasesCompactProvider);
-      ref.invalidate(homeRecentActivityFeedProvider);
+      if (!mounted || _throttleHomeInvalidate()) return;
+      _invalidateHomeDataProviders();
     });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
@@ -116,17 +127,9 @@ class _HomePageState extends ConsumerState<HomePage>
     _rtPoll = Timer.periodic(const Duration(seconds: 30), (_) {
       if (!mounted) return;
       setState(() => _lastRefreshedAt = DateTime.now());
-      ref.invalidate(stockListProvider);
-      invalidateTradePurchaseCaches(ref);
-      ref.invalidate(homeTodayDashboardDataProvider);
-      ref.invalidate(stockAlertCountsProvider);
-      ref.invalidate(stockLowTopHomeProvider);
-      ref.invalidate(stockAuditDayProvider(_todayDate()));
-      ref.invalidate(stockVariancesTodayProvider);
-      ref.invalidate(homeRecentPurchasesCompactProvider);
-      ref.invalidate(homeMonthDashboardDataProvider);
-      ref.invalidate(homeRecentActivityFeedProvider);
-      ref.invalidate(activeStaffSessionsProvider);
+      if (!_throttleHomeInvalidate()) {
+        _invalidateHomeDataProviders();
+      }
       ref.invalidate(appNotificationUnreadCountProvider);
       _maybePushBackgroundAlert();
       _maybeNotifyStaffPurchases();
@@ -226,21 +229,9 @@ class _HomePageState extends ConsumerState<HomePage>
   }
 
   Future<void> _refresh() async {
-    bustHomeDashboardVolatileCaches();
+    if (_throttleHomeInvalidate()) return;
     ref.invalidate(homeDashboardDataProvider);
-    ref.invalidate(homeTodayDashboardDataProvider);
-    ref.invalidate(homeMonthDashboardDataProvider);
-    ref.invalidate(stockLowCountProvider);
-    ref.invalidate(stockCriticalCountProvider);
-    ref.invalidate(stockLowTopHomeProvider);
-    ref.invalidate(stockAuditDayProvider(_todayDate()));
-    ref.invalidate(stockVariancesTodayProvider);
-    ref.invalidate(activeSessionsCountProvider);
-    ref.invalidate(activeStaffSessionsProvider);
-    ref.invalidate(homeRecentPurchasesCompactProvider);
-    ref.invalidate(homeRecentActivityFeedProvider);
-    invalidateTradePurchaseCaches(ref);
-    ref.invalidate(reportsPurchasesPayloadProvider);
+    _invalidateHomeDataProviders();
     if (mounted) setState(() => _lastRefreshedAt = DateTime.now());
   }
 
@@ -264,9 +255,10 @@ class _HomePageState extends ConsumerState<HomePage>
       _handlingPurchasePostSave = true;
       unawaited(_doHandlePurchasePostSave(next));
     });
-    ref.listen(stockLowCountProvider, (prev, next) {
+    ref.listen(stockAlertCountsProvider, (prev, next) {
       if (!ref.read(localNotificationsOptInProvider)) return;
-      next.whenData((count) {
+      next.whenData((counts) {
+        final count = counts.low + counts.critical;
         if (count <= _lastNotifiedLowCount) {
           _lastNotifiedLowCount = count;
           return;
@@ -302,17 +294,16 @@ class _HomePageState extends ConsumerState<HomePage>
     final isOwner = session != null && _sessionIsOwner(session);
     final todayAsync = ref.watch(homeTodayDashboardDataProvider);
     final monthAsync = ref.watch(homeMonthDashboardDataProvider);
-    final lowN = ref.watch(stockLowCountProvider);
-    final critN = ref.watch(stockCriticalCountProvider);
+    final alertCountsAsync = ref.watch(stockAlertCountsProvider);
+    final alertCounts = alertCountsAsync.valueOrNull;
     final lowRows = ref.watch(stockLowTopHomeProvider);
     final todayDay = _todayDate();
     final audits = ref.watch(stockAuditDayProvider(todayDay));
     final variances = ref.watch(stockVariancesTodayProvider);
     final recentPurch = ref.watch(homeRecentPurchasesCompactProvider);
-    final alertCounts = ref.watch(stockAlertCountsProvider).valueOrNull;
     final stockHealth = StockHealthScore.compute(
-      lowCount: alertCounts?.low ?? lowN.valueOrNull ?? 0,
-      criticalCount: alertCounts?.critical ?? critN.valueOrNull ?? 0,
+      lowCount: alertCounts?.low ?? 0,
+      criticalCount: alertCounts?.critical ?? 0,
       outCount: 0,
     );
     final bellCount = ref.watch(notificationsUnreadCountProvider);
@@ -499,23 +490,22 @@ class _HomePageState extends ConsumerState<HomePage>
               if (isOwner && !offline)
                 OperationalLiveBanner(
                   pulse: _livePulse,
-                  statsLine: _liveStatsLine(lowN.valueOrNull ?? 0),
+                  statsLine: _liveStatsLine(
+                    (alertCounts?.low ?? 0) + (alertCounts?.critical ?? 0),
+                  ),
                 ),
               if (isOwner) ...[
                 const SizedBox(height: 10),
                 HomeQuickStatsRow(
                   todayAsync: todayAsync,
                   monthAsync: monthAsync,
-                  lowN: lowN,
-                  critN: critN,
+                  alertCountsAsync: alertCountsAsync,
                 ),
                 const SizedBox(height: 10),
                 const HomeStaffActivitySection(),
                 const SizedBox(height: 10),
                 const HomeRecentActivitySection(),
               ],
-              const SizedBox(height: 10),
-              const _HomeCatalogChips(),
               const SizedBox(height: 10),
               OperationalSection(
                 title: 'Low stock',
@@ -617,8 +607,11 @@ class _HomePageState extends ConsumerState<HomePage>
                       child: CircularProgressIndicator(strokeWidth: 2),
                     ),
                   ),
-                  error: (_, __) =>
-                      const Text('Could not load stock movement'),
+                  error: (_, __) => FriendlyLoadError(
+                    message: 'Could not load stock movement',
+                    onRetry: () =>
+                        ref.invalidate(stockAuditDayProvider(todayDay)),
+                  ),
                   data: (rows) => StockTodayFeed(
                     rows: rows,
                     maxRows: 6,
@@ -647,9 +640,7 @@ class _HomePageState extends ConsumerState<HomePage>
       if (!mounted) return;
       final container = ProviderScope.containerOf(context, listen: false);
       container.invalidate(homeDashboardDataProvider);
-      container.invalidate(homeTodayDashboardDataProvider);
       _invalidateOwnerCachesFromContainer(container);
-      invalidateTradePurchaseCachesFromContainer(container);
       container.read(purchasePostSaveProvider.notifier).state = null;
       _handlingPurchasePostSave = false;
       if (!mounted) return;
@@ -679,6 +670,7 @@ class _HomePageState extends ConsumerState<HomePage>
   }
 
   void _invalidateOwnerCachesFromContainer(ProviderContainer c) {
+    bustHomeDashboardVolatileCaches();
     c.invalidate(homeTodayDashboardDataProvider);
     c.invalidate(stockAlertCountsProvider);
     c.invalidate(stockLowTopHomeProvider);
@@ -725,109 +717,48 @@ class _CircularQuickActionsRow extends StatelessWidget {
         (label: 'Daily', icon: Icons.summarize_outlined, onTap: onDailyReport!),
       if (isOwner) (label: 'Users', icon: Icons.group_outlined, onTap: onUsers),
     ];
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      padding: const EdgeInsets.symmetric(horizontal: 2),
-      child: Row(
-        children: [
-          for (var i = 0; i < actions.length; i++) ...[
-            if (i > 0) const SizedBox(width: 4),
-            CircularQuickAction(
-              icon: actions[i].icon,
-              label: actions[i].label,
-              onTap: actions[i].onTap,
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-class _HomeCatalogChips extends ConsumerWidget {
-  const _HomeCatalogChips();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final catsAsync = ref.watch(itemCategoriesListProvider);
-    final suppliersAsync = ref.watch(suppliersListProvider);
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
+    final crossCount = isOwner ? 3 : 2;
+    return GridView.count(
+      crossAxisCount: crossCount,
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      mainAxisSpacing: 8,
+      crossAxisSpacing: 8,
+      childAspectRatio: 0.92,
       children: [
-        catsAsync.when(
-          loading: () => const SizedBox(height: 34),
-          error: (_, __) => const SizedBox.shrink(),
-          data: (cats) {
-            final names = [
-              for (final c in cats)
-                if ((c['name'] ?? '').toString().trim().isNotEmpty)
-                  c['name'].toString().trim(),
-            ];
-            if (names.isEmpty) return const SizedBox.shrink();
-            return OperationalPillRow(
-              labels: names.take(12).toList(),
-              onSelected: (name) {
-                ref.read(stockListQueryProvider.notifier).state =
-                    StockListQuery(category: name, page: 1);
-                context.go('/stock');
-              },
-            );
-          },
-        ),
-        const SizedBox(height: 6),
-        suppliersAsync.when(
-          loading: () => const SizedBox.shrink(),
-          error: (_, __) => const SizedBox.shrink(),
-          data: (rows) {
-            final names = [
-              for (final s in rows)
-                if ((s['name'] ?? '').toString().trim().isNotEmpty)
-                  s['name'].toString().trim(),
-            ];
-            if (names.isEmpty) return const SizedBox.shrink();
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.only(left: 12, bottom: 4),
-                  child: Text(
-                    'Suppliers',
-                    style: HexaDsType.label(11, color: HexaDsColors.textMuted),
-                  ),
-                ),
-                OperationalPillRow(
-                  labels: names.take(10).toList(),
-                  onSelected: (name) {
-                    ref.read(stockListQueryProvider.notifier).state =
-                        StockListQuery(q: name, page: 1);
-                    context.go('/stock');
-                  },
-                ),
-              ],
-            );
-          },
-        ),
+        for (final a in actions)
+          CircularQuickAction(
+            icon: a.icon,
+            label: a.label,
+            onTap: a.onTap,
+          ),
       ],
     );
   }
 }
 
-class _LowStockTable extends StatelessWidget {
+class _LowStockTable extends ConsumerStatefulWidget {
   const _LowStockTable({required this.rowsAsync});
 
   final AsyncValue<List<Map<String, dynamic>>> rowsAsync;
 
   @override
+  ConsumerState<_LowStockTable> createState() => _LowStockTableState();
+}
+
+class _LowStockTableState extends ConsumerState<_LowStockTable> {
+  bool _expanded = false;
+
+  @override
   Widget build(BuildContext context) {
-    return rowsAsync.when(
+    return widget.rowsAsync.when(
       loading: () => const Center(child: Padding(
         padding: EdgeInsets.all(16),
         child: CircularProgressIndicator(strokeWidth: 2),
       )),
-      error: (e, _) => Text(
-        'Could not load low stock alerts.',
-        style: TextStyle(color: Colors.red.shade700, fontSize: 13),
+      error: (e, _) => FriendlyLoadError(
+        message: 'Could not load low stock alerts',
+        onRetry: () => ref.invalidate(stockLowTopHomeProvider),
       ),
       data: (rows) {
         if (rows.isEmpty) {
@@ -836,25 +767,26 @@ class _LowStockTable extends StatelessWidget {
             style: TextStyle(color: Colors.grey.shade600, fontWeight: FontWeight.w600),
           );
         }
+        final visible = _expanded ? rows : rows.take(4).toList();
         return Column(
           children: [
-            for (var i = 0; i < rows.length; i++) ...[
+            for (var i = 0; i < visible.length; i++) ...[
               ListTile(
                 dense: true,
                 visualDensity: VisualDensity.compact,
                 contentPadding: const EdgeInsets.symmetric(horizontal: 12),
                 title: Text(
-                  rows[i]['name']?.toString() ?? '—',
+                  visible[i]['name']?.toString() ?? '—',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
                 ),
                 subtitle: Text(
-                  '${rows[i]['current_stock'] ?? '—'} / ${rows[i]['reorder_level'] ?? '—'} ${rows[i]['unit'] ?? ''}',
+                  '${visible[i]['current_stock'] ?? '—'} / ${visible[i]['reorder_level'] ?? '—'} ${visible[i]['unit'] ?? ''}',
                   style: const TextStyle(fontSize: 11),
                 ),
                 trailing: Text(
-                  (rows[i]['stock_status'] ?? '').toString(),
+                  (visible[i]['stock_status'] ?? '').toString(),
                   style: TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w800,
@@ -862,15 +794,24 @@ class _LowStockTable extends StatelessWidget {
                   ),
                 ),
                 onTap: () {
-                  final id = rows[i]['id']?.toString();
+                  final id = visible[i]['id']?.toString();
                   if (id != null && id.isNotEmpty) {
                     context.push('/catalog/item/$id');
                   }
                 },
               ),
-              if (i < rows.length - 1)
+              if (i < visible.length - 1)
                 const Divider(height: 1, indent: 12, endIndent: 12),
             ],
+            if (rows.length > 4)
+              TextButton(
+                onPressed: () => setState(() => _expanded = !_expanded),
+                child: Text(
+                  _expanded
+                      ? 'Show less'
+                      : 'Show all ${rows.length} low items →',
+                ),
+              ),
           ],
         );
       },

@@ -7,6 +7,8 @@ import '../../../core/auth/auth_error_messages.dart';
 import '../../../core/auth/session_notifier.dart';
 import '../../../core/providers/business_write_revision.dart';
 import '../../../core/providers/catalog_providers.dart';
+import '../../../core/providers/home_owner_dashboard_providers.dart';
+import '../../../core/providers/staff_home_providers.dart';
 import '../../../core/providers/stock_providers.dart';
 
 const _kAdjustmentTypes = <String, String>{
@@ -132,6 +134,9 @@ class _UpdateStockSheetBodyState extends ConsumerState<_UpdateStockSheetBody> {
       widget.parentRef.invalidate(catalogItemDetailProvider(widget.itemId));
       widget.parentRef.invalidate(stockItemDetailProvider(widget.itemId));
       widget.parentRef.invalidate(stockListProvider);
+      widget.parentRef.invalidate(stockAlertCountsProvider);
+      widget.parentRef.invalidate(staffTodayActivityProvider);
+      widget.parentRef.invalidate(staffTodaySummaryProvider);
       if (mounted) {
         Navigator.pop(context);
         ScaffoldMessenger.of(context).showSnackBar(

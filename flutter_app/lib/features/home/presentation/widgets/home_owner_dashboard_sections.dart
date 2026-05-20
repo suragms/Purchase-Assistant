@@ -27,54 +27,104 @@ class HomeQuickStatsRow extends StatelessWidget {
     super.key,
     required this.todayAsync,
     required this.monthAsync,
-    required this.lowN,
-    required this.critN,
+    required this.alertCountsAsync,
   });
 
   final AsyncValue<HomeDashboardData> todayAsync;
   final AsyncValue<HomeDashboardData> monthAsync;
-  final AsyncValue<int> lowN;
-  final AsyncValue<int> critN;
+  final AsyncValue<({int low, int critical})> alertCountsAsync;
 
   @override
   Widget build(BuildContext context) {
     final today = todayAsync.valueOrNull;
     final month = monthAsync.valueOrNull;
-    final low = lowN.valueOrNull ?? 0;
-    final crit = critN.valueOrNull ?? 0;
-    final alerts = low + crit;
-
-    return Wrap(
-      spacing: 8,
-      runSpacing: 8,
+    final counts = alertCountsAsync.valueOrNull;
+    final low = counts?.low ?? 0;
+    final crit = counts?.critical ?? 0;
+    return GridView.count(
+      crossAxisCount: 2,
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      mainAxisSpacing: 8,
+      crossAxisSpacing: 8,
+      childAspectRatio: 1.55,
       children: [
-        OperationalStatChip(
+        _HomeStatCard(
           label: 'Today spend',
-          value: todayAsync.isLoading
-              ? '…'
-              : _inr(today?.totalPurchase ?? 0),
+          value: todayAsync.isLoading ? '…' : _inr(today?.totalPurchase ?? 0),
           onTap: () => context.go('/reports'),
         ),
-        OperationalStatChip(
-          label: 'This month',
-          value: monthAsync.isLoading
-              ? '…'
-              : _inr(month?.totalPurchase ?? 0),
+        _HomeStatCard(
+          label: 'Month spend',
+          value: monthAsync.isLoading ? '…' : _inr(month?.totalPurchase ?? 0),
           onTap: () => context.go('/reports'),
         ),
-        OperationalStatChip(
-          label: 'Items bought',
-          value: monthAsync.isLoading
-              ? '…'
-              : '${month?.purchaseCount ?? today?.purchaseCount ?? 0}',
+        _HomeStatCard(
+          label: 'Low stock',
+          value: alertCountsAsync.isLoading ? '…' : '$low items',
+          tint: low > 0 ? const Color(0xFFE65100) : null,
+          onTap: () => context.go('/stock'),
         ),
-        OperationalStatChip(
-          label: 'Stock alerts',
-          value: lowN.isLoading && critN.isLoading ? '…' : '$alerts',
-          tint: alerts > 0 ? const Color(0xFFE65100) : null,
+        _HomeStatCard(
+          label: 'Critical',
+          value: alertCountsAsync.isLoading ? '…' : '$crit items',
+          tint: crit > 0 ? const Color(0xFFC62828) : null,
           onTap: () => context.go('/stock'),
         ),
       ],
+    );
+  }
+}
+
+class _HomeStatCard extends StatelessWidget {
+  const _HomeStatCard({
+    required this.label,
+    required this.value,
+    this.onTap,
+    this.tint,
+  });
+
+  final String label;
+  final String value;
+  final VoidCallback? onTap;
+  final Color? tint;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.white,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: Colors.grey.shade300),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                label,
+                style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                value,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w800,
+                  color: tint ?? HexaColors.textBody,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
@@ -91,16 +141,7 @@ class HomeStaffActivitySection extends ConsumerWidget {
       loading: () => const SizedBox.shrink(),
       error: (_, __) => const SizedBox.shrink(),
       data: (rows) {
-        if (rows.isEmpty) {
-          return OperationalSection(
-            title: 'Staff activity',
-            dense: true,
-            child: Text(
-              'No staff active right now',
-              style: HexaDsType.bodySm(context),
-            ),
-          );
-        }
+        if (rows.isEmpty) return const SizedBox.shrink();
         return OperationalSection(
           title: 'Staff activity',
           dense: true,
@@ -208,29 +249,19 @@ class HomeRecentActivitySection extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final feedAsync = ref.watch(homeRecentActivityFeedProvider);
 
-    return OperationalSection(
-      title: 'Recent changes',
-      dense: true,
-      trailing: TextButton(
-        onPressed: () => context.go('/purchase'),
-        child: const Text('See all', style: TextStyle(fontSize: 12)),
-      ),
-      child: feedAsync.when(
-        loading: () => const Center(
-          child: Padding(
-            padding: EdgeInsets.all(12),
-            child: CircularProgressIndicator(strokeWidth: 2),
+    return feedAsync.when(
+      loading: () => const SizedBox.shrink(),
+      error: (_, __) => const SizedBox.shrink(),
+      data: (items) {
+        if (items.isEmpty) return const SizedBox.shrink();
+        return OperationalSection(
+          title: 'Recent changes',
+          dense: true,
+          trailing: TextButton(
+            onPressed: () => context.go('/purchase'),
+            child: const Text('See all', style: TextStyle(fontSize: 12)),
           ),
-        ),
-        error: (_, __) => const Text('Could not load recent activity'),
-        data: (items) {
-          if (items.isEmpty) {
-            return Text(
-              'No purchases or stock updates yet',
-              style: HexaDsType.bodySm(context),
-            );
-          }
-          return Column(
+          child: Column(
             children: [
               for (var i = 0; i < items.length; i++) ...[
                 _ActivityTile(item: items[i]),
@@ -238,9 +269,9 @@ class HomeRecentActivitySection extends ConsumerWidget {
                   const Divider(height: 1, indent: 12, endIndent: 12),
               ],
             ],
-          );
-        },
-      ),
+          ),
+        );
+      },
     );
   }
 }
