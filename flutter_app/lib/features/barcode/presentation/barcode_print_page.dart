@@ -47,7 +47,8 @@ class _BarcodePrintPageState extends ConsumerState<BarcodePrintPage> {
     final bid = session.primaryBusiness.id;
     final api = ref.read(hexaApiProvider);
     try {
-      final j = await api.getBarcodeLabel(businessId: bid, itemId: widget.itemId);
+      final j =
+          await api.getBarcodeLabel(businessId: bid, itemId: widget.itemId);
       if (!mounted) return;
       setState(() => _data = j);
     } catch (e) {
@@ -62,6 +63,15 @@ class _BarcodePrintPageState extends ConsumerState<BarcodePrintPage> {
     return BarcodeLabelData.fromApiMap(d);
   }
 
+  String _singleBarcodeFilename(BarcodeLabelData label) {
+    final code = label.itemCode
+        .trim()
+        .replaceAll(RegExp(r'[^A-Za-z0-9_-]+'), '_')
+        .replaceAll(RegExp(r'_+'), '_');
+    final date = DateFormat('yyyyMMdd').format(DateTime.now());
+    return 'harisree_barcode_${code.isEmpty ? 'item' : code}_$date.pdf';
+  }
+
   Future<void> _print() async {
     final label = _label;
     if (label == null) return;
@@ -73,7 +83,10 @@ class _BarcodePrintPageState extends ConsumerState<BarcodePrintPage> {
         copies: _copies,
         showLastPurchase: _showLastPurchase,
       );
-      await Printing.layoutPdf(onLayout: (_) async => bytes);
+      await Printing.layoutPdf(
+        name: _singleBarcodeFilename(label),
+        onLayout: (_) async => bytes,
+      );
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -92,7 +105,7 @@ class _BarcodePrintPageState extends ConsumerState<BarcodePrintPage> {
       );
       await Printing.sharePdf(
         bytes: bytes,
-        filename: 'barcode_${label.itemCode}.pdf',
+        filename: _singleBarcodeFilename(label),
       );
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -150,7 +163,8 @@ class _BarcodePrintPageState extends ConsumerState<BarcodePrintPage> {
         24 + MediaQuery.viewPaddingOf(context).bottom,
       ),
       children: [
-        Text('LABEL PREVIEW', style: HexaDsType.label(10, color: HexaDsColors.textMuted)),
+        Text('LABEL PREVIEW',
+            style: HexaDsType.label(10, color: HexaDsColors.textMuted)),
         const SizedBox(height: 8),
         Container(
           padding: const EdgeInsets.all(16),
@@ -172,7 +186,8 @@ class _BarcodePrintPageState extends ConsumerState<BarcodePrintPage> {
                 textAlign: TextAlign.center,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800),
+                style:
+                    const TextStyle(fontSize: 14, fontWeight: FontWeight.w800),
               ),
               const SizedBox(height: 8),
               if (label.itemCode.isNotEmpty)
@@ -200,7 +215,8 @@ class _BarcodePrintPageState extends ConsumerState<BarcodePrintPage> {
                   label.lastPurchaseDate != null) ...[
                 const SizedBox(height: 8),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
                     color: Colors.grey.shade100,
                     borderRadius: BorderRadius.circular(4),
@@ -219,7 +235,8 @@ class _BarcodePrintPageState extends ConsumerState<BarcodePrintPage> {
           ),
         ),
         const SizedBox(height: 20),
-        Text('Label size', style: HexaDsType.label(12, color: HexaDsColors.textMuted)),
+        Text('Label size',
+            style: HexaDsType.label(12, color: HexaDsColors.textMuted)),
         const SizedBox(height: 8),
         SegmentedButton<LabelSize>(
           segments: const [
@@ -243,7 +260,8 @@ class _BarcodePrintPageState extends ConsumerState<BarcodePrintPage> {
               ),
               Text('$_copies', style: HexaDsType.heading(18)),
               IconButton(
-                onPressed: _copies < 100 ? () => setState(() => _copies++) : null,
+                onPressed:
+                    _copies < 100 ? () => setState(() => _copies++) : null,
                 icon: const Icon(Icons.add_circle_outline),
               ),
             ],
@@ -270,7 +288,8 @@ class _BarcodePrintPageState extends ConsumerState<BarcodePrintPage> {
               ? const SizedBox(
                   width: 18,
                   height: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                  child: CircularProgressIndicator(
+                      strokeWidth: 2, color: Colors.white),
                 )
               : const Icon(Icons.print_rounded),
           label: Text(_busy ? 'Preparing…' : 'Print label'),

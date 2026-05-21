@@ -18,6 +18,46 @@ final _genDf = DateFormat('dd MMM yyyy, h:mm a');
 
 String _rs(num n) => 'Rs. ${_money.format(n)}';
 
+String _filenameSlug(String raw, {String fallback = 'all'}) {
+  final cleaned = raw
+      .trim()
+      .replaceAll(RegExp(r'[^A-Za-z0-9_-]+'), '_')
+      .replaceAll(RegExp(r'_+'), '_')
+      .replaceAll(RegExp(r'^_|_$'), '');
+  return cleaned.isEmpty ? fallback : cleaned;
+}
+
+String buildPurchaseReportPdfFilename({
+  required String label,
+  required DateTime from,
+  required DateTime to,
+}) {
+  final ymd = DateFormat('yyyyMMdd');
+  return 'harisree_purchases_${_filenameSlug(label)}_${ymd.format(from)}_${ymd.format(to)}.pdf';
+}
+
+String buildTradeStatementPdfFilename({
+  required DateTime from,
+  required DateTime to,
+  String label = 'all_suppliers',
+}) {
+  final ymd = DateFormat('yyyyMMdd');
+  return 'harisree_statement_${_filenameSlug(label, fallback: 'all_suppliers')}_${ymd.format(from)}_${ymd.format(to)}.pdf';
+}
+
+String buildItemStatementPdfFilename({
+  required String itemName,
+  DateTime? from,
+  DateTime? to,
+}) {
+  final slug = _filenameSlug(itemName, fallback: 'item');
+  if (from != null && to != null) {
+    final ymd = DateFormat('yyyyMMdd');
+    return 'harisree_item_${slug}_${ymd.format(from)}_${ymd.format(to)}.pdf';
+  }
+  return 'harisree_item_$slug.pdf';
+}
+
 Future<pw.ImageProvider?> _tryLogo(String? url) async {
   final u = url?.trim();
   if (u == null || u.isEmpty) return null;
@@ -144,8 +184,7 @@ pw.Widget _totCell(String label, String value, {bool bold = false}) =>
             textAlign: pw.TextAlign.center,
             style: pw.TextStyle(
               fontSize: bold ? 10 : 9,
-              fontWeight:
-                  bold ? pw.FontWeight.bold : pw.FontWeight.normal,
+              fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal,
             ),
           ),
         ],
@@ -158,8 +197,8 @@ pw.Widget _tableSection({
   List<pw.FlexColumnWidth>? widths,
 }) {
   final cols = headers.length;
-  final cw = widths ??
-      List.generate(cols, (i) => pw.FlexColumnWidth(i == 0 ? 3 : 1));
+  final cw =
+      widths ?? List.generate(cols, (i) => pw.FlexColumnWidth(i == 0 ? 3 : 1));
   pw.Widget cell(String t,
           {bool bold = false, bool right = false, PdfColor? color}) =>
       pw.Padding(
@@ -239,8 +278,7 @@ Future<void> shareReportsSummaryPdf({
         pw.SizedBox(height: 6),
         pw.Text(
           'Total purchases is the sum of trade line amounts for deals in this range (same method as the in-app reports). A single purchase PDF invoice total can differ because it includes header terms (discount, freight, etc.).',
-          style: const pw.TextStyle(
-              fontSize: 7.2, color: _muted, height: 1.3),
+          style: const pw.TextStyle(fontSize: 7.2, color: _muted, height: 1.3),
         ),
         _divider(),
 
@@ -291,8 +329,7 @@ Future<void> shareReportsSummaryPdf({
                 .take(30)
                 .map((r) => [
                       r['category_name']?.toString() ?? '—',
-                      _rs(
-                          coerceToDouble(r['total_purchase'])),
+                      _rs(coerceToDouble(r['total_purchase'])),
                     ])
                 .toList(),
           ),
@@ -315,8 +352,7 @@ Future<void> shareReportsSummaryPdf({
                 .map((r) => [
                       r['supplier_name']?.toString() ?? '—',
                       '${coerceToInt(r['purchase_count'])}',
-                      _rs(
-                          coerceToDouble(r['total_purchase'])),
+                      _rs(coerceToDouble(r['total_purchase'])),
                     ])
                 .toList(),
           ),
@@ -330,11 +366,13 @@ Future<void> shareReportsSummaryPdf({
       ],
     ),
   );
-  final safe =
-      modeLabel.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]+'), '_');
   await Printing.sharePdf(
     bytes: await doc.save(),
-    filename: 'report_${safe}_${_df.format(from)}.pdf',
+    filename: buildPurchaseReportPdfFilename(
+      label: modeLabel,
+      from: from,
+      to: to,
+    ),
   );
 }
 
@@ -355,8 +393,7 @@ Future<void> shareItemPurchaseTradeHistoryPdf({
   }
   if (periodFrom != null && periodTo != null) {
     // Hyphen, not en-dash, so default PDF font encodes it.
-    periodParts
-        .add('${_df.format(periodFrom)} - ${_df.format(periodTo)}');
+    periodParts.add('${_df.format(periodFrom)} - ${_df.format(periodTo)}');
   }
   final periodLine = periodParts.isEmpty
       ? 'All available lines in export'
@@ -426,9 +463,11 @@ Future<void> shareItemPurchaseTradeHistoryPdf({
                       padding: const pw.EdgeInsets.all(3),
                       child: pw.Text(
                         safePdfText(r[i]),
-                        textAlign:
-                            i == r.length - 1 ? pw.TextAlign.right : pw.TextAlign.left,
-                        style: const pw.TextStyle(fontSize: 6.5, color: PdfColors.black),
+                        textAlign: i == r.length - 1
+                            ? pw.TextAlign.right
+                            : pw.TextAlign.left,
+                        style: const pw.TextStyle(
+                            fontSize: 6.5, color: PdfColors.black),
                       ),
                     ),
                 ],
@@ -442,7 +481,9 @@ Future<void> shareItemPurchaseTradeHistoryPdf({
             child: pw.Text(
               safePdfText(totalLineLabel),
               style: pw.TextStyle(
-                  fontSize: 9, fontWeight: pw.FontWeight.bold, color: PdfColors.black),
+                  fontSize: 9,
+                  fontWeight: pw.FontWeight.bold,
+                  color: PdfColors.black),
             ),
           ),
         ],
@@ -459,10 +500,13 @@ Future<void> shareItemPurchaseTradeHistoryPdf({
       ],
     ),
   );
-  final safe = itemName.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]+'), '_');
   await Printing.sharePdf(
     bytes: await doc.save(),
-    filename: 'item_statement_$safe.pdf',
+    filename: buildItemStatementPdfFilename(
+      itemName: itemName,
+      from: periodFrom,
+      to: periodTo,
+    ),
   );
 }
 
@@ -490,8 +534,7 @@ Future<Uint8List> buildTradeStatementSsotPdfBytes({
           textAlign: right ? pw.TextAlign.right : pw.TextAlign.left,
           style: pw.TextStyle(
             fontSize: hdr ? 8 : 7.5,
-            fontWeight:
-                hdr ? pw.FontWeight.bold : pw.FontWeight.normal,
+            fontWeight: hdr ? pw.FontWeight.bold : pw.FontWeight.normal,
           ),
         ),
       );
@@ -586,8 +629,7 @@ Future<Uint8List> buildTradeStatementSsotPdfBytes({
                 border: pw.TableBorder.all(color: _border, width: 0.3),
                 children: [
                   pw.TableRow(
-                    decoration:
-                        const pw.BoxDecoration(color: PdfColors.white),
+                    decoration: const pw.BoxDecoration(color: PdfColors.white),
                     children: [
                       _totCell(
                         'Bags',
@@ -606,9 +648,7 @@ Future<Uint8List> buildTradeStatementSsotPdfBytes({
                       ),
                       _totCell(
                         'Total KG',
-                        tt.kg > 1e-9
-                            ? '${tt.kg.round()} KG'
-                            : '—',
+                        tt.kg > 1e-9 ? '${tt.kg.round()} KG' : '—',
                         bold: true,
                       ),
                       _totCell(
@@ -650,6 +690,7 @@ Future<void> layoutTradeStatementSsotPdf({
   required List<TradePurchase> purchases,
 }) async {
   await Printing.layoutPdf(
+    name: buildTradeStatementPdfFilename(from: from, to: to),
     onLayout: (_) async => buildTradeStatementSsotPdfBytes(
       business: business,
       from: from,

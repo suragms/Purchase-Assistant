@@ -2,6 +2,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
 import 'package:printing/printing.dart';
 
 import '../../../core/auth/session_notifier.dart';
@@ -26,6 +27,7 @@ class _BulkBarcodePrintPageState extends ConsumerState<BulkBarcodePrintPage> {
   LabelSize _size = LabelSize.medium;
   int _copies = 1;
   int _perRow = 2;
+
   /// When true, narrow the loaded "all status" list to low + critical only (client-side).
   bool _lowStockOnly = false;
   String _searchText = '';
@@ -146,7 +148,10 @@ class _BulkBarcodePrintPageState extends ConsumerState<BulkBarcodePrintPage> {
         );
         return;
       }
-      await Printing.layoutPdf(onLayout: (_) async => pdf);
+      await Printing.layoutPdf(
+        name: _bulkBarcodeFilename(),
+        onLayout: (_) async => pdf,
+      );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -174,7 +179,7 @@ class _BulkBarcodePrintPageState extends ConsumerState<BulkBarcodePrintPage> {
       }
       await Printing.sharePdf(
         bytes: pdf,
-        filename: 'bulk_barcodes.pdf',
+        filename: _bulkBarcodeFilename(),
       );
     } catch (e) {
       if (!mounted) return;
@@ -193,8 +198,7 @@ class _BulkBarcodePrintPageState extends ConsumerState<BulkBarcodePrintPage> {
     final q = _searchText.trim().toLowerCase();
     return [
       for (final it in items)
-        if (_matches(it, q))
-          it,
+        if (_matches(it, q)) it,
     ];
   }
 
@@ -207,6 +211,19 @@ class _BulkBarcodePrintPageState extends ConsumerState<BulkBarcodePrintPage> {
     final name = it['name']?.toString().toLowerCase() ?? '';
     final code = it['item_code']?.toString().toLowerCase() ?? '';
     return name.contains(q) || code.contains(q);
+  }
+
+  String _bulkBarcodeFilename() {
+    final q = ref.read(stockListQueryProvider);
+    final raw = q.category.trim().isNotEmpty
+        ? q.category.trim()
+        : (_lowStockOnly ? 'low_stock' : 'all_items');
+    final category = raw
+        .replaceAll(RegExp(r'[^A-Za-z0-9_-]+'), '_')
+        .replaceAll(RegExp(r'_+'), '_')
+        .replaceAll(RegExp(r'^_|_$'), '');
+    final date = DateFormat('yyyyMMdd').format(DateTime.now());
+    return 'harisree_barcodes_${category.isEmpty ? 'all_items' : category}_$date.pdf';
   }
 
   String? _categoryIdForName(List<Map<String, dynamic>> cats, String name) {
@@ -255,7 +272,8 @@ class _BulkBarcodePrintPageState extends ConsumerState<BulkBarcodePrintPage> {
                   borderRadius: BorderRadius.circular(12),
                 ),
               ),
-              onChanged: (v) => setState(() => _searchText = v.trim().toLowerCase()),
+              onChanged: (v) =>
+                  setState(() => _searchText = v.trim().toLowerCase()),
             ),
           ),
           const SizedBox(height: 6),
@@ -293,11 +311,14 @@ class _BulkBarcodePrintPageState extends ConsumerState<BulkBarcodePrintPage> {
                                 : listQ.category == name,
                             onSelected: (_) {
                               final cur = ref.read(stockListQueryProvider);
-                              final n = ref.read(stockListQueryProvider.notifier);
+                              final n =
+                                  ref.read(stockListQueryProvider.notifier);
                               if (name == 'All') {
-                                n.state = cur.copyWith(category: '', subcategory: '');
+                                n.state =
+                                    cur.copyWith(category: '', subcategory: '');
                               } else {
-                                n.state = cur.copyWith(category: name, subcategory: '');
+                                n.state = cur.copyWith(
+                                    category: name, subcategory: '');
                               }
                             },
                           ),
@@ -330,9 +351,11 @@ class _BulkBarcodePrintPageState extends ConsumerState<BulkBarcodePrintPage> {
                                     ),
                                     selected: listQ.subcategory.isEmpty,
                                     onSelected: (_) {
-                                      final cur = ref.read(stockListQueryProvider);
-                                      ref.read(stockListQueryProvider.notifier).state =
-                                          cur.copyWith(subcategory: '');
+                                      final cur =
+                                          ref.read(stockListQueryProvider);
+                                      ref
+                                          .read(stockListQueryProvider.notifier)
+                                          .state = cur.copyWith(subcategory: '');
                                     },
                                   ),
                                   for (final sub in typeNames)
@@ -346,7 +369,8 @@ class _BulkBarcodePrintPageState extends ConsumerState<BulkBarcodePrintPage> {
                                         final cur =
                                             ref.read(stockListQueryProvider);
                                         ref
-                                                .read(stockListQueryProvider.notifier)
+                                                .read(stockListQueryProvider
+                                                    .notifier)
                                                 .state =
                                             cur.copyWith(subcategory: sub);
                                       },
@@ -371,26 +395,31 @@ class _BulkBarcodePrintPageState extends ConsumerState<BulkBarcodePrintPage> {
                   label: const Text('All', style: TextStyle(fontSize: 12)),
                   selected: listQ.status == 'all' && !_lowStockOnly,
                   onSelected: (_) {
-                    ref.read(stockListQueryProvider.notifier).state =
-                        ref.read(stockListQueryProvider).copyWith(status: 'all');
+                    ref.read(stockListQueryProvider.notifier).state = ref
+                        .read(stockListQueryProvider)
+                        .copyWith(status: 'all');
                     setState(() => _lowStockOnly = false);
                   },
                 ),
                 FilterChip(
-                  label: const Text('Low stock', style: TextStyle(fontSize: 12)),
+                  label:
+                      const Text('Low stock', style: TextStyle(fontSize: 12)),
                   selected: listQ.status == 'all' && _lowStockOnly,
                   onSelected: (_) {
-                    ref.read(stockListQueryProvider.notifier).state =
-                        ref.read(stockListQueryProvider).copyWith(status: 'all');
+                    ref.read(stockListQueryProvider.notifier).state = ref
+                        .read(stockListQueryProvider)
+                        .copyWith(status: 'all');
                     setState(() => _lowStockOnly = true);
                   },
                 ),
                 FilterChip(
-                  label: const Text('Out of stock', style: TextStyle(fontSize: 12)),
+                  label: const Text('Out of stock',
+                      style: TextStyle(fontSize: 12)),
                   selected: listQ.status == 'out',
                   onSelected: (_) {
-                    ref.read(stockListQueryProvider.notifier).state =
-                        ref.read(stockListQueryProvider).copyWith(status: 'out');
+                    ref.read(stockListQueryProvider.notifier).state = ref
+                        .read(stockListQueryProvider)
+                        .copyWith(status: 'out');
                     setState(() => _lowStockOnly = false);
                   },
                 ),
@@ -401,10 +430,10 @@ class _BulkBarcodePrintPageState extends ConsumerState<BulkBarcodePrintPage> {
             child: listAsync.when(
               loading: () => const Center(child: CircularProgressIndicator()),
               error: (e, _) => HexaErrorCard.fromError(
-                    error: e,
-                    title: 'Could not load items',
-                    onRetry: () => ref.invalidate(bulkStockListProvider),
-                  ),
+                error: e,
+                title: 'Could not load items',
+                onRetry: () => ref.invalidate(bulkStockListProvider),
+              ),
               data: (data) {
                 final raw = (data['items'] as List?) ?? const [];
                 final items = [
@@ -413,8 +442,8 @@ class _BulkBarcodePrintPageState extends ConsumerState<BulkBarcodePrintPage> {
                 ];
                 final visible = _filterItems(items);
                 final total = (data['total'] as num?)?.toInt();
-                final loaded = (data['loaded'] as num?)?.toInt() ??
-                    items.length;
+                final loaded =
+                    (data['loaded'] as num?)?.toInt() ?? items.length;
                 return Column(
                   children: [
                     Padding(
@@ -426,21 +455,22 @@ class _BulkBarcodePrintPageState extends ConsumerState<BulkBarcodePrintPage> {
                               '${_selected.length} selected · '
                               '${visible.length} shown'
                               '${total != null ? ' · $loaded of $total loaded' : ''}',
-                              style: const TextStyle(fontWeight: FontWeight.w800),
+                              style:
+                                  const TextStyle(fontWeight: FontWeight.w800),
                             ),
                           ),
                           TextButton(
                             onPressed: visible.isEmpty
                                 ? null
                                 : () => setState(() {
-                                    _selected
-                                      ..clear()
-                                      ..addAll(
-                                        visible
-                                            .map((e) => e['id']?.toString())
-                                            .whereType<String>(),
-                                      );
-                                  }),
+                                      _selected
+                                        ..clear()
+                                        ..addAll(
+                                          visible
+                                              .map((e) => e['id']?.toString())
+                                              .whereType<String>(),
+                                        );
+                                    }),
                             child: const Text('Select all'),
                           ),
                         ],
@@ -577,9 +607,8 @@ class _BulkBarcodePrintPageState extends ConsumerState<BulkBarcodePrintPage> {
                         style: Theme.of(context).textTheme.bodySmall,
                       ),
                       value: _denseA4,
-                      onChanged: _busy
-                          ? null
-                          : (v) => setState(() => _denseA4 = v),
+                      onChanged:
+                          _busy ? null : (v) => setState(() => _denseA4 = v),
                     ),
                     const SizedBox(height: 8),
                     Row(

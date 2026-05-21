@@ -109,8 +109,7 @@ class ReportsWhatsAppSheet extends StatefulWidget {
 }
 
 class _ReportsWhatsAppSheetState extends State<ReportsWhatsAppSheet> {
-  late final TextEditingController _phone =
-      TextEditingController(text: '');
+  late final TextEditingController _phone = TextEditingController(text: '');
   String _freq = 'weekly';
   bool _sharingPdf = false;
 
@@ -162,13 +161,16 @@ class _ReportsWhatsAppSheetState extends State<ReportsWhatsAppSheet> {
         to: widget.to,
         purchases: widget.purchases,
       );
-      final safe = DateFormat('yyyyMMdd').format(widget.from);
+      final filename = buildTradeStatementPdfFilename(
+        from: widget.from,
+        to: widget.to,
+      );
       await Share.shareXFiles(
         [
           XFile.fromData(
             bytes,
             mimeType: 'application/pdf',
-            name: 'trade_report_$safe.pdf',
+            name: filename,
           ),
         ],
         text: 'Purchase report (PDF)',
@@ -190,7 +192,8 @@ class _ReportsWhatsAppSheetState extends State<ReportsWhatsAppSheet> {
     final raw = _digitsOnly(_phone.text);
     if (raw.length < 10) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Enter a valid phone number (digits only).')),
+        const SnackBar(
+            content: Text('Enter a valid phone number (digits only).')),
       );
       return;
     }
@@ -230,7 +233,8 @@ class _ReportsWhatsAppSheetState extends State<ReportsWhatsAppSheet> {
           const SizedBox(height: 8),
           Text(
             'We open WhatsApp with a prefilled summary. Use Share PDF to open the system sheet, then pick WhatsApp and attach the file if you like.',
-            style: TextStyle(fontSize: 13, color: HexaColors.textBody, height: 1.35),
+            style: TextStyle(
+                fontSize: 13, color: HexaColors.textBody, height: 1.35),
           ),
           const SizedBox(height: 16),
           TextField(

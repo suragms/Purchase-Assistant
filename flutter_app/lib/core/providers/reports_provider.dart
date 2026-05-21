@@ -241,7 +241,7 @@ Future<List<TradePurchase>> _loadReportsPurchases(Ref ref) async {
         }
         if (kDebugMode) {
           debugPrint(
-            '[REPORTS] fetched ${items.length} purchases, range: $fromStr → $toStr',
+            '[Reports] Fetching range: $fromStr → $toStr, key: $key; fetched ${items.length} purchases',
           );
         }
         if (items.isEmpty) {
@@ -396,7 +396,6 @@ final reportsPurchasesMergedProvider =
 });
 
 /// Single aggregate engine input → [TradeReportAgg] (all classified lines).
-final reportsAggregateProvider =
-    Provider.autoDispose<TradeReportAgg>((ref) {
+final reportsAggregateProvider = Provider.autoDispose<TradeReportAgg>((ref) {
   return buildTradeReportAgg(ref.watch(reportsPurchasesMergedProvider));
 });

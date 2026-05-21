@@ -11,17 +11,30 @@ import '../utils/trade_purchase_commission.dart';
 
 final _money = NumberFormat('#,##,##0', 'en_IN');
 final _df = DateFormat('dd MMM yyyy');
+final _fileDf = DateFormat('yyyyMMdd');
 
 const _statementTitleInk = PdfColor.fromInt(0xFF0F172A);
 const _statementTeal = PdfColor.fromInt(0xFF17A8A7);
 
 String _rs(num n) => 'Rs. ${_money.format(n)}';
 
-String _safe(String? s) =>
-    (s == null || s.trim().isEmpty) ? '—' : s.trim();
+String _safe(String? s) => (s == null || s.trim().isEmpty) ? '—' : s.trim();
 
-String _brokerStatementFilename(String brokerName) =>
-    'broker_statement_${brokerName.replaceAll(RegExp(r'[^\w\-]+'), '_')}.pdf';
+String _filenameSlug(String raw, {String fallback = 'broker'}) {
+  final cleaned = raw
+      .trim()
+      .replaceAll(RegExp(r'[^A-Za-z0-9_-]+'), '_')
+      .replaceAll(RegExp(r'_+'), '_')
+      .replaceAll(RegExp(r'^_|_$'), '');
+  return cleaned.isEmpty ? fallback : cleaned;
+}
+
+String _brokerStatementFilename(
+  String brokerName,
+  DateTime fromDate,
+  DateTime toDate,
+) =>
+    'harisree_broker_${_filenameSlug(brokerName)}_${_fileDf.format(fromDate)}_${_fileDf.format(toDate)}.pdf';
 
 pw.Document _buildBrokerStatementDocument({
   required BusinessProfile business,
@@ -66,9 +79,12 @@ pw.Document _buildBrokerStatementDocument({
   }
   final totalsParts = <String>[
     if (totalKg > 1e-6) '${totalKg.toStringAsFixed(0)} kg',
-    if (totalBags > 1e-6) '${totalBags % 1 == 0 ? totalBags.toInt() : totalBags.toStringAsFixed(1)} bags',
-    if (totalBoxes > 1e-6) '${totalBoxes % 1 == 0 ? totalBoxes.toInt() : totalBoxes.toStringAsFixed(1)} boxes',
-    if (totalTins > 1e-6) '${totalTins % 1 == 0 ? totalTins.toInt() : totalTins.toStringAsFixed(1)} tins',
+    if (totalBags > 1e-6)
+      '${totalBags % 1 == 0 ? totalBags.toInt() : totalBags.toStringAsFixed(1)} bags',
+    if (totalBoxes > 1e-6)
+      '${totalBoxes % 1 == 0 ? totalBoxes.toInt() : totalBoxes.toStringAsFixed(1)} boxes',
+    if (totalTins > 1e-6)
+      '${totalTins % 1 == 0 ? totalTins.toInt() : totalTins.toStringAsFixed(1)} tins',
   ];
 
   final tableRows = <pw.TableRow>[
@@ -115,7 +131,8 @@ pw.Document _buildBrokerStatementDocument({
               l.qty % 1 == 0 ? '${l.qty.toInt()}' : l.qty.toStringAsFixed(1),
               right: true,
             ),
-            _pcell(kgLine > 1e-6 ? kgLine.toStringAsFixed(0) : '—', right: true),
+            _pcell(kgLine > 1e-6 ? kgLine.toStringAsFixed(0) : '—',
+                right: true),
             _pcell(
               i == 0 ? _rs(tradePurchaseCommissionInr(p)) : '',
               right: true,
@@ -227,7 +244,7 @@ Future<void> shareBrokerStatementPdf({
   );
   await Printing.sharePdf(
     bytes: await doc.save(),
-    filename: _brokerStatementFilename(brokerName),
+    filename: _brokerStatementFilename(brokerName, fromDate, toDate),
   );
 }
 
@@ -249,7 +266,7 @@ Future<void> shareBrokerStatementPdfForChat({
     toDate: toDate,
   );
   final bytes = await doc.save();
-  final fn = _brokerStatementFilename(brokerName);
+  final fn = _brokerStatementFilename(brokerName, fromDate, toDate);
   await Share.shareXFiles(
     [
       XFile.fromData(

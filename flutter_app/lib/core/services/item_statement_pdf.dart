@@ -8,14 +8,23 @@ import '../models/trade_purchase_models.dart';
 
 final _money = NumberFormat('#,##,##0', 'en_IN');
 final _df = DateFormat('dd MMM yyyy');
+final _fileDf = DateFormat('yyyyMMdd');
 
 const _statementTitleInk = PdfColor.fromInt(0xFF0F172A);
 const _statementTeal = PdfColor.fromInt(0xFF17A8A7);
 
 String _rs(num n) => 'Rs. ${_money.format(n)}';
 
-String _safe(String? s) =>
-    (s == null || s.trim().isEmpty) ? '—' : s.trim();
+String _safe(String? s) => (s == null || s.trim().isEmpty) ? '—' : s.trim();
+
+String _filenameSlug(String raw, {String fallback = 'item'}) {
+  final cleaned = raw
+      .trim()
+      .replaceAll(RegExp(r'[^A-Za-z0-9_-]+'), '_')
+      .replaceAll(RegExp(r'_+'), '_')
+      .replaceAll(RegExp(r'^_|_$'), '');
+  return cleaned.isEmpty ? fallback : cleaned;
+}
 
 /// Item-centric PUR statement for [purchases] (already filtered to the item).
 Future<void> shareItemStatementPdf({
@@ -27,8 +36,7 @@ Future<void> shareItemStatementPdf({
 }) async {
   final doc = pw.Document();
   final total = purchases.fold<double>(0, (s, p) => s + p.totalAmount);
-  final outstanding =
-      purchases.fold<double>(0, (s, p) => s + p.remaining);
+  final outstanding = purchases.fold<double>(0, (s, p) => s + p.remaining);
 
   doc.addPage(
     pw.MultiPage(
@@ -127,7 +135,7 @@ Future<void> shareItemStatementPdf({
   await Printing.sharePdf(
     bytes: await doc.save(),
     filename:
-        'item_statement_${itemName.replaceAll(RegExp(r'[^\w\-]+'), '_')}.pdf',
+        'harisree_item_${_filenameSlug(itemName)}_${_fileDf.format(fromDate)}_${_fileDf.format(toDate)}.pdf',
   );
 }
 

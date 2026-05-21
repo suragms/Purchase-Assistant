@@ -60,17 +60,15 @@ mixin PurchaseItemEntrySheetStateMixin {
     return null;
   }
 
-
-
   TextInputFormatter _decimalFormatter(int decimalRange) {
-    return FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,' + decimalRange.toString() + r'}'));
+    return FilteringTextInputFormatter.allow(
+        RegExp(r'^\d*\.?\d{0,' + decimalRange.toString() + r'}'));
   }
 
   bool _bagQtyIsWhole(double bags) {
     return (bags - bags.roundToDouble()).abs() < 1e-6;
   }
 }
-
 
 /// Persist [default_kg_per_bag] (+ optional rename) for catalog items used as bags.
 typedef PersistCatalogBagWeight = Future<void> Function({
@@ -88,21 +86,27 @@ class PurchaseItemEntrySheet extends ConsumerStatefulWidget {
     this.initial,
     required this.isEdit,
     required this.onCommitted,
+
     /// When set, each catalog pick refetches the item so HSN/tax/kg match the server
     /// (list payloads may be incomplete). Failures keep list-row data only.
     this.resolveCatalogItem,
     this.resolveLastDefaults,
     this.onDefaultsResolved,
+
     /// Full-screen [Scaffold] (ENTRY Prompt 1) instead of a bottom sheet.
     this.fullPage = false,
+
     /// When true, line payload omits freight / delivered / billty / line discount (purchase header carries these).
     this.omitLineFreightDeliveredBilltyDiscount = false,
+
     /// Optional: push catalog add-item route; caller invalidates catalog + returns `{id,name}`.
     this.navigateCatalogQuickAddItem,
+
     /// When set, user can save missing kg/bag to the server from a blocking sheet.
     this.persistCatalogBagWeight,
     this.preferredSupplierId,
     this.priorityCatalogItemIds = const [],
+
     /// Reserved for future line-level prefs; rates are always entered **before** GST (Tax % applies on top).
     this.gstPrefs,
   });
@@ -165,6 +169,7 @@ class _PurchaseItemEntrySheetState extends ConsumerState<PurchaseItemEntrySheet>
   final _discCtrl = TextEditingController();
   final _taxCtrl = TextEditingController();
   final _sellingCtrl = TextEditingController();
+
   /// Manual kg per bag (when no catalog row or catalog row has no default_kg_per_bag).
   final _kgPerBagCtrl = TextEditingController();
   final _freightCtrl = TextEditingController();
@@ -178,8 +183,10 @@ class _PurchaseItemEntrySheetState extends ConsumerState<PurchaseItemEntrySheet>
 
   /// Persisted catalog row id for the line (`catalog_item_id` on save).
   String? _selectedCatalogItemId;
+
   /// When true: bag with kg snapshot — user enters landing & selling per kg.
   bool _weightPricing = false;
+
   /// kg per bag (from `default_kg_per_bag` or saved line).
   double? _kgPerUnit;
   String _freightType = 'separate';
@@ -201,10 +208,13 @@ class _PurchaseItemEntrySheetState extends ConsumerState<PurchaseItemEntrySheet>
   String? _hsnCode;
   String? _itemCode;
   final Map<String, Map<String, dynamic>> _catalogFetchById = {};
+
   /// Non-null after [resolveLastDefaults] applied meaningful trade history.
   String? _lastPurchaseAutofillHint;
+
   /// Ignore stale default fetches when the user selects another catalog row mid-flight.
   int _catalogPickSeq = 0;
+
   /// True while a suggestion pick mutates `_itemCtrl` + `_selectedCatalogItemId`; skips
   /// the label-vs-row unlink in `_onItemTextChanged` for that microtask window.
   bool _suppressCatalogTextUnlink = false;
@@ -223,8 +233,7 @@ class _PurchaseItemEntrySheetState extends ConsumerState<PurchaseItemEntrySheet>
   Map<String, String>? _fieldBaseline;
 
   /// Indian grouping for weight line (display only).
-  static final NumberFormat _inQtyWtFmt =
-      NumberFormat('#,##,##0.###', 'en_IN');
+  static final NumberFormat _inQtyWtFmt = NumberFormat('#,##,##0.###', 'en_IN');
 
   void _onItemTextChanged() {
     if (!mounted) return;
@@ -368,8 +377,7 @@ class _PurchaseItemEntrySheetState extends ConsumerState<PurchaseItemEntrySheet>
         _kgPerUnit = null;
         final r = coerceToDoubleNullable(
             init['landing_cost'] ?? init['purchase_rate']);
-        _landingCtrl.text =
-            r != null && r > 0 ? r.toStringAsFixed(2) : '';
+        _landingCtrl.text = r != null && r > 0 ? r.toStringAsFixed(2) : '';
         final s = coerceToDoubleNullable(
             init['selling_cost'] ?? init['selling_rate']);
         if (s != null && s > 0) {
@@ -397,11 +405,13 @@ class _PurchaseItemEntrySheetState extends ConsumerState<PurchaseItemEntrySheet>
       _lineNotesCtrl.text = init['description']?.toString() ?? '';
       final ft = init['freight_type']?.toString();
       if (ft == 'included' || ft == 'separate') _freightType = ft!;
-      _freightCtrl.text = _fmtInput(init['freight_value'] ?? init['freight_amount'], 2);
+      _freightCtrl.text =
+          _fmtInput(init['freight_value'] ?? init['freight_amount'], 2);
       _deliveredCtrl.text = _fmtInput(init['delivered_rate'], 2);
       _billtyCtrl.text = _fmtInput(init['billty_rate'], 2);
       _itemsPerBoxCtrl.text = _fmtInput(init['items_per_box'], 3, trim: true);
-      _weightPerItemCtrl.text = _fmtInput(init['weight_per_item'], 3, trim: true);
+      _weightPerItemCtrl.text =
+          _fmtInput(init['weight_per_item'], 3, trim: true);
       _kgPerBoxCtrl.text = _fmtInput(init['kg_per_box'], 3, trim: true);
       _weightPerTinCtrl.text = _fmtInput(init['weight_per_tin'], 3, trim: true);
       _boxFixedWeight = (init['box_mode']?.toString() != 'items_per_box');
@@ -423,7 +433,6 @@ class _PurchaseItemEntrySheetState extends ConsumerState<PurchaseItemEntrySheet>
       _kgPerBoxCtrl,
       _weightPerTinCtrl,
       _kgPerBagCtrl,
-      _lineNotesCtrl,
       _taxModeNotifier,
     ]);
     _rebuildCatalogSearchItems();
@@ -452,13 +461,18 @@ class _PurchaseItemEntrySheetState extends ConsumerState<PurchaseItemEntrySheet>
   }
 
   void _syncKgStateFromCatalogRow() {
-    if (_selectedCatalogItemId == null || _selectedCatalogItemId!.isEmpty) return;
+    if (_selectedCatalogItemId == null || _selectedCatalogItemId!.isEmpty)
+      return;
     if (_kgPerUnit != null && _kgPerUnit! > 0) return;
     final u = _unitCtrl.text.trim().toLowerCase();
     if (u != 'bag' && u != 'sack') return;
     final r = _catalogRowById(_selectedCatalogItemId!);
     if (r == null) return;
-    for (final key in <String>['default_kg_per_bag', 'kg_per_bag', 'kg_per_unit']) {
+    for (final key in <String>[
+      'default_kg_per_bag',
+      'kg_per_bag',
+      'kg_per_unit'
+    ]) {
       final v = r[key];
       if (v is num && v > 0) {
         _kgPerUnit = v.toDouble();
@@ -551,8 +565,8 @@ class _PurchaseItemEntrySheetState extends ConsumerState<PurchaseItemEntrySheet>
       lineUnit: _unitCtrl.text,
       catalogDefaultUnit: row?['default_unit']?.toString(),
       catalogDefaultKgPerBag: _catalogKpb(row),
-      categoryName: row?['category_name']?.toString() ??
-          row?['category']?.toString(),
+      categoryName:
+          row?['category_name']?.toString() ?? row?['category']?.toString(),
       subcategoryName: row?['subcategory_name']?.toString() ??
           row?['subcategory']?.toString(),
     );
@@ -583,7 +597,8 @@ class _PurchaseItemEntrySheetState extends ConsumerState<PurchaseItemEntrySheet>
       fallbackClassification: c,
     );
     if (resolved.unitConfidence >= 60 &&
-        const {'bag', 'box', 'tin', 'kg', 'pcs'}.contains(resolved.sellingUnit)) {
+        const {'bag', 'box', 'tin', 'kg', 'pcs'}
+            .contains(resolved.sellingUnit)) {
       return resolved.sellingUnit == 'pcs' ? 'pcs' : resolved.sellingUnit;
     }
     final dn = displayName.toUpperCase();
@@ -597,9 +612,7 @@ class _PurchaseItemEntrySheetState extends ConsumerState<PurchaseItemEntrySheet>
         return 'box';
       case UnitType.singlePack:
         if (dn.contains('TIN')) return 'tin';
-        if (dn.contains('BOX') ||
-            dn.contains('CTN') ||
-            dn.contains('CARTON')) {
+        if (dn.contains('BOX') || dn.contains('CTN') || dn.contains('CARTON')) {
           return 'box';
         }
         if (row == null) return 'kg';
@@ -667,7 +680,9 @@ class _PurchaseItemEntrySheetState extends ConsumerState<PurchaseItemEntrySheet>
   ];
 
   List<String> _suggestedUnitChoices() {
-    final row = _selectedCatalogItemId != null ? _catalogRowById(_selectedCatalogItemId!) : null;
+    final row = _selectedCatalogItemId != null
+        ? _catalogRowById(_selectedCatalogItemId!)
+        : null;
     final du = (row?['default_unit']?.toString() ?? '').trim().toLowerCase();
     final c = _activeClassification();
     final resolved = _resolvedUnitContext();
@@ -1000,7 +1015,11 @@ class _PurchaseItemEntrySheetState extends ConsumerState<PurchaseItemEntrySheet>
     if (id == null || id.isEmpty) return false;
     final r = _catalogRowById(id);
     if (r == null) return false;
-    for (final key in <String>['default_kg_per_bag', 'kg_per_bag', 'kg_per_unit']) {
+    for (final key in <String>[
+      'default_kg_per_bag',
+      'kg_per_bag',
+      'kg_per_unit'
+    ]) {
       final v = r[key];
       if (v is num && v > 0) return true;
     }
@@ -1107,7 +1126,8 @@ class _PurchaseItemEntrySheetState extends ConsumerState<PurchaseItemEntrySheet>
                   style: TextStyle(
                     fontWeight: FontWeight.w800,
                     fontSize: 13,
-                    color: sel ? cs.onPrimaryContainer : const Color(0xFF0F172A),
+                    color:
+                        sel ? cs.onPrimaryContainer : const Color(0xFF0F172A),
                   ),
                 ),
               ),
@@ -1137,8 +1157,7 @@ class _PurchaseItemEntrySheetState extends ConsumerState<PurchaseItemEntrySheet>
     final bags = enteredKg / k;
     final theme = Theme.of(context);
 
-    final bagsTxt =
-        _bagQtyIsWhole(bags) ? '${bags.round()}' : _fmtQty(bags);
+    final bagsTxt = _bagQtyIsWhole(bags) ? '${bags.round()}' : _fmtQty(bags);
     final kgTxt = _inQtyWtFmt.format(enteredKg);
     final totalKgTxt = _inQtyWtFmt.format(bags * k);
     final needsWhole = !_bagQtyIsWhole(bags);
@@ -1433,8 +1452,7 @@ class _PurchaseItemEntrySheetState extends ConsumerState<PurchaseItemEntrySheet>
   }
 
   EdgeInsets _textFieldScrollPadding() {
-    final reserve =
-        widget.fullPage ? _kPinnedPreviewReserve : 140.0;
+    final reserve = widget.fullPage ? _kPinnedPreviewReserve : 140.0;
     return formFieldScrollPaddingForContext(
       context,
       reserveBelowField: reserve,
@@ -1574,8 +1592,9 @@ class _PurchaseItemEntrySheetState extends ConsumerState<PurchaseItemEntrySheet>
     final q = _qtyVal();
     if (q <= 0 || (q - kn).abs() > 0.01 * math.max(1.0, kn)) return null;
     final theme = Theme.of(context);
-    final knLabel =
-        (kn - kn.roundToDouble()).abs() < 1e-6 ? '${kn.round()}' : kn.toStringAsFixed(1);
+    final knLabel = (kn - kn.roundToDouble()).abs() < 1e-6
+        ? '${kn.round()}'
+        : kn.toStringAsFixed(1);
     return Material(
       color: const Color(0xFFE0F2FE),
       borderRadius: BorderRadius.circular(8),
@@ -1664,7 +1683,9 @@ class _PurchaseItemEntrySheetState extends ConsumerState<PurchaseItemEntrySheet>
   /// Name encodes a weight bag but unit is kg — qty is **kg**, not bag count.
   Widget? _nameImpliesBagButKgUnitBanner() {
     final c = _activeClassification();
-    if (c.type != UnitType.weightBag || c.kgFromName == null || c.kgFromName! <= 0) {
+    if (c.type != UnitType.weightBag ||
+        c.kgFromName == null ||
+        c.kgFromName! <= 0) {
       return null;
     }
     if (_unitCtrl.text.trim().toLowerCase() != 'kg') return null;
@@ -1704,8 +1725,9 @@ class _PurchaseItemEntrySheetState extends ConsumerState<PurchaseItemEntrySheet>
     final name = _itemCtrl.text.trim();
     final qty = _qtyVal();
     final unit = _unitCtrl.text.trim();
-    final rateIn =
-        _ratesPerKgEconomics ? (_landingParsedAsPerKg() ?? 0) : (_parseD(_landingCtrl.text) ?? 0);
+    final rateIn = _ratesPerKgEconomics
+        ? (_landingParsedAsPerKg() ?? 0)
+        : (_parseD(_landingCtrl.text) ?? 0);
     final rate = rateIn;
 
     final catalogId = _selectedCatalogItemId;
@@ -1750,8 +1772,7 @@ class _PurchaseItemEntrySheetState extends ConsumerState<PurchaseItemEntrySheet>
         if (k != null && k > 0 && enteredKg != null && enteredKg > 0) {
           final bags = enteredKg / k;
           if (!_bagQtyIsWhole(bags)) {
-            _errQty =
-                'Kg must convert to a whole bag count. '
+            _errQty = 'Kg must convert to a whole bag count. '
                 'Use a multiple of ${_fmtQty(k)} kg.';
           }
         }
@@ -1808,7 +1829,8 @@ class _PurchaseItemEntrySheetState extends ConsumerState<PurchaseItemEntrySheet>
     final sellSt = _sellingCtrl.text.trim();
 
     final m = <String, dynamic>{
-      if (_selectedCatalogItemId != null && _selectedCatalogItemId!.isNotEmpty) 'catalog_item_id': _selectedCatalogItemId,
+      if (_selectedCatalogItemId != null && _selectedCatalogItemId!.isNotEmpty)
+        'catalog_item_id': _selectedCatalogItemId,
       'item_name': name,
       'qty': qty,
       'unit': unit,
@@ -1839,8 +1861,7 @@ class _PurchaseItemEntrySheetState extends ConsumerState<PurchaseItemEntrySheet>
           if (items != null) m['items_per_box'] = items;
           if (weight != null) m['weight_per_item'] = weight;
         } else if (clf.type == UnitType.singlePack) {
-          final kg =
-              _parseD(_kgPerBoxCtrl.text) ?? clf.kgFromName ?? _kgPer();
+          final kg = _parseD(_kgPerBoxCtrl.text) ?? clf.kgFromName ?? _kgPer();
           if (kg != null && kg > 0) {
             m['box_mode'] = 'fixed_weight_box';
             m['kg_per_box'] = kg;
@@ -2083,8 +2104,7 @@ class _PurchaseItemEntrySheetState extends ConsumerState<PurchaseItemEntrySheet>
           child: TextField(
             controller: _landingCtrl,
             focusNode: _landingFocus,
-            keyboardType:
-                const TextInputType.numberWithOptions(decimal: true),
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
             inputFormatters: [_decimalFormatter(2)],
             textInputAction: TextInputAction.next,
             scrollPadding: _textFieldScrollPadding(),
@@ -2108,8 +2128,7 @@ class _PurchaseItemEntrySheetState extends ConsumerState<PurchaseItemEntrySheet>
           child: TextField(
             controller: _sellingCtrl,
             focusNode: _sellingFocus,
-            keyboardType:
-                const TextInputType.numberWithOptions(decimal: true),
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
             inputFormatters: [_decimalFormatter(2)],
             textInputAction: TextInputAction.done,
             scrollPadding: _textFieldScrollPadding(),
@@ -2129,8 +2148,8 @@ class _PurchaseItemEntrySheetState extends ConsumerState<PurchaseItemEntrySheet>
       builder: (context, constraints) {
         const narrowBreak = 300.0;
         const minPairWidth = 280.0;
-        final stackRates = preferVerticalRates ||
-            constraints.maxWidth < minPairWidth;
+        final stackRates =
+            preferVerticalRates || constraints.maxWidth < minPairWidth;
         if (stackRates || constraints.maxWidth < narrowBreak) {
           return Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -2168,9 +2187,7 @@ class _PurchaseItemEntrySheetState extends ConsumerState<PurchaseItemEntrySheet>
           _taxCtrl.clear();
         } else {
           final rowTax = _numericTaxFromCatalogRow();
-          if (rowTax != null &&
-              rowTax > 0 &&
-              _taxCtrl.text.trim().isEmpty) {
+          if (rowTax != null && rowTax > 0 && _taxCtrl.text.trim().isEmpty) {
             _taxCtrl.text = StrictDecimal.fromObject(rowTax).format(2);
           }
         }
@@ -2229,7 +2246,9 @@ class _PurchaseItemEntrySheetState extends ConsumerState<PurchaseItemEntrySheet>
     final dpu = row['default_purchase_unit']?.toString().trim();
     final du = row['default_unit']?.toString().trim();
     if (kpbD != null && kpbD > 0) {
-      if (du != null && _isWeightUnit(du) && (dpu == null || dpu.toLowerCase() == 'kg')) {
+      if (du != null &&
+          _isWeightUnit(du) &&
+          (dpu == null || dpu.toLowerCase() == 'kg')) {
         return du;
       }
     }
@@ -2259,7 +2278,8 @@ class _PurchaseItemEntrySheetState extends ConsumerState<PurchaseItemEntrySheet>
   }
 
   void _recomputeModeFromUnitAndCatalog() {
-    if (_selectedCatalogItemId == null || _selectedCatalogItemId!.isEmpty) return;
+    if (_selectedCatalogItemId == null || _selectedCatalogItemId!.isEmpty)
+      return;
     final u0 = _unitCtrl.text.trim().toLowerCase();
     if (u0 != 'bag' && u0 != 'sack') return;
     final row = _catalogRowById(_selectedCatalogItemId!);
@@ -2285,8 +2305,10 @@ class _PurchaseItemEntrySheetState extends ConsumerState<PurchaseItemEntrySheet>
     }
   }
 
-  Future<void> _offerCatalogKgPerBagSheetIfNeeded(Map<String, dynamic>? row) async {
-    if (!mounted || row == null || widget.persistCatalogBagWeight == null) return;
+  Future<void> _offerCatalogKgPerBagSheetIfNeeded(
+      Map<String, dynamic>? row) async {
+    if (!mounted || row == null || widget.persistCatalogBagWeight == null)
+      return;
     final cid = _selectedCatalogItemId?.trim();
     if (cid == null || cid.isEmpty) return;
     final u = _unitCtrl.text.trim().toLowerCase();
@@ -2323,85 +2345,86 @@ class _PurchaseItemEntrySheetState extends ConsumerState<PurchaseItemEntrySheet>
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                    Text(
-                      'Missing bag weight',
-                      style: Theme.of(ctx2).textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.w800,
-                          ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Enter kg per bag for "$currentName" so totals calculate correctly. '
-                      'This is saved to the catalog.',
-                      style: TextStyle(color: Colors.grey[700], fontSize: 13),
-                    ),
-                    const SizedBox(height: 16),
-                    TextField(
-                      controller: kgCtrl,
-                      autofocus: true,
-                      keyboardType:
-                          const TextInputType.numberWithOptions(decimal: true),
-                      decoration: InputDecoration(
-                        labelText: 'KG per bag',
-                        suffixText: 'kg/bag',
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
+                      Text(
+                        'Missing bag weight',
+                        style: Theme.of(ctx2).textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.w800,
+                            ),
                       ),
-                      onChanged: (_) => setModal(() {}),
-                    ),
-                    const SizedBox(height: 8),
-                    Builder(
-                      builder: (ctx3) {
-                        final kg = double.tryParse(kgCtrl.text.trim());
-                        if (kg == null || kg <= 0) {
-                          return const SizedBox.shrink();
-                        }
-                        final base = _stripKgSuffixForCatalogDisplay(currentName);
-                        final suffix = (kg - kg.roundToDouble()).abs() < 1e-6
-                            ? '${kg.round()}KG'
-                            : '${kg.toStringAsFixed(1)}KG';
-                        final newName = '$base $suffix'.trim();
-                        return Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFE8F5E9),
-                            borderRadius: BorderRadius.circular(8),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Enter kg per bag for "$currentName" so totals calculate correctly. '
+                        'This is saved to the catalog.',
+                        style: TextStyle(color: Colors.grey[700], fontSize: 13),
+                      ),
+                      const SizedBox(height: 16),
+                      TextField(
+                        controller: kgCtrl,
+                        autofocus: true,
+                        keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true),
+                        decoration: InputDecoration(
+                          labelText: 'KG per bag',
+                          suffixText: 'kg/bag',
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
                           ),
-                          child: Text(
-                            'Item will be renamed to:\n"$newName"',
-                            style: const TextStyle(
-                              color: Color(0xFF1A7A6A),
-                              fontWeight: FontWeight.w600,
-                              fontSize: 13,
+                        ),
+                        onChanged: (_) => setModal(() {}),
+                      ),
+                      const SizedBox(height: 8),
+                      Builder(
+                        builder: (ctx3) {
+                          final kg = double.tryParse(kgCtrl.text.trim());
+                          if (kg == null || kg <= 0) {
+                            return const SizedBox.shrink();
+                          }
+                          final base =
+                              _stripKgSuffixForCatalogDisplay(currentName);
+                          final suffix = (kg - kg.roundToDouble()).abs() < 1e-6
+                              ? '${kg.round()}KG'
+                              : '${kg.toStringAsFixed(1)}KG';
+                          final newName = '$base $suffix'.trim();
+                          return Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFE8F5E9),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Text(
+                              'Item will be renamed to:\n"$newName"',
+                              style: const TextStyle(
+                                color: Color(0xFF1A7A6A),
+                                fontWeight: FontWeight.w600,
+                                fontSize: 13,
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                      const SizedBox(height: 16),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton(
+                              onPressed: () => Navigator.pop(ctx),
+                              child: const Text('Skip'),
                             ),
                           ),
-                        );
-                      },
-                    ),
-                    const SizedBox(height: 16),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: OutlinedButton(
-                            onPressed: () => Navigator.pop(ctx),
-                            child: const Text('Skip'),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: FilledButton(
+                              onPressed: () {
+                                final kg = double.tryParse(kgCtrl.text.trim());
+                                if (kg != null && kg > 0) {
+                                  Navigator.pop(ctx, kg);
+                                }
+                              },
+                              child: const Text('DONE +'),
+                            ),
                           ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: FilledButton(
-                            onPressed: () {
-                              final kg = double.tryParse(kgCtrl.text.trim());
-                              if (kg != null && kg > 0) {
-                                Navigator.pop(ctx, kg);
-                              }
-                            },
-                            child: const Text('DONE +'),
-                          ),
-                        ),
-                      ],
-                    ),
+                        ],
+                      ),
                     ],
                   ),
                 );
@@ -2461,7 +2484,8 @@ class _PurchaseItemEntrySheetState extends ConsumerState<PurchaseItemEntrySheet>
     if (id.isEmpty) return;
     _suppressCatalogTextUnlink = true;
     unawaited(
-      _onCatalogPickAsync(InlineSearchItem(id: id, label: name)).whenComplete(() {
+      _onCatalogPickAsync(InlineSearchItem(id: id, label: name))
+          .whenComplete(() {
         if (mounted) _suppressCatalogTextUnlink = false;
       }),
     );
@@ -2532,8 +2556,8 @@ class _PurchaseItemEntrySheetState extends ConsumerState<PurchaseItemEntrySheet>
       catalogDefaultKgPerBag: catalogKpbFull,
       categoryName:
           row['category_name']?.toString() ?? row['category']?.toString(),
-      subcategoryName: row['subcategory_name']?.toString() ??
-          row['subcategory']?.toString(),
+      subcategoryName:
+          row['subcategory_name']?.toString() ?? row['subcategory']?.toString(),
     );
 
     final wire = _wireUnitFromClassification(
@@ -2544,8 +2568,8 @@ class _PurchaseItemEntrySheetState extends ConsumerState<PurchaseItemEntrySheet>
     );
     final uLowWire = wire.toLowerCase();
 
-    final bool boxUsesItems = classification.type == UnitType.multiPackBox &&
-        uLowWire == 'box';
+    final bool boxUsesItems =
+        classification.type == UnitType.multiPackBox && uLowWire == 'box';
 
     setState(() {
       _lastPurchaseAutofillHint = null;
@@ -2604,8 +2628,9 @@ class _PurchaseItemEntrySheetState extends ConsumerState<PurchaseItemEntrySheet>
 
       if (_taxMode != TaxMode.none) {
         final tax = _numD(row['tax_percent']);
-        _taxCtrl.text =
-            tax != null && tax > 0 ? StrictDecimal.fromObject(tax).format(2) : '';
+        _taxCtrl.text = tax != null && tax > 0
+            ? StrictDecimal.fromObject(tax).format(2)
+            : '';
       }
       _errItem = null;
     });
@@ -2643,9 +2668,7 @@ class _PurchaseItemEntrySheetState extends ConsumerState<PurchaseItemEntrySheet>
     final hist = await PurchaseSmartDefaults.loadQtyHistoryForItem(itemId);
     if (!mounted) return;
     setState(() {
-      if (rate != null &&
-          rate > 0 &&
-          _landingCtrl.text.trim().isEmpty) {
+      if (rate != null && rate > 0 && _landingCtrl.text.trim().isEmpty) {
         _landingCtrl.text = _fmtMoney(rate);
         _lastPurchaseAutofillHint =
             'Filled from your last entry on this device.';
@@ -2714,13 +2737,19 @@ class _PurchaseItemEntrySheetState extends ConsumerState<PurchaseItemEntrySheet>
       }
       final ft = d['freight_type']?.toString();
       if (ft == 'included' || ft == 'separate') _freightType = ft!;
-      if (freight != null && freight >= 0) _freightCtrl.text = _fmtMoney(freight);
-      if (delivered != null && delivered >= 0) _deliveredCtrl.text = _fmtMoney(delivered);
+      if (freight != null && freight >= 0)
+        _freightCtrl.text = _fmtMoney(freight);
+      if (delivered != null && delivered >= 0)
+        _deliveredCtrl.text = _fmtMoney(delivered);
       if (billty != null && billty >= 0) _billtyCtrl.text = _fmtMoney(billty);
-      if (itemsPerBox != null && itemsPerBox > 0) _itemsPerBoxCtrl.text = _fmtQty(itemsPerBox);
-      if (weightPerItem != null && weightPerItem > 0) _weightPerItemCtrl.text = _fmtQty(weightPerItem);
-      if (kgPerBox != null && kgPerBox > 0) _kgPerBoxCtrl.text = _fmtQty(kgPerBox);
-      if (weightPerTin != null && weightPerTin > 0) _weightPerTinCtrl.text = _fmtQty(weightPerTin);
+      if (itemsPerBox != null && itemsPerBox > 0)
+        _itemsPerBoxCtrl.text = _fmtQty(itemsPerBox);
+      if (weightPerItem != null && weightPerItem > 0)
+        _weightPerItemCtrl.text = _fmtQty(weightPerItem);
+      if (kgPerBox != null && kgPerBox > 0)
+        _kgPerBoxCtrl.text = _fmtQty(kgPerBox);
+      if (weightPerTin != null && weightPerTin > 0)
+        _weightPerTinCtrl.text = _fmtQty(weightPerTin);
       final bm = d['box_mode']?.toString();
       if (bm == 'items_per_box') {
         _boxFixedWeight = false;
@@ -2857,8 +2886,8 @@ class _PurchaseItemEntrySheetState extends ConsumerState<PurchaseItemEntrySheet>
         displayName: labelTrim,
       );
       final wLow = wire.toLowerCase();
-      final boxItems = classification.type == UnitType.multiPackBox &&
-          wLow == 'box';
+      final boxItems =
+          classification.type == UnitType.multiPackBox && wLow == 'box';
 
       setState(() {
         _selectedCatalogItemId = it.id;
@@ -2917,11 +2946,10 @@ class _PurchaseItemEntrySheetState extends ConsumerState<PurchaseItemEntrySheet>
           _kgPerBagCtrl.clear();
         }
 
-        _unitDetectHint =
-            _hintFromClassification(classification, wLow);
+        _unitDetectHint = _hintFromClassification(classification, wLow);
       });
       _scheduleLastDefaultsFetch(it.id, seq);
-    unawaited(_applyPrefsSmartDefaults(it.id));
+      unawaited(_applyPrefsSmartDefaults(it.id));
       return;
     }
     _applyCatalogRowToLineState(
@@ -2989,8 +3017,7 @@ class _PurchaseItemEntrySheetState extends ConsumerState<PurchaseItemEntrySheet>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        for (final w in warnings)
-          SheetWarningPill(message: w),
+        for (final w in warnings) SheetWarningPill(message: w),
         Container(
           padding: const EdgeInsets.all(10),
           decoration: BoxDecoration(
@@ -3010,7 +3037,10 @@ class _PurchaseItemEntrySheetState extends ConsumerState<PurchaseItemEntrySheet>
                   ),
                   SheetSummaryPill(
                     label: 'RATE',
-                    value: _purchaseRateLabel(true).replaceFirst(' *', '').replaceFirst('Landing cost ', '').replaceFirst('Purchase Rate ', ''),
+                    value: _purchaseRateLabel(true)
+                        .replaceFirst(' *', '')
+                        .replaceFirst('Landing cost ', '')
+                        .replaceFirst('Purchase Rate ', ''),
                     subtitle: formatRupee(enteredPurchase, decimals: true),
                     color: const Color(0xFF64748B),
                   ),
@@ -3030,8 +3060,12 @@ class _PurchaseItemEntrySheetState extends ConsumerState<PurchaseItemEntrySheet>
                   ),
                   SheetMetric(
                     label: 'PROFIT',
-                    value: sell != null && sell > 0 ? formatRupee(profit, decimals: true) : '—',
-                    color: (profit >= 0) ? const Color(0xFF10B981) : const Color(0xFFEF4444),
+                    value: sell != null && sell > 0
+                        ? formatRupee(profit, decimals: true)
+                        : '—',
+                    color: (profit >= 0)
+                        ? const Color(0xFF10B981)
+                        : const Color(0xFFEF4444),
                   ),
                   SheetMetric(
                     label: 'TOTAL',
@@ -3048,7 +3082,6 @@ class _PurchaseItemEntrySheetState extends ConsumerState<PurchaseItemEntrySheet>
     );
   }
 
-
   Widget? _buildStockPreviewBar() {
     final id = _selectedCatalogItemId;
     if (id == null || id.isEmpty) return null;
@@ -3061,8 +3094,7 @@ class _PurchaseItemEntrySheetState extends ConsumerState<PurchaseItemEntrySheet>
       error: (_, __) => const SizedBox.shrink(),
       data: (st) {
         final cur = _numD(st['current_stock']) ?? 0;
-        final unit =
-            (st['unit'] ?? _unitCtrl.text).toString().trim();
+        final unit = (st['unit'] ?? _unitCtrl.text).toString().trim();
         final addQty = _parseD(_qtyCtrl.text) ?? 0;
         if (cur == 0 && addQty == 0) return const SizedBox.shrink();
         final after = cur + addQty;
@@ -3274,643 +3306,619 @@ class _PurchaseItemEntrySheetState extends ConsumerState<PurchaseItemEntrySheet>
           ),
         ),
       ),
-              if (_errItem != null)
-                Padding(
-                  padding: const EdgeInsets.only(top: 2, left: 2),
-                  child: Text(_errItem!, style: TextStyle(color: Colors.red[800], fontSize: 11)),
-                ),
-              if (_lastPurchaseAutofillHint != null &&
-                  _lastPurchaseAutofillHint!.isNotEmpty) ...[
-                Padding(
-                  padding: const EdgeInsets.only(top: 2, left: 2),
-                  child: Text(
-                    _lastPurchaseAutofillHint!,
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: Colors.blueGrey[700],
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      height: 1.25,
-                    ),
-                  ),
-                ),
-              ],
-              if (_unitDetectHint != null && _unitDetectHint!.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(top: 2, left: 2),
-                  child: Text(
-                    _unitDetectHint!,
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: teal,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      height: 1.15,
-                    ),
-                  ),
-                ),
-              if (_selectedCatalogItemId != null &&
-                  _selectedCatalogItemId!.isNotEmpty) ...[
-                SizedBox(height: gapField),
-                ListenableBuilder(
-                  listenable: _qtyCtrl,
-                  builder: (context, _) {
-                    final bar = _buildStockPreviewBar();
-                    return bar ?? const SizedBox.shrink();
-                  },
-                ),
-              ],
-              SizedBox(height: gapField),
-              if (widget.fullPage)
-                _fpShell(
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+      if (_errItem != null)
+        Padding(
+          padding: const EdgeInsets.only(top: 2, left: 2),
+          child: Text(_errItem!,
+              style: TextStyle(color: Colors.red[800], fontSize: 11)),
+        ),
+      if (_lastPurchaseAutofillHint != null &&
+          _lastPurchaseAutofillHint!.isNotEmpty) ...[
+        Padding(
+          padding: const EdgeInsets.only(top: 2, left: 2),
+          child: Text(
+            _lastPurchaseAutofillHint!,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: Colors.blueGrey[700],
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              height: 1.25,
+            ),
+          ),
+        ),
+      ],
+      if (_unitDetectHint != null && _unitDetectHint!.isNotEmpty)
+        Padding(
+          padding: const EdgeInsets.only(top: 2, left: 2),
+          child: Text(
+            _unitDetectHint!,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: teal,
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              height: 1.15,
+            ),
+          ),
+        ),
+      if (_selectedCatalogItemId != null &&
+          _selectedCatalogItemId!.isNotEmpty) ...[
+        SizedBox(height: gapField),
+        ListenableBuilder(
+          listenable: _qtyCtrl,
+          builder: (context, _) {
+            final bar = _buildStockPreviewBar();
+            return bar ?? const SizedBox.shrink();
+          },
+        ),
+      ],
+      SizedBox(height: gapField),
+      if (widget.fullPage)
+        _fpShell(
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                flex: 5,
+                child: KeyedSubtree(
+                  key: _qtyKey,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      Expanded(
-                        flex: 5,
-                        child: KeyedSubtree(
-                          key: _qtyKey,
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              if (_qtyEntryModeSegmented() != null)
-                                _qtyEntryModeSegmented()!,
-                              TextField(
-                                controller: _qtyCtrl,
-                                focusNode: _qtyFocus,
-                                keyboardType:
-                                    const TextInputType.numberWithOptions(
-                                        decimal: true),
-                                inputFormatters: [_decimalFormatter(3)],
-                                textInputAction: TextInputAction.next,
-                                scrollPadding: _textFieldScrollPadding(),
-                                decoration: _deco(_qtyFieldLabel(),
-                                    errorText: _errQty),
-                                onChanged: (_) {
-                                  _clearFieldErrors();
-                                  _schedulePreviewRebuild();
-                                },
-                                onSubmitted: (_) {
-                                  if (showManualKgField) {
-                                    FocusScope.of(context)
-                                        .requestFocus(_kgManualFocus);
-                                  } else {
-                                    FocusScope.of(context)
-                                        .requestFocus(_landingFocus);
-                                  }
-                                },
-                              ),
-                              if (_kgEntryConversionHint() != null) ...[
-                                SizedBox(height: gapField * 0.6),
-                                _kgEntryConversionHint()!,
-                              ],
-                            ],
-                          ),
-                        ),
+                      if (_qtyEntryModeSegmented() != null)
+                        _qtyEntryModeSegmented()!,
+                      TextField(
+                        controller: _qtyCtrl,
+                        focusNode: _qtyFocus,
+                        keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true),
+                        inputFormatters: [_decimalFormatter(3)],
+                        textInputAction: TextInputAction.next,
+                        scrollPadding: _textFieldScrollPadding(),
+                        decoration: _deco(_qtyFieldLabel(), errorText: _errQty),
+                        onChanged: (_) {
+                          _clearFieldErrors();
+                          _schedulePreviewRebuild();
+                        },
+                        onSubmitted: (_) {
+                          if (showManualKgField) {
+                            FocusScope.of(context).requestFocus(_kgManualFocus);
+                          } else {
+                            FocusScope.of(context).requestFocus(_landingFocus);
+                          }
+                        },
                       ),
-                      const SizedBox(width: 6),
-                      Expanded(
-                        flex: 5,
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Expanded(
-                              child: KeyedSubtree(
-                                key: _unitKey,
-                                child: (showPerKgFields && _hasCatalogKg())
-                                    ? InputDecorator(
-                                        decoration:
-                                            _deco('Unit *', errorText: _errUnit),
-                                        child: Text(
-                                          '${_unitCtrl.text.trim()} (${_fmtQty(k ?? 0)} kg)',
-                                          style: const TextStyle(
-                                            fontWeight: FontWeight.w600,
-                                            fontSize: 13,
-                                          ),
-                                        ),
-                                      )
-                                    : _unitDropdownField(errorText: _errUnit),
-                              ),
-                            ),
-                            IconButton(
-                              tooltip:
-                                  'Unit, bags vs kg, and quantity — tap to edit',
-                              icon: const Icon(Icons.swap_vert_outlined, size: 22),
-                              visualDensity: VisualDensity.compact,
-                              onPressed: _focusQtyUnitEntry,
-                            ),
-                          ],
-                        ),
-                      ),
+                      if (_kgEntryConversionHint() != null) ...[
+                        SizedBox(height: gapField * 0.6),
+                        _kgEntryConversionHint()!,
+                      ],
                     ],
                   ),
-                )
-              else
-                Row(
+                ),
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                flex: 5,
+                child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Expanded(
-                      flex: 5,
                       child: KeyedSubtree(
-                        key: _qtyKey,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            if (_qtyEntryModeSegmented() != null)
-                              _qtyEntryModeSegmented()!,
-                            TextField(
-                              controller: _qtyCtrl,
-                              focusNode: _qtyFocus,
-                              keyboardType: const TextInputType.numberWithOptions(
-                                  decimal: true),
-                              inputFormatters: [_decimalFormatter(3)],
-                              textInputAction: TextInputAction.next,
-                              scrollPadding: _textFieldScrollPadding(),
-                              decoration:
-                                  _deco(_qtyFieldLabel(), errorText: _errQty),
-                              onChanged: (_) {
-                                _clearFieldErrors();
-                                _schedulePreviewRebuild();
-                              },
-                              onSubmitted: (_) {
-                                if (showManualKgField) {
-                                  FocusScope.of(context)
-                                      .requestFocus(_kgManualFocus);
-                                } else {
-                                  FocusScope.of(context)
-                                      .requestFocus(_landingFocus);
-                                }
-                              },
-                            ),
-                            if (_kgEntryConversionHint() != null) ...[
-                              SizedBox(height: gapField * 0.6),
-                              _kgEntryConversionHint()!,
-                            ],
-                          ],
-                        ),
+                        key: _unitKey,
+                        child: (showPerKgFields && _hasCatalogKg())
+                            ? InputDecorator(
+                                decoration:
+                                    _deco('Unit *', errorText: _errUnit),
+                                child: Text(
+                                  '${_unitCtrl.text.trim()} (${_fmtQty(k ?? 0)} kg)',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              )
+                            : _unitDropdownField(errorText: _errUnit),
                       ),
                     ),
-                    const SizedBox(width: 6),
-                    Expanded(
-                      flex: 5,
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Expanded(
-                            child: KeyedSubtree(
-                              key: _unitKey,
-                              child: (showPerKgFields && _hasCatalogKg())
-                                  ? InputDecorator(
-                                      decoration:
-                                          _deco('Unit *', errorText: _errUnit),
-                                      child: Text(
-                                        '${_unitCtrl.text.trim()} (${_fmtQty(k ?? 0)} kg)',
-                                        style: const TextStyle(
-                                          fontWeight: FontWeight.w600,
-                                          fontSize: 13,
-                                        ),
-                                      ),
-                                    )
-                                  : _unitDropdownField(errorText: _errUnit),
-                            ),
-                          ),
-                          IconButton(
-                            tooltip:
-                                'Unit, bags vs kg, and quantity — tap to edit',
-                            icon:
-                                const Icon(Icons.swap_vert_outlined, size: 22),
-                            visualDensity: VisualDensity.compact,
-                            onPressed: _focusQtyUnitEntry,
-                          ),
-                        ],
-                      ),
+                    IconButton(
+                      tooltip: 'Unit, bags vs kg, and quantity — tap to edit',
+                      icon: const Icon(Icons.swap_vert_outlined, size: 22),
+                      visualDensity: VisualDensity.compact,
+                      onPressed: _focusQtyUnitEntry,
                     ),
                   ],
                 ),
-              ListenableBuilder(
-                listenable: _lineTotalsListenable,
-                builder: (cx, _) {
-                  final chips = <Widget>[
-                    for (final w in [
-                      _nameImpliesBagButKgUnitBanner(),
-                      _suggestOneBagInsteadOfKgBanner(),
-                      _didYouMeanKgNotBagsBanner(),
-                    ])
-                      if (w != null) w,
-                  ];
-                  if (chips.isEmpty) return const SizedBox.shrink();
-                  return Padding(
-                    padding: EdgeInsets.only(top: gapField * 0.5),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        for (var i = 0; i < chips.length; i++) ...[
-                          if (i > 0) SizedBox(height: gapField * 0.35),
-                          chips[i],
-                        ],
-                      ],
-                    ),
-                  );
-                },
               ),
-              if (showManualKgField) ...[
-                SizedBox(height: gapField),
-                KeyedSubtree(
-                  key: _kgPerBagKey,
-                  child: TextField(
-                    controller: _kgPerBagCtrl,
-                    focusNode: _kgManualFocus,
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                    inputFormatters: [_decimalFormatter(3)],
-                    textInputAction: TextInputAction.next,
-                    scrollPadding: _textFieldScrollPadding(),
-                    decoration: _deco('Kg per bag *', errorText: _errKgPerBag),
-                    onSubmitted: (_) {
-                      FocusScope.of(context).requestFocus(_landingFocus);
-                    },
-                  ),
-                ),
-              ],
-              if (_advancedInventoryEnabled && unitLow == 'box') ...[
-                SizedBox(height: gapField),
-                if (!(cRow.type == UnitType.singlePack ||
-                    cRow.type == UnitType.multiPackBox))
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 6),
-                    child: SegmentedButton<bool>(
-                      segments: const [
-                        ButtonSegment(value: true, label: Text('Fixed kg')),
-                        ButtonSegment(value: false, label: Text('Items/box')),
-                      ],
-                      selected: {_boxFixedWeight},
-                      onSelectionChanged: (s) {
-                        setState(() => _boxFixedWeight = s.first);
+            ],
+          ),
+        )
+      else
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              flex: 5,
+              child: KeyedSubtree(
+                key: _qtyKey,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (_qtyEntryModeSegmented() != null)
+                      _qtyEntryModeSegmented()!,
+                    TextField(
+                      controller: _qtyCtrl,
+                      focusNode: _qtyFocus,
+                      keyboardType:
+                          const TextInputType.numberWithOptions(decimal: true),
+                      inputFormatters: [_decimalFormatter(3)],
+                      textInputAction: TextInputAction.next,
+                      scrollPadding: _textFieldScrollPadding(),
+                      decoration: _deco(_qtyFieldLabel(), errorText: _errQty),
+                      onChanged: (_) {
+                        _clearFieldErrors();
+                        _schedulePreviewRebuild();
+                      },
+                      onSubmitted: (_) {
+                        if (showManualKgField) {
+                          FocusScope.of(context).requestFocus(_kgManualFocus);
+                        } else {
+                          FocusScope.of(context).requestFocus(_landingFocus);
+                        }
                       },
                     ),
-                  ),
-                if (cRow.type == UnitType.multiPackBox)
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          controller: _itemsPerBoxCtrl,
-                          keyboardType:
-                              const TextInputType.numberWithOptions(decimal: true),
-                          inputFormatters: [_decimalFormatter(3)],
-                          decoration: _deco(
-                            'Items per box *',
-                            errorText: _errKgPerBag,
-                          ),
-                          onChanged: (_) => _schedulePreviewRebuild(),
-                        ),
-                      ),
-                      const SizedBox(width: 6),
-                      Expanded(
-                        child: TextField(
-                          controller: _weightPerItemCtrl,
-                          keyboardType:
-                              const TextInputType.numberWithOptions(decimal: true),
-                          inputFormatters: [_decimalFormatter(3)],
-                          decoration: _deco(
-                            'Kg per item',
-                            errorText: _errKgPerBag,
-                          ),
-                          onChanged: (_) => _schedulePreviewRebuild(),
-                        ),
-                      ),
+                    if (_kgEntryConversionHint() != null) ...[
+                      SizedBox(height: gapField * 0.6),
+                      _kgEntryConversionHint()!,
                     ],
-                  )
-                else if (cRow.type == UnitType.singlePack)
-                  TextField(
-                    controller: _kgPerBoxCtrl,
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(width: 6),
+            Expanded(
+              flex: 5,
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: KeyedSubtree(
+                      key: _unitKey,
+                      child: (showPerKgFields && _hasCatalogKg())
+                          ? InputDecorator(
+                              decoration: _deco('Unit *', errorText: _errUnit),
+                              child: Text(
+                                '${_unitCtrl.text.trim()} (${_fmtQty(k ?? 0)} kg)',
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 13,
+                                ),
+                              ),
+                            )
+                          : _unitDropdownField(errorText: _errUnit),
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: 'Unit, bags vs kg, and quantity — tap to edit',
+                    icon: const Icon(Icons.swap_vert_outlined, size: 22),
+                    visualDensity: VisualDensity.compact,
+                    onPressed: _focusQtyUnitEntry,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ListenableBuilder(
+        listenable: _lineTotalsListenable,
+        builder: (cx, _) {
+          final chips = <Widget>[
+            for (final w in [
+              _nameImpliesBagButKgUnitBanner(),
+              _suggestOneBagInsteadOfKgBanner(),
+              _didYouMeanKgNotBagsBanner(),
+            ])
+              if (w != null) w,
+          ];
+          if (chips.isEmpty) return const SizedBox.shrink();
+          return Padding(
+            padding: EdgeInsets.only(top: gapField * 0.5),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                for (var i = 0; i < chips.length; i++) ...[
+                  if (i > 0) SizedBox(height: gapField * 0.35),
+                  chips[i],
+                ],
+              ],
+            ),
+          );
+        },
+      ),
+      if (showManualKgField) ...[
+        SizedBox(height: gapField),
+        KeyedSubtree(
+          key: _kgPerBagKey,
+          child: TextField(
+            controller: _kgPerBagCtrl,
+            focusNode: _kgManualFocus,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            inputFormatters: [_decimalFormatter(3)],
+            textInputAction: TextInputAction.next,
+            scrollPadding: _textFieldScrollPadding(),
+            decoration: _deco('Kg per bag *', errorText: _errKgPerBag),
+            onSubmitted: (_) {
+              FocusScope.of(context).requestFocus(_landingFocus);
+            },
+          ),
+        ),
+      ],
+      if (_advancedInventoryEnabled && unitLow == 'box') ...[
+        SizedBox(height: gapField),
+        if (!(cRow.type == UnitType.singlePack ||
+            cRow.type == UnitType.multiPackBox))
+          Padding(
+            padding: const EdgeInsets.only(bottom: 6),
+            child: SegmentedButton<bool>(
+              segments: const [
+                ButtonSegment(value: true, label: Text('Fixed kg')),
+                ButtonSegment(value: false, label: Text('Items/box')),
+              ],
+              selected: {_boxFixedWeight},
+              onSelectionChanged: (s) {
+                setState(() => _boxFixedWeight = s.first);
+              },
+            ),
+          ),
+        if (cRow.type == UnitType.multiPackBox)
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _itemsPerBoxCtrl,
+                  keyboardType:
+                      const TextInputType.numberWithOptions(decimal: true),
+                  inputFormatters: [_decimalFormatter(3)],
+                  decoration: _deco(
+                    'Items per box *',
+                    errorText: _errKgPerBag,
+                  ),
+                  onChanged: (_) => _schedulePreviewRebuild(),
+                ),
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: TextField(
+                  controller: _weightPerItemCtrl,
+                  keyboardType:
+                      const TextInputType.numberWithOptions(decimal: true),
+                  inputFormatters: [_decimalFormatter(3)],
+                  decoration: _deco(
+                    'Kg per item',
+                    errorText: _errKgPerBag,
+                  ),
+                  onChanged: (_) => _schedulePreviewRebuild(),
+                ),
+              ),
+            ],
+          )
+        else if (cRow.type == UnitType.singlePack)
+          TextField(
+            controller: _kgPerBoxCtrl,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            inputFormatters: [_decimalFormatter(3)],
+            decoration: _deco(
+              'Kg per box',
+              errorText: _errKgPerBag,
+            ),
+            onChanged: (_) => _schedulePreviewRebuild(),
+          )
+        else ...[
+          if (_boxFixedWeight)
+            TextField(
+              controller: _kgPerBoxCtrl,
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
+              inputFormatters: [_decimalFormatter(3)],
+              decoration: _deco('Kg per box *', errorText: _errKgPerBag),
+              onChanged: (_) => _schedulePreviewRebuild(),
+            )
+          else
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _itemsPerBoxCtrl,
                     keyboardType:
                         const TextInputType.numberWithOptions(decimal: true),
                     inputFormatters: [_decimalFormatter(3)],
                     decoration: _deco(
-                      'Kg per box',
+                      'Items per box *',
                       errorText: _errKgPerBag,
                     ),
                     onChanged: (_) => _schedulePreviewRebuild(),
-                  )
-                else ...[
-                  if (_boxFixedWeight)
-                    TextField(
-                      controller: _kgPerBoxCtrl,
-                      keyboardType:
-                          const TextInputType.numberWithOptions(decimal: true),
-                      inputFormatters: [_decimalFormatter(3)],
-                      decoration:
-                          _deco('Kg per box *', errorText: _errKgPerBag),
-                      onChanged: (_) => _schedulePreviewRebuild(),
-                    )
-                  else
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TextField(
-                            controller: _itemsPerBoxCtrl,
-                            keyboardType:
-                                const TextInputType.numberWithOptions(
-                                    decimal: true),
-                            inputFormatters: [_decimalFormatter(3)],
-                            decoration: _deco(
-                              'Items per box *',
-                              errorText: _errKgPerBag,
-                            ),
-                            onChanged: (_) => _schedulePreviewRebuild(),
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-                        Expanded(
-                          child: TextField(
-                            controller: _weightPerItemCtrl,
-                            keyboardType:
-                                const TextInputType.numberWithOptions(
-                                    decimal: true),
-                            inputFormatters: [_decimalFormatter(3)],
-                            decoration: _deco(
-                              'Kg per item *',
-                              errorText: _errKgPerBag,
-                            ),
-                            onChanged: (_) => _schedulePreviewRebuild(),
-                          ),
-                        ),
-                      ],
+                  ),
+                ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: TextField(
+                    controller: _weightPerItemCtrl,
+                    keyboardType:
+                        const TextInputType.numberWithOptions(decimal: true),
+                    inputFormatters: [_decimalFormatter(3)],
+                    decoration: _deco(
+                      'Kg per item *',
+                      errorText: _errKgPerBag,
                     ),
-                ],
-              ],
-              if (_advancedInventoryEnabled && unitLow == 'tin') ...[
-                SizedBox(height: gapField),
-                TextField(
-                  controller: _weightPerTinCtrl,
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                  inputFormatters: [_decimalFormatter(3)],
-                  decoration: _deco('Weight per tin *', errorText: _errKgPerBag),
-                  onChanged: (_) => _schedulePreviewRebuild(),
+                    onChanged: (_) => _schedulePreviewRebuild(),
+                  ),
                 ),
               ],
-              SizedBox(height: gapField),
-              widget.fullPage
-                  ? _fpShell(
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: ratesAndGstChildren,
-                      ),
-                    )
-                  : Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: ratesAndGstChildren,
-                    ),
-              SizedBox(height: widget.fullPage ? gapSection : 2),
-              KeyedSubtree(
-                key: _taxKey,
-                child: _fpShell(
-                  Theme(
-                    data: theme.copyWith(dividerColor: Colors.transparent),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
+            ),
+        ],
+      ],
+      if (_advancedInventoryEnabled && unitLow == 'tin') ...[
+        SizedBox(height: gapField),
+        TextField(
+          controller: _weightPerTinCtrl,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          inputFormatters: [_decimalFormatter(3)],
+          decoration: _deco('Weight per tin *', errorText: _errKgPerBag),
+          onChanged: (_) => _schedulePreviewRebuild(),
+        ),
+      ],
+      SizedBox(height: gapField),
+      widget.fullPage
+          ? _fpShell(
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: ratesAndGstChildren,
+              ),
+            )
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: ratesAndGstChildren,
+            ),
+      SizedBox(height: widget.fullPage ? gapSection : 2),
+      KeyedSubtree(
+        key: _taxKey,
+        child: _fpShell(
+          Theme(
+            data: theme.copyWith(dividerColor: Colors.transparent),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                InkWell(
+                  onTap: () => setState(
+                    () => _moreSectionExpanded = !_moreSectionExpanded,
+                  ),
+                  borderRadius: BorderRadius.circular(8),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 6),
+                    child: Row(
                       children: [
-                        InkWell(
-                          onTap: () => setState(
-                            () => _moreSectionExpanded = !_moreSectionExpanded,
-                          ),
-                          borderRadius: BorderRadius.circular(8),
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 6),
-                            child: Row(
-                              children: [
-                                Expanded(
-                                  child: Text(
-                                    'Advanced',
-                                    style: theme.textTheme.labelLarge?.copyWith(
-                                      fontWeight: FontWeight.w700,
-                                      fontSize: 13,
-                                    ),
-                                  ),
-                                ),
-                                Icon(
-                                  _moreSectionExpanded
-                                      ? Icons.expand_less
-                                      : Icons.expand_more,
-                                  color: theme.colorScheme.onSurfaceVariant,
-                                ),
-                              ],
+                        Expanded(
+                          child: Text(
+                            'Advanced',
+                            style: theme.textTheme.labelLarge?.copyWith(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 13,
                             ),
                           ),
                         ),
-                        if (_moreSectionExpanded)
-                          Padding(
-                            padding: const EdgeInsets.only(bottom: 4, top: 4),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                if (widget
-                                    .omitLineFreightDeliveredBilltyDiscount) ...[
-                                  TextField(
-                                    controller: _taxCtrl,
-                                    keyboardType:
-                                        const TextInputType.numberWithOptions(
-                                            decimal: true),
-                                    inputFormatters: [_decimalFormatter(2)],
-                                    scrollPadding: _textFieldScrollPadding(),
-                                    decoration: _deco('Tax %'),
-                                    onChanged: (_) {
-                                      _clearFieldErrors();
-                                      setState(() {});
-                                    },
-                                  ),
-                                  const SizedBox(height: 6),
-                                  TextField(
-                                    controller: _lineNotesCtrl,
-                                    maxLines: 4,
-                                    minLines: 1,
-                                    scrollPadding: _textFieldScrollPadding(),
-                                    decoration: _deco('Notes'),
-                                  ),
-                                ] else ...[
-                                  Row(
-                                    children: [
-                                      Expanded(
-                                        child: TextField(
-                                          controller: _discCtrl,
-                                          keyboardType:
-                                              const TextInputType.numberWithOptions(
-                                                  decimal: true),
-                                          inputFormatters:
-                                              [_decimalFormatter(2)],
-                                          scrollPadding:
-                                              _textFieldScrollPadding(),
-                                          decoration: _deco('Discount %'),
-                                          onChanged: (_) => setState(() {}),
-                                        ),
-                                      ),
-                                      const SizedBox(width: 6),
-                                      Expanded(
-                                        child: TextField(
-                                          controller: _taxCtrl,
-                                          keyboardType:
-                                              const TextInputType.numberWithOptions(
-                                                  decimal: true),
-                                          inputFormatters:
-                                              [_decimalFormatter(2)],
-                                          scrollPadding:
-                                              _textFieldScrollPadding(),
-                                          decoration: _deco('Tax %'),
-                                          onChanged: (_) {
-                                            _clearFieldErrors();
-                                            setState(() {});
-                                          },
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 6),
-                                  Row(
-                                    children: [
-                                      Expanded(
-                                        child: TextField(
-                                          controller: _freightCtrl,
-                                          keyboardType:
-                                              const TextInputType.numberWithOptions(
-                                                  decimal: true),
-                                          inputFormatters:
-                                              [_decimalFormatter(2)],
-                                          scrollPadding:
-                                              _textFieldScrollPadding(),
-                                          decoration: _deco('Freight value'),
-                                          onChanged: (_) => setState(() {}),
-                                        ),
-                                      ),
-                                      const SizedBox(width: 6),
-                                      Expanded(
-                                        child: InputDecorator(
-                                          decoration: _deco('Freight type'),
-                                          child: DropdownButtonHideUnderline(
-                                            child: DropdownButton<String>(
-                                              value: _freightType,
-                                              isExpanded: true,
-                                              items: const [
-                                                DropdownMenuItem(
-                                                  value: 'separate',
-                                                  child: Text('Separate'),
-                                                ),
-                                                DropdownMenuItem(
-                                                  value: 'included',
-                                                  child: Text('Included'),
-                                                ),
-                                              ],
-                                              onChanged: (v) {
-                                                if (v == null) return;
-                                                setState(() => _freightType = v);
-                                              },
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 6),
-                                  Row(
-                                    children: [
-                                      Expanded(
-                                        child: TextField(
-                                          controller: _deliveredCtrl,
-                                          keyboardType:
-                                              const TextInputType.numberWithOptions(
-                                                  decimal: true),
-                                          inputFormatters:
-                                              [_decimalFormatter(2)],
-                                          scrollPadding:
-                                              _textFieldScrollPadding(),
-                                          decoration: _deco('Delivered rate'),
-                                          onChanged: (_) => setState(() {}),
-                                        ),
-                                      ),
-                                      const SizedBox(width: 6),
-                                      Expanded(
-                                        child: TextField(
-                                          controller: _billtyCtrl,
-                                          keyboardType:
-                                              const TextInputType.numberWithOptions(
-                                                  decimal: true),
-                                          inputFormatters:
-                                              [_decimalFormatter(2)],
-                                          scrollPadding:
-                                              _textFieldScrollPadding(),
-                                          decoration: _deco('Billty rate'),
-                                          onChanged: (_) => setState(() {}),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 6),
-                                  TextField(
-                                    controller: _lineNotesCtrl,
-                                    maxLines: 4,
-                                    minLines: 1,
-                                    scrollPadding: _textFieldScrollPadding(),
-                                    decoration: _deco('Notes'),
-                                  ),
-                                ],
-                              ],
-                            ),
-                          ),
+                        Icon(
+                          _moreSectionExpanded
+                              ? Icons.expand_less
+                              : Icons.expand_more,
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
                       ],
                     ),
                   ),
                 ),
-              ),
-              ListenableBuilder(
-                listenable: _lineTotalsListenable,
-                builder: (cx, _) {
-                  final showMeta = _showHsnFooterMeta();
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      if (_errHsn != null) ...[
-                        const SizedBox(height: 2),
-                        Text(
-                          _errHsn!,
-                          style: TextStyle(
-                            color: Colors.red[800],
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
+                if (_moreSectionExpanded)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 4, top: 4),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        if (widget.omitLineFreightDeliveredBilltyDiscount) ...[
+                          TextField(
+                            controller: _taxCtrl,
+                            keyboardType: const TextInputType.numberWithOptions(
+                                decimal: true),
+                            inputFormatters: [_decimalFormatter(2)],
+                            scrollPadding: _textFieldScrollPadding(),
+                            decoration: _deco('Tax %'),
+                            onChanged: (_) {
+                              _clearFieldErrors();
+                              setState(() {});
+                            },
                           ),
-                        ),
-                      ] else if (showMeta && _hsnCode != null && _hsnCode!.isNotEmpty) ...[
-                        const SizedBox(height: 2),
-                        Text(
-                          'HSN: ${_hsnCode!}',
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: Colors.blueGrey[800],
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
+                          const SizedBox(height: 6),
+                          TextField(
+                            controller: _lineNotesCtrl,
+                            maxLines: 4,
+                            minLines: 1,
+                            scrollPadding: _textFieldScrollPadding(),
+                            decoration: _deco('Notes'),
                           ),
-                        ),
+                        ] else ...[
+                          Row(
+                            children: [
+                              Expanded(
+                                child: TextField(
+                                  controller: _discCtrl,
+                                  keyboardType:
+                                      const TextInputType.numberWithOptions(
+                                          decimal: true),
+                                  inputFormatters: [_decimalFormatter(2)],
+                                  scrollPadding: _textFieldScrollPadding(),
+                                  decoration: _deco('Discount %'),
+                                  onChanged: (_) => setState(() {}),
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              Expanded(
+                                child: TextField(
+                                  controller: _taxCtrl,
+                                  keyboardType:
+                                      const TextInputType.numberWithOptions(
+                                          decimal: true),
+                                  inputFormatters: [_decimalFormatter(2)],
+                                  scrollPadding: _textFieldScrollPadding(),
+                                  decoration: _deco('Tax %'),
+                                  onChanged: (_) {
+                                    _clearFieldErrors();
+                                    setState(() {});
+                                  },
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: TextField(
+                                  controller: _freightCtrl,
+                                  keyboardType:
+                                      const TextInputType.numberWithOptions(
+                                          decimal: true),
+                                  inputFormatters: [_decimalFormatter(2)],
+                                  scrollPadding: _textFieldScrollPadding(),
+                                  decoration: _deco('Freight value'),
+                                  onChanged: (_) => setState(() {}),
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              Expanded(
+                                child: InputDecorator(
+                                  decoration: _deco('Freight type'),
+                                  child: DropdownButtonHideUnderline(
+                                    child: DropdownButton<String>(
+                                      value: _freightType,
+                                      isExpanded: true,
+                                      items: const [
+                                        DropdownMenuItem(
+                                          value: 'separate',
+                                          child: Text('Separate'),
+                                        ),
+                                        DropdownMenuItem(
+                                          value: 'included',
+                                          child: Text('Included'),
+                                        ),
+                                      ],
+                                      onChanged: (v) {
+                                        if (v == null) return;
+                                        setState(() => _freightType = v);
+                                      },
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: TextField(
+                                  controller: _deliveredCtrl,
+                                  keyboardType:
+                                      const TextInputType.numberWithOptions(
+                                          decimal: true),
+                                  inputFormatters: [_decimalFormatter(2)],
+                                  scrollPadding: _textFieldScrollPadding(),
+                                  decoration: _deco('Delivered rate'),
+                                  onChanged: (_) => setState(() {}),
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              Expanded(
+                                child: TextField(
+                                  controller: _billtyCtrl,
+                                  keyboardType:
+                                      const TextInputType.numberWithOptions(
+                                          decimal: true),
+                                  inputFormatters: [_decimalFormatter(2)],
+                                  scrollPadding: _textFieldScrollPadding(),
+                                  decoration: _deco('Billty rate'),
+                                  onChanged: (_) => setState(() {}),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
+                          TextField(
+                            controller: _lineNotesCtrl,
+                            maxLines: 4,
+                            minLines: 1,
+                            scrollPadding: _textFieldScrollPadding(),
+                            decoration: _deco('Notes'),
+                          ),
+                        ],
                       ],
-                      if (showMeta && _itemCode != null && _itemCode!.isNotEmpty) ...[
-                        const SizedBox(height: 2),
-                        Text(
-                          'Item code: ${_itemCode!}',
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: Colors.blueGrey[800],
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ],
-                    ],
-                  );
-                },
-              ),
-              if (!widget.fullPage) ...[
-                SizedBox(height: gapField),
-                ListenableBuilder(
-                  listenable: _lineTotalsListenable,
-                  builder: (context, _) => _liveTotalsCard(theme),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ),
+      ListenableBuilder(
+        listenable: _lineTotalsListenable,
+        builder: (cx, _) {
+          final showMeta = _showHsnFooterMeta();
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (_errHsn != null) ...[
+                const SizedBox(height: 2),
+                Text(
+                  _errHsn!,
+                  style: TextStyle(
+                    color: Colors.red[800],
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ] else if (showMeta &&
+                  _hsnCode != null &&
+                  _hsnCode!.isNotEmpty) ...[
+                const SizedBox(height: 2),
+                Text(
+                  'HSN: ${_hsnCode!}',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: Colors.blueGrey[800],
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ],
-            ];
+              if (showMeta && _itemCode != null && _itemCode!.isNotEmpty) ...[
+                const SizedBox(height: 2),
+                Text(
+                  'Item code: ${_itemCode!}',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: Colors.blueGrey[800],
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ],
+          );
+        },
+      ),
+      if (!widget.fullPage) ...[
+        SizedBox(height: gapField),
+        ListenableBuilder(
+          listenable: _lineTotalsListenable,
+          builder: (context, _) => _liveTotalsCard(theme),
+        ),
+      ],
+    ];
 
     if (widget.fullPage) {
       final footerPad = const EdgeInsets.fromLTRB(0, 6, 0, 10);
@@ -3947,8 +3955,7 @@ class _PurchaseItemEntrySheetState extends ConsumerState<PurchaseItemEntrySheet>
                         foregroundColor: teal,
                         side: const BorderSide(color: teal),
                         minimumSize: const Size(double.infinity, 50),
-                        padding:
-                            const EdgeInsets.symmetric(vertical: 14),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
                         shape: const RoundedRectangleBorder(
                           borderRadius: BorderRadius.all(Radius.circular(12)),
                         ),
@@ -3963,8 +3970,7 @@ class _PurchaseItemEntrySheetState extends ConsumerState<PurchaseItemEntrySheet>
                       style: FilledButton.styleFrom(
                         backgroundColor: teal,
                         minimumSize: const Size(double.infinity, 50),
-                        padding:
-                            const EdgeInsets.symmetric(vertical: 14),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
                         shape: const RoundedRectangleBorder(
                           borderRadius: BorderRadius.all(Radius.circular(12)),
                         ),
@@ -3991,7 +3997,7 @@ class _PurchaseItemEntrySheetState extends ConsumerState<PurchaseItemEntrySheet>
             await _confirmDiscardAndPop();
           },
           child: Scaffold(
-            resizeToAvoidBottomInset: false,
+            resizeToAvoidBottomInset: true,
             backgroundColor: Colors.white,
             appBar: AppBar(
               backgroundColor: Colors.white,
@@ -4003,16 +4009,14 @@ class _PurchaseItemEntrySheetState extends ConsumerState<PurchaseItemEntrySheet>
                 onPressed: _handleLeadingBack,
               ),
             ),
-            body: Padding(
-              padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
-              child: LayoutBuilder(
+            body: LayoutBuilder(
               builder: (context, c) {
-// Scaffold.resizeToAvoidBottomInset:true already shrinks body for keyboard.
-// Only add safe area bottom — never add imeBottom (would double-count).
                 final safeBottom = MediaQuery.paddingOf(context).bottom;
-                final double previewBottomPad = safeBottom > 0 ? safeBottom + 6.0 : 10.0;
-                final kbd = _keyboardVisible || MediaQuery.viewInsetsOf(context).bottom > 20;
-                
+                final double previewBottomPad =
+                    safeBottom > 0 ? safeBottom + 6.0 : 10.0;
+                final kbd = _keyboardVisible ||
+                    MediaQuery.viewInsetsOf(context).bottom > 20;
+
                 final previewPinned = Material(
                   elevation: 8,
                   color: Colors.white,
@@ -4024,21 +4028,21 @@ class _PurchaseItemEntrySheetState extends ConsumerState<PurchaseItemEntrySheet>
                       12,
                       kbd ? 4 : previewBottomPad,
                     ),
-                    child: kbd 
-                      ? _buildKeyboardAccessoryRow(theme)
-                      : Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            ListenableBuilder(
-                              listenable: _lineTotalsListenable,
-                              builder: (context, _) => RepaintBoundary(
-                                child: _fpShell(_liveTotalsCard(theme)),
+                    child: kbd
+                        ? _buildKeyboardAccessoryRow(theme)
+                        : Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              ListenableBuilder(
+                                listenable: _lineTotalsListenable,
+                                builder: (context, _) => RepaintBoundary(
+                                  child: _fpShell(_liveTotalsCard(theme)),
+                                ),
                               ),
-                            ),
-                            footer,
-                          ],
-                        ),
+                              footer,
+                            ],
+                          ),
                   ),
                 );
                 return Column(
@@ -4067,8 +4071,7 @@ class _PurchaseItemEntrySheetState extends ConsumerState<PurchaseItemEntrySheet>
             ),
           ),
         ),
-      ),
-    );
+      );
     }
 
     final footer = widget.isEdit
@@ -4138,7 +4141,8 @@ class _PurchaseItemEntrySheetState extends ConsumerState<PurchaseItemEntrySheet>
         child: LayoutBuilder(
           builder: (context, c) {
             final homeBottomInset = MediaQuery.paddingOf(context).bottom;
-            final kbd = _keyboardVisible || MediaQuery.viewInsetsOf(context).bottom > 20;
+            final kbd = _keyboardVisible ||
+                MediaQuery.viewInsetsOf(context).bottom > 20;
             return KeyboardSafeFormViewport(
               dismissKeyboardOnTap: true,
               scrollController: _scrollController,
@@ -4159,7 +4163,9 @@ class _PurchaseItemEntrySheetState extends ConsumerState<PurchaseItemEntrySheet>
                     10,
                     kbd ? 4 : 8,
                     10,
-                    kbd ? 4 : (homeBottomInset > 0 ? homeBottomInset + 10.0 : 12.0),
+                    kbd
+                        ? 4
+                        : (homeBottomInset > 0 ? homeBottomInset + 10.0 : 12.0),
                   ),
                   child: kbd ? _buildKeyboardAccessoryRow(theme) : footer,
                 ),
@@ -4172,7 +4178,8 @@ class _PurchaseItemEntrySheetState extends ConsumerState<PurchaseItemEntrySheet>
 
     if (!widget.fullPage) {
       content = Padding(
-        padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
+        padding:
+            EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
         child: content,
       );
     }
@@ -4187,7 +4194,9 @@ class _PurchaseItemEntrySheetState extends ConsumerState<PurchaseItemEntrySheet>
         final l = _currentLine();
         final t = lineMoney(l, taxMode: _taxMode);
         final p = _profitPreview();
-        final s = _ratesPerKgEconomics ? _sellingParsedAsPerKg() : _parseD(_sellingCtrl.text);
+        final s = _ratesPerKgEconomics
+            ? _sellingParsedAsPerKg()
+            : _parseD(_sellingCtrl.text);
         final qStr = _qtyAndUnitWeightSummaryLine();
 
         return Row(
@@ -4196,14 +4205,25 @@ class _PurchaseItemEntrySheetState extends ConsumerState<PurchaseItemEntrySheet>
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text('TOTAL: ${formatRupee(t)}', style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: Color(0xFF0F172A))),
+                Text('TOTAL: ${formatRupee(t)}',
+                    style: const TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w900,
+                        color: Color(0xFF0F172A))),
                 Row(
                   children: [
-                    Text('PROFIT: ${s != null && s > 0 ? formatRupee(p) : "—"}', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w800, color: p >= 0 ? const Color(0xFF059669) : const Color(0xFFDC2626))),
+                    Text('PROFIT: ${s != null && s > 0 ? formatRupee(p) : "—"}',
+                        style: TextStyle(
+                            fontSize: 9,
+                            fontWeight: FontWeight.w800,
+                            color: p >= 0
+                                ? const Color(0xFF059669)
+                                : const Color(0xFFDC2626))),
                     const SizedBox(width: 8),
                     Builder(builder: (context) {
                       final taxable =
-                          lineNetTaxableDecimal(l, taxMode: _taxMode).toDouble();
+                          lineNetTaxableDecimal(l, taxMode: _taxMode)
+                              .toDouble();
                       final tax = lineTaxAmount(l, taxMode: _taxMode);
                       return Text(
                         'NET ${formatRupee(taxable)} · TAX ${formatRupee(tax)}',
@@ -4219,11 +4239,13 @@ class _PurchaseItemEntrySheetState extends ConsumerState<PurchaseItemEntrySheet>
             ),
             const SizedBox(width: 8),
             Expanded(
-              child: Text(qStr, 
-                maxLines: 1, 
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontSize: 9, fontWeight: FontWeight.w600, color: Color(0xFF64748B))
-              ),
+              child: Text(qStr,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                      fontSize: 9,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF64748B))),
             ),
             if (!widget.isEdit)
               SizedBox(
@@ -4234,8 +4256,10 @@ class _PurchaseItemEntrySheetState extends ConsumerState<PurchaseItemEntrySheet>
                     foregroundColor: const Color(0xFF17A8A7),
                     side: const BorderSide(color: Color(0xFF17A8A7)),
                     padding: const EdgeInsets.symmetric(horizontal: 8),
-                    textStyle: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                    textStyle: const TextStyle(
+                        fontSize: 11, fontWeight: FontWeight.w800),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(6)),
                   ),
                   child: const Text('Add+'),
                 ),
@@ -4248,8 +4272,10 @@ class _PurchaseItemEntrySheetState extends ConsumerState<PurchaseItemEntrySheet>
                 style: FilledButton.styleFrom(
                   backgroundColor: const Color(0xFF17A8A7),
                   padding: const EdgeInsets.symmetric(horizontal: 12),
-                  textStyle: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                  textStyle: const TextStyle(
+                      fontSize: 11, fontWeight: FontWeight.w800),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(6)),
                 ),
                 child: const Text('Save'),
               ),

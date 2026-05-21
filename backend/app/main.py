@@ -174,11 +174,29 @@ async def lifespan(app: FastAPI):
             """Hook: scan due-soon trade purchases; extend with DB + push/WhatsApp if needed."""
             logger.info("due_soon_reminder: tick (use app.services.monthly_payment_reminder)")
 
+        async def _db_keepalive_tick() -> None:
+            """Best-effort Postgres keepalive for hosted free-tier databases."""
+            if is_sqlite_runtime():
+                return
+            try:
+                async with async_session_factory() as sess:
+                    await sess.execute(text("SELECT 1"))
+                logger.info("db_keepalive: SELECT 1 ok")
+            except Exception as e:  # noqa: BLE001
+                logger.warning("db_keepalive failed: %s", e, exc_info=True)
+
         scheduler.add_job(
             _due_soon_tick, "cron", hour=8, minute=0, id="due_soon_scan", replace_existing=True
         )
+        scheduler.add_job(
+            _db_keepalive_tick,
+            "interval",
+            hours=48,
+            id="db_keepalive",
+            replace_existing=True,
+        )
         scheduler.start()
-        logger.info("APScheduler: due_soon job registered (08:00 Asia/Kolkata)")
+        logger.info("APScheduler: due_soon and db_keepalive jobs registered")
     except Exception as e:  # noqa: BLE001
         logger.warning("APScheduler not started: %s", e)
 

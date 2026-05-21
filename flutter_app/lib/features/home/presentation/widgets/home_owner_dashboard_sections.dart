@@ -8,10 +8,33 @@ import '../../../../core/providers/home_dashboard_provider.dart';
 import '../../../../core/providers/home_owner_dashboard_providers.dart';
 import '../../../../core/theme/hexa_colors.dart';
 import '../../../../shared/widgets/operational_ui.dart';
+import '../../home_pack_unit_word.dart';
 
 String _inr(num n) =>
     NumberFormat.currency(locale: 'en_IN', symbol: '₹', decimalDigits: 0)
         .format(n);
+
+String _fmtQty(double q) =>
+    q == q.roundToDouble() ? q.round().toString() : q.toStringAsFixed(1);
+
+String _dashboardUnitsLine(HomeDashboardData? data) {
+  if (data == null) return '';
+  final parts = <String>[];
+  if (data.totalBags > 0) {
+    parts.add(
+        '${_fmtQty(data.totalBags)} ${homePackUnitWord('BAG', data.totalBags)}');
+  }
+  if (data.totalBoxes > 0) {
+    parts.add(
+        '${_fmtQty(data.totalBoxes)} ${homePackUnitWord('BOX', data.totalBoxes)}');
+  }
+  if (data.totalTins > 0) {
+    parts.add(
+        '${_fmtQty(data.totalTins)} ${homePackUnitWord('TIN', data.totalTins)}');
+  }
+  if (data.totalKg > 0) parts.add('${_fmtQty(data.totalKg)} KG');
+  return parts.isEmpty ? '0 KG' : parts.join(' · ');
+}
 
 String _timeAgo(DateTime at) {
   final diff = DateTime.now().difference(at);
@@ -52,11 +75,13 @@ class HomeQuickStatsRow extends StatelessWidget {
         _HomeStatCard(
           label: 'Today spend',
           value: todayAsync.isLoading ? '…' : _inr(today?.totalPurchase ?? 0),
+          subtitle: todayAsync.isLoading ? null : _dashboardUnitsLine(today),
           onTap: () => context.go('/reports'),
         ),
         _HomeStatCard(
           label: 'Month spend',
           value: monthAsync.isLoading ? '…' : _inr(month?.totalPurchase ?? 0),
+          subtitle: monthAsync.isLoading ? null : _dashboardUnitsLine(month),
           onTap: () => context.go('/reports'),
         ),
         _HomeStatCard(
@@ -82,12 +107,14 @@ class _HomeStatCard extends StatelessWidget {
     required this.value,
     this.onTap,
     this.tint,
+    this.subtitle,
   });
 
   final String label;
   final String value;
   final VoidCallback? onTap;
   final Color? tint;
+  final String? subtitle;
 
   @override
   Widget build(BuildContext context) {
@@ -121,6 +148,19 @@ class _HomeStatCard extends StatelessWidget {
                   color: tint ?? HexaColors.textBody,
                 ),
               ),
+              if (subtitle != null && subtitle!.trim().isNotEmpty) ...[
+                const SizedBox(height: 4),
+                Text(
+                  subtitle!,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: Colors.grey.shade600,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
             ],
           ),
         ),
@@ -199,7 +239,8 @@ class _StaffChip extends StatelessWidget {
       decoration: BoxDecoration(
         color: const Color(0xFFE8F5E9),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: const Color(0xFF2E7D32).withValues(alpha: 0.35)),
+        border:
+            Border.all(color: const Color(0xFF2E7D32).withValues(alpha: 0.35)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -284,9 +325,8 @@ class _ActivityTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isPurchase = item.kind == 'purchase';
-    final icon = isPurchase
-        ? Icons.shopping_cart_outlined
-        : Icons.inventory_2_outlined;
+    final icon =
+        isPurchase ? Icons.shopping_cart_outlined : Icons.inventory_2_outlined;
     final color =
         isPurchase ? HexaColors.brandPrimary : const Color(0xFF0D9488);
 

@@ -30,11 +30,10 @@ String buildPurchaseSharePdfFileName(
   final cleaned = raw.isEmpty
       ? 'PURCHASE'
       : raw
-            .replaceAll(RegExp(r'[^A-Z0-9]+'), '_')
-            .replaceAll(RegExp(r'_+'), '_')
-            .trim();
-  final short =
-      cleaned.length > 40 ? cleaned.substring(0, 40) : cleaned;
+          .replaceAll(RegExp(r'[^A-Z0-9]+'), '_')
+          .replaceAll(RegExp(r'_+'), '_')
+          .trim();
+  final short = cleaned.length > 40 ? cleaned.substring(0, 40) : cleaned;
   final datePart = DateFormat('dMMMyyyy', 'en_IN').format(p.purchaseDate);
   final timePart = DateFormat('HHmm').format(p.purchaseDate);
   final hid = p.humanId.replaceAll(RegExp(r'[^\w\-]+'), '_');
@@ -63,7 +62,8 @@ Future<pw.ImageProvider?> _tryLogo(String? url) async {
   }
 }
 
-String _partyName(String? s) => (s == null || s.trim().isEmpty) ? '—' : safePdfText(s.trim());
+String _partyName(String? s) =>
+    (s == null || s.trim().isEmpty) ? '—' : safePdfText(s.trim());
 
 String _pdfReceiptPurchase(TradePurchaseLine l) {
   final r = tradePurchaseLineDisplayPurchaseRate(l);
@@ -178,7 +178,8 @@ Future<pw.Document> buildPurchaseReceiptDoc(
 }
 
 /// Professional A4 purchase order; footer uses server [TradePurchase.totalAmount].
-Future<pw.Document> buildPurchaseDoc(TradePurchase p, BusinessProfile biz) async {
+Future<pw.Document> buildPurchaseDoc(
+    TradePurchase p, BusinessProfile biz) async {
   final logo = await _tryLogo(biz.logoUrl);
   final pdfTheme = await loadPurchasePdfTheme();
   final doc = await buildProfessionalPurchaseInvoiceDoc(
@@ -217,7 +218,8 @@ Future<bool> sharePurchasePdf(TradePurchase p, BusinessProfile biz) async {
       await Printing.sharePdf(bytes: bytes, filename: filename);
       return true;
     } catch (printingError) {
-      debugPrint('PDF: Printing.sharePdf failed ($printingError), trying share_plus');
+      debugPrint(
+          'PDF: Printing.sharePdf failed ($printingError), trying share_plus');
       await Share.shareXFiles(
         [
           XFile.fromData(
@@ -238,11 +240,13 @@ Future<bool> sharePurchasePdf(TradePurchase p, BusinessProfile biz) async {
   }
 }
 
-
 Future<bool> printPurchasePdf(TradePurchase p, BusinessProfile biz) async {
   try {
     final doc = await buildPurchaseDoc(p, biz);
-    await Printing.layoutPdf(onLayout: (_) async => doc.save());
+    await Printing.layoutPdf(
+      name: buildPurchaseSharePdfFileName(p),
+      onLayout: (_) async => doc.save(),
+    );
     return true;
   } catch (e, st) {
     debugPrint('PDF Print error: $e');
@@ -254,7 +258,10 @@ Future<bool> printPurchasePdf(TradePurchase p, BusinessProfile biz) async {
 Future<bool> downloadPurchasePdf(TradePurchase p, BusinessProfile biz) async {
   try {
     final doc = await buildPurchaseDoc(p, biz);
-    await Printing.layoutPdf(onLayout: (_) async => doc.save());
+    await Printing.layoutPdf(
+      name: buildPurchaseSharePdfFileName(p),
+      onLayout: (_) async => doc.save(),
+    );
     return true;
   } catch (e, st) {
     _logPdfFailure('download', e, st);
@@ -274,7 +281,8 @@ Future<bool> sharePurchaseFullInvoicePdf(
       await Printing.sharePdf(bytes: bytes, filename: filename);
       return true;
     } catch (printingError) {
-      debugPrint('Printing.sharePdf failed ($printingError), trying share_plus');
+      debugPrint(
+          'Printing.sharePdf failed ($printingError), trying share_plus');
       await Share.shareXFiles(
         [
           XFile.fromData(

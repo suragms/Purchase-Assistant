@@ -5,16 +5,26 @@ import 'package:printing/printing.dart';
 
 import '../models/business_profile.dart';
 import '../models/trade_purchase_models.dart';
+
 final _money = NumberFormat('#,##,##0', 'en_IN');
 final _df = DateFormat('dd MMM yyyy');
+final _fileMonth = DateFormat('MMMMyyyy');
 
 const _statementTitleInk = PdfColor.fromInt(0xFF0F172A);
 const _statementTeal = PdfColor.fromInt(0xFF17A8A7);
 
 String _rs(num n) => 'Rs. ${_money.format(n)}';
 
-String _safe(String? s) =>
-    (s == null || s.trim().isEmpty) ? '—' : s.trim();
+String _safe(String? s) => (s == null || s.trim().isEmpty) ? '—' : s.trim();
+
+String _filenameSlug(String raw, {String fallback = 'supplier'}) {
+  final cleaned = raw
+      .trim()
+      .replaceAll(RegExp(r'[^A-Za-z0-9_-]+'), '_')
+      .replaceAll(RegExp(r'_+'), '_')
+      .replaceAll(RegExp(r'^_|_$'), '');
+  return cleaned.isEmpty ? fallback : cleaned;
+}
 
 /// Share a supplier PUR statement for [purchases] (already date-filtered).
 Future<void> shareSupplierStatementPdf({
@@ -29,8 +39,7 @@ Future<void> shareSupplierStatementPdf({
 }) async {
   final doc = pw.Document();
   final total = purchases.fold<double>(0, (s, p) => s + p.totalAmount);
-  final outstanding =
-      purchases.fold<double>(0, (s, p) => s + p.remaining);
+  final outstanding = purchases.fold<double>(0, (s, p) => s + p.remaining);
 
   doc.addPage(
     pw.MultiPage(
@@ -137,7 +146,7 @@ Future<void> shareSupplierStatementPdf({
   await Printing.sharePdf(
     bytes: await doc.save(),
     filename:
-        'supplier_statement_${supplierName.replaceAll(RegExp(r'[^\w\-]+'), '_')}.pdf',
+        'harisree_statement_${_filenameSlug(supplierName)}_${_fileMonth.format(toDate)}.pdf',
   );
 }
 

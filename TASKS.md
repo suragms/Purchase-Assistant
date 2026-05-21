@@ -1,6 +1,6 @@
 # Purchase Assistant — Living task board
 
-**Last updated:** 2026-05-20  
+**Last updated:** 2026-05-21
 **App:** `hexa_purchase_assistant` (Flutter + FastAPI + Supabase)  
 **Product docs:** `docs/harisree/` (`MASTER_REFERENCE.md`, `FEATURES_DEEP_PLAN.md`)
 
@@ -34,8 +34,8 @@
 | FIX-04 | Done | Reports debug logs + existing empty fallback |
 | FIX-05 / UX-02 | Done | Stock filter bottom sheet; 3-col table; active filter pill |
 | FIX-06 / UX-01 | Done | Removed home catalog chips; 3-col quick actions; 2x2 stat cards |
-| FIX-07 | Verify | Broker commission UI exists when broker selected |
-| FIX-08 | Verify | Item entry sheet + overlay fix (device QA) |
+| FIX-07 | Code verified | Broker commission UI exists when `brokerId` is set; physical device QA still recommended |
+| FIX-08 | Code verified | Suggestion overlays use tap grouping/grace handling; physical iOS/Android QA still recommended |
 | FIX-09 | Done | Staff stock update invalidates activity + alert counts |
 | FIX-10 | Done | Barcode lookup 10s timeout + friendly slow message |
 | FIX-11 | Done | Web: `GET /stock/reorder` before `/{id}` (422 fix); `_HexaErrorBoundary` post-frame `setState`; bulk barcode print `Wrap` chips + PDF download |
@@ -43,6 +43,13 @@
 | UX-03 | Done | Compact 4-col report tabs; ring summary card; PDF actions sheet; `hideTopStatRow` on overview; ~48dp item rows |
 | UX-04 | Done | Item detail collapsible sections |
 | UX-05 | Done | A4 dense barcode grid (margins/gaps + dynamic cols/rows); `Isolate.run` / web path; bulk dense toggle + progress; `run_web_dev.ps1 -WebPort` |
+| UX-06 | Done | Home Today/Month spend cards now show BAGS/BOXES/TINS/KG sublines from dashboard unit totals |
+| UX-07 / UX-11 | Done | Purchase item full-page flow aligned with keyboard-resizing scaffold; Save/Add More remains pinned |
+| UX-08 | Done | Reports purchase fetch already keyed by business/date range; debug log now prints range + key |
+| UX-09 / PERF-02 | Done | Stock header compacted to search + status chips + active filter pill; table stays 3 columns with updated-today marker |
+| UX-10 | Done | Barcode print route verified; stock long-press print route now URI-encodes item id |
+| UX-12 | Done | Barcode/report/supplier/item/broker/Purchase print-share filenames are descriptive and date-stamped |
+| PERF-01 | Done | Purchase item notes no longer trigger live totals rebuilds; full-page preview remains behind `RepaintBoundary` |
 
 ---
 
@@ -52,7 +59,7 @@
 |------|--------|
 | FCM push | Owner alert when staff saves purchase while app is killed |
 | Per-category last supplier | Wire `PurchaseSmartDefaults.loadLastSupplierForCategory` when party step has category context |
-| Full `pytest` | Run `python -m pytest` in `backend/` (can be slow); health: `tests/test_health.py` |
+| Full `pytest` | Done — `python -m pytest -q` passed 244 tests locally |
 
 **Local verify:** `powershell -File scripts/verify-release.ps1`
 
@@ -105,6 +112,10 @@
 
 | Blocker | Mitigation |
 |---------|------------|
+| Render service suspended | Resume `my-purchases-api` before live `/health` and `/health/ready` checks |
+| Render MCP workspace not selected | Select the Render workspace in Cursor before env/deploy inspection via MCP |
+| Android SDK missing locally | Install/configure Android SDK or set `ANDROID_HOME` before release APK build |
+| Flutter test generated asset lock | Retry focused Flutter tests after `build/unit_test_assets` is unlocked/cleaned |
 | Local API 503 on stock | `HEXA_USE_SQLITE=1` + `hexa_dev.db` bootstrap |
 | Flutter web blank shell | Full restart (not hot reload only) |
 | `mobile_scanner` on web | Manual barcode entry |
@@ -113,12 +124,15 @@
 
 ## Deployment checklist
 
-- [ ] `pytest` green in `backend/` (or at least `tests/test_health.py`)
-- [x] `flutter analyze` — 0 errors (May 2026 run: warnings/info only in purchase item sheet)
+- [x] `pytest` green in `backend/` (`tests/test_health.py` passed; full suite passed 244 tests)
+- [x] `flutter analyze` — 0 errors; existing warnings/info remain in purchase/catalog files
+- [x] Alembic heads checked locally — single head `023_catalog_business_active_partial`
+- [x] Monitoring code ready — Sentry env-gated; APScheduler DB keepalive runs every 48h; GitHub Supabase keep-alive workflow exists
 - [ ] Render: `/health/ready` → `db: ok`
 - [ ] Supabase migrations (if hosted Postgres)
 - [ ] Env: `DATABASE_URL`, JWT, OpenAI scan key
 - [ ] Smoke: login → home → stock → purchase history → reports
+- [ ] Android release APK build (`ANDROID_HOME` / Android SDK missing locally)
 - [ ] Section 7 device tests (below)
 
 ---
