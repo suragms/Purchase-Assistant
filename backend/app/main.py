@@ -395,6 +395,7 @@ _origins = [o.strip() for o in settings.cors_origins.split(",") if o.strip()]
 if settings.app_env.lower() == "production":
     for _prod_web in (
         "https://purchase-assiastant.vercel.app",
+        "https://purchase-assastant.vercel.app",
         "https://purchase-assistant.vercel.app",
     ):
         if _prod_web not in _origins:
