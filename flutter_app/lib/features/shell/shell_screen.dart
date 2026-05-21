@@ -7,7 +7,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/providers/connectivity_provider.dart';
-import '../../core/providers/home_owner_dashboard_providers.dart';
+import '../../core/providers/home_owner_dashboard_providers.dart'
+    show homeRecentActivityFeedProvider, stockAlertCountsProvider, stockAuditPeriodProvider, stockLowCountProvider;
 import '../../core/providers/stock_providers.dart';
 import '../../core/providers/home_breakdown_tab_providers.dart';
 import '../../core/providers/home_dashboard_provider.dart';
@@ -57,6 +58,8 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
       case ShellBranch.home:
         ref.invalidate(homeDashboardDataProvider);
         ref.invalidate(homeShellReportsProvider);
+        ref.invalidate(stockAuditPeriodProvider);
+        ref.invalidate(homeRecentActivityFeedProvider);
         break;
       case ShellBranch.history:
         invalidateTradePurchaseCaches(ref);
@@ -167,13 +170,13 @@ class _ShellBottomBar extends StatelessWidget {
   final int stockBadgeCount;
   final ValueChanged<int> onDestinationSelected;
 
-  static const _fabOuter = 60.0;
+  static const _fabOuter = 52.0;
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final bottomPad = 6.0 +
-        math.max(0.0, MediaQuery.viewPaddingOf(context).bottom * 0.2);
+    final bottomPad = 8.0 +
+        math.max(8.0, MediaQuery.viewPaddingOf(context).bottom);
     return Padding(
       padding: EdgeInsets.fromLTRB(10, 0, 10, bottomPad),
       child: ClipRRect(
@@ -302,7 +305,7 @@ class _ShellNavTile extends StatelessWidget {
       onTap: onTap,
       borderRadius: BorderRadius.circular(14),
       child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 4),
+        padding: const EdgeInsets.symmetric(vertical: 6),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -426,8 +429,8 @@ class _FabButton extends StatelessWidget {
       enabled: true,
       excludeSemantics: true,
       child: Container(
-        width: 56,
-        height: 56,
+        width: 48,
+        height: 48,
         decoration: BoxDecoration(
           gradient: HexaColors.ctaGradient,
           shape: BoxShape.circle,
@@ -443,7 +446,7 @@ class _FabButton extends StatelessWidget {
               HapticFeedback.mediumImpact();
               _openQuickActions(context);
             },
-            child: const Icon(Icons.add_rounded, size: 26, color: Colors.white),
+            child: const Icon(Icons.add_rounded, size: 24, color: Colors.white),
           ),
         ),
       ),

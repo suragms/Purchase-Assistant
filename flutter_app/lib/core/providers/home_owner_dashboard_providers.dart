@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../auth/session_notifier.dart';
 import '../json_coerce.dart';
+import 'home_breakdown_tab_providers.dart';
 import 'home_dashboard_provider.dart';
 
 String _apiDate(DateTime d) {
@@ -84,7 +85,7 @@ final stockAuditRecentHomeProvider =
       );
 });
 
-/// Stock adjustments for a single calendar day (owner today feed).
+/// Stock adjustments for a single calendar day (legacy / stock detail).
 final stockAuditDayProvider = FutureProvider.autoDispose
     .family<List<Map<String, dynamic>>, DateTime>((ref, day) async {
   final session = ref.watch(sessionProvider);
@@ -95,6 +96,37 @@ final stockAuditDayProvider = FutureProvider.autoDispose
         limit: 50,
         on: _apiDate(d),
       );
+});
+
+/// Stock adjustments for the global [homePeriodProvider] window (client-filtered).
+final stockAuditPeriodProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
+  final session = ref.watch(sessionProvider);
+  if (session == null) return [];
+  ref.watch(homePeriodProvider);
+  ref.watch(homeCustomDateRangeProvider);
+  final range = homePeriodRange(
+    ref.read(homePeriodProvider),
+    custom: ref.read(homeCustomDateRangeProvider),
+  );
+  final rows = await ref.read(hexaApiProvider).listStockAuditRecent(
+        businessId: session.primaryBusiness.id,
+        limit: 80,
+      );
+  return rows.where((a) {
+    final atRaw = a['created_at']?.toString() ?? a['at']?.toString();
+    final at = atRaw != null ? DateTime.tryParse(atRaw)?.toLocal() : null;
+    if (at == null) return false;
+    return !at.isBefore(range.start) && at.isBefore(range.end);
+  }).toList();
+});
+
+/// Period-scoped overview for category pills (reuses dashboard cache when possible).
+final homeOwnerPeriodDashboardProvider =
+    Provider.autoDispose<HomeDashboardData>((ref) {
+  ref.watch(homePeriodProvider);
+  ref.watch(homeCustomDateRangeProvider);
+  return ref.watch(homeDashboardDataProvider).snapshot.data;
 });
 
 final stockVariancesTodayProvider =
@@ -157,26 +189,79 @@ class HomeActivityItem {
   final String? routeId;
 }
 
+/// Group label + items for the recent-changes section.
+class HomeActivityGroup {
+  const HomeActivityGroup({required this.header, required this.items});
+
+  final String header;
+  final List<HomeActivityItem> items;
+}
+
+List<HomeActivityGroup> groupHomeActivityByDay(List<HomeActivityItem> items) {
+  if (items.isEmpty) return [];
+  final now = DateTime.now();
+  final today = DateTime(now.year, now.month, now.day);
+  final yesterday = today.subtract(const Duration(days: 1));
+  final weekStart = today.subtract(const Duration(days: 6));
+
+  final todayList = <HomeActivityItem>[];
+  final yesterdayList = <HomeActivityItem>[];
+  final weekList = <HomeActivityItem>[];
+  final olderList = <HomeActivityItem>[];
+
+  for (final item in items) {
+    final d = DateTime(item.at.year, item.at.month, item.at.day);
+    if (!d.isBefore(today)) {
+      todayList.add(item);
+    } else if (!d.isBefore(yesterday)) {
+      yesterdayList.add(item);
+    } else if (!d.isBefore(weekStart)) {
+      weekList.add(item);
+    } else {
+      olderList.add(item);
+    }
+  }
+
+  final out = <HomeActivityGroup>[];
+  if (todayList.isNotEmpty) {
+    out.add(HomeActivityGroup(header: 'Today', items: todayList));
+  }
+  if (yesterdayList.isNotEmpty) {
+    out.add(HomeActivityGroup(header: 'Yesterday', items: yesterdayList));
+  }
+  if (weekList.isNotEmpty) {
+    out.add(HomeActivityGroup(header: 'This week', items: weekList));
+  }
+  if (olderList.isNotEmpty) {
+    out.add(HomeActivityGroup(header: 'Earlier', items: olderList.take(8).toList()));
+  }
+  return out;
+}
+
 final homeRecentActivityFeedProvider =
     FutureProvider.autoDispose<List<HomeActivityItem>>((ref) async {
   final session = ref.watch(sessionProvider);
   if (session == null) return [];
+  ref.watch(homePeriodProvider);
+  ref.watch(homeCustomDateRangeProvider);
+  final q = homeDateRangeForRef(ref);
   final api = ref.read(hexaApiProvider);
   final bid = session.primaryBusiness.id;
-  final now = DateTime.now();
-  final day = DateTime(now.year, now.month, now.day);
+  final range = homePeriodRange(
+    ref.read(homePeriodProvider),
+    custom: ref.read(homeCustomDateRangeProvider),
+  );
 
   final purchases = await api.listTradePurchases(
     businessId: bid,
-    limit: 8,
+    limit: 24,
     offset: 0,
     status: 'all',
+    purchaseFrom: q.from,
+    purchaseTo: q.to,
   );
-  final audits = await api.listStockAuditRecent(
-    businessId: bid,
-    limit: 8,
-    on: _apiDate(day),
-  );
+  ref.watch(stockAuditPeriodProvider);
+  final audits = await ref.read(stockAuditPeriodProvider.future);
   final items = <HomeActivityItem>[];
 
   for (final p in purchases) {
@@ -184,14 +269,19 @@ final homeRecentActivityFeedProvider =
     final atRaw = p['purchase_date']?.toString() ?? p['created_at']?.toString();
     final at = atRaw != null ? DateTime.tryParse(atRaw) : null;
     if (at == null) continue;
+    final local = at.toLocal();
+    if (local.isBefore(range.start) || !local.isBefore(range.end)) continue;
     items.add(
       HomeActivityItem(
         kind: 'purchase',
         title: p['supplier_name']?.toString() ??
             p['human_id']?.toString() ??
             'Purchase',
-        subtitle: p['human_id']?.toString() ?? p['bill_no']?.toString() ?? '',
-        at: at.toLocal(),
+        subtitle: p['human_id']?.toString() ??
+            p['invoice_number']?.toString() ??
+            p['bill_no']?.toString() ??
+            '',
+        at: local,
         amountInr: coerceToDouble(p['total_amount'] ?? p['bill_total']),
         routeId: id.isNotEmpty ? id : null,
       ),
@@ -216,23 +306,22 @@ final homeRecentActivityFeedProvider =
   }
 
   items.sort((a, b) => b.at.compareTo(a.at));
-  return items.take(5).toList();
+  return items.take(12).toList();
 });
 
+/// @deprecated Use [homeRecentActivityFeedProvider] only — kept for invalidation parity.
 final homeRecentPurchasesCompactProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
   final session = ref.watch(sessionProvider);
   if (session == null) return [];
-  final now = DateTime.now();
-  final day = DateTime(now.year, now.month, now.day);
-  final from = _apiDate(day);
+  final q = homeDateRangeForRef(ref);
   final rows = await ref.read(hexaApiProvider).listTradePurchases(
         businessId: session.primaryBusiness.id,
         limit: 6,
         offset: 0,
         status: 'all',
-        purchaseFrom: from,
-        purchaseTo: from,
+        purchaseFrom: q.from,
+        purchaseTo: q.to,
       );
   return rows;
 });

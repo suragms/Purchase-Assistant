@@ -3,30 +3,21 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:intl/intl.dart';
 
-import '../../../core/auth/session_notifier.dart';
-import '../../../core/json_coerce.dart';
+import '../../../core/auth/session_notifier.dart' show hexaApiProvider, sessionProvider;
 import '../../../core/models/session.dart';
 import '../../../core/models/trade_purchase_models.dart';
 import '../../../core/providers/home_dashboard_provider.dart'
     show bustHomeDashboardVolatileCaches, homeDashboardDataProvider;
 import '../../../core/providers/home_owner_dashboard_providers.dart'
     show
-        activeSessionsCountProvider,
-        activeStaffSessionsProvider,
         homeMonthDashboardDataProvider,
         homeRecentActivityFeedProvider,
-        homeRecentPurchasesCompactProvider,
         homeTodayDashboardDataProvider,
         stockAlertCountsProvider,
-        stockAuditDayProvider,
+        stockAuditPeriodProvider,
         stockLowTopHomeProvider,
         stockVariancesTodayProvider;
-import 'widgets/home_owner_dashboard_sections.dart';
-import 'widgets/daily_stock_report_sheet.dart';
-import 'widgets/stock_health_score.dart';
-import '../../stock/presentation/widgets/stock_today_feed.dart';
 import '../../../core/providers/purchase_post_save_provider.dart';
 import '../../../core/notifications/local_notifications_service.dart';
 import '../../../core/providers/connectivity_provider.dart';
@@ -34,29 +25,26 @@ import '../../../core/providers/notifications_provider.dart'
     show notificationsUnreadCountProvider;
 import '../../../core/providers/prefs_provider.dart';
 import '../../../core/providers/server_notifications_provider.dart';
-import '../../../core/providers/stock_providers.dart';
 import '../../../core/theme/hexa_colors.dart';
-import '../../../core/widgets/friendly_load_error.dart';
-import '../../../shared/widgets/operational_ui.dart';
-import '../../../shared/widgets/shell_quick_ref_actions.dart';
 import '../../purchase/presentation/widgets/purchase_saved_sheet.dart';
 import '../../purchase/presentation/widgets/resume_purchase_draft_banner.dart';
-
-String _inr(num n) =>
-    NumberFormat.currency(locale: 'en_IN', symbol: '₹', decimalDigits: 0)
-        .format(n);
+import 'widgets/daily_stock_report_sheet.dart';
+import 'widgets/home_category_pills.dart';
+import 'widgets/home_compact_header.dart';
+import 'widgets/home_kpi_strip.dart';
+import 'widgets/home_live_status_bar.dart';
+import 'widgets/home_low_stock_section.dart';
+import 'widgets/home_period_filter_row.dart';
+import 'widgets/home_quick_actions_grid.dart';
+import 'widgets/home_recent_changes_section.dart';
+import 'widgets/home_stock_movement_section.dart';
 
 bool _sessionIsOwner(Session s) {
   final r = s.primaryBusiness.role.toLowerCase();
   return r == 'owner' || r == 'super_admin' || s.isSuperAdmin;
 }
 
-DateTime _todayDate() {
-  final now = DateTime.now();
-  return DateTime(now.year, now.month, now.day);
-}
-
-/// Harisree owner home: quick actions, today stats, stock, audits, recent purchases.
+/// Harisree owner home — dense industrial warehouse operations dashboard.
 class HomePage extends ConsumerStatefulWidget {
   const HomePage({super.key});
 
@@ -65,7 +53,7 @@ class HomePage extends ConsumerStatefulWidget {
 }
 
 class _HomePageState extends ConsumerState<HomePage>
-    with WidgetsBindingObserver, SingleTickerProviderStateMixin {
+    with WidgetsBindingObserver {
   Timer? _poll;
   Timer? _rtPoll;
   Timer? _resumeRefreshDebounce;
@@ -74,7 +62,6 @@ class _HomePageState extends ConsumerState<HomePage>
   int _lastNotifiedLowCount = 0;
   final _notifiedStaffPurchaseIds = <String>{};
   AppLifecycleState _lifecycle = AppLifecycleState.resumed;
-  late final AnimationController _livePulse;
   DateTime? _lastRefreshedAt;
   DateTime? _lastThrottledInvalidate;
 
@@ -94,25 +81,19 @@ class _HomePageState extends ConsumerState<HomePage>
 
   void _invalidateHomeDataProviders() {
     bustHomeDashboardVolatileCaches();
+    ref.invalidate(homeDashboardDataProvider);
     ref.invalidate(homeTodayDashboardDataProvider);
     ref.invalidate(homeMonthDashboardDataProvider);
     ref.invalidate(stockAlertCountsProvider);
     ref.invalidate(stockLowTopHomeProvider);
-    ref.invalidate(stockAuditDayProvider(_todayDate()));
+    ref.invalidate(stockAuditPeriodProvider);
     ref.invalidate(stockVariancesTodayProvider);
-    ref.invalidate(activeSessionsCountProvider);
-    ref.invalidate(activeStaffSessionsProvider);
-    ref.invalidate(homeRecentPurchasesCompactProvider);
     ref.invalidate(homeRecentActivityFeedProvider);
   }
 
   @override
   void initState() {
     super.initState();
-    _livePulse = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1200),
-    )..repeat(reverse: true);
     _lastRefreshedAt = DateTime.now();
     WidgetsBinding.instance.addObserver(this);
     _poll = Timer.periodic(const Duration(minutes: 5), (_) {
@@ -181,7 +162,6 @@ class _HomePageState extends ConsumerState<HomePage>
 
   @override
   void dispose() {
-    _livePulse.dispose();
     _poll?.cancel();
     _rtPoll?.cancel();
     _resumeRefreshDebounce?.cancel();
@@ -230,22 +210,41 @@ class _HomePageState extends ConsumerState<HomePage>
 
   Future<void> _refresh() async {
     if (_throttleHomeInvalidate()) return;
-    ref.invalidate(homeDashboardDataProvider);
     _invalidateHomeDataProviders();
     if (mounted) setState(() => _lastRefreshedAt = DateTime.now());
   }
 
-  String _liveStatsLine(int lowCount) {
-    final at = _lastRefreshedAt;
-    final ago = at == null
-        ? 'just now'
-        : () {
-            final d = DateTime.now().difference(at);
-            if (d.inSeconds < 60) return 'just now';
-            if (d.inMinutes < 60) return '${d.inMinutes}m ago';
-            return '${d.inHours}h ago';
-          }();
-    return 'Updated $ago · $lowCount low stock';
+  Future<void> _showAccountMenu() async {
+    final session = ref.read(sessionProvider);
+    if (session == null || !mounted) return;
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              title: Text(session.primaryBusiness.role.toUpperCase()),
+              subtitle: Text(
+                session.primaryBusiness.contactEmail ??
+                    session.primaryBusiness.phone ??
+                    session.primaryBusiness.name,
+              ),
+            ),
+            ListTile(
+              leading: const Icon(Icons.logout),
+              title: const Text('Sign out'),
+              onTap: () => Navigator.pop(ctx, 'logout'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (action == 'logout' && mounted) {
+      await ref.read(sessionProvider.notifier).logout();
+      if (mounted) context.go('/login');
+    }
   }
 
   @override
@@ -295,251 +294,71 @@ class _HomePageState extends ConsumerState<HomePage>
     final todayAsync = ref.watch(homeTodayDashboardDataProvider);
     final monthAsync = ref.watch(homeMonthDashboardDataProvider);
     final alertCountsAsync = ref.watch(stockAlertCountsProvider);
-    final alertCounts = alertCountsAsync.valueOrNull;
-    final lowRows = ref.watch(stockLowTopHomeProvider);
-    final todayDay = _todayDate();
-    final audits = ref.watch(stockAuditDayProvider(todayDay));
     final variances = ref.watch(stockVariancesTodayProvider);
-    final recentPurch = ref.watch(homeRecentPurchasesCompactProvider);
-    final stockHealth = StockHealthScore.compute(
-      lowCount: alertCounts?.low ?? 0,
-      criticalCount: alertCounts?.critical ?? 0,
-      outCount: 0,
-    );
-    final bellCount = ref.watch(notificationsUnreadCountProvider);
     final conn = ref.watch(connectivityResultsProvider);
     final offline =
         conn.valueOrNull != null && isOfflineResult(conn.valueOrNull!);
 
     return Scaffold(
       backgroundColor: HexaColors.brandBackground,
-      appBar: AppBar(
-        automaticallyImplyLeading: false,
-        backgroundColor: HexaColors.brandBackground,
-        surfaceTintColor: Colors.transparent,
-        scrolledUnderElevation: 0,
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                const Text(
-                  'Harisree Agency',
-                  style: TextStyle(
-                    fontWeight: FontWeight.w900,
-                    fontSize: 17,
-                    letterSpacing: -0.2,
-                    color: Color(0xFF0F172A),
-                  ),
-                ),
-                if (!offline) ...[
-                  const SizedBox(width: 8),
-                  FadeTransition(
-                    opacity: Tween<double>(begin: 0.45, end: 1).animate(
-                      CurvedAnimation(
-                        parent: _livePulse,
-                        curve: Curves.easeInOut,
-                      ),
-                    ),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 6,
-                        vertical: 2,
-                      ),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFE8F5E9),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(
-                          color: const Color(0xFF2E7D32),
-                          width: 0.8,
-                        ),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Container(
-                            width: 6,
-                            height: 6,
-                            decoration: const BoxDecoration(
-                              color: Color(0xFF2E7D32),
-                              shape: BoxShape.circle,
-                            ),
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            'Live',
-                            style: TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w800,
-                              color: Colors.green.shade800,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ] else ...[
-                  const SizedBox(width: 8),
-                  Text(
-                    'Offline',
-                    style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w700,
-                      color: Colors.grey.shade600,
-                    ),
-                  ),
-                ],
-              ],
-            ),
-            Text(
-              DateFormat('EEE, d MMM yyyy').format(DateTime.now()),
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: Colors.grey.shade600,
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          if (isOwner)
-            Padding(
-              padding: const EdgeInsets.only(right: 4),
-              child: StockHealthScoreBadge(health: stockHealth, compact: true),
-            ),
-          if (session != null)
-            PopupMenuButton<String>(
-              tooltip: 'Account',
-              offset: const Offset(0, 40),
-              child: CircleAvatar(
-                radius: 16,
-                backgroundColor: HexaColors.brandPrimary.withValues(alpha: 0.15),
-                child: Text(
-                  () {
-                    final t = session.primaryBusiness.effectiveDisplayTitle;
-                    return t.isNotEmpty ? t[0].toUpperCase() : 'H';
-                  }(),
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w800,
-                    fontSize: 14,
-                    color: HexaColors.brandPrimary,
-                  ),
-                ),
-              ),
-              onSelected: (v) async {
-                if (v == 'logout') {
-                  await ref.read(sessionProvider.notifier).logout();
-                  if (context.mounted) context.go('/login');
-                }
-              },
-              itemBuilder: (ctx) => [
-                PopupMenuItem(
-                  enabled: false,
-                  child: Text(
-                    session.primaryBusiness.role.toUpperCase(),
-                    style: const TextStyle(fontWeight: FontWeight.w700),
-                  ),
-                ),
-                const PopupMenuItem(
-                  value: 'logout',
-                  child: Text('Sign out'),
-                ),
-              ],
-            ),
-          IconButton(
-            tooltip: 'Notifications',
-            onPressed: () => context.push('/notifications'),
-            icon: Badge(
-              isLabelVisible: bellCount > 0,
-              label: Text(
-                bellCount > 99 ? '99+' : '$bellCount',
-                style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w800),
-              ),
-              child: const Icon(Icons.notifications_outlined),
-            ),
-          ),
-          ShellQuickRefActions(
-            onRefresh: _refresh,
-            suppressToolbarSearch: true,
-          ),
-        ],
-      ),
       body: SafeArea(
-        top: false,
-        bottom: true,
         child: RefreshIndicator(
           onRefresh: _refresh,
           child: ListView(
-            padding: const EdgeInsets.fromLTRB(16, 6, 16, 20),
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 20),
             children: [
+              HomeCompactHeader(
+                offline: offline,
+                onSettingsLongPress: _showAccountMenu,
+              ),
+              const SizedBox(height: 12),
               const ResumePurchaseDraftBanner(),
-              const SizedBox(height: 6),
-              _CircularQuickActionsRow(
+              if (isOwner) ...[
+                const HomePeriodFilterRow(),
+                const SizedBox(height: 12),
+              ],
+              HomeQuickActionsGrid(
                 isOwner: isOwner,
                 onScan: () => context.push('/barcode/scan'),
-                onAddStock: () => context.go('/stock'),
+                onStock: () => context.go('/stock'),
                 onPurchase: () => context.push('/purchase/new'),
                 onReports: () => context.go('/reports'),
-                onBulkPrint: () => context.push('/barcode/bulk-print'),
-                onUsers: () => context.push('/settings/users'),
-                onDailyReport: isOwner
+                onPrint: () => context.push('/barcode/bulk-print'),
+                onDaily: isOwner
                     ? () => DailyStockReportSheet.show(context)
                     : null,
+                onUsers: () => context.push('/settings/users'),
               ),
-              const SizedBox(height: 8),
-              if (isOwner && !offline)
-                OperationalLiveBanner(
-                  pulse: _livePulse,
-                  statsLine: _liveStatsLine(
-                    (alertCounts?.low ?? 0) + (alertCounts?.critical ?? 0),
-                  ),
-                ),
+              const SizedBox(height: 12),
               if (isOwner) ...[
-                const SizedBox(height: 10),
-                HomeQuickStatsRow(
+                HomeLiveStatusBar(
+                  offline: offline,
+                  lastRefreshedAt: _lastRefreshedAt,
+                ),
+                const SizedBox(height: 12),
+                HomeKpiStrip(
                   todayAsync: todayAsync,
                   monthAsync: monthAsync,
                   alertCountsAsync: alertCountsAsync,
                 ),
-                const SizedBox(height: 10),
-                const HomeStaffActivitySection(),
-                const SizedBox(height: 10),
-                const HomeRecentActivitySection(),
+                const SizedBox(height: 12),
+                const HomeCategoryPills(),
+                const SizedBox(height: 12),
+                const HomeRecentChangesSection(),
+                const SizedBox(height: 12),
               ],
-              const SizedBox(height: 10),
-              OperationalSection(
-                title: 'Low stock',
-                dense: true,
-                trailing: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    TextButton(
-                      onPressed: () => context.push('/stock/reorder'),
-                      child: const Text('Reorder', style: TextStyle(fontSize: 12)),
-                    ),
-                    TextButton(
-                      onPressed: () {
-                        ref.read(stockListQueryProvider.notifier).state =
-                            const StockListQuery(status: 'low', sort: 'stock_asc');
-                        context.go('/stock');
-                      },
-                      child: const Text('All', style: TextStyle(fontSize: 12)),
-                    ),
-                  ],
-                ),
-                child: _LowStockTable(rowsAsync: lowRows),
-              ),
+              const HomeLowStockSection(),
               variances.when(
                 loading: () => const SizedBox.shrink(),
                 error: (_, __) => const SizedBox.shrink(),
                 data: (rows) {
                   if (rows.isEmpty) return const SizedBox.shrink();
                   return Padding(
-                    padding: const EdgeInsets.only(bottom: 10),
+                    padding: const EdgeInsets.only(top: 12, bottom: 12),
                     child: Material(
                       color: const Color(0xFFFFF5F5),
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
+                        borderRadius: BorderRadius.circular(10),
                         side: const BorderSide(color: Color(0xFFC62828)),
                       ),
                       child: Padding(
@@ -552,37 +371,30 @@ class _HomePageState extends ConsumerState<HomePage>
                                 const Icon(
                                   Icons.warning_amber_rounded,
                                   color: Color(0xFFC62828),
-                                  size: 20,
+                                  size: 18,
                                 ),
                                 const SizedBox(width: 8),
                                 Expanded(
                                   child: Text(
-                                    'Stock variances · ${rows.length} item(s)',
+                                    'Pending verification · ${rows.length}',
                                     style: const TextStyle(
                                       fontWeight: FontWeight.w800,
-                                      fontSize: 14,
+                                      fontSize: 13,
                                     ),
                                   ),
                                 ),
                               ],
                             ),
                             const SizedBox(height: 6),
-                            Text(
-                              'Counted stock does not match purchase qty',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: Colors.grey.shade800,
-                              ),
-                            ),
-                            const SizedBox(height: 8),
                             for (final v in rows.take(3))
                               Padding(
-                                padding: const EdgeInsets.symmetric(vertical: 2),
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 2),
                                 child: Text(
                                   '${v['item_name'] ?? 'Item'}: expected '
                                   '${v['expected_qty'] ?? '—'} · found '
                                   '${v['found_qty'] ?? '—'}',
-                                  style: const TextStyle(fontSize: 12),
+                                  style: const TextStyle(fontSize: 11),
                                 ),
                               ),
                           ],
@@ -592,42 +404,8 @@ class _HomePageState extends ConsumerState<HomePage>
                   );
                 },
               ),
-              const SizedBox(height: 10),
-              OperationalSection(
-                title: "Today's stock movement",
-                dense: true,
-                trailing: TextButton(
-                  onPressed: () => context.push('/stock/today-feed'),
-                  child: const Text('View all', style: TextStyle(fontSize: 12)),
-                ),
-                child: audits.when(
-                  loading: () => const Center(
-                    child: Padding(
-                      padding: EdgeInsets.all(12),
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    ),
-                  ),
-                  error: (_, __) => FriendlyLoadError(
-                    message: 'Could not load stock movement',
-                    onRetry: () =>
-                        ref.invalidate(stockAuditDayProvider(todayDay)),
-                  ),
-                  data: (rows) => StockTodayFeed(
-                    rows: rows,
-                    maxRows: 6,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 10),
-              OperationalSection(
-                title: "Today's purchases",
-                dense: true,
-                trailing: TextButton(
-                  onPressed: () => context.go('/purchase'),
-                  child: const Text('History', style: TextStyle(fontSize: 12)),
-                ),
-                child: _RecentPurchasesCompact(rowsAsync: recentPurch),
-              ),
+              const SizedBox(height: 12),
+              const HomeStockMovementSection(),
             ],
           ),
         ),
@@ -672,204 +450,12 @@ class _HomePageState extends ConsumerState<HomePage>
   void _invalidateOwnerCachesFromContainer(ProviderContainer c) {
     bustHomeDashboardVolatileCaches();
     c.invalidate(homeTodayDashboardDataProvider);
+    c.invalidate(homeMonthDashboardDataProvider);
     c.invalidate(stockAlertCountsProvider);
     c.invalidate(stockLowTopHomeProvider);
-    c.invalidate(stockAuditDayProvider(_todayDate()));
+    c.invalidate(stockAuditPeriodProvider);
     c.invalidate(stockVariancesTodayProvider);
-    c.invalidate(activeSessionsCountProvider);
-    c.invalidate(activeStaffSessionsProvider);
-    c.invalidate(homeMonthDashboardDataProvider);
-    c.invalidate(homeRecentPurchasesCompactProvider);
     c.invalidate(homeRecentActivityFeedProvider);
-  }
-}
-
-class _CircularQuickActionsRow extends StatelessWidget {
-  const _CircularQuickActionsRow({
-    required this.isOwner,
-    required this.onScan,
-    required this.onAddStock,
-    required this.onPurchase,
-    required this.onReports,
-    required this.onBulkPrint,
-    required this.onUsers,
-    this.onDailyReport,
-  });
-
-  final bool isOwner;
-  final VoidCallback onScan;
-  final VoidCallback onAddStock;
-  final VoidCallback onPurchase;
-  final VoidCallback onReports;
-  final VoidCallback onBulkPrint;
-  final VoidCallback onUsers;
-  final VoidCallback? onDailyReport;
-
-  @override
-  Widget build(BuildContext context) {
-    final actions = <({String label, IconData icon, VoidCallback onTap})>[
-      (label: 'Scan', icon: Icons.qr_code_scanner_rounded, onTap: onScan),
-      (label: 'Stock', icon: Icons.inventory_2_outlined, onTap: onAddStock),
-      (label: 'Purchase', icon: Icons.add_shopping_cart_outlined, onTap: onPurchase),
-      (label: 'Reports', icon: Icons.bar_chart_outlined, onTap: onReports),
-      (label: 'Print', icon: Icons.print_outlined, onTap: onBulkPrint),
-      if (isOwner && onDailyReport != null)
-        (label: 'Daily', icon: Icons.summarize_outlined, onTap: onDailyReport!),
-      if (isOwner) (label: 'Users', icon: Icons.group_outlined, onTap: onUsers),
-    ];
-    final crossCount = isOwner ? 3 : 2;
-    return GridView.count(
-      crossAxisCount: crossCount,
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      mainAxisSpacing: 8,
-      crossAxisSpacing: 8,
-      childAspectRatio: 0.92,
-      children: [
-        for (final a in actions)
-          CircularQuickAction(
-            icon: a.icon,
-            label: a.label,
-            onTap: a.onTap,
-          ),
-      ],
-    );
-  }
-}
-
-class _LowStockTable extends ConsumerStatefulWidget {
-  const _LowStockTable({required this.rowsAsync});
-
-  final AsyncValue<List<Map<String, dynamic>>> rowsAsync;
-
-  @override
-  ConsumerState<_LowStockTable> createState() => _LowStockTableState();
-}
-
-class _LowStockTableState extends ConsumerState<_LowStockTable> {
-  bool _expanded = false;
-
-  @override
-  Widget build(BuildContext context) {
-    return widget.rowsAsync.when(
-      loading: () => const Center(child: Padding(
-        padding: EdgeInsets.all(16),
-        child: CircularProgressIndicator(strokeWidth: 2),
-      )),
-      error: (e, _) => FriendlyLoadError(
-        message: 'Could not load low stock alerts',
-        onRetry: () => ref.invalidate(stockLowTopHomeProvider),
-      ),
-      data: (rows) {
-        if (rows.isEmpty) {
-          return Text(
-            'No low-stock items',
-            style: TextStyle(color: Colors.grey.shade600, fontWeight: FontWeight.w600),
-          );
-        }
-        final visible = _expanded ? rows : rows.take(4).toList();
-        return Column(
-          children: [
-            for (var i = 0; i < visible.length; i++) ...[
-              ListTile(
-                dense: true,
-                visualDensity: VisualDensity.compact,
-                contentPadding: const EdgeInsets.symmetric(horizontal: 12),
-                title: Text(
-                  visible[i]['name']?.toString() ?? '—',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
-                ),
-                subtitle: Text(
-                  '${visible[i]['current_stock'] ?? '—'} / ${visible[i]['reorder_level'] ?? '—'} ${visible[i]['unit'] ?? ''}',
-                  style: const TextStyle(fontSize: 11),
-                ),
-                trailing: Text(
-                  (visible[i]['stock_status'] ?? '').toString(),
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w800,
-                    color: HexaColors.brandPrimary,
-                  ),
-                ),
-                onTap: () {
-                  final id = visible[i]['id']?.toString();
-                  if (id != null && id.isNotEmpty) {
-                    context.push('/catalog/item/$id');
-                  }
-                },
-              ),
-              if (i < visible.length - 1)
-                const Divider(height: 1, indent: 12, endIndent: 12),
-            ],
-            if (rows.length > 4)
-              TextButton(
-                onPressed: () => setState(() => _expanded = !_expanded),
-                child: Text(
-                  _expanded
-                      ? 'Show less'
-                      : 'Show all ${rows.length} low items →',
-                ),
-              ),
-          ],
-        );
-      },
-    );
-  }
-}
-
-class _RecentPurchasesCompact extends StatelessWidget {
-  const _RecentPurchasesCompact({required this.rowsAsync});
-
-  final AsyncValue<List<Map<String, dynamic>>> rowsAsync;
-
-  @override
-  Widget build(BuildContext context) {
-    return rowsAsync.when(
-      loading: () => const Center(child: Padding(
-        padding: EdgeInsets.all(12),
-        child: CircularProgressIndicator(strokeWidth: 2),
-      )),
-      error: (_, __) => const Text('Could not load purchases'),
-      data: (rows) {
-        if (rows.isEmpty) {
-          return Text('No purchases today', style: TextStyle(color: Colors.grey.shade600));
-        }
-        return Column(
-          children: [
-            for (var i = 0; i < rows.length; i++) ...[
-              ListTile(
-                dense: true,
-                visualDensity: VisualDensity.compact,
-                contentPadding: const EdgeInsets.symmetric(horizontal: 12),
-                title: Text(
-                  rows[i]['supplier_name']?.toString() ?? rows[i]['bill_no']?.toString() ?? 'Purchase',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
-                  ),
-                  subtitle: Text(
-                    rows[i]['purchase_date']?.toString() ?? '',
-                    style: const TextStyle(fontSize: 11),
-                  ),
-                  trailing: Text(
-                    _inr(coerceToDouble(rows[i]['total_amount'] ?? rows[i]['bill_total'] ?? 0)),
-                    style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 12),
-                  ),
-                  onTap: () {
-                    final id = rows[i]['id']?.toString();
-                    if (id != null && id.isNotEmpty) {
-                      context.push('/purchase/detail/$id');
-                    }
-                  },
-                ),
-              if (i < rows.length - 1)
-                const Divider(height: 1, indent: 12, endIndent: 12),
-            ],
-          ],
-        );
-      },
-    );
+    c.invalidate(homeDashboardDataProvider);
   }
 }

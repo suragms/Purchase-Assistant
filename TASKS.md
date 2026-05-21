@@ -50,6 +50,7 @@
 | UX-10 | Done | Barcode print route verified; stock long-press print route now URI-encodes item id |
 | UX-12 | Done | Barcode/report/supplier/item/broker/Purchase print-share filenames are descriptive and date-stamped |
 | PERF-01 | Done | Purchase item notes no longer trigger live totals rebuilds; full-page preview remains behind `RepaintBoundary` |
+| HOME-REBUILD | Done | Owner `/home` dense warehouse dashboard: global period chips, compact header/KPI/quick actions, grouped recent changes, deduped feeds, shell FAB 48dp |
 
 ---
 
