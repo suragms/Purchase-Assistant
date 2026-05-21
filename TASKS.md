@@ -113,6 +113,7 @@
 | Blocker | Mitigation |
 |---------|------------|
 | ~~Prod login 503~~ | **Fixed 2026-05-21** — Supabase missing `users.is_active` + `user_sessions` (applied `backend/sql/021–025` via MCP) |
+| ~~Prod schema drift~~ | **Fixed 2026-05-21** — Applied `026_stock_audits`, `ocr_correction_events`; Alembic `024_harisree_sql_parity`; audit: `python backend/scripts/schema_audit.py` |
 | Render service suspended | Resume `my-purchases-api` in Render dashboard if `/health` returns “Service Suspended” |
 | Render MCP workspace not selected | Select the Render workspace in Cursor before env/deploy inspection via MCP |
 | Android SDK missing locally | Install/configure Android SDK or set `ANDROID_HOME` before release APK build |

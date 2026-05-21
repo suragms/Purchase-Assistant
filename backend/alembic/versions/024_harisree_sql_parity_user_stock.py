@@ -18,11 +18,14 @@ depends_on: Union[str, Sequence[str], None] = None
 
 _SQL_DIR = Path(__file__).resolve().parents[2] / "sql"
 _SQL_FILES = (
+    "supabase_019_smart_unit_intelligence.sql",
     "021_stock_inventory.sql",
     "022_user_management.sql",
     "023_notifications.sql",
     "024_trade_line_tax_mode.sql",
     "025_reorder_list.sql",
+    "026_stock_audits.sql",
+    "supabase_020_ocr_learning.sql",
 )
 
 

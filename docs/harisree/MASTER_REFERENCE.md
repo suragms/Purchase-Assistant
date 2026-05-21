@@ -49,7 +49,9 @@ powershell -File scripts/verify-deploy.ps1
 ```
 
 **Vercel build:** `bash scripts/vercel-flutter-build.sh` (set `API_BASE_URL` + `GOOGLE_OAUTH_CLIENT_ID` in Vercel Production env).  
-**CORS:** Production API allows `https://purchase-assiastant.vercel.app` (code + set `CORS_ORIGINS` on Render).
+**CORS:** Production API allows `https://purchase-assiastant.vercel.app` and `https://purchase-assastant.vercel.app` (code + set `CORS_ORIGINS` on Render).
+
+**Schema parity:** Alembic head `024_harisree_sql_parity` runs `backend/sql/021–026` + `supabase_019/020`. If pages 500 with “column does not exist”, run `python backend/scripts/schema_audit.py` with production `DATABASE_URL`, then apply missing SQL via Supabase SQL editor or `AUTO_MIGRATE=1` on Render deploy.
 
 ---
 
