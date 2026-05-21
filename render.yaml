@@ -1,0 +1,17 @@
+# Render Blueprint reference — service is usually configured in the dashboard.
+# Sync: my-purchases-api → rootDir backend, healthCheckPath /health/ready
+services:
+  - type: web
+    name: my-purchases-api
+    runtime: python
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT --log-level info
+    healthCheckPath: /health/ready
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: AUTO_MIGRATE
+        value: "1"
+      # Set in dashboard (never commit secrets):
+      # DATABASE_URL, JWT_SECRET, CORS_ORIGINS, OPENAI_API_KEY, SENTRY_DSN

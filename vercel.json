@@ -3,6 +3,13 @@
   "installCommand": "npm install --ignore-scripts --no-audit --no-fund",
   "buildCommand": "bash scripts/vercel-flutter-build.sh",
   "outputDirectory": "flutter_app/build/web",
+  "build": {
+    "env": {
+      "BUILD_MAX_WORKERS_PER_TASK": "1",
+      "DART_VM_OPTIONS": "--max-old-space-size=3072",
+      "API_BASE_URL": "https://my-purchases-api.onrender.com"
+    }
+  },
   "headers": [
     {
       "source": "/index.html",

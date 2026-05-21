@@ -15,7 +15,7 @@
 | Today | May 20, 2026 |
 | Days building | 42 days |
 | Production score | 72 / 100 |
-| Backend | Render.com — **SUSPENDED** (resume before any test) |
+| Backend | Render.com — `my-purchases-api` ✅ (`/health`, `/health/ready`) |
 | Frontend admin | Vercel — purchase-assiastant.vercel.app ✅ |
 | Mobile app | Flutter — iOS 16+ / Android ✅ |
 | Database | Supabase PostgreSQL (free tier) |
@@ -35,22 +35,21 @@
 
 ---
 
-## 🚨 STEP 0 — RESUME RENDER BEFORE ANYTHING
+## 🚨 STEP 0 — RENDER + VERCEL SMOKE (before device QA)
 
-**The backend is SUSPENDED.** Every API call fails until you resume it.
+**If the API was manually suspended**, resume it first. When healthy:
 
 ```
-1. Go to https://render.com/dashboard
-2. Click "my-purchases-api"
-3. Click "Resume service" button
-4. Wait 60-90 seconds for cold start
-5. Test: curl https://my-purchases-api.onrender.com/health
-   Expected: { "status": "ok" }
-6. Only then open the Flutter app
+curl https://my-purchases-api.onrender.com/health
+curl https://my-purchases-api.onrender.com/health/ready
+# Expected: {"status":"ok"} and {"status":"ok","db":"ok",...}
+
+powershell -File scripts/verify-deploy.ps1
+# Expected: Render + Vercel smoke OK
 ```
 
-**Why it was suspended:** Render Starter plan ($7/month) suspends when you manually suspend.  
-It does NOT auto-suspend (that was old free tier behavior — Starter stays up 24/7 when resumed).
+**Vercel build:** `bash scripts/vercel-flutter-build.sh` (set `API_BASE_URL` + `GOOGLE_OAUTH_CLIENT_ID` in Vercel Production env).  
+**CORS:** Production API allows `https://purchase-assiastant.vercel.app` (code + set `CORS_ORIGINS` on Render).
 
 ---
 

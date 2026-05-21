@@ -390,6 +390,15 @@ _DEFAULT_LOCAL_CORS_ORIGINS = [
     "http://127.0.0.1:8092",
 ]
 _origins = [o.strip() for o in settings.cors_origins.split(",") if o.strip()]
+# Harisree production web (Vercel). Also set in Render CORS_ORIGINS; this prevents
+# credentialed Flutter web calls failing when env omits the Vercel hostname.
+if settings.app_env.lower() == "production":
+    for _prod_web in (
+        "https://purchase-assiastant.vercel.app",
+        "https://purchase-assistant.vercel.app",
+    ):
+        if _prod_web not in _origins:
+            _origins.append(_prod_web)
 if not _origins:
     _origins = list(_DEFAULT_LOCAL_CORS_ORIGINS)
 elif settings.app_env.lower() == "development":

@@ -112,7 +112,7 @@
 
 | Blocker | Mitigation |
 |---------|------------|
-| Render service suspended | Resume `my-purchases-api` before live `/health` and `/health/ready` checks |
+| Render service suspended | Resume `my-purchases-api` in Render dashboard if `/health` returns “Service Suspended” |
 | Render MCP workspace not selected | Select the Render workspace in Cursor before env/deploy inspection via MCP |
 | Android SDK missing locally | Install/configure Android SDK or set `ANDROID_HOME` before release APK build |
 | Flutter test generated asset lock | Retry focused Flutter tests after `build/unit_test_assets` is unlocked/cleaned |
@@ -128,7 +128,8 @@
 - [x] `flutter analyze` — 0 errors; existing warnings/info remain in purchase/catalog files
 - [x] Alembic heads checked locally — single head `023_catalog_business_active_partial`
 - [x] Monitoring code ready — Sentry env-gated; APScheduler DB keepalive runs every 48h; GitHub Supabase keep-alive workflow exists
-- [ ] Render: `/health/ready` → `db: ok`
+- [x] Render: `/health` + `/health/ready` → `db: ok` (verified 2026-05-21; keep-alive: `.github/workflows/render-keepalive.yml`)
+- [x] Vercel: Flutter web build hardened (`vercel.json` env + `scripts/vercel-flutter-build.sh`); smoke: `scripts/verify-deploy.ps1`
 - [ ] Supabase migrations (if hosted Postgres)
 - [ ] Env: `DATABASE_URL`, JWT, OpenAI scan key
 - [ ] Smoke: login → home → stock → purchase history → reports
