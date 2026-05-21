@@ -49,6 +49,16 @@ def test_login_by_email():
     assert r.json().get("access_token")
 
 
+def test_login_legacy_identifier_field():
+    """Older Flutter web builds POST `identifier` instead of `email`."""
+    pwd, staff_email, _owner, _bid, _h = _owner_with_staff()
+    r = client.post(
+        "/v1/auth/login",
+        json={"identifier": staff_email, "password": pwd},
+    )
+    assert r.status_code == 200, r.text
+
+
 def test_login_wrong_password():
     pwd, staff_email, _owner, _bid, _h = _owner_with_staff()
     r = client.post(

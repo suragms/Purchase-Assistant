@@ -225,6 +225,13 @@ class _LoginPageState extends ConsumerState<LoginPage> {
         });
         return;
       }
+      if (sc == 422) {
+        setState(() {
+          _inlineAuthError =
+              'Use your full login email (e.g. 1234567890@staff.harisree.local) and password from the owner.';
+        });
+        return;
+      }
       setState(() {
         _inlineAuthError = friendlyAuthError(e, context: AuthErrorContext.login);
       });

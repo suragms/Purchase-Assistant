@@ -2,22 +2,30 @@ import uuid
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, Field, field_validator
+import re
+
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class UserCreateIn(BaseModel):
     full_name: str = Field(min_length=1, max_length=255)
-    email: str = Field(min_length=5, max_length=320)
+    email: str | None = Field(default=None, min_length=5, max_length=320)
     phone: str = Field(min_length=6, max_length=32)
     role: str = Field(pattern="^(admin|manager|staff)$")
     password: str | None = None
     notes: str | None = Field(default=None, max_length=2000)
     is_active: bool = True
 
-    @field_validator("email")
-    @classmethod
-    def email_lower(cls, v: str) -> str:
-        return v.strip().lower()
+    @model_validator(mode="after")
+    def resolve_email(self) -> "UserCreateIn":
+        if self.email and self.email.strip():
+            object.__setattr__(self, "email", self.email.strip().lower())
+            return self
+        digits = re.sub(r"\D", "", self.phone or "")
+        if len(digits) < 6:
+            raise ValueError("Invalid phone")
+        object.__setattr__(self, "email", f"{digits}@staff.harisree.local")
+        return self
 
 
 class UserPatchIn(BaseModel):

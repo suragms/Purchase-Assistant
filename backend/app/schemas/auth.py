@@ -1,6 +1,6 @@
 import re
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class RegisterRequest(BaseModel):
@@ -34,15 +34,23 @@ class RegisterRequest(BaseModel):
 
 
 class LoginRequest(BaseModel):
-    """Warehouse staff login: email + password only."""
+    """Warehouse staff login: email + password (legacy clients may send `identifier`)."""
 
-    email: str = Field(..., min_length=5, max_length=320)
+    email: str | None = Field(default=None, min_length=5, max_length=320)
+    identifier: str | None = Field(
+        default=None,
+        max_length=320,
+        description="Deprecated alias for email — kept for older Flutter web builds.",
+    )
     password: str = Field(..., min_length=1, max_length=128)
 
-    @field_validator("email")
-    @classmethod
-    def email_lower(cls, v: str) -> str:
-        return v.strip().lower()
+    @model_validator(mode="after")
+    def resolve_email(self) -> "LoginRequest":
+        raw = (self.email or self.identifier or "").strip().lower()
+        if not raw or "@" not in raw:
+            raise ValueError("Sign in with your email address and password")
+        object.__setattr__(self, "email", raw)
+        return self
 
 
 class TokenPair(BaseModel):
