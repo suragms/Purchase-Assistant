@@ -106,7 +106,7 @@
 | SE-06 | P1 | Done | Operations API: daily usage + checklist; Flutter pages `/operations/*` |
 | SE-07 | P2 | Done | `/stock/missing-barcodes` alias; operational reports section on Reports |
 | SE-08 | P2 | Done | Voice route removed; `formatOperationalDate` helper |
-| SE-09 | P2 | Pending deploy | Apply `029` SQL on Supabase; device QA matrix |
+| SE-09 | P2 | Done | `029` + `030` on Supabase; `alembic_version` = `030_catalog_barcode` (2026-05-22) |
 
 ---
 
@@ -156,7 +156,7 @@
 | BC-06 | P1 | Done | Labels: symbology=barcode, PDF 2/4-col; bulk selection provider + debounce |
 | BC-07 | P1 | Done | `pytest test_barcode_item_code.py`; docs matrix in `MASTER_REFERENCE.md` |
 
-**Deploy:** `030_catalog_barcode` applied on Supabase **2026-05-22** via MCP (`harisree_030_catalog_barcode`). Redeploy backend/Flutter if still broken after hard refresh.
+**Deploy:** Supabase schema at Alembic **`030_catalog_barcode`** (2026-05-22): MCP `harisree_030_catalog_barcode` + `alembic upgrade head` stamped `029→030`. Columns: `barcode`, `eviction_days`, `daily_usage_logs`, etc.
 
 **E2E prod (2026-05-22):** Use **https://purchase-assiastant.vercel.app** (not `purchase-assistant.vercel.app`). `/stock` crash root cause: `as num?` on API decimal **strings** — fixed with `coerceToDouble` in stock rows. Push + Vercel redeploy required.
 
@@ -173,7 +173,7 @@
 | UX-05 | P1 | Done | Bulk print: sticky bottom bar, 64dp rows, Wrap filters, determinate progress, desktop 2-col ≥900px |
 | UX-06 | P1 | Done | Item code edit on catalog detail + barcode print; missing-labels 64dp rows |
 | UX-07 | P1 | Done | Shell FAB 56dp / bottom bar 60dp; stock `perPage` 50 + `coerceToDouble` audit on hot paths |
-| UX-08 | P2 | Pending deploy | Push `main` → Vercel prod; smoke: `/home`, `/stock`, `/barcode/scan`, `/barcode/bulk-print` |
+| UX-08 | P2 | Done | Pushed `57655a2`; Vercel prod smoke: `/home`, `/stock`, `/barcode/scan`, `/barcode/bulk-print` |
 
 **E2E checklist (purchase-assiastant):** hard refresh → home tabs/accordions → stock scroll + filters → scan manual code → bulk select + PDF preview → missing-labels tabs.
 
