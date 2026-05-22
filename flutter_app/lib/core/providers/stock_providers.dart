@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../auth/session_notifier.dart';
+import 'home_dashboard_provider.dart';
 
 /// Query for GET `/v1/businesses/{id}/stock/list`.
 class StockListQuery {
@@ -84,28 +85,48 @@ final stockItemIntelligenceProvider = FutureProvider.autoDispose
 final stockListQueryProvider =
     StateProvider<StockListQuery>((_) => const StockListQuery());
 
-/// Client-side filters (missing barcode, unit, eviction) shared by stock + bulk print.
+/// Stock list period chips (Today / Week / Month / Year).
+final stockPagePeriodProvider =
+    StateProvider<HomePeriod>((_) => HomePeriod.today);
+
+/// Tablet/desktop split pane selection.
+final stockSelectedItemIdProvider = StateProvider<String?>((ref) => null);
+
+/// Client-side filters shared by stock + bulk print.
 class StockOperationalFilters {
   const StockOperationalFilters({
     this.missingBarcodeOnly = false,
+    this.missingItemCodeOnly = false,
+    this.reorderOnly = false,
     this.evictionOnly = false,
     this.unit = '',
   });
 
   final bool missingBarcodeOnly;
+  final bool missingItemCodeOnly;
+  final bool reorderOnly;
   final bool evictionOnly;
   /// Empty = all units; else match `unit` field lowercased.
   final String unit;
 
   StockOperationalFilters copyWith({
     bool? missingBarcodeOnly,
+    bool? missingItemCodeOnly,
+    bool? reorderOnly,
     bool? evictionOnly,
     String? unit,
+    bool clearUnit = false,
+    bool clearMissingItemCode = false,
+    bool clearEviction = false,
   }) {
     return StockOperationalFilters(
       missingBarcodeOnly: missingBarcodeOnly ?? this.missingBarcodeOnly,
-      evictionOnly: evictionOnly ?? this.evictionOnly,
-      unit: unit ?? this.unit,
+      missingItemCodeOnly: clearMissingItemCode
+          ? false
+          : (missingItemCodeOnly ?? this.missingItemCodeOnly),
+      reorderOnly: reorderOnly ?? this.reorderOnly,
+      evictionOnly: clearEviction ? false : (evictionOnly ?? this.evictionOnly),
+      unit: clearUnit ? '' : (unit ?? this.unit),
     );
   }
 }
@@ -124,6 +145,8 @@ int countOperationalActiveFilters(StockListQuery q, StockOperationalFilters op) 
   if (q.status != 'all') n++;
   if (q.sort != 'name') n++;
   if (op.missingBarcodeOnly) n++;
+  if (op.missingItemCodeOnly) n++;
+  if (op.reorderOnly) n++;
   if (op.evictionOnly) n++;
   if (op.unit.isNotEmpty) n++;
   return n;

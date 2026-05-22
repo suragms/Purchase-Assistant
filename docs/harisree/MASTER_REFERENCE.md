@@ -202,10 +202,10 @@ Use `flutter_app/lib/core/design_system/hexa_operational_tokens.dart` on **opera
 | `chipHeight` | 36dp | Filters, horizontal alert pills |
 | `listRowMin` / `listRowMax` | 64–72dp | Stock rows, bulk print, missing labels |
 | `collapsedHeader` | 52dp | Home accordions (default collapsed) |
-| `bottomNavMax` | 60dp | Owner shell bottom bar |
+| `bottomNavMax` | 56dp | Owner shell bottom bar (20dp nav icons) |
 | `fabSize` | 56dp | Center scan FAB |
 
-Owner home: 3×2 quick actions, horizontal `HomeMultiAlertStrip` pills, compact stock totals (Purchased \| Current \| Variance). Scanner: post-scan `scan_stock_result_sheet` (+1/+5). Bulk print: sticky Preview/PDF/Print, search + filter icon (no category chip wall), desktop preview panel ≥1100px. Filters: `showOperationalStockFilter` (bottom sheet / 320px side panel). Errors: `barcodeMessageForUser` — never bare "Something went wrong" on barcode/PDF paths.
+Owner home: 3×2 quick actions, horizontal `HomeMultiAlertStrip` pills, compact stock totals (Purchased \| Current \| Variance). **Stock list:** single dense list (`StockOperationalRow` 72dp); sticky 32dp period/unit/status pills on page; category/supplier/reorder/missing filters in `showOperationalStockFilter` only; quick edit `showStockQuickEditSheet`; 4 app-bar icons + scroll-hiding mini scan FAB. Scanner: post-scan `scan_stock_result_sheet` (+1/+5). Bulk print: sticky Preview/PDF/Print, search + filter icon, desktop preview panel ≥1100px. Errors: `barcodeMessageForUser` / `friendlyApiError` — never bare "Something went wrong" on barcode/PDF/stock patch paths.
 
 ### Typography (warehouse-grade, old-person friendly)
 
@@ -542,7 +542,8 @@ ROUTE                          PAGE FILE                          ROLE    STATUS
 
 ── OWNER / MANAGER SHELL ──────────────────────────────────────────────────────
 /home                          home_page.dart                     owner   ✅ done (analytics card: on-hand strip + period purchased strip, ring/tabs sync, collapse; `shell_bundle` adds `stock_in_hand`/`purchased` on home-overview)
-/stock                         stock_page.dart                    all     ✅ done (3 sections: eviction/low/all; row = name+unit, ITM code, cat·sub, bar, Stock/Today+/Used−, last updater; scan FAB; bulk actions)
+/stock                         stock_page.dart                    owner   ✅ done (flat warehouse list; sticky Today/Week/Month/Year + unit + status pills; 72dp row; filter sheet for category/supplier; quick edit sheet; mini FAB)
+/staff/stock                   stock_page.dart (staff mode)       staff   ✅ done (same list; no Year period chip; intelligence hides owner analytics)
 /reports                       reports_page.dart                  owner   ✅ done (KEEP RING CHART)
 /purchase                      purchase_home_page.dart            all     ✅ done
 /search                        search_page.dart                   all     ✅ done

@@ -16,7 +16,7 @@ abstract final class HexaOp {
   static const double listRowMin = 64;
   static const double listRowMax = 72;
   static const double collapsedHeader = 52;
-  static const double bottomNavMax = 60;
+  static const double bottomNavMax = 56;
   static const double fabSize = 56;
   static const double quickActionIcon = 48;
 

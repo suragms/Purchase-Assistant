@@ -392,7 +392,7 @@ class _ShellNavTile extends StatelessWidget {
       onTap: onTap,
       borderRadius: BorderRadius.circular(14),
       child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 6),
+        padding: const EdgeInsets.symmetric(vertical: 4),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -414,7 +414,7 @@ class _ShellNavTile extends StatelessWidget {
                 ),
                 child: Icon(
                   ic,
-                  size: 24,
+                  size: 20,
                   color: selected ? HexaColors.brandPrimary : cs.onSurfaceVariant,
                 ),
               ),

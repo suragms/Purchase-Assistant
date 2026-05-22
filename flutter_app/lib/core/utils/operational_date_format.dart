@@ -12,7 +12,21 @@ String formatOperationalDateFromIso(String? iso) {
   return formatOperationalDate(d);
 }
 
-/// e.g. "Rajan · 10:22am" for stock row last-update line.
+/// Compact stock row footer: "10:22am · Rajan".
+String formatStockRowUpdateLine({
+  String? updatedBy,
+  String? updatedAtIso,
+}) {
+  if (updatedAtIso == null || updatedAtIso.isEmpty) return '';
+  final dt = DateTime.tryParse(updatedAtIso);
+  if (dt == null) return updatedBy?.trim() ?? '';
+  final time = DateFormat('h:mma').format(dt.toLocal()).toLowerCase();
+  final by = updatedBy?.trim();
+  if (by != null && by.isNotEmpty) return '$time · $by';
+  return time;
+}
+
+/// e.g. "Last update: Rajan · 10:22am" for legacy screens.
 String formatLastStockUpdateLine({
   String? updatedBy,
   String? updatedAtIso,

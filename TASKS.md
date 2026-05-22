@@ -162,6 +162,20 @@
 
 ---
 
+## Sprint 18 — Stock warehouse list rebuild (May 22 2026)
+
+| ID | Priority | Status | Summary |
+|----|----------|--------|---------|
+| ST-01 | P0 | Done | `stock_page.dart`: flat 72dp rows, sticky 32dp period/unit/status pills, 4-icon app bar |
+| ST-02 | P0 | Done | `stock_quick_edit_sheet` (+1/+5/manual/reason); `stock_operational_row`; period via `stockPagePeriodProvider` |
+| ST-03 | P1 | Done | Advanced filter sheet only (category/supplier/reorder/missing code/barcode); bulk actions in sheet footer |
+| ST-04 | P1 | Done | Staff `/staff/stock` `StockPageMode.staff`; desktop ≥1100 split + `Item detail` intelligence |
+| ST-05 | P1 | Done | Shell bottom nav 56dp / 20dp icons; scroll-hiding 48dp scan FAB |
+
+**E2E:** stock filters instant apply → quick edit → row detail → staff route hides owner analytics.
+
+---
+
 ## Sprint 17 — Production UX + PDF/print (May 22 2026)
 
 | ID | Priority | Status | Summary |

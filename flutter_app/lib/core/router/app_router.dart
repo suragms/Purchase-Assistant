@@ -856,7 +856,8 @@ final appRouterProvider = Provider<GoRouter>((ref) {
               GoRoute(
                 path: '/stock',
                 name: 'stock_tab',
-                builder: (context, state) => const StockPage(),
+                builder: (context, state) =>
+                    const StockPage(mode: StockPageMode.owner),
               ),
             ],
           ),
@@ -918,7 +919,8 @@ final appRouterProvider = Provider<GoRouter>((ref) {
               GoRoute(
                 path: '/staff/stock',
                 name: 'staff_stock',
-                builder: (context, state) => const StockPage(),
+                builder: (context, state) =>
+                    const StockPage(mode: StockPageMode.staff),
               ),
             ],
           ),

@@ -1,22 +1,30 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../core/design_system/hexa_operational_tokens.dart';
+import '../../../core/auth/session_notifier.dart';
 import '../../../core/json_coerce.dart';
 import '../../../core/providers/stock_providers.dart';
-import '../../../core/utils/operational_date_format.dart';
-import '../../../core/utils/unit_utils.dart';
+import '../../../core/router/post_auth_route.dart';
 import '../../../core/widgets/friendly_load_error.dart';
 import '../../../core/widgets/list_skeleton.dart';
+import '../stock_period_utils.dart';
 import 'widgets/operational_stock_filter_sheet.dart';
-import 'widgets/stock_bulk_actions_sheet.dart';
-import 'widgets/stock_row_actions.dart';
+import 'widgets/stock_operational_row.dart';
+import 'widgets/stock_page_filter_header.dart';
+import 'stock_item_intelligence_page.dart';
+
+enum StockPageMode { auto, staff, owner }
+
+const _kStockDetailPaneBreakpoint = 1100.0;
 
 class StockPage extends ConsumerStatefulWidget {
-  const StockPage({super.key});
+  const StockPage({super.key, this.mode = StockPageMode.auto});
+
+  final StockPageMode mode;
 
   @override
   ConsumerState<StockPage> createState() => _StockPageState();
@@ -29,17 +37,19 @@ class _StockPageState extends ConsumerState<StockPage> {
   Timer? _debounce;
   bool _loadingMore = false;
   bool _searchExpanded = false;
+  bool _fabVisible = true;
 
   @override
   void initState() {
     super.initState();
     _searchCtrl.addListener(_onSearchChanged);
     _subcatCtrl.text = ref.read(stockListQueryProvider).subcategory;
-    _scroll.addListener(_onScrollLoadMore);
+    _scroll.addListener(_onScroll);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
+      applyStockPagePeriod(ref, ref.read(stockPagePeriodProvider));
       ref.read(stockListQueryProvider.notifier).state =
-          const StockListQuery(perPage: 50, page: 1);
+          ref.read(stockListQueryProvider).copyWith(perPage: 50, page: 1);
     });
   }
 
@@ -52,6 +62,13 @@ class _StockPageState extends ConsumerState<StockPage> {
     super.dispose();
   }
 
+  bool get _isStaffMode {
+    if (widget.mode == StockPageMode.staff) return true;
+    if (widget.mode == StockPageMode.owner) return false;
+    final session = ref.read(sessionProvider);
+    return session != null && sessionIsStaff(session);
+  }
+
   void _onSearchChanged() {
     _debounce?.cancel();
     _debounce = Timer(const Duration(milliseconds: 300), () {
@@ -61,7 +78,21 @@ class _StockPageState extends ConsumerState<StockPage> {
                 q: _searchCtrl.text.trim(),
                 page: 1,
               );
+      ref.read(stockSelectedItemIdProvider.notifier).state = null;
     });
+  }
+
+  void _onScroll() {
+    _onScrollLoadMore();
+    if (!_scroll.hasClients) return;
+    final dir = _scroll.position.userScrollDirection;
+    if (dir == ScrollDirection.reverse && _fabVisible) {
+      setState(() => _fabVisible = false);
+    } else if ((dir == ScrollDirection.forward ||
+            _scroll.position.pixels <= 24) &&
+        !_fabVisible) {
+      setState(() => _fabVisible = true);
+    }
   }
 
   void _onScrollLoadMore() {
@@ -78,19 +109,40 @@ class _StockPageState extends ConsumerState<StockPage> {
         q.copyWith(page: q.page + 1);
   }
 
-  List<Map<String, dynamic>> _clientFilter(List<Map<String, dynamic>> items) {
+  List<Map<String, dynamic>> _prepareItems(List<Map<String, dynamic>> raw) {
     final op = ref.read(stockOperationalFiltersProvider);
-    return items.where((it) {
-      if (op.missingBarcodeOnly && it['missing_barcode'] != true) {
-        return false;
+    final q = ref.read(stockListQueryProvider);
+    var items = filterStockListClient(raw, op);
+    if (q.supplier.isNotEmpty) {
+      items = items
+          .where(
+            (it) =>
+                (it['supplier_name']?.toString() ?? '').trim() == q.supplier,
+          )
+          .toList();
+    }
+    sortStockListOperational(items);
+    return items;
+  }
+
+  void _toggleSearch() {
+    setState(() {
+      _searchExpanded = !_searchExpanded;
+      if (!_searchExpanded) {
+        _searchCtrl.clear();
       }
-      if (op.evictionOnly && it['needs_eviction'] != true) return false;
-      if (op.unit.isNotEmpty) {
-        final u = (it['unit']?.toString() ?? '').toLowerCase();
-        if (u != op.unit) return false;
-      }
-      return true;
-    }).toList();
+    });
+  }
+
+  void _openItem(Map<String, dynamic> item) {
+    final id = item['id']?.toString();
+    if (id == null || id.isEmpty) return;
+    final wide = MediaQuery.sizeOf(context).width >= _kStockDetailPaneBreakpoint;
+    if (wide) {
+      ref.read(stockSelectedItemIdProvider.notifier).state = id;
+    } else {
+      context.push('/stock/intelligence/$id');
+    }
   }
 
   @override
@@ -102,40 +154,27 @@ class _StockPageState extends ConsumerState<StockPage> {
         setState(() => _loadingMore = false);
       });
     });
+
     final listAsync = ref.watch(stockListProvider);
     final listQ = ref.watch(stockListQueryProvider);
     final op = ref.watch(stockOperationalFiltersProvider);
     final filterCount = countOperationalActiveFilters(listQ, op);
+    final selectedId = ref.watch(stockSelectedItemIdProvider);
+    final width = MediaQuery.sizeOf(context).width;
+    final useSplit = width >= _kStockDetailPaneBreakpoint;
+    final includePeriod = listQ.includePeriod;
 
     return Scaffold(
       backgroundColor: const Color(0xFFF5F3EE),
       appBar: AppBar(
         backgroundColor: const Color(0xFFF5F3EE),
         foregroundColor: const Color(0xFF1A1A1A),
-        title: _searchExpanded
-            ? TextField(
-                controller: _searchCtrl,
-                autofocus: true,
-                decoration: const InputDecoration(
-                  hintText: 'Search stock…',
-                  border: InputBorder.none,
-                ),
-              )
-            : const Text('Stock'),
+        title: const Text('Stock', style: TextStyle(fontSize: 18)),
         actions: [
           IconButton(
             icon: Icon(_searchExpanded ? Icons.close : Icons.search),
-            onPressed: () {
-              setState(() {
-                _searchExpanded = !_searchExpanded;
-                if (!_searchExpanded) _searchCtrl.clear();
-              });
-            },
-          ),
-          IconButton(
-            icon: const Icon(Icons.layers_outlined),
-            tooltip: 'Bulk actions',
-            onPressed: () => showStockBulkActionsSheet(context: context, ref: ref),
+            tooltip: 'Search',
+            onPressed: _toggleSearch,
           ),
           IconButton(
             tooltip: 'Filters',
@@ -143,6 +182,7 @@ class _StockPageState extends ConsumerState<StockPage> {
               context: context,
               ref: ref,
               subcategoryCtrl: _subcatCtrl,
+              isStaffMode: _isStaffMode,
             ),
             icon: Badge(
               isLabelVisible: filterCount > 0,
@@ -157,20 +197,28 @@ class _StockPageState extends ConsumerState<StockPage> {
           ),
           IconButton(
             icon: const Icon(Icons.add),
-            tooltip: 'Quick add',
+            tooltip: 'Add item',
             onPressed: () => context.push('/catalog/quick-add'),
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => context.push('/barcode/scan?return=stock'),
-        backgroundColor: const Color(0xFF3B6D11),
-        foregroundColor: Colors.white,
-        icon: const Icon(Icons.qr_code_scanner),
-        label: const Text('Scan'),
+      floatingActionButton: AnimatedSlide(
+        duration: const Duration(milliseconds: 200),
+        offset: _fabVisible ? Offset.zero : const Offset(0, 2),
+        child: AnimatedOpacity(
+          duration: const Duration(milliseconds: 200),
+          opacity: _fabVisible ? 1 : 0,
+          child: FloatingActionButton.small(
+            heroTag: 'stock-scan',
+            backgroundColor: const Color(0xFF3B6D11),
+            foregroundColor: Colors.white,
+            onPressed: () => context.push('/barcode/scan?return=stock'),
+            child: const Icon(Icons.qr_code_scanner, size: 22),
+          ),
+        ),
       ),
       body: listAsync.when(
-        loading: () => const ListSkeleton(rowCount: 8),
+        loading: () => const ListSkeleton(rowCount: 10),
         error: (e, _) => FriendlyLoadError(
           onRetry: () => ref.invalidate(stockListProvider),
         ),
@@ -179,18 +227,9 @@ class _StockPageState extends ConsumerState<StockPage> {
             for (final e in (data['items'] as List? ?? []))
               if (e is Map) Map<String, dynamic>.from(e),
           ];
-          final items = _clientFilter(raw);
-          final eviction = items.where((i) => i['needs_eviction'] == true).toList();
-          final low = items
-              .where((i) {
-                final st = i['stock_status']?.toString() ?? '';
-                return (st == 'low' || st == 'critical' || st == 'out') &&
-                    i['needs_eviction'] != true;
-              })
-              .toList();
-          final all = items;
+          final items = _prepareItems(raw);
 
-          return RefreshIndicator(
+          final listBody = RefreshIndicator(
             onRefresh: () async {
               ref.invalidate(stockListProvider);
               await ref.read(stockListProvider.future);
@@ -198,333 +237,87 @@ class _StockPageState extends ConsumerState<StockPage> {
             child: CustomScrollView(
               controller: _scroll,
               slivers: [
-                SliverToBoxAdapter(child: _filterSummaryChip(listQ, op)),
-                if (eviction.isNotEmpty) ...[
-                  _sectionHeader('Needs eviction', color: const Color(0xFFA32D2D)),
-                  SliverList(
-                    delegate: SliverChildBuilderDelegate(
-                      (ctx, i) => RepaintBoundary(
-                        child: _StockEaseRow(
-                          item: eviction[i],
-                          highlight: StockRowHighlight.eviction,
-                          onMore: () => showStockRowActions(
-                            context: context,
-                            ref: ref,
-                            item: eviction[i],
-                          ),
-                          onTap: () => _openIntelligence(eviction[i]),
-                        ),
-                      ),
-                      childCount: eviction.length,
-                    ),
-                  ),
-                ],
-                if (low.isNotEmpty) ...[
-                  _sectionHeader('Low stock', color: const Color(0xFFBA7517)),
-                  SliverList(
-                    delegate: SliverChildBuilderDelegate(
-                      (ctx, i) => RepaintBoundary(
-                        child: _StockEaseRow(
-                          item: low[i],
-                          highlight: StockRowHighlight.low,
-                          onMore: () => showStockRowActions(
-                            context: context,
-                            ref: ref,
-                            item: low[i],
-                          ),
-                          onTap: () => _openIntelligence(low[i]),
-                        ),
-                      ),
-                      childCount: low.length,
-                    ),
-                  ),
-                ],
-                _sectionHeader('All items', color: const Color(0xFF3B6D11)),
-                SliverList(
-                  delegate: SliverChildBuilderDelegate(
-                    (ctx, i) {
-                      if (i >= all.length) {
-                        return _loadingMore
-                            ? const Padding(
-                                padding: EdgeInsets.all(16),
-                                child: Center(child: CircularProgressIndicator()),
-                              )
-                            : const SizedBox(height: 80);
-                      }
-                      return RepaintBoundary(
-                        child: _StockEaseRow(
-                          item: all[i],
-                          onMore: () => showStockRowActions(
-                            context: context,
-                            ref: ref,
-                            item: all[i],
-                          ),
-                          onTap: () => _openIntelligence(all[i]),
-                        ),
-                      );
-                    },
-                    childCount: all.length + 1,
+                SliverPersistentHeader(
+                  pinned: true,
+                  delegate: StockPageFilterSliverDelegate(
+                    searchExpanded: _searchExpanded,
+                    searchController: _searchCtrl,
+                    onSearchToggle: _toggleSearch,
+                    showYearPeriod: !_isStaffMode,
                   ),
                 ),
+                if (items.isEmpty)
+                  const SliverFillRemaining(
+                    hasScrollBody: false,
+                    child: Center(
+                      child: Text(
+                        'No items match filters',
+                        style: TextStyle(fontSize: 13, color: Colors.black54),
+                      ),
+                    ),
+                  )
+                else
+                  SliverList(
+                    delegate: SliverChildBuilderDelegate(
+                      (ctx, i) {
+                        if (i >= items.length) {
+                          return _loadingMore
+                              ? const Padding(
+                                  padding: EdgeInsets.all(16),
+                                  child: Center(
+                                    child: CircularProgressIndicator(),
+                                  ),
+                                )
+                              : const SizedBox(height: 72);
+                        }
+                        final item = items[i];
+                        return RepaintBoundary(
+                          child: StockOperationalRow(
+                            item: item,
+                            includePeriod: includePeriod,
+                            canEdit: true,
+                            onTap: () => _openItem(item),
+                          ),
+                        );
+                      },
+                      childCount: items.length + 1,
+                    ),
+                  ),
               ],
             ),
+          );
+
+          if (!useSplit) {
+            return listBody;
+          }
+
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(flex: 3, child: listBody),
+              const VerticalDivider(width: 1),
+              Expanded(
+                flex: 2,
+                child: selectedId == null
+                    ? const Center(
+                        child: Text(
+                          'Select an item',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: Colors.black45,
+                          ),
+                        ),
+                      )
+                    : StockItemIntelligencePage(
+                        itemId: selectedId,
+                        embedded: true,
+                        hideOwnerAnalytics: _isStaffMode,
+                      ),
+              ),
+            ],
           );
         },
       ),
     );
   }
-
-  void _openIntelligence(Map<String, dynamic> item) {
-    final id = item['id']?.toString();
-    if (id != null && id.isNotEmpty) {
-      context.push('/stock/intelligence/$id');
-    }
-  }
-
-  Widget _filterSummaryChip(StockListQuery q, StockOperationalFilters op) {
-    final summary = stockActiveFilterSummary(q, op);
-    if (summary.isEmpty) return const SizedBox(height: 4);
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(
-        HexaOp.pageGutter,
-        4,
-        HexaOp.pageGutter,
-        4,
-      ),
-      child: Wrap(
-        spacing: 8,
-        children: [
-          ActionChip(
-            label: Text('Filters: $summary', style: const TextStyle(fontSize: 11)),
-            onPressed: () => showOperationalStockFilter(
-              context: context,
-              ref: ref,
-              subcategoryCtrl: _subcatCtrl,
-            ),
-          ),
-          ActionChip(
-            avatar: const Icon(Icons.label_off_outlined, size: 18),
-            label: const Text('Missing labels'),
-            onPressed: () => context.push('/stock/missing-barcodes'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  SliverToBoxAdapter _sectionHeader(String title, {required Color color}) {
-    return SliverToBoxAdapter(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 16, 12, 8),
-        child: Row(
-          children: [
-            Container(
-              width: 4,
-              height: 20,
-              color: color,
-            ),
-            const SizedBox(width: 8),
-            Text(
-              title,
-              style: TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.w700,
-                color: color,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-enum StockRowHighlight { none, low, eviction }
-
-class _StockEaseRow extends StatelessWidget {
-  const _StockEaseRow({
-    required this.item,
-    required this.onMore,
-    required this.onTap,
-    this.highlight = StockRowHighlight.none,
-  });
-
-  final Map<String, dynamic> item;
-  final VoidCallback onMore;
-  final VoidCallback onTap;
-  final StockRowHighlight highlight;
-
-  @override
-  Widget build(BuildContext context) {
-    final name = item['name']?.toString() ?? '—';
-    final code = item['item_code']?.toString() ?? '—';
-    final unit = item['unit']?.toString() ?? '';
-    final cat = item['category_name']?.toString() ?? '';
-    final sub = item['subcategory_name']?.toString() ?? '';
-    final cur = coerceToDouble(item['current_stock']);
-    final reorder = coerceToDouble(item['reorder_level']);
-    final bought = coerceToDouble(item['purchased_today_qty']);
-    final used = coerceToDouble(item['usage_today_qty']);
-    final days = item['days_since_last_purchase'] as int?;
-
-    double? progress;
-    Color barColor = const Color(0xFF3B6D11);
-    if (reorder > 0) {
-      progress = (cur / reorder).clamp(0.0, 1.0);
-      if (cur <= 0) {
-        barColor = const Color(0xFFA32D2D);
-      } else if (cur <= reorder) {
-        barColor = const Color(0xFFBA7517);
-      }
-    }
-
-    final stockPrimary = stockDisplayPrimary(cur, unit);
-    final stockSecondary = stockDisplaySecondary(cur, unit, null, null);
-    final boughtLabel = bought > 0
-        ? 'Today: +${stockDisplayPrimary(bought, unit)}'
-        : 'Today: none';
-    final usedLabel = used > 0
-        ? 'Used: -${stockDisplayPrimary(used, unit)}'
-        : 'Used: —';
-    final lastLine = formatLastStockUpdateLine(
-      updatedBy: item['last_stock_updated_by']?.toString(),
-      updatedAtIso: item['last_stock_updated_at']?.toString(),
-    );
-
-    return Material(
-      color: Colors.white,
-      child: InkWell(
-        onTap: onTap,
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxHeight: HexaOp.listRowMax),
-          child: Padding(
-          padding: const EdgeInsets.symmetric(
-            horizontal: HexaOp.pageGutter,
-            vertical: 8,
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w600,
-                        fontSize: 15,
-                      ),
-                    ),
-                  ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFE8F5E0),
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    child: Text(
-                      unit.isEmpty ? '—' : unit.toUpperCase(),
-                      style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600),
-                    ),
-                  ),
-                  if (highlight == StockRowHighlight.eviction)
-                    Padding(
-                      padding: const EdgeInsets.only(left: 6),
-                      child: Chip(
-                        label: const Text('EVICT NOW', style: TextStyle(fontSize: 9)),
-                        backgroundColor: const Color(0xFFFFEBEE),
-                        padding: EdgeInsets.zero,
-                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      ),
-                    ),
-                ],
-              ),
-              Text(
-                code,
-                style: const TextStyle(fontSize: 12, color: Colors.black54),
-              ),
-              Text(
-                [cat, sub].where((s) => s.isNotEmpty).join(' · '),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontSize: 12, color: Colors.black54),
-              ),
-              if (progress != null) ...[
-                const SizedBox(height: 6),
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(2),
-                  child: LinearProgressIndicator(
-                    value: progress,
-                    minHeight: 4,
-                    backgroundColor: const Color(0xFFE0DDD8),
-                    color: barColor,
-                  ),
-                ),
-              ],
-              const SizedBox(height: 8),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: Text(
-                      stockSecondary != null
-                          ? 'Stock: $stockPrimary\n$stockSecondary'
-                          : 'Stock: $stockPrimary',
-                      style: valueStyle,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  Expanded(
-                    child: Text(
-                      boughtLabel,
-                      style: valueStyle,
-                      textAlign: TextAlign.center,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  Expanded(
-                    child: Text(
-                      usedLabel,
-                      style: valueStyle,
-                      textAlign: TextAlign.end,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.more_vert),
-                    onPressed: onMore,
-                    tooltip: 'Actions',
-                    constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
-                  ),
-                ],
-              ),
-              if (lastLine.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(top: 4),
-                  child: Text(
-                    lastLine,
-                    style: const TextStyle(fontSize: 11, color: Colors.black45),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              if (days != null && highlight == StockRowHighlight.eviction)
-                Text(
-                  '$days days since last purchase',
-                  style: const TextStyle(fontSize: 11, color: Color(0xFFA32D2D)),
-                ),
-            ],
-          ),
-        ),
-        ),
-      ),
-    );
-  }
-
-  static const valueStyle = TextStyle(fontSize: 12, fontWeight: FontWeight.w600);
 }
