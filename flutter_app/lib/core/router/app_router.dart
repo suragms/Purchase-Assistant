@@ -70,7 +70,10 @@ import '../../features/shell/shell_screen.dart';
 import '../../features/splash/presentation/splash_page.dart';
 import '../../features/admin/presentation/super_admin_page.dart';
 import '../../features/get_started/presentation/get_started_page.dart';
-import '../../features/voice/presentation/voice_page.dart';
+import '../../features/operations/presentation/daily_usage_page.dart';
+import '../../features/operations/presentation/staff_checklist_page.dart';
+import '../../features/catalog/presentation/catalog_duplicates_page.dart';
+import '../../features/stock/presentation/stock_operational_list_page.dart';
 
 final _rootNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'root');
 
@@ -81,6 +84,47 @@ bool _isOwnerShellTab(String loc) {
   if (loc == '/purchase') return true;
   if (loc == '/search') return true;
   return false;
+}
+
+/// Staff may only open operational routes (shell + stock/barcode/catalog helpers).
+bool _isStaffAllowedRoute(String loc) {
+  if (loc.startsWith('/staff')) return true;
+  if (loc == '/notifications') return true;
+  if (loc.startsWith('/barcode/')) return true;
+  if (loc == '/catalog/missing-codes' ||
+      loc == '/stock/missing-barcodes' ||
+      loc == '/catalog/quick-add' ||
+      loc.startsWith('/catalog/item/')) {
+    return true;
+  }
+  if (loc.startsWith('/operations/')) return true;
+  if (loc.startsWith('/stock/intelligence/') ||
+      loc.startsWith('/stock/') && loc.endsWith('/history')) {
+    return true;
+  }
+  if (loc.startsWith('/operations/')) return true;
+  return false;
+}
+
+String _staffRedirectForBlockedRoute(String loc) {
+  if (loc.startsWith('/purchase')) return '/staff/purchase-history';
+  if (loc.startsWith('/stock')) return '/staff/stock';
+  if (loc.startsWith('/search')) return '/staff/search';
+  if (loc.startsWith('/home')) return '/staff/home';
+  if (loc.startsWith('/reports') || loc.startsWith('/analytics')) {
+    return '/staff/home';
+  }
+  if (loc.startsWith('/settings') ||
+      loc == '/voice' ||
+      loc.startsWith('/contacts') ||
+      loc.startsWith('/supplier') ||
+      loc.startsWith('/broker') ||
+      loc == '/catalog' ||
+      loc.startsWith('/catalog/') && !_isStaffAllowedRoute(loc) ||
+      loc == '/admin') {
+    return '/staff/home';
+  }
+  return '/staff/home';
 }
 
 final appRouterProvider = Provider<GoRouter>((ref) {
@@ -148,15 +192,15 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         return '/settings';
       }
       if (sessionIsStaff(session)) {
-        if (loc.startsWith('/staff')) return null;
-        if (loc == '/reports' || loc.startsWith('/reports/')) {
-          return '/staff/home';
-        }
+        if (_isStaffAllowedRoute(loc)) return null;
         if (_isOwnerShellTab(loc)) {
           if (loc == '/stock') return '/staff/stock';
           if (loc == '/search') return '/staff/search';
           if (loc == '/home' || loc.startsWith('/home/')) return '/staff/home';
           return '/staff/home';
+        }
+        if (!_isStaffAllowedRoute(loc)) {
+          return _staffRedirectForBlockedRoute(loc);
         }
       } else {
         if (loc.startsWith('/staff')) return '/home';
@@ -259,6 +303,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           key: state.pageKey,
           child: const CatalogMissingCodesPage(),
         ),
+      ),
+      GoRoute(
+        path: '/stock/missing-barcodes',
+        redirect: (_, __) => '/catalog/missing-codes',
       ),
       GoRoute(
         path: '/catalog/setup-reorder-levels',
@@ -688,11 +736,45 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         ),
       ),
       GoRoute(
-        path: '/voice',
-        name: 'voice',
+        path: '/operations/usage',
         pageBuilder: (context, state) => iosPushPage(
           key: state.pageKey,
-          child: const VoicePage(),
+          child: const DailyUsagePage(),
+        ),
+      ),
+      GoRoute(
+        path: '/operations/checklist',
+        pageBuilder: (context, state) => iosPushPage(
+          key: state.pageKey,
+          child: const StaffChecklistPage(),
+        ),
+      ),
+      GoRoute(
+        path: '/catalog/duplicates',
+        pageBuilder: (context, state) => iosPushPage(
+          key: state.pageKey,
+          child: const CatalogDuplicatesPage(),
+        ),
+      ),
+      GoRoute(
+        path: '/stock/dead',
+        pageBuilder: (context, state) => iosPushPage(
+          key: state.pageKey,
+          child: const StockOperationalListPage(kind: StockOperationalListKind.dead),
+        ),
+      ),
+      GoRoute(
+        path: '/stock/fast-moving',
+        pageBuilder: (context, state) => iosPushPage(
+          key: state.pageKey,
+          child: const StockOperationalListPage(kind: StockOperationalListKind.fast),
+        ),
+      ),
+      GoRoute(
+        path: '/stock/slow-moving',
+        pageBuilder: (context, state) => iosPushPage(
+          key: state.pageKey,
+          child: const StockOperationalListPage(kind: StockOperationalListKind.slow),
         ),
       ),
       GoRoute(

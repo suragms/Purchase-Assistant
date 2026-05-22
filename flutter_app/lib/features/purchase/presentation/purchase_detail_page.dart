@@ -189,6 +189,14 @@ _Agg _buildAgg(TradePurchase p) {
   );
 }
 
+String _purchaseHistoryBackRoute(WidgetRef ref) {
+  final session = ref.read(sessionProvider);
+  if (session != null && sessionIsStaff(session)) {
+    return '/staff/purchase-history';
+  }
+  return '/purchase';
+}
+
 class PurchaseDetailPage extends ConsumerStatefulWidget {
   const PurchaseDetailPage({
     super.key,
@@ -261,7 +269,7 @@ class _PurchaseDetailPageState extends ConsumerState<PurchaseDetailPage> {
           appBar: AppBar(
             leading: IconButton(
               icon: const Icon(Icons.arrow_back_rounded),
-              onPressed: () => context.popOrGo('/purchase'),
+              onPressed: () => context.popOrGo(_purchaseHistoryBackRoute(ref)),
             ),
             title: const Text('Purchase'),
             backgroundColor: Colors.transparent,
@@ -286,7 +294,7 @@ class _PurchaseDetailPageState extends ConsumerState<PurchaseDetailPage> {
           appBar: AppBar(
             leading: IconButton(
               icon: const Icon(Icons.arrow_back_rounded),
-              onPressed: () => context.popOrGo('/purchase'),
+              onPressed: () => context.popOrGo(_purchaseHistoryBackRoute(ref)),
             ),
             title: const Text('Purchase'),
             backgroundColor: Colors.transparent,
@@ -401,7 +409,7 @@ class _LoadedPurchaseScaffold extends ConsumerWidget {
       ref.invalidate(tradePurchaseDetailProvider(p.id));
       if (!context.mounted) return;
       showTopSnack(context, 'Deleted');
-      context.popOrGo('/purchase');
+      context.popOrGo(_purchaseHistoryBackRoute(ref));
     } catch (e) {
       if (!context.mounted) return;
       showTopSnack(
@@ -498,7 +506,7 @@ class _LoadedPurchaseScaffold extends ConsumerWidget {
       appBar: AppBar(
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_rounded),
-          onPressed: () => context.popOrGo('/purchase'),
+          onPressed: () => context.popOrGo(_purchaseHistoryBackRoute(ref)),
         ),
         title: Text(p.humanId),
         backgroundColor: Colors.transparent,

@@ -557,6 +557,10 @@ def _ensure_catalog_items_stock_columns(sync_conn):
         alters.append("ALTER TABLE catalog_items ADD COLUMN last_stock_updated_at DATETIME NULL")
     if "last_stock_updated_by" not in cols:
         alters.append("ALTER TABLE catalog_items ADD COLUMN last_stock_updated_by VARCHAR(255) NULL")
+    if "eviction_days" not in cols:
+        alters.append("ALTER TABLE catalog_items ADD COLUMN eviction_days INTEGER NULL")
+    if "last_purchase_at" not in cols:
+        alters.append("ALTER TABLE catalog_items ADD COLUMN last_purchase_at DATETIME NULL")
     import logging
 
     log = logging.getLogger(__name__)

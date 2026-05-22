@@ -18,6 +18,7 @@ class ItemCategory(Base):
     id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
     business_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), ForeignKey("businesses.id"), index=True)
     name: Mapped[str] = mapped_column(String(255))
+    is_perishable: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
     items = relationship("CatalogItem", back_populates="category", cascade="all, delete-orphan")
@@ -107,6 +108,8 @@ class CatalogItem(Base):
     rack_location: Mapped[str | None] = mapped_column(String(100), nullable=True)
     last_stock_updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     last_stock_updated_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    eviction_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    last_purchase_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )

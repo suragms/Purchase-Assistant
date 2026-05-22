@@ -147,6 +147,7 @@ async def apply_confirmed_purchase_stock(
         item.current_stock = new_qty
         item.last_stock_updated_at = datetime.now(timezone.utc)
         item.last_stock_updated_by = display
+        item.last_purchase_at = datetime.now(timezone.utc)
         updates.append(
             {
                 "catalog_item_id": item.id,

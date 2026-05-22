@@ -163,6 +163,8 @@ class _HexaBootstrapState extends State<_HexaBootstrap> {
           isPaid: maintRepo.currentFor(now)?.isPaid ?? false,
           now: now,
         );
+        await LocalNotificationsService.instance
+            .scheduleStockEaseReminders(enabled: notifOptIn);
       }
 
       final container = ProviderContainer(

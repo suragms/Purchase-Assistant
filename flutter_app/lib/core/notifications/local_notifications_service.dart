@@ -539,6 +539,42 @@ class LocalNotificationsService {
     );
   }
 
+  static const _usageReminderId = 93010;
+  static const _checklistReminderId = 93011;
+  static const _lowStockDigestId = 93012;
+
+  /// Staff EOD usage, checklist, and owner low-stock digest (local only).
+  Future<void> scheduleStockEaseReminders({required bool enabled}) async {
+    if (kIsWeb || !_inited) return;
+    if (!enabled) {
+      await _p.cancel(_usageReminderId);
+      await _p.cancel(_checklistReminderId);
+      await _p.cancel(_lowStockDigestId);
+      return;
+    }
+    final loc = tz.local;
+    final usageAt = tz.TZDateTime(loc, loc.year, loc.month, loc.day, 18, 0);
+    final checklistAt =
+        tz.TZDateTime(loc, loc.year, loc.month, loc.day, 20, 30);
+    final digestAt = tz.TZDateTime(loc, loc.year, loc.month, loc.day, 9, 0);
+    for (final entry in [
+      (_usageReminderId, usageAt, 'Log today\'s usage', 'Submit daily usage before closing.'),
+      (_checklistReminderId, checklistAt, 'Finish shift checklist',
+          'Complete morning, midday, or evening tasks.'),
+      (_lowStockDigestId, digestAt, 'Low stock check', 'Review low and critical stock on Home.'),
+    ]) {
+      await _p.zonedSchedule(
+        id: entry.$1,
+        scheduledDate: entry.$2,
+        notificationDetails: _immediateDetails,
+        androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+        title: AppConfig.appName,
+        body: entry.$4,
+        matchDateTimeComponents: DateTimeComponents.time,
+      );
+    }
+  }
+
   /// Immediate alert (e.g. new in-app notification while app is backgrounded).
   Future<void> showStockOrInAppAlert({
     required String title,

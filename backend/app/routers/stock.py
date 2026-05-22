@@ -1,5 +1,5 @@
 import uuid
-from datetime import date, datetime, time, timezone
+from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
 from typing import Annotated, Literal
 
@@ -14,6 +14,7 @@ from app.services.staff_audit import log_staff_activity
 from app.models import (
     CatalogItem,
     CategoryType,
+    DailyUsageLog,
     ItemCategory,
     Membership,
     Supplier,
@@ -42,6 +43,7 @@ from app.schemas.stock import (
     ReorderListPatchIn,
     InventorySummaryOut,
     StockTotalsOut,
+    StockAlertsSummaryOut,
 )
 from app.services.staff_view import should_redact_financials
 from app.services.stock_inventory import (
@@ -76,6 +78,30 @@ async def _supplier_name(db: AsyncSession, item: CatalogItem) -> str | None:
     return None
 
 
+def _days_since_last_purchase(item: CatalogItem) -> int | None:
+    if not item.last_purchase_at:
+        return None
+    delta = datetime.now(timezone.utc) - item.last_purchase_at
+    return max(0, delta.days)
+
+
+def _needs_eviction(
+    item: CatalogItem,
+    *,
+    is_perishable: bool,
+    current: Decimal,
+) -> bool:
+    if not is_perishable or current <= 0:
+        return False
+    days = item.eviction_days
+    if days is None or days <= 0:
+        return False
+    since = _days_since_last_purchase(item)
+    if since is None:
+        return False
+    return since > days
+
+
 def _item_to_list_row(
     item: CatalogItem,
     category_name: str | None,
@@ -85,6 +111,9 @@ def _item_to_list_row(
     period_purchased_qty: Decimal | None = None,
     period_variance_qty: Decimal | None = None,
     needs_verification: bool = False,
+    purchased_today_qty: Decimal | None = None,
+    usage_today_qty: Decimal | None = None,
+    is_perishable: bool = False,
 ) -> StockListItemOut:
     cur = catalog_stock_qty(item)
     ro = catalog_reorder(item)
@@ -106,6 +135,12 @@ def _item_to_list_row(
         period_purchased_qty=period_purchased_qty,
         period_variance_qty=period_variance_qty,
         needs_verification=needs_verification,
+        purchased_today_qty=purchased_today_qty,
+        usage_today_qty=usage_today_qty,
+        days_since_last_purchase=_days_since_last_purchase(item),
+        needs_eviction=_needs_eviction(item, is_perishable=is_perishable, current=cur),
+        is_perishable=is_perishable,
+        missing_barcode=not (item.item_code and str(item.item_code).strip()),
     )
 
 
@@ -120,6 +155,33 @@ def _parse_period_dates(
         return ps, pe
     except ValueError:
         return None, None
+
+
+async def _today_purchased_map(
+    db: AsyncSession,
+    business_id: uuid.UUID,
+    item_ids: list[uuid.UUID],
+    today: date,
+) -> dict[uuid.UUID, Decimal]:
+    return await _period_purchased_map(db, business_id, item_ids, today, today)
+
+
+async def _today_usage_map(
+    db: AsyncSession,
+    business_id: uuid.UUID,
+    item_ids: list[uuid.UUID],
+    today: date,
+) -> dict[uuid.UUID, Decimal]:
+    if not item_ids:
+        return {}
+    r = await db.execute(
+        select(DailyUsageLog.item_id, DailyUsageLog.used_qty).where(
+            DailyUsageLog.business_id == business_id,
+            DailyUsageLog.usage_date == today,
+            DailyUsageLog.item_id.in_(item_ids),
+        )
+    )
+    return {row[0]: Decimal(row[1] or 0) for row in r.all()}
 
 
 async def _period_purchased_map(
@@ -321,6 +383,7 @@ async def list_stock(
     include_period: bool = Query(False),
     period_start: str | None = Query(None),
     period_end: str | None = Query(None),
+    include_today: bool = Query(True),
 ):
     total, rows = await _query_items(
         db,
@@ -335,10 +398,24 @@ async def list_stock(
     )
     period_map: dict[uuid.UUID, Decimal] = {}
     ps, pe = _parse_period_dates(period_start, period_end)
+    item_ids = [item.id for item, _, _ in rows]
     if include_period and ps and pe:
-        period_map = await _period_purchased_map(
-            db, business_id, [item.id for item, _, _ in rows], ps, pe
+        period_map = await _period_purchased_map(db, business_id, item_ids, ps, pe)
+    today = date.today()
+    today_purchased: dict[uuid.UUID, Decimal] = {}
+    today_usage: dict[uuid.UUID, Decimal] = {}
+    if include_today and item_ids:
+        today_purchased = await _today_purchased_map(db, business_id, item_ids, today)
+        today_usage = await _today_usage_map(db, business_id, item_ids, today)
+    cat_ids = {item.category_id for item, _, _ in rows if item.category_id}
+    perishable_by_cat: dict[uuid.UUID, bool] = {}
+    if cat_ids:
+        cr = await db.execute(
+            select(ItemCategory.id, ItemCategory.is_perishable).where(
+                ItemCategory.id.in_(cat_ids)
+            )
         )
+        perishable_by_cat = {row[0]: bool(row[1]) for row in cr.all()}
     items: list[StockListItemOut] = []
     for item, cat_name, type_name in rows:
         sup = await _supplier_name(db, item)
@@ -348,6 +425,7 @@ async def list_stock(
         verify = (
             _needs_verification(cur, purchased) if purchased is not None else False
         )
+        perishable = perishable_by_cat.get(item.category_id, False) if item.category_id else False
         items.append(
             _item_to_list_row(
                 item,
@@ -357,6 +435,9 @@ async def list_stock(
                 period_purchased_qty=purchased,
                 period_variance_qty=variance,
                 needs_verification=verify,
+                purchased_today_qty=today_purchased.get(item.id),
+                usage_today_qty=today_usage.get(item.id),
+                is_perishable=perishable,
             )
         )
     return StockListOut(items=items, total=total, page=page, per_page=per_page)
@@ -514,6 +595,82 @@ async def _adjustments_to_out(
             )
         )
     return out
+
+
+@router.get("/alerts/summary", response_model=StockAlertsSummaryOut)
+async def stock_alerts_summary(
+    business_id: uuid.UUID,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    _m: Annotated[Membership, Depends(require_membership)],
+):
+    """Operational alert counts for owner home strip."""
+    today = date.today()
+    low = crit = missing_code = eviction = 0
+    ir = await db.execute(
+        select(
+            CatalogItem.id,
+            CatalogItem.current_stock,
+            CatalogItem.reorder_level,
+            CatalogItem.item_code,
+            CatalogItem.last_purchase_at,
+            CatalogItem.eviction_days,
+            ItemCategory.is_perishable,
+        )
+        .join(ItemCategory, CatalogItem.category_id == ItemCategory.id)
+        .where(
+            CatalogItem.business_id == business_id,
+            CatalogItem.deleted_at.is_(None),
+        )
+    )
+    for row in ir.all():
+        _iid, cur, ro, code, lpa, ev_days, perish = row
+        cur_d = Decimal(cur or 0)
+        ro_d = Decimal(ro or 0)
+        st = stock_status(cur_d, ro_d)
+        if st == "low":
+            low += 1
+        elif st in ("critical", "out"):
+            crit += 1
+        if not (code and str(code).strip()):
+            missing_code += 1
+        if perish and cur_d > 0 and ev_days and lpa:
+            days = max(0, (datetime.now(timezone.utc) - lpa).days)
+            if days > int(ev_days):
+                eviction += 1
+    lr = await db.execute(
+        select(func.count(DailyUsageLog.id)).where(
+            DailyUsageLog.business_id == business_id,
+            DailyUsageLog.usage_date == today,
+        )
+    )
+    logged = int(lr.scalar_one() or 0)
+    ar = await db.execute(
+        select(func.count()).select_from(CatalogItem).where(
+            CatalogItem.business_id == business_id,
+            CatalogItem.deleted_at.is_(None),
+            CatalogItem.current_stock > 0,
+        )
+    )
+    active = int(ar.scalar_one() or 0)
+    return StockAlertsSummaryOut(
+        low_stock=low,
+        critical_stock=crit,
+        missing_barcode=missing_code,
+        missing_usage_logs=max(0, active - logged),
+        eviction_count=eviction,
+    )
+
+
+@router.get("/audit/feed", response_model=list[StockAdjustmentOut])
+async def audit_feed(
+    business_id: uuid.UUID,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    _m: Annotated[Membership, Depends(require_membership)],
+    limit: int = Query(50, ge=1, le=200),
+    on: date | None = Query(None),
+):
+    """Alias for owner-wide stock change feed."""
+    return await recent_adjustments_all(business_id, db, _m, limit=limit, on=on)
 
 
 @router.get("/audit/recent", response_model=list[StockAdjustmentOut])
@@ -956,6 +1113,66 @@ async def patch_stock_item(
     await db.commit()
     await db.refresh(item)
 
+    return await get_stock_item(business_id, item_id, db, _membership)
+
+
+@router.post("/{item_id}/undo-last", response_model=StockDetailOut)
+async def undo_last_stock_change(
+    business_id: uuid.UUID,
+    item_id: uuid.UUID,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
+    _membership: Annotated[Membership, Depends(require_permission("stock_edit"))],
+):
+    """Revert the user's most recent stock adjustment within 15 minutes."""
+    cutoff = datetime.now(timezone.utc) - timedelta(minutes=15)
+    r = await db.execute(
+        select(StockAdjustmentLog)
+        .where(
+            StockAdjustmentLog.business_id == business_id,
+            StockAdjustmentLog.item_id == item_id,
+            StockAdjustmentLog.updated_by == user.id,
+            StockAdjustmentLog.updated_at >= cutoff,
+        )
+        .order_by(desc(StockAdjustmentLog.updated_at))
+        .limit(1)
+    )
+    log = r.scalar_one_or_none()
+    if not log:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            detail="No recent stock change to undo",
+        )
+    item_r = await db.execute(
+        select(CatalogItem).where(
+            CatalogItem.id == item_id,
+            CatalogItem.business_id == business_id,
+            CatalogItem.deleted_at.is_(None),
+        )
+    )
+    item = item_r.scalar_one_or_none()
+    if not item:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Item not found")
+    current = catalog_stock_qty(item)
+    revert_to = log.old_qty
+    display = _user_display(user)
+    db.add(
+        StockAdjustmentLog(
+            business_id=business_id,
+            item_id=item_id,
+            old_qty=current,
+            new_qty=revert_to,
+            adjustment_type="correction",
+            reason="Undo previous adjustment",
+            updated_by=user.id,
+            updated_by_name=display,
+        )
+    )
+    item.current_stock = revert_to
+    item.last_stock_updated_at = datetime.now(timezone.utc)
+    item.last_stock_updated_by = display
+    await db.commit()
+    await db.refresh(item)
     return await get_stock_item(business_id, item_id, db, _membership)
 
 

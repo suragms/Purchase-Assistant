@@ -17,13 +17,10 @@ String? stockDisplaySecondary(
   final u = unit.trim().toLowerCase();
   if (u == 'bag' || u == 'sack') {
     if (kgPerBag != null && kgPerBag > 0) {
-      return '= ${_fmtQty(qty * kgPerBag)} KG';
-    }
-  } else if (u == 'tin') {
-    if (kgPerTin != null && kgPerTin > 0) {
-      return '= ${_fmtQty(qty * kgPerTin)} KG';
+      return '(${_fmtQty(qty * kgPerBag)} kg)';
     }
   }
+  // BOX and TIN never show kg secondary (operational rule).
   return null;
 }
 

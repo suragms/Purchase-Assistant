@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/providers/connectivity_provider.dart';
+import '../../core/services/offline_store.dart';
 import '../../core/providers/home_owner_dashboard_providers.dart'
     show
         homeInventorySummaryProvider,
@@ -22,6 +23,7 @@ import '../../core/providers/trade_purchases_provider.dart'
     show invalidateTradePurchaseCaches;
 import '../../core/design_system/hexa_ds_tokens.dart';
 import '../../core/theme/hexa_colors.dart';
+import 'responsive_shell_layout.dart';
 import 'shell_branch_provider.dart';
 
 /// Shell: Home | Stock | Reports | History | Search in one row, then [+] (no overlap).
@@ -90,6 +92,7 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
     final conn = ref.watch(connectivityResultsProvider);
     final offline =
         conn.valueOrNull != null && isOfflineResult(conn.valueOrNull!);
+    final pendingSync = OfflineStore.getPendingEntries().length;
     final stockAlertN = ref.watch(stockLowCountProvider).valueOrNull ?? 0;
 
     void go(int branch) {
@@ -108,11 +111,7 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
     // body gets ~zero height while the bar still paints — it then looks vertically
     // centered with a blank page. [SizedBox.expand] + [Column] keeps tabs + bar as
     // explicit flex siblings (see also [NoTransitionPage] in app_router).
-    return SizedBox.expand(
-      child: Material(
-        key: const ValueKey<String>('main_shell'),
-        color: Theme.of(context).scaffoldBackgroundColor,
-        child: Column(
+    final shellBody = Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             if (offline)
@@ -151,14 +150,92 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
                   ),
                 ),
               ),
+            if (!offline && pendingSync > 0)
+              Material(
+                color: const Color(0xFFE3F2FD),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: HexaDsLayout.pageGutter,
+                    vertical: HexaDsSpace.xs + 2,
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.sync, size: 18, color: Color(0xFF1565C0)),
+                      const SizedBox(width: HexaDsLayout.inlineGap),
+                      Expanded(
+                        child: Text(
+                          pendingSync == 1
+                              ? '1 change pending sync'
+                              : '$pendingSync changes pending sync',
+                          style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                                color: const Color(0xFF1565C0),
+                                fontWeight: FontWeight.w600,
+                                fontSize: 12,
+                              ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
             Expanded(child: navigationShell),
             if (!hideShellChrome)
-              _ShellBottomBar(
-                selectedIndex: idx,
-                stockBadgeCount: stockAlertN,
-                onDestinationSelected: go,
+              LayoutBuilder(
+                builder: (context, c) {
+                  if (c.maxWidth >= 900) return const SizedBox.shrink();
+                  return _ShellBottomBar(
+                    selectedIndex: idx,
+                    stockBadgeCount: stockAlertN,
+                    onDestinationSelected: go,
+                  );
+                },
               ),
           ],
+        );
+
+    final rail = NavigationRail(
+      selectedIndex: idx,
+      extended: MediaQuery.sizeOf(context).width >= 1100,
+      labelType: MediaQuery.sizeOf(context).width < 380
+          ? NavigationRailLabelType.none
+          : NavigationRailLabelType.all,
+      onDestinationSelected: go,
+      destinations: const [
+        NavigationRailDestination(
+          icon: Icon(Icons.grid_view_outlined),
+          selectedIcon: Icon(Icons.grid_view_rounded),
+          label: Text('Home'),
+        ),
+        NavigationRailDestination(
+          icon: Icon(Icons.inventory_2_outlined),
+          selectedIcon: Icon(Icons.inventory_2_rounded),
+          label: Text('Stock'),
+        ),
+        NavigationRailDestination(
+          icon: Icon(Icons.bar_chart_outlined),
+          selectedIcon: Icon(Icons.bar_chart_rounded),
+          label: Text('Reports'),
+        ),
+        NavigationRailDestination(
+          icon: Icon(Icons.receipt_long_outlined),
+          selectedIcon: Icon(Icons.receipt_long_rounded),
+          label: Text('History'),
+        ),
+        NavigationRailDestination(
+          icon: Icon(Icons.search_rounded),
+          selectedIcon: Icon(Icons.manage_search_rounded),
+          label: Text('Search'),
+        ),
+      ],
+    );
+
+    return SizedBox.expand(
+      child: Material(
+        key: const ValueKey<String>('main_shell'),
+        color: Theme.of(context).scaffoldBackgroundColor,
+        child: ResponsiveShellLayout(
+          rail: hideShellChrome ? const SizedBox.shrink() : rail,
+          body: shellBody,
         ),
       ),
     );

@@ -26,7 +26,8 @@
 ### Owner visibility (shipped 2026-05-19)
 
 - Today's stock movement feed on home + full page `/stock/today-feed`
-- Stock page 5-tab shell (All / Low / Today / Category / Scan) + inline reorder on Low tab
+- Stock page 3-section scroll (Eviction / Low / All) + Wrap filters + today movement fields
+- Daily usage log + staff checklist (`/operations/usage`, `/operations/checklist`)
 - Purchase confirm returns `stock_updates`; save sheet + live stock preview in line entry
 - Stock variance detection + home card + `GET /stock/variances/today`
 - Daily stock report sheet (home quick action) + client health score badge (home + stock)
@@ -522,7 +523,7 @@ ROUTE                          PAGE FILE                          ROLE    STATUS
 
 ── OWNER / MANAGER SHELL ──────────────────────────────────────────────────────
 /home                          home_page.dart                     owner   ✅ done (analytics card: on-hand strip + period purchased strip, ring/tabs sync, collapse; `shell_bundle` adds `stock_in_hand`/`purchased` on home-overview)
-/stock                         stock_page.dart                    all     ✅ done (5-tab, swipe, who-edited, health badge)
+/stock                         stock_page.dart                    all     ✅ done (3 sections: eviction/low/all; row = name+unit, ITM code, cat·sub, bar, Stock/Today+/Used−, last updater; scan FAB; bulk actions)
 /reports                       reports_page.dart                  owner   ✅ done (KEEP RING CHART)
 /purchase                      purchase_home_page.dart            all     ✅ done
 /search                        search_page.dart                   all     ✅ done

@@ -29,10 +29,10 @@ import '../../../core/theme/hexa_colors.dart';
 import '../../purchase/presentation/widgets/purchase_saved_sheet.dart';
 import '../../purchase/presentation/widgets/resume_purchase_draft_banner.dart';
 import 'widgets/daily_stock_report_sheet.dart';
-import 'widgets/home_analytics_card.dart';
 import 'widgets/home_collapsible_section.dart';
 import 'widgets/home_compact_header.dart';
 import 'widgets/home_low_stock_section.dart';
+import 'widgets/home_multi_alert_strip.dart';
 import 'widgets/home_operational_alert_banner.dart';
 import 'widgets/home_period_filter_row.dart';
 import 'widgets/home_quick_actions_grid.dart';
@@ -366,11 +366,10 @@ class _HomePageState extends ConsumerState<HomePage>
               ),
               const SizedBox(height: 12),
               if (isOwner) ...[
+                const HomeMultiAlertStrip(),
                 const HomeOperationalAlertBanner(),
                 const SizedBox(height: 12),
                 const HomeStockTotalsCard(),
-                const SizedBox(height: 12),
-                const HomeAnalyticsCard(),
                 const SizedBox(height: 12),
                 HomeCollapsibleSection(
                   title: 'Recent changes',

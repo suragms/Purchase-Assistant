@@ -2063,6 +2063,7 @@ class HexaApi {
     bool includePeriod = false,
     String? periodStart,
     String? periodEnd,
+    bool includeToday = true,
   }) async {
     final res = await _dio.get<Map<String, dynamic>>(
       '/v1/businesses/$businessId/stock/list',
@@ -2075,6 +2076,7 @@ class HexaApi {
         'status': status,
         'sort': sort,
         if (includePeriod) 'include_period': true,
+        if (includeToday) 'include_today': true,
         if (periodStart != null && periodStart.isNotEmpty)
           'period_start': periodStart,
         if (periodEnd != null && periodEnd.isNotEmpty) 'period_end': periodEnd,
@@ -2346,6 +2348,7 @@ class HexaApi {
     String? defaultPurchaseUnit,
     String? defaultSaleUnit,
     String? hsnCode,
+    String? itemCode,
     double? taxPercent,
     double? defaultLandingCost,
     double? defaultSellingCost,
@@ -2381,6 +2384,9 @@ class HexaApi {
     }
     if (hsnCode != null) {
       data['hsn_code'] = hsnCode.isEmpty ? null : hsnCode;
+    }
+    if (itemCode != null) {
+      data['item_code'] = itemCode.trim().isEmpty ? null : itemCode.trim();
     }
     if (taxPercent != null) {
       data['tax_percent'] = taxPercent;
@@ -2861,5 +2867,150 @@ class HexaApi {
     final d = res.data;
     if (d is! Map) return {};
     return Map<String, dynamic>.from(d);
+  }
+
+  Future<Map<String, dynamic>> getChecklistToday({
+    required String businessId,
+  }) async {
+    final res = await _dio.get<Map<String, dynamic>>(
+      '/v1/businesses/$businessId/operations/checklist/today',
+    );
+    return res.data ?? {};
+  }
+
+  Future<void> completeChecklistTask({
+    required String businessId,
+    required String slot,
+    required String taskKey,
+    String? notes,
+  }) async {
+    await _dio.post<void>(
+      '/v1/businesses/$businessId/operations/checklist/$slot/complete',
+      data: {'task_key': taskKey, if (notes != null) 'notes': notes},
+    );
+  }
+
+  Future<Map<String, dynamic>> getUsageToday({
+    required String businessId,
+  }) async {
+    final res = await _dio.get<Map<String, dynamic>>(
+      '/v1/businesses/$businessId/operations/usage/today',
+    );
+    return res.data ?? {};
+  }
+
+  Future<Map<String, dynamic>> submitUsageToday({
+    required String businessId,
+    required List<Map<String, dynamic>> lines,
+  }) async {
+    final res = await _dio.post<Map<String, dynamic>>(
+      '/v1/businesses/$businessId/operations/usage/today',
+      data: {'lines': lines},
+    );
+    return res.data ?? {};
+  }
+
+  Future<Map<String, dynamic>> getOperationalReports({
+    required String businessId,
+    int staleDays = 30,
+  }) async {
+    final res = await _dio.get<Map<String, dynamic>>(
+      '/v1/businesses/$businessId/operations/reports/summary',
+      queryParameters: {'stale_days': staleDays},
+    );
+    return res.data ?? {};
+  }
+
+  Future<Map<String, dynamic>> getStockAlertsSummary({
+    required String businessId,
+  }) async {
+    final res = await _dio.get<Map<String, dynamic>>(
+      '/v1/businesses/$businessId/stock/alerts/summary',
+    );
+    return res.data ?? {};
+  }
+
+  Future<List<Map<String, dynamic>>> listStockAuditFeed({
+    required String businessId,
+    int limit = 50,
+    String? onDate,
+  }) async {
+    final res = await _dio.get<List<dynamic>>(
+      '/v1/businesses/$businessId/stock/audit/feed',
+      queryParameters: {
+        'limit': limit,
+        if (onDate != null && onDate.isNotEmpty) 'on': onDate,
+      },
+    );
+    return _parseJsonMapList(res.data);
+  }
+
+  Future<Map<String, dynamic>> undoLastStockChange({
+    required String businessId,
+    required String itemId,
+  }) async {
+    final res = await _dio.post<Map<String, dynamic>>(
+      '/v1/businesses/$businessId/stock/$itemId/undo-last',
+    );
+    return res.data ?? {};
+  }
+
+  Future<Map<String, dynamic>> getChecklistSummary({
+    required String businessId,
+  }) async {
+    final res = await _dio.get<Map<String, dynamic>>(
+      '/v1/businesses/$businessId/operations/checklist/summary',
+    );
+    return res.data ?? {};
+  }
+
+  Future<List<Map<String, dynamic>>> listDailySnapshots({
+    required String businessId,
+    String? fromDate,
+    String? toDate,
+    String? itemId,
+  }) async {
+    final res = await _dio.get<List<dynamic>>(
+      '/v1/businesses/$businessId/operations/snapshots',
+      queryParameters: {
+        if (fromDate != null) 'from_date': fromDate,
+        if (toDate != null) 'to_date': toDate,
+        if (itemId != null) 'item_id': itemId,
+      },
+    );
+    return _parseJsonMapList(res.data);
+  }
+
+  Future<Map<String, dynamic>> getCatalogDuplicateClusters({
+    required String businessId,
+    double minScore = 0.85,
+  }) async {
+    final res = await _dio.get<Map<String, dynamic>>(
+      '/v1/businesses/$businessId/catalog/duplicate-clusters',
+      queryParameters: {'min_score': minScore},
+    );
+    return res.data ?? {};
+  }
+
+  Future<void> bulkArchiveCatalogItems({
+    required String businessId,
+    required List<String> itemIds,
+  }) async {
+    await _dio.post<void>(
+      '/v1/businesses/$businessId/catalog/items/bulk-archive',
+      data: {'item_ids': itemIds},
+    );
+  }
+
+  Future<Map<String, dynamic>> bulkReorderCatalogItems({
+    required String businessId,
+    required List<String> itemIds,
+    required double reorderLevel,
+  }) async {
+    final res = await _dio.patch<Map<String, dynamic>>(
+      '/v1/businesses/$businessId/catalog/items/bulk-reorder',
+      data: {'item_ids': itemIds, 'reorder_level': reorderLevel},
+    );
+    return res.data ?? {};
   }
 }

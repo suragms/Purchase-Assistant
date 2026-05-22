@@ -25,6 +25,7 @@ import '../../../core/widgets/list_skeleton.dart';
 import '../../../features/analytics/presentation/analytics_report_helpers.dart';
 import 'reports_full_list_page.dart';
 import 'reports_item_tile.dart';
+import 'operational_reports_section.dart';
 import 'reports_overview_chart_section.dart';
 import 'reports_whatsapp_sheet.dart';
 import '../reporting/reports_item_metrics.dart';
@@ -1557,6 +1558,10 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
                         onMatchHome: _syncRangeWithHome,
                         onPickRange: () => unawaited(_pickCustomRange()),
                       ),
+                      if (session != null && sessionCanSeeFinancials(session)) ...[
+                        const SizedBox(height: 8),
+                        const OperationalReportsSection(),
+                      ],
                     ] else ...[
                       if (showSkeleton)
                         const ListSkeleton(

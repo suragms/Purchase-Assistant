@@ -242,6 +242,29 @@ class StaffHomePage extends ConsumerWidget {
                   ),
                 ),
               ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () => context.push('/operations/checklist'),
+                      icon: const Icon(Icons.checklist_rounded),
+                      label: const Text('Checklist'),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: FilledButton.icon(
+                      onPressed: () => context.push('/operations/usage'),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: const Color(0xFF3B6D11),
+                      ),
+                      icon: const Icon(Icons.edit_note_outlined),
+                      label: const Text('Log usage'),
+                    ),
+                  ),
+                ],
+              ),
               const SizedBox(height: 16),
               GridView.count(
                 crossAxisCount: 2,

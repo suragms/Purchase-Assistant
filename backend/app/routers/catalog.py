@@ -104,6 +104,23 @@ class CatalogFuzzyCheckOut(BaseModel):
     hits: list[CatalogFuzzyCheckHitOut]
 
 
+class DuplicatePairOut(BaseModel):
+    id_a: uuid.UUID
+    name_a: str
+    id_b: uuid.UUID
+    name_b: str
+    score: float = Field(..., ge=0, le=1)
+
+
+class BulkItemIdsIn(BaseModel):
+    item_ids: list[uuid.UUID] = Field(min_length=1, max_length=200)
+
+
+class BulkReorderIn(BaseModel):
+    item_ids: list[uuid.UUID] = Field(min_length=1, max_length=200)
+    reorder_level: float = Field(ge=0)
+
+
 _UNIT_PATTERN = "^(kg|box|piece|bag|tin)$"
 
 
@@ -1365,6 +1382,90 @@ async def delete_category_type(
             )
     await db.delete(t)
     await db.commit()
+
+
+@router.get("/catalog/duplicate-clusters")
+async def catalog_duplicate_clusters(
+    business_id: uuid.UUID,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    _m: Annotated[Membership, Depends(require_owner_membership)],
+    min_score: float = Query(0.85, ge=0.5, le=1.0),
+):
+    """Similar catalog item name pairs for owner duplicate review."""
+    from rapidfuzz import fuzz
+
+    r = await db.execute(
+        select(CatalogItem.id, CatalogItem.name).where(
+            CatalogItem.business_id == business_id,
+            CatalogItem.deleted_at.is_(None),
+        )
+    )
+    rows = [(i, str(n).strip()) for i, n in r.all() if n and str(n).strip()]
+    pairs: list[DuplicatePairOut] = []
+    cutoff = int(min_score * 100)
+    for i in range(len(rows)):
+        id_a, name_a = rows[i]
+        for j in range(i + 1, len(rows)):
+            id_b, name_b = rows[j]
+            sc = int(fuzz.token_sort_ratio(name_a.lower(), name_b.lower()))
+            if sc >= cutoff:
+                pairs.append(
+                    DuplicatePairOut(
+                        id_a=id_a,
+                        name_a=name_a,
+                        id_b=id_b,
+                        name_b=name_b,
+                        score=round(sc / 100.0, 4),
+                    )
+                )
+    pairs.sort(key=lambda p: p.score, reverse=True)
+    return {"pairs": pairs[:80]}
+
+
+@router.post("/catalog/items/bulk-archive", status_code=status.HTTP_204_NO_CONTENT)
+async def bulk_archive_catalog_items(
+    business_id: uuid.UUID,
+    body: BulkItemIdsIn,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    _m: Annotated[Membership, Depends(require_owner_membership)],
+):
+    from datetime import datetime, timezone
+
+    now = datetime.now(timezone.utc)
+    r = await db.execute(
+        select(CatalogItem).where(
+            CatalogItem.business_id == business_id,
+            CatalogItem.id.in_(body.item_ids),
+            CatalogItem.deleted_at.is_(None),
+        )
+    )
+    for item in r.scalars().all():
+        item.deleted_at = now
+    await db.commit()
+
+
+@router.patch("/catalog/items/bulk-reorder")
+async def bulk_reorder_catalog_items(
+    business_id: uuid.UUID,
+    body: BulkReorderIn,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    _m: Annotated[Membership, Depends(require_owner_membership)],
+):
+    from decimal import Decimal as D
+
+    r = await db.execute(
+        select(CatalogItem).where(
+            CatalogItem.business_id == business_id,
+            CatalogItem.id.in_(body.item_ids),
+            CatalogItem.deleted_at.is_(None),
+        )
+    )
+    updated = 0
+    for item in r.scalars().all():
+        item.reorder_level = D(str(body.reorder_level))
+        updated += 1
+    await db.commit()
+    return {"updated": updated}
 
 
 @router.get("/catalog/fuzzy-check", response_model=CatalogFuzzyCheckOut)

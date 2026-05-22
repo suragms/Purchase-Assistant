@@ -12,7 +12,11 @@ import 'package:permission_handler/permission_handler.dart';
 import '../../../core/auth/auth_error_messages.dart';
 import '../../../core/auth/session_notifier.dart';
 import '../../../core/providers/barcode_recent_scans.dart';
+import '../../../core/providers/catalog_providers.dart';
 import '../../../core/router/navigation_ext.dart';
+import '../../../shared/widgets/search_picker_sheet.dart';
+import '../../stock/presentation/quick_stock_patch_sheet.dart';
+import '../../stock/presentation/stock_undo_snackbar.dart';
 
 const _kMaxRecent = 10;
 const _kDebounceMs = 1500;
@@ -118,6 +122,54 @@ class _BarcodeScanPageState extends ConsumerState<BarcodeScanPage>
     if (mounted) setState(() => _busy = false);
   }
 
+  Future<void> _assignBarcodeToExisting(String code) async {
+    final session = ref.read(sessionProvider);
+    if (session == null || !mounted) return;
+    final catalog = ref.read(catalogItemsListProvider).valueOrNull ?? [];
+    if (catalog.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Load catalog first, then try again')),
+      );
+      await _resumeScan();
+      return;
+    }
+    final picked = await showSearchPickerSheet<String>(
+      context: context,
+      title: 'Assign barcode $code',
+      rows: [
+        for (final row in catalog)
+          SearchPickerRow<String>(
+            value: row['id']?.toString() ?? '',
+            title: row['name']?.toString() ?? '—',
+            subtitle: row['item_code']?.toString(),
+          ),
+      ],
+    );
+    if (picked == null || picked.isEmpty || !mounted) {
+      await _resumeScan();
+      return;
+    }
+    try {
+      await ref.read(hexaApiProvider).updateCatalogItem(
+            businessId: session.primaryBusiness.id,
+            itemId: picked,
+            itemCode: code,
+          );
+      ref.invalidate(catalogItemsListProvider);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Barcode $code assigned')),
+      );
+      context.push('/catalog/item/$picked?source=scan');
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(friendlyApiError(e))),
+      );
+      await _resumeScan();
+    }
+  }
+
   Future<void> _showNotFoundSheet(String code) async {
     if (!mounted) return;
     await showModalBottomSheet<void>(
@@ -153,6 +205,15 @@ class _BarcodeScanPageState extends ConsumerState<BarcodeScanPage>
                 },
                 icon: const Icon(Icons.add_box_outlined),
                 label: const Text('Create new item'),
+              ),
+              const SizedBox(height: 8),
+              OutlinedButton.icon(
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  unawaited(_assignBarcodeToExisting(code));
+                },
+                icon: const Icon(Icons.link),
+                label: const Text('Assign to existing item'),
               ),
               const SizedBox(height: 8),
               OutlinedButton.icon(
@@ -206,6 +267,24 @@ class _BarcodeScanPageState extends ConsumerState<BarcodeScanPage>
       );
       await HapticFeedback.mediumImpact();
       if (!mounted) return;
+      final returnTo = GoRouterState.of(context).uri.queryParameters['return'];
+      if (returnTo == 'stock') {
+        final saved = await showQuickStockPatchSheet(
+          context: context,
+          ref: ref,
+          item: Map<String, dynamic>.from(row),
+        );
+        if (saved && mounted) {
+          showStockUndoSnackBar(
+            context: context,
+            ref: ref,
+            itemId: id,
+            itemName: name,
+          );
+        }
+        if (mounted) context.pop();
+        return;
+      }
       context.push('/catalog/item/$id?source=scan');
     } on TimeoutException {
       if (!mounted) return;

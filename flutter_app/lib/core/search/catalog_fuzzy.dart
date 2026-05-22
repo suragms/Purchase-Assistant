@@ -1,5 +1,8 @@
 // Lightweight fuzzy matching for catalog search (typo-tolerant, case-insensitive).
 
+/// Max autocomplete / picker rows (Sprint 12 duplicate-search cap).
+const int kCatalogFuzzySearchMax = 8;
+
 String normalizeCatalogSearch(String s) {
   return s.toLowerCase().trim().replaceAll(RegExp(r'\s+'), ' ');
 }
@@ -61,7 +64,7 @@ List<T> catalogFuzzyRank<T>(
   List<T> items,
   String Function(T) labelOf, {
   double minScore = 42,
-  int limit = 24,
+  int limit = kCatalogFuzzySearchMax,
 }) {
   final q = normalizeCatalogSearch(query);
   if (q.isEmpty) return List<T>.from(items);

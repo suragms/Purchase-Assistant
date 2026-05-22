@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 
 import '../../../core/auth/session_notifier.dart';
 import '../../../core/design_system/hexa_ds_tokens.dart';
+import '../../../core/providers/operations_providers.dart';
 import '../../../core/providers/stock_providers.dart';
 import '../../../core/router/post_auth_route.dart';
 import '../../../core/utils/unit_utils.dart';
@@ -21,6 +22,7 @@ class StockItemIntelligencePage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final async = ref.watch(stockItemIntelligenceProvider(itemId));
+    final snapAsync = ref.watch(itemTodaySnapshotProvider(itemId));
     final session = ref.watch(sessionProvider);
     final hideFinancials = session != null && !sessionCanSeeFinancials(session);
 
@@ -89,6 +91,33 @@ class StockItemIntelligencePage extends ConsumerWidget {
                       ),
                   ],
                 ),
+              ),
+              snapAsync.when(
+                loading: () => const SizedBox.shrink(),
+                error: (_, __) => const SizedBox.shrink(),
+                data: (snap) {
+                  if (snap == null) return const SizedBox.shrink();
+                  final open = snap['opening_qty'];
+                  final bought = snap['purchased_qty'];
+                  final used = snap['used_qty'];
+                  final close = snap['closing_qty'];
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: WarehouseCompactCard(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Today snapshot', style: HexaDsType.heading(14)),
+                          const SizedBox(height: 6),
+                          Text('Opening: $open', style: HexaDsType.body(13)),
+                          Text('Purchased: $bought', style: HexaDsType.body(13)),
+                          Text('Used: $used', style: HexaDsType.body(13)),
+                          Text('Closing: $close', style: HexaDsType.body(13)),
+                        ],
+                      ),
+                    ),
+                  );
+                },
               ),
               const SizedBox(height: 12),
               Text('Recent purchases', style: HexaDsType.heading(14)),

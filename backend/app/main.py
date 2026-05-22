@@ -49,6 +49,7 @@ from app.routers import (
     whatsapp_reports,
     stock,
     stock_audits,
+    operations,
     users,
     notifications,
 )
@@ -453,6 +454,7 @@ app.include_router(billing.router)
 app.include_router(razorpay_webhook.router)
 app.include_router(stock_audits.router)
 app.include_router(stock.router)
+app.include_router(operations.router)
 app.include_router(users.router)
 app.include_router(users.activity_router)
 

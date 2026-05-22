@@ -35,6 +35,11 @@ from app.models.stock_adjustment import StockAdjustmentLog
 from app.models.user_session import StaffActivityLog, UserSession
 from app.models.notification import AppNotification
 from app.models.reorder_list import ReorderListEntry
+from app.models.operations import (
+    DailyUsageLog,
+    StaffChecklistCompletion,
+    StaffChecklistTemplate,
+)
 
 __all__ = [
     "Base",
@@ -86,4 +91,7 @@ __all__ = [
     "StaffActivityLog",
     "AppNotification",
     "ReorderListEntry",
+    "DailyUsageLog",
+    "StaffChecklistTemplate",
+    "StaffChecklistCompletion",
 ]

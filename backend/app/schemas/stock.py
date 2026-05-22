@@ -31,6 +31,12 @@ class StockListItemOut(BaseModel):
     period_purchased_qty: Decimal | None = None
     period_variance_qty: Decimal | None = None
     needs_verification: bool = False
+    purchased_today_qty: Decimal | None = None
+    usage_today_qty: Decimal | None = None
+    days_since_last_purchase: int | None = None
+    needs_eviction: bool = False
+    is_perishable: bool = False
+    missing_barcode: bool = False
 
 
 class StockListOut(BaseModel):
@@ -38,6 +44,14 @@ class StockListOut(BaseModel):
     total: int
     page: int
     per_page: int
+
+
+class StockAlertsSummaryOut(BaseModel):
+    low_stock: int = 0
+    critical_stock: int = 0
+    missing_barcode: int = 0
+    missing_usage_logs: int = 0
+    eviction_count: int = 0
 
 
 class InventorySummaryOut(BaseModel):

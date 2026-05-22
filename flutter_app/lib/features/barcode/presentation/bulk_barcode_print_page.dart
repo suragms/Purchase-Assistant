@@ -37,6 +37,7 @@ class _BulkBarcodePrintPageState extends ConsumerState<BulkBarcodePrintPage> {
   String _searchText = '';
   bool _busy = false;
   bool _denseA4 = true;
+  BarcodeSymbolMode _symbol = BarcodeSymbolMode.code128WithQr;
   String? _pdfStatus;
 
   @override
@@ -97,6 +98,7 @@ class _BulkBarcodePrintPageState extends ConsumerState<BulkBarcodePrintPage> {
         copiesPerItem: _copies,
         labelsPerRow: _perRow,
         hideFinancials: hideFinancials,
+        symbol: _symbol,
       );
     } finally {
       if (mounted) setState(() => _pdfStatus = null);
@@ -602,12 +604,43 @@ class _BulkBarcodePrintPageState extends ConsumerState<BulkBarcodePrintPage> {
                       ),
                       const SizedBox(height: 8),
                     ],
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: Text(
-                        'Thermal label (50×25 mm)',
-                        style: Theme.of(context).textTheme.labelLarge,
-                      ),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
+                      children: [
+                        FilterChip(
+                          label: const Text('A4 grid'),
+                          selected: _denseA4,
+                          onSelected: _busy
+                              ? null
+                              : (_) => setState(() => _denseA4 = true),
+                        ),
+                        FilterChip(
+                          label: const Text('Thermal 50×25'),
+                          selected: !_denseA4,
+                          onSelected: _busy
+                              ? null
+                              : (_) => setState(() => _denseA4 = false),
+                        ),
+                        FilterChip(
+                          label: const Text('Code128'),
+                          selected: _symbol == BarcodeSymbolMode.code128,
+                          onSelected: _busy
+                              ? null
+                              : (_) => setState(
+                                    () => _symbol = BarcodeSymbolMode.code128,
+                                  ),
+                        ),
+                        FilterChip(
+                          label: const Text('QR'),
+                          selected: _symbol == BarcodeSymbolMode.qrCode,
+                          onSelected: _busy
+                              ? null
+                              : (_) => setState(
+                                    () => _symbol = BarcodeSymbolMode.qrCode,
+                                  ),
+                        ),
+                      ],
                     ),
                     if (!_denseA4) ...[
                       const SizedBox(height: 6),

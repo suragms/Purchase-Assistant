@@ -74,6 +74,7 @@ Future<String?> runScanDraftPurchaseCreate({
   required WidgetRef ref,
   required BuildContext context,
   required Map<String, dynamic> scan,
+  bool forceDuplicate = false,
 }) async {
   final token = scanDraftToken(scan);
   if (token == null) return null;
@@ -90,10 +91,19 @@ Future<String?> runScanDraftPurchaseCreate({
     scanPayload: scan,
     purchaseDate: pd,
     invoiceNumber: scan['invoice_number']?.toString(),
-    forceDuplicate: false,
+    forceDuplicate: forceDuplicate,
   );
 
   return created['id']?.toString().trim();
+}
+
+bool isDuplicatePurchase409(DioException e) {
+  if (e.response?.statusCode != 409) return false;
+  final data = e.response?.data;
+  if (data is! Map) return false;
+  final detail = data['detail'];
+  return detail is Map &&
+      detail['code']?.toString() == 'DUPLICATE_PURCHASE_DETECTED';
 }
 
 /// Shows confirm dialog then creates purchase; returns true if navigated away.
@@ -130,7 +140,11 @@ Future<bool> confirmScanDraftPurchase({
 
   try {
     HapticFeedback.mediumImpact();
-    final id = await runScanDraftPurchaseCreate(ref: ref, context: context, scan: scan);
+    final id = await _runScanDraftWithDuplicateRetry(
+      ref: ref,
+      context: context,
+      scan: scan,
+    );
     if (!context.mounted) return false;
     if (id != null && id.isNotEmpty) {
       HapticFeedback.selectionClick();
@@ -151,4 +165,52 @@ Future<bool> confirmScanDraftPurchase({
     }
   }
   return false;
+}
+
+Future<String?> _runScanDraftWithDuplicateRetry({
+  required WidgetRef ref,
+  required BuildContext context,
+  required Map<String, dynamic> scan,
+  bool forceDuplicate = false,
+}) async {
+  try {
+    return await runScanDraftPurchaseCreate(
+      ref: ref,
+      context: context,
+      scan: scan,
+      forceDuplicate: forceDuplicate,
+    );
+  } on DioException catch (e) {
+    if (!forceDuplicate && isDuplicatePurchase409(e) && context.mounted) {
+      final proceed = await showDialog<bool>(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Similar purchase already exists'),
+          content: const Text(
+            'A purchase that looks like this is already recorded for this date. Continue?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: const Text('Save anyway'),
+            ),
+          ],
+        ),
+      );
+      if (proceed == true && context.mounted) {
+        return _runScanDraftWithDuplicateRetry(
+          ref: ref,
+          context: context,
+          scan: scan,
+          forceDuplicate: true,
+        );
+      }
+    }
+    rethrow;
+  }
 }

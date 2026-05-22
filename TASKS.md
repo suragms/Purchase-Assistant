@@ -1,6 +1,6 @@
 # Purchase Assistant — Living task board
 
-**Last updated:** 2026-05-21 (user management v2 rebuild)
+**Last updated:** 2026-05-22 (Sprints 12–15 StockEase)
 **App:** `hexa_purchase_assistant` (Flutter + FastAPI + Supabase)  
 **Product docs:** `docs/harisree/` (`MASTER_REFERENCE.md`, `FEATURES_DEEP_PLAN.md`)
 
@@ -91,6 +91,68 @@
 | HOME-PIE-SYNC | Done | Inventory strip (on-hand + period purchased); Items tab shell fallback; compact empty states; overview `stock_in_hand`/`purchased` when `shell_bundle`; analytics collapse; cache invalidation |
 | USER-SYSTEM | Done | Identifier login (username/phone/email); user CRUD + credentials UX; tabbed `UserProfilePage`; permissions_json; server LOGIN/PASSWORD_RESET audit; staff dashboard alias + route guards; Alembic `025_user_system_rebuild` |
 | USER-MGMT-V2 | Done | Email-only login; `admin` role + `is_blocked`; real email on create; bulk user actions; Users page Wrap filters + row actions + profile nav; profile tabs enriched; `028_user_mgmt_v2` migration |
+
+---
+
+## Sprint 11 — StockEase (May 22 2026)
+
+| ID | Priority | Status | Summary |
+|----|----------|--------|---------|
+| SE-01 | P0 | Done | Phase 1: scan duplicate 409, staff route allow-list, purchase detail back nav, unit_utils bag-only kg |
+| SE-02 | P0 | Done | Migration `029_stockease_operations` + stock list today/eviction fields |
+| SE-03 | P0 | Done | Stock page: 3-section scroll (eviction / low / all), Wrap filters, `more_vert` actions |
+| SE-04 | P1 | Done | Desktop `NavigationRail` ≥900px; stock provider 5min cache |
+| SE-05 | P1 | Done | Owner home: removed analytics ring; staff home: checklist + usage CTAs |
+| SE-06 | P1 | Done | Operations API: daily usage + checklist; Flutter pages `/operations/*` |
+| SE-07 | P2 | Done | `/stock/missing-barcodes` alias; operational reports section on Reports |
+| SE-08 | P2 | Done | Voice route removed; `formatOperationalDate` helper |
+| SE-09 | P2 | Pending deploy | Apply `029` SQL on Supabase; device QA matrix |
+
+---
+
+## Sprint 12 — Product trust (May 22 2026)
+
+| ID | Priority | Status | Summary |
+|----|----------|--------|---------|
+| SE-10 | P0 | Done | Stock row last-update line; audit feed API; undo-last PATCH + SnackBar |
+| SE-11 | P0 | Done | Daily snapshots list/materialize API; today block on intelligence page |
+| SE-12 | P1 | Done | `/catalog/duplicates` page + duplicate clusters API |
+| SE-13 | P1 | Done | Fuzzy search cap `kCatalogFuzzySearchMax=8`; inline picker already max 8 |
+
+---
+
+## Sprint 13 — Operational speed (May 22 2026)
+
+| ID | Priority | Status | Summary |
+|----|----------|--------|---------|
+| SE-19 | P0 | Done | Quick +/- sheet; stock row actions entry |
+| SE-20 | P0 | Done | Stock scan FAB `?return=stock`; post-scan quick patch + assign barcode |
+| SE-21 | P1 | Done | Final stock row layout (code line, signed Today/Used, last update) |
+| SE-22 | P1 | Done | Bulk actions: print, reorder setup, duplicates, archive picker |
+| SE-23 | P2 | Done | Barcode PDF: thermal 50×25, A4/thermal chips, Code128/QR modes |
+
+---
+
+## Sprint 14 — Staff clarity + intelligence (May 22 2026)
+
+| ID | Priority | Status | Summary |
+|----|----------|--------|---------|
+| SE-25 | P1 | Done | `HomeMultiAlertStrip` + `GET /stock/alerts/summary` |
+| SE-26 | P1 | Done | Checklist Morning/Midday/Evening tabs + summary API |
+| SE-27 | P1 | Done | `/stock/dead`, `/stock/fast-moving`, `/stock/slow-moving` + reports chips |
+| SE-28 | P2 | Done | Operational reports drill-down from Reports section |
+
+---
+
+## Sprint 15 — Production polish (May 22 2026)
+
+| ID | Priority | Status | Summary |
+|----|----------|--------|---------|
+| SE-31 | P2 | Done | Shell pending-sync banner (`OfflineStore`) |
+| SE-32 | P2 | Done | Local notifications: usage, checklist, low-stock digest schedules |
+| SE-33 | P2 | Done | Biometric re-login (`local_auth` + saved email, refresh token) |
+| SE-34 | P3 | Deferred | Assistant/voice modules unused (routes redirect); physical delete later |
+| SE-35 | P2 | Done | Docs: this board + `MASTER_REFERENCE` stock row note |
 
 ---
 

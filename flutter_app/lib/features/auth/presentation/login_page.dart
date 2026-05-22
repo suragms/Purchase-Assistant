@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
@@ -5,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/auth/auth_error_messages.dart';
+import '../../../core/auth/biometric_login.dart';
 import '../../../core/auth/session_notifier.dart';
 import '../../../core/router/post_auth_route.dart';
 import '../../../core/design_system/hexa_ds_tokens.dart';
@@ -35,6 +38,8 @@ class _LoginPageState extends ConsumerState<LoginPage> {
   String? _inlineAuthError;
   bool _handledDupEmailQuery = false;
   bool _handledOwnerOnlyNotice = false;
+  bool _bioReady = false;
+  String? _bioEmail;
 
   @override
   void initState() {
@@ -43,6 +48,19 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     _loginPass.addListener(_clearInlineErrors);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _tryResumeSession();
+      unawaited(_loadBiometricState());
+    });
+  }
+
+  Future<void> _loadBiometricState() async {
+    final email = await BiometricLogin.savedEmail();
+    final can = await BiometricLogin.canCheckBiometrics();
+    final t = await ref.read(tokenStoreProvider).read();
+    final hasTokens = t.access != null && t.refresh != null;
+    if (!mounted) return;
+    setState(() {
+      _bioEmail = email;
+      _bioReady = can && email != null && email.isNotEmpty && hasTokens;
     });
   }
 
@@ -192,10 +210,12 @@ class _LoginPageState extends ConsumerState<LoginPage> {
       _lastNetworkError = null;
     });
     try {
+      final email = _loginEmail.text.trim();
       await ref.read(sessionProvider.notifier).login(
-            email: _loginEmail.text.trim(),
+            email: email,
             password: _loginPass.text,
           );
+      await BiometricLogin.saveEmail(email);
       if (mounted) _goPostAuth();
     } on DioException catch (e) {
       if (!mounted) return;
@@ -239,6 +259,34 @@ class _LoginPageState extends ConsumerState<LoginPage> {
       if (mounted) {
         setState(() {
           _inlineAuthError = 'Something went wrong. Please try again.';
+        });
+      }
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _signInWithBiometric() async {
+    if (_loading || !_bioReady) return;
+    final ok = await BiometricLogin.authenticate();
+    if (!ok || !mounted) return;
+    if (_bioEmail != null && _bioEmail!.isNotEmpty) {
+      _loginEmail.text = _bioEmail!;
+    }
+    setState(() => _loading = true);
+    try {
+      await ref.read(sessionProvider.notifier).restore();
+      if (mounted && ref.read(sessionProvider) != null) {
+        _goPostAuth();
+      } else if (mounted) {
+        setState(() {
+          _inlineAuthError = 'Session expired — sign in with password once.';
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _inlineAuthError = 'Biometric sign-in failed. Use password.';
         });
       }
     } finally {
@@ -379,6 +427,18 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                           color: Colors.red.shade700,
                           fontSize: 13,
                           fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                    if (_bioReady) ...[
+                      const SizedBox(height: 8),
+                      SizedBox(
+                        width: double.infinity,
+                        height: 48,
+                        child: OutlinedButton.icon(
+                          onPressed: _loading ? null : _signInWithBiometric,
+                          icon: const Icon(Icons.fingerprint),
+                          label: const Text('Sign in with biometrics'),
                         ),
                       ),
                     ],

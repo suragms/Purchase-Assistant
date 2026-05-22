@@ -8,6 +8,9 @@ import 'package:pdf/widgets.dart' as pw;
 
 enum LabelSize { small, medium, large }
 
+/// Primary symbology on printed labels (Sprint 15).
+enum BarcodeSymbolMode { code128, qrCode, code128WithQr }
+
 class BarcodeLabelData {
   const BarcodeLabelData({
     required this.itemCode,
@@ -115,6 +118,7 @@ class BarcodePdfService {
     bool showLastPurchase = true,
     bool hideFinancials = false,
     int labelsPerRow = 1,
+    BarcodeSymbolMode symbol = BarcodeSymbolMode.code128WithQr,
   }) async {
     final expanded = <BarcodeLabelData>[];
     for (final data in items) {
@@ -142,6 +146,7 @@ class BarcodePdfService {
                 size: size,
                 showLastPurchase: showLastPurchase,
                 hideFinancials: hideFinancials,
+                symbol: symbol,
               ),
             ),
           ),
@@ -180,6 +185,7 @@ class BarcodePdfService {
                         size: size,
                         showLastPurchase: showLastPurchase,
                         hideFinancials: hideFinancials,
+                        symbol: symbol,
                       ),
                     ),
                   ),
@@ -334,7 +340,7 @@ class BarcodePdfService {
         LabelSize.large =>
           const PdfPageFormat(100 * PdfPageFormat.mm, 50 * PdfPageFormat.mm),
         LabelSize.medium =>
-          const PdfPageFormat(57 * PdfPageFormat.mm, 32 * PdfPageFormat.mm),
+          const PdfPageFormat(50 * PdfPageFormat.mm, 25 * PdfPageFormat.mm),
       };
 
   static (double titleSize, double codeSize, double bcHeight, double qrSize)
@@ -349,9 +355,9 @@ class BarcodePdfService {
     required LabelSize size,
     required bool showLastPurchase,
     bool hideFinancials = false,
+    BarcodeSymbolMode symbol = BarcodeSymbolMode.code128WithQr,
   }) {
     final code = data.itemCode.trim().isEmpty ? data.itemName : data.itemCode;
-    final bc = Barcode.code128();
     final (titleSize, codeSize, bcHeight, qrSize) = _sizes(size);
 
     final children = <pw.Widget>[
@@ -361,16 +367,32 @@ class BarcodePdfService {
         style: pw.TextStyle(fontSize: titleSize, fontWeight: pw.FontWeight.bold),
       ),
       pw.SizedBox(height: 3),
-      pw.BarcodeWidget(
-        barcode: bc,
-        data: code,
-        drawText: false,
-        height: bcHeight,
-      ),
-      pw.Text(code, style: pw.TextStyle(fontSize: codeSize)),
     ];
 
-    if (qrSize > 0) {
+    if (symbol == BarcodeSymbolMode.qrCode) {
+      final side = qrSize > 0 ? qrSize : bcHeight;
+      children.add(
+        pw.BarcodeWidget(
+          barcode: Barcode.qrCode(),
+          data: code,
+          width: side,
+          height: side,
+        ),
+      );
+    } else {
+      children.add(
+        pw.BarcodeWidget(
+          barcode: Barcode.code128(),
+          data: code,
+          drawText: false,
+          height: bcHeight,
+        ),
+      );
+    }
+    children.add(pw.Text(code, style: pw.TextStyle(fontSize: codeSize)));
+
+    if (qrSize > 0 &&
+        symbol == BarcodeSymbolMode.code128WithQr) {
       children.addAll([
         pw.SizedBox(height: 3),
         pw.Row(

@@ -286,19 +286,16 @@ Dismissible: owner can dismiss for 24 hours
 CURRENT: Single list with filter chips at top
 PROBLEM: 500+ items, owner needs different VIEWS not just filters
 
-REDESIGN: TabBar with 5 distinct views
+REDESIGN (StockEase May 2026): Single scroll, three sections
 
-TAB BAR (below AppBar, sticky):
-┌──────┬──────┬──────┬──────┬──────┐
-│ ALL  │ LOW  │TODAY │ CAT  │ SCAN │
-│(504) │ (18) │ (12) │ EGORY│      │
-└──────┴──────┴──────┴──────┴──────┘
+SECTIONS (one CustomScrollView, Wrap filters — no horizontal chip scroll):
+1. **Needs eviction** — perishable + days since last purchase > eviction_days
+2. **Low stock** — status low/critical/out (amber progress vs reorder)
+3. **All items** — dense rows: stock / bought today / used today + `more_vert` sheet
 
-TAB 1: ALL — full stock list (current behavior)
-TAB 2: LOW — only low + critical (action-required list)
-TAB 3: TODAY — today's changes feed (same as /stock/today-feed)
-TAB 4: CATEGORY — group-by-category tree view
-TAB 5: SCAN — quick scan entry (camera shortcut for staff)
+Scan → AppBar; missing codes → `/stock/missing-barcodes`; today feed → `/stock/today-feed`
+
+Legacy 5-tab shell superseded by this layout in `stock_page.dart`.
 
 Badge counts:
   ALL: total item count (504)
