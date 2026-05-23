@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
+import '../../../core/api/hexa_api.dart';
 import '../../../core/auth/session_notifier.dart';
 import '../../../core/json_coerce.dart';
 import '../../../core/providers/app_period_provider.dart';
@@ -25,17 +26,21 @@ class _StockMovementPageState extends ConsumerState<StockMovementPage> {
   }
 
   Future<void> _load() async {
+    if (!mounted) return;
     final session = ref.read(sessionProvider);
     if (session == null) {
+      if (!mounted) return;
       setState(() => _loading = false);
       return;
     }
+    if (!mounted) return;
     setState(() => _loading = true);
     try {
       final rows = await ref.read(hexaApiProvider).listStockAuditRecent(
             businessId: session.primaryBusiness.id,
-            limit: 250,
+            limit: HexaApi.stockAuditRecentMaxLimit,
           );
+      if (!mounted) return;
       final range = appPeriodDateRange(
         ref as Ref,
         ref.read(appSelectedPeriodProvider),
@@ -61,18 +66,24 @@ class _StockMovementPageState extends ConsumerState<StockMovementPage> {
             DateTime.fromMillisecondsSinceEpoch(0);
         return tb.compareTo(ta);
       });
+      if (!mounted) return;
       setState(() {
         _rows = filtered;
         _loading = false;
       });
     } catch (_) {
+      if (!mounted) return;
       setState(() => _loading = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    ref.listen(appSelectedPeriodProvider, (_, __) => _load());
+    ref.listen(appSelectedPeriodProvider, (_, __) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _load();
+      });
+    });
     final period = ref.watch(appSelectedPeriodProvider);
 
     var totalIn = 0.0;

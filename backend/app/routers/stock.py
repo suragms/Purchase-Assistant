@@ -939,7 +939,7 @@ async def recent_adjustments_all(
     business_id: uuid.UUID,
     db: Annotated[AsyncSession, Depends(get_db)],
     _m: Annotated[Membership, Depends(require_membership)],
-    limit: int = Query(5, ge=1, le=100),
+    limit: int = Query(5, ge=1, le=250),
     on: date | None = Query(None, description="Filter to calendar day (UTC) YYYY-MM-DD"),
 ):
     stmt = select(StockAdjustmentLog).where(

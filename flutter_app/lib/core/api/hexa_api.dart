@@ -2221,16 +2221,21 @@ class HexaApi {
         };
   }
 
+  /// Max rows for [listStockAuditRecent] (must match backend `le` on `/audit/recent`).
+  static const int stockAuditRecentMaxLimit = 250;
+
   Future<List<Map<String, dynamic>>> listStockAuditRecent({
     required String businessId,
     int limit = 12,
     /// Calendar day filter (YYYY-MM-DD). Omit for latest across all days.
     String? on,
   }) async {
+    final capped =
+        limit.clamp(1, HexaApi.stockAuditRecentMaxLimit);
     final res = await _dio.get<dynamic>(
       '/v1/businesses/$businessId/stock/audit/recent',
       queryParameters: {
-        'limit': limit,
+        'limit': capped,
         if (on != null && on.isNotEmpty) 'on': on,
       },
     );
