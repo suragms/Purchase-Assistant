@@ -19,15 +19,15 @@ import '../../../core/design_system/hexa_ds_tokens.dart';
 import '../../../core/theme/hexa_colors.dart';
 import '../../../core/widgets/form_feedback.dart';
 import '../../../core/widgets/form_field_scroll.dart';
+import '../../../core/unit_engine/stock_tracking_profile.dart';
 import '../../../shared/widgets/bag_default_unit_hint.dart';
 import '../../../shared/widgets/inline_search_field.dart';
+import '../../../shared/widgets/packaging_type_selector.dart';
 import '../../../shared/widgets/keyboard_safe_form_viewport.dart';
 
 const _kPrefLastCategory = 'catalog_last_category_id';
 const _kPrefLastType = 'catalog_last_type_id';
 const _kPrefLastSupplier = 'catalog_last_supplier_id';
-
-const _kUnits = <String>['bag', 'box', 'kg', 'tin', 'piece'];
 
 /// Add catalog item: category, subcategory, unit, defaults, at least one supplier.
 class CatalogAddItemPage extends ConsumerStatefulWidget {
@@ -61,6 +61,7 @@ class _CatalogAddItemPageState extends ConsumerState<CatalogAddItemPage> {
   String? _categoryId;
   String? _typeId;
   String? _unit;
+  String? _packagingMode;
   final _supplierIds = <String>[];
 
   bool _saving = false;
@@ -300,9 +301,14 @@ class _CatalogAddItemPageState extends ConsumerState<CatalogAddItemPage> {
   bool get _isValid {
     if (_categoryId == null || _typeId == null) return false;
     if (_name.text.trim().isEmpty) return false;
-    if (_unit == null || _unit!.isEmpty) return false;
+    if (_packagingMode == null || _unit == null || _unit!.isEmpty) return false;
     if (_supplierIds.isEmpty) return false;
-    if (_unit == 'bag' && parseOptionalKgPerBag(_kg.text) == null) return false;
+    if ((_unit == 'bag' ||
+            _packagingMode == StockTrackingMode.wholesaleBag ||
+            _packagingMode == StockTrackingMode.retailPacket) &&
+        parseOptionalKgPerBag(_kg.text) == null) {
+      return false;
+    }
     if (_unit == 'box') {
       final v = double.tryParse(_perBox.text.trim());
       if (v == null || v <= 0) return false;
@@ -429,7 +435,10 @@ class _CatalogAddItemPageState extends ConsumerState<CatalogAddItemPage> {
             itemCode: ic.isEmpty ? null : ic,
             taxPercent: taxPct,
             defaultPurchaseUnit: _unit,
-            defaultKgPerBag: _unit == 'bag' ? parseOptionalKgPerBag(_kg.text) : null,
+            defaultKgPerBag: (_unit == 'bag' ||
+                    _packagingMode == StockTrackingMode.retailPacket)
+                ? parseOptionalKgPerBag(_kg.text)
+                : null,
             defaultItemsPerBox: _unit == 'box' ? double.tryParse(_perBox.text.trim()) : null,
             defaultWeightPerTin: (tinW != null && tinW > 0) ? tinW : null,
           );
@@ -649,7 +658,10 @@ class _CatalogAddItemPageState extends ConsumerState<CatalogAddItemPage> {
       case 0:
         return _categoryId != null && _typeId != null;
       case 1:
-        return _name.text.trim().isNotEmpty && _unit != null && _unit!.isNotEmpty;
+        return _name.text.trim().isNotEmpty &&
+            _packagingMode != null &&
+            _unit != null &&
+            _unit!.isNotEmpty;
       case 2:
         if (_unit == 'bag') {
           return parseOptionalKgPerBag(_kg.text) != null;
@@ -1030,25 +1042,27 @@ class _CatalogAddItemPageState extends ConsumerState<CatalogAddItemPage> {
                 ),
               ],
               const SizedBox(height: 12),
-              Text('Unit type', style: HexaDsType.formSectionLabel),
-              const SizedBox(height: 6),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  for (final u in _kUnits)
-                    ChoiceChip(
-                      label: Text(u.toUpperCase()),
-                      selected: _unit == u,
-                      onSelected: (_) => setState(() {
-                        _unit = u; // _kUnits are lowercase — keeps review + chips in sync
-                        _kgErr = null;
-                        _boxErr = null;
-                        _tinErr = null;
-                      }),
-                    ),
-                ],
+              PackagingTypeSelector(
+                selectedMode: _packagingMode,
+                itemNameForAutofill: _name.text,
+                suggestedMode: StockTrackingMode.suggestFromName(
+                  _name.text,
+                  categoryName: typeName,
                 ),
+                weightController: _kg,
+                itemsPerBoxController: _perBox,
+                weightPerTinController: _perTin,
+                weightError: _kgErr,
+                boxError: _boxErr,
+                tinError: _tinErr,
+                onModeChanged: (m) => setState(() {
+                  _packagingMode = m;
+                  _unit = StockTrackingMode.catalogUnitForMode(m);
+                  _kgErr = null;
+                  _boxErr = null;
+                  _tinErr = null;
+                }),
+              ),
               if (unitErr)
                 Padding(
                   padding: const EdgeInsets.only(top: 6),
@@ -1059,15 +1073,23 @@ class _CatalogAddItemPageState extends ConsumerState<CatalogAddItemPage> {
                 ),
               ],
               if (_step == 2) ...[
-              Text('Unit configuration', style: HexaDsType.formSectionLabel),
+              Text('Confirm conversion', style: HexaDsType.formSectionLabel),
               const SizedBox(height: 6),
-              if (_unit == 'bag') ...[
+              Text(
+                'Review weight and defaults for ${_packagingMode != null ? StockTrackingMode.labelForMode(_packagingMode!) : _unit?.toUpperCase() ?? 'unit'}.',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+              if (_unit == 'bag' ||
+                  _packagingMode == StockTrackingMode.wholesaleBag ||
+                  _packagingMode == StockTrackingMode.retailPacket) ...[
                 const SizedBox(height: 10),
                 TextField(
                   controller: _kg,
                   keyboardType: const TextInputType.numberWithOptions(decimal: true),
                   decoration: InputDecoration(
-                    labelText: 'Weight per bag (kg)',
+                    labelText: _packagingMode == StockTrackingMode.retailPacket
+                        ? 'Weight per packet (kg)'
+                        : 'Weight per bag (kg)',
                     hintText: 'e.g. 50',
                     errorText: _kgErr,
                     contentPadding: _fieldPad,

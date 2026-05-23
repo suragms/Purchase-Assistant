@@ -34,14 +34,23 @@ class StockOperationalRow extends ConsumerWidget {
     final sub = item['subcategory_name']?.toString() ?? '';
     final supplier = item['supplier_name']?.toString() ?? '';
     final cur = coerceToDouble(item['current_stock']);
+    final stockUnit =
+        item['stock_unit']?.toString() ?? item['unit']?.toString() ?? 'piece';
+    final kgPerBag = coerceToDouble(item['default_kg_per_bag']);
+    final stockKg = coerceToDouble(item['current_stock_kg']);
+    final nowDual = dualStockDisplay(
+      qty: cur,
+      unit: stockUnit,
+      kgPerBag: kgPerBag > 0 ? kgPerBag : null,
+      currentStockKg: stockKg > 0 ? stockKg : null,
+    );
 
     final purchased = includePeriod
         ? coerceToDouble(item['period_purchased_qty'])
         : coerceToDouble(item['purchased_today_qty']);
 
-    final moved = includePeriod
-        ? coerceToDouble(item['period_variance_qty'])
-        : 0.0;
+    final ledgerVar = item['ledger_variance_qty'] ?? item['period_variance_qty'];
+    final moved = includePeriod ? coerceToDouble(ledgerVar) : 0.0;
 
     final status =
         (item['stock_status']?.toString() ?? 'healthy').toLowerCase();
@@ -63,16 +72,26 @@ class StockOperationalRow extends ConsumerWidget {
       updatedAtIso: item['last_stock_updated_at']?.toString(),
     );
 
+    // Subcategory only — avoid "Essentials · Sugar · Sugar" noise.
+    final subOnly = sub.isNotEmpty
+        ? sub
+        : (cat.isNotEmpty ? cat : '');
     final catLine = [
-      [cat, sub].where((s) => s.isNotEmpty).join(' · '),
+      if (subOnly.isNotEmpty &&
+          subOnly.toLowerCase() != name.trim().toLowerCase())
+        subOnly,
       supplier,
     ].where((s) => s.isNotEmpty).join(' • ');
     final itemId = item['id']?.toString() ?? '';
     final hid = item['last_purchase_human_id']?.toString() ?? '';
     final delivered = item['last_purchase_delivered'];
     final pendingDelivery = delivered == false && hid.isNotEmpty;
+    final boughtPrimary = stockDisplayPrimary(
+      purchased,
+      stockUnit,
+    );
     final boughtLine = includePeriod && purchased > 0
-        ? 'Bought ${formatStockQtyNumber(purchased)} this period'
+        ? 'Bought $boughtPrimary this period'
         : '';
 
     return Material(
@@ -182,6 +201,7 @@ class StockOperationalRow extends ConsumerWidget {
                       current: cur,
                       moved: moved,
                       highlightCurrent: highlightCurrent,
+                      currentSubtitle: nowDual.secondary,
                     ),
                     if (daysSince != null)
                       Padding(

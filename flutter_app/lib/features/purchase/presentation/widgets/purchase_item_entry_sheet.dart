@@ -21,6 +21,7 @@ import '../../../../core/theme/hexa_colors.dart';
 import '../../../../core/units/dynamic_unit_label_engine.dart' as unit_lbl;
 import '../../../../core/units/resolved_item_unit_context.dart';
 import '../../../../core/utils/line_display.dart';
+import '../../../../core/unit_engine/purchase_line_unit_guard.dart';
 import '../../../../core/utils/unit_classifier.dart';
 import '../../../../core/utils/unit_utils.dart';
 import '../../../../shared/widgets/inline_search_field.dart';
@@ -1758,7 +1759,10 @@ class _PurchaseItemEntrySheetState extends ConsumerState<PurchaseItemEntrySheet>
           }
         }
       }
-      _errUnit = unit.isEmpty ? 'Unit is required' : null;
+      final unitProfileErr =
+          validatePurchaseLineUnitAgainstCatalog(rowSnap, unit);
+      _errUnit = unitProfileErr ??
+          (unit.isEmpty ? 'Unit is required' : null);
       _errKgPerBag = null;
       if (unitLow == 'bag' || unitLow == 'sack') {
         final k = _kgPer();

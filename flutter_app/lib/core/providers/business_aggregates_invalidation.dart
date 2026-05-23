@@ -124,7 +124,7 @@ void invalidateWorkspaceSeedData(dynamic ref) {
 /// (purchase list + alert/cache providers) plus [homeDashboardDataProvider],
 /// reports insights, KPIs, and supplier/broker lists.
 void invalidatePurchaseWorkspace(dynamic ref) {
-  invalidateBusinessAggregates(ref);
+  invalidateWarehouseSurfaces(ref);
 }
 
 /// Home, stock list, bulk print, totals, and warehouse alert chips.

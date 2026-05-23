@@ -66,6 +66,7 @@ class StockQtyMetricTriple extends StatelessWidget {
     required this.current,
     required this.moved,
     this.highlightCurrent = false,
+    this.currentSubtitle,
   });
 
   final double purchased;
@@ -74,11 +75,13 @@ class StockQtyMetricTriple extends StatelessWidget {
 
   /// Low / critical / out styling on current qty.
   final bool highlightCurrent;
+  final String? currentSubtitle;
 
   @override
   Widget build(BuildContext context) {
     return Row(
       mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         StockQtyMetricColumn(
           label: 'Buy',
@@ -86,14 +89,30 @@ class StockQtyMetricTriple extends StatelessWidget {
           muted: purchased <= 0,
         ),
         const SizedBox(width: 2),
-        StockQtyMetricColumn(
-          label: 'Now',
-          value: current,
-          highlight: highlightCurrent,
+        Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            StockQtyMetricColumn(
+              label: 'Now',
+              value: current,
+              highlight: highlightCurrent,
+            ),
+            if (currentSubtitle != null && currentSubtitle!.isNotEmpty)
+              SizedBox(
+                width: 40,
+                child: Text(
+                  currentSubtitle!,
+                  textAlign: TextAlign.center,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 8, color: Colors.black38),
+                ),
+              ),
+          ],
         ),
         const SizedBox(width: 2),
         StockQtyMetricColumn(
-          label: 'Δ',
+          label: 'Var',
           value: moved,
           muted: moved == 0,
           highlight: moved.abs() > 0.0001,

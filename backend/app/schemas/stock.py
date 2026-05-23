@@ -9,7 +9,10 @@ class StockPatchIn(BaseModel):
     new_qty: Decimal = Field(ge=0)
     adjustment_type: str = Field(
         default="verification",
-        pattern="^(purchase|sale|usage|transfer|manual|damaged|expired|correction|verification)$",
+        pattern=(
+            "^(purchase|sale|usage|transfer|manual|damaged|expired|correction|"
+            "verification|opening_stock)$"
+        ),
     )
     reason: str | None = None
 
@@ -35,7 +38,11 @@ class StockListItemOut(BaseModel):
     last_stock_updated_at: datetime | None
     last_stock_updated_by: str | None
     period_purchased_qty: Decimal | None = None
+    period_usage_qty: Decimal | None = None
     period_variance_qty: Decimal | None = None
+    ledger_variance_qty: Decimal | None = None
+    stock_unit: str | None = None
+    current_stock_kg: Decimal | None = None
     needs_verification: bool = False
     purchased_today_qty: Decimal | None = None
     usage_today_qty: Decimal | None = None
@@ -92,6 +99,10 @@ class RecentPurchaseOut(BaseModel):
     purchase_date: datetime | None
     qty: Decimal | None
     unit: str | None
+    entered_qty: Decimal | None = None
+    entered_unit: str | None = None
+    qty_in_stock_unit: Decimal | None = None
+    stock_unit: str | None = None
     rate: Decimal | None
     supplier_name: str | None
 
@@ -131,7 +142,13 @@ class StockIntelligenceOut(BaseModel):
     unit: str | None
     stock_status: str
     period_purchased_qty: Decimal = Decimal("0")
-    period_variance_qty: Decimal = Decimal("0")
+    period_usage_qty: Decimal = Decimal("0")
+    period_variance_qty: Decimal | None = None
+    ledger_variance_qty: Decimal | None = None
+    stock_unit: str | None = None
+    stock_tracking: dict | None = None
+    current_stock_kg: Decimal | None = None
+    default_kg_per_bag: Decimal | None = None
     needs_verification: bool = False
     recent_purchases: list[RecentPurchaseOut] = Field(default_factory=list)
     recent_adjustments: list[StockAdjustmentOut] = Field(default_factory=list)

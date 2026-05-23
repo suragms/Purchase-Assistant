@@ -117,11 +117,26 @@ class UnitClassifier {
   static String? detectUnitFromName(String rawName) {
     final name = rawName.toUpperCase().trim();
     if (name.isEmpty) return null;
+    if (RegExp(r'\b(LOOSE)\b', caseSensitive: false).hasMatch(name)) {
+      return 'kg';
+    }
+    if (RegExp(r'\b(BAG|SACK|BAGS|SACKS)\b', caseSensitive: false).hasMatch(name)) {
+      return 'bag';
+    }
     if (RegExp(r'\d+\s*X\s*\d+', caseSensitive: false).hasMatch(name)) {
       return 'box';
     }
-    if (RegExp(r'\d+(?:\.\d+)?\s*KG\b', caseSensitive: false).hasMatch(name)) {
-      return 'bag';
+    final kgM = RegExp(r'(\d+(?:\.\d+)?)\s*KG\b', caseSensitive: false).firstMatch(name);
+    if (kgM != null) {
+      final kg = double.tryParse(kgM.group(1) ?? '');
+      if (kg != null) {
+        if ({25, 30, 40, 45, 50, 55}.contains(kg.round())) {
+          return 'bag';
+        }
+        if (kg <= 10) {
+          return 'piece';
+        }
+      }
     }
     if (RegExp(r'\d+(?:\.\d+)?\s*ML\b', caseSensitive: false).hasMatch(name) ||
         RegExp(r'\d+(?:\.\d+)?\s*L(?:\b|TR)', caseSensitive: false).hasMatch(name)) {

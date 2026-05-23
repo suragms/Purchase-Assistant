@@ -1,6 +1,7 @@
 import '../calc_engine.dart';
 import '../models/trade_purchase_models.dart';
 import '../utils/trade_purchase_rate_display.dart';
+import '../utils/unit_utils.dart';
 import '../units/dynamic_unit_label_engine.dart' as unit_lbl;
 
 /// Purchase rows that are not meaningful for catalog / trade intel.
@@ -57,8 +58,7 @@ class ItemTradeHistoryRow {
   }
 }
 
-String _fmtNum(double n) =>
-    n == n.roundToDouble() ? n.toInt().toString() : n.toStringAsFixed(2);
+String _fmtNum(double n) => formatStockQtyNumber(n);
 
 /// True when the line belongs to this catalog item (ID match, or legacy
 /// lines with no [TradePurchaseLine.catalogItemId] matched by exact name).

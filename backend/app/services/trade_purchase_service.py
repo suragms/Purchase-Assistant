@@ -37,6 +37,8 @@ from app.services.stock_inventory import (
     revert_confirmed_purchase_stock,
     sync_confirmed_purchase_stock_diff,
 )
+from app.services.purchase_line_unit_validation import validate_purchase_line_unit
+from app.services.unit_normalization import fetch_catalog_items_map, line_qty_in_stock_unit
 
 
 def _line_tax_mode(li: TradePurchaseLineIn) -> str:
@@ -130,6 +132,25 @@ def _collect_trade_purchase_validation_errors(
                         "msg": "line gross (qty × weight × rates) must be greater than 0",
                     }
                 )
+    return errs
+
+
+async def _collect_line_unit_profile_errors(
+    db: AsyncSession,
+    business_id: uuid.UUID,
+    lines: list[TradePurchaseLineIn],
+) -> list[dict[str, Any]]:
+    """Block bag/piece mismatches per catalog stock-tracking profile."""
+    item_ids = {li.catalog_item_id for li in lines if li.catalog_item_id}
+    items = await fetch_catalog_items_map(db, business_id, item_ids)
+    errs: list[dict[str, Any]] = []
+    for i, li in enumerate(lines):
+        item = items.get(li.catalog_item_id)
+        if not item:
+            continue
+        msg = validate_purchase_line_unit(item, li.unit)
+        if msg:
+            errs.append({"loc": ["body", "lines", i, "unit"], "msg": msg})
     return errs
 
 
@@ -805,6 +826,8 @@ async def create_trade_purchase(
     body: TradePurchaseCreateRequest,
 ) -> TradePurchaseOut:
     errs = _collect_trade_purchase_validation_errors(body)
+    unit_errs = await _collect_line_unit_profile_errors(db, business_id, body.lines)
+    errs = errs + unit_errs
     if errs:
         raise TradePurchaseValidationError(errs)
     initial_status = body.status if body.status in ("draft", "saved", "confirmed") else "confirmed"
@@ -865,12 +888,16 @@ async def create_trade_purchase(
     )
     db.add(tp)
     await db.flush()
+    line_item_ids = {li.catalog_item_id for li in body.lines if li.catalog_item_id}
+    catalog_by_id = await fetch_catalog_items_map(db, business_id, line_item_ids)
     for li in body.lines:
         li = _strip_disallowed_fields_for_default_wholesale_mode(li)
         line_total = _line_money(li)
         line_weight = _line_total_weight(li)
         # Profit uses `li` only for selling_rate; safe to reuse normalized line.
         line_profit = _line_profit(li, body)
+        cat_item = catalog_by_id.get(li.catalog_item_id)
+        qty_su = line_qty_in_stock_unit(li, cat_item) if cat_item else dp.qty(li.qty)
         db.add(
             TradePurchaseLine(
                 trade_purchase_id=tp.id,
@@ -878,6 +905,7 @@ async def create_trade_purchase(
                 item_name=li.item_name,
                 qty=dp.qty(li.qty),
                 unit=li.unit,
+                qty_in_stock_unit=qty_su,
                 unit_type=derive_trade_unit_type(li.unit),
                 purchase_rate=dp.rate(li.purchase_rate or li.landing_cost),
                 selling_rate=dp.rate(li.selling_rate) if li.selling_rate is not None else None,
@@ -937,6 +965,8 @@ async def update_trade_purchase(
     body: TradePurchaseUpdateRequest,
 ) -> TradePurchaseOut | None:
     errs = _collect_trade_purchase_validation_errors(body)
+    unit_errs = await _collect_line_unit_profile_errors(db, business_id, body.lines)
+    errs = errs + unit_errs
     if errs:
         raise TradePurchaseValidationError(errs)
     new_status = body.status if body.status in ("draft", "saved", "confirmed") else "confirmed"
@@ -1003,11 +1033,15 @@ async def update_trade_purchase(
         tp.status = body.status
     await db.execute(delete(TradePurchaseLine).where(TradePurchaseLine.trade_purchase_id == tp.id))
     await db.flush()
+    line_item_ids = {li.catalog_item_id for li in body.lines if li.catalog_item_id}
+    catalog_by_id = await fetch_catalog_items_map(db, business_id, line_item_ids)
     for li in body.lines:
         li = _strip_disallowed_fields_for_default_wholesale_mode(li)
         line_total = _line_money(li)
         line_weight = _line_total_weight(li)
         line_profit = _line_profit(li, body)
+        cat_item = catalog_by_id.get(li.catalog_item_id)
+        qty_su = line_qty_in_stock_unit(li, cat_item) if cat_item else dp.qty(li.qty)
         db.add(
             TradePurchaseLine(
                 trade_purchase_id=tp.id,
@@ -1015,6 +1049,7 @@ async def update_trade_purchase(
                 item_name=li.item_name,
                 qty=dp.qty(li.qty),
                 unit=li.unit,
+                qty_in_stock_unit=qty_su,
                 unit_type=derive_trade_unit_type(li.unit),
                 purchase_rate=dp.rate(li.purchase_rate or li.landing_cost),
                 selling_rate=dp.rate(li.selling_rate) if li.selling_rate is not None else None,

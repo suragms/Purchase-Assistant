@@ -91,6 +91,8 @@ class TradePurchaseLine(Base):
     item_name: Mapped[str] = mapped_column(String(512))
     qty: Mapped[Decimal] = mapped_column(Numeric(12, 3))
     unit: Mapped[str] = mapped_column(String(32))
+    # Snapshot at confirm: qty converted to catalog stock_unit (bags for SUGAR 50 KG).
+    qty_in_stock_unit: Mapped[Decimal | None] = mapped_column(Numeric(12, 3), nullable=True)
     unit_type: Mapped[str | None] = mapped_column(String(16), nullable=True)
     # Canonical purchase-accounting fields. Legacy aliases below are kept during
     # rollout so older clients can still read/write the same purchase lines.

@@ -183,6 +183,9 @@ class CatalogItemCreate(BaseModel):
         if u == "bag":
             if self.default_kg_per_bag is None:
                 raise ValueError("default_kg_per_bag is required when default_unit is bag")
+        elif u == "piece" and self.default_kg_per_bag is not None:
+            if self.default_kg_per_bag <= 0:
+                raise ValueError("weight per packet must be positive")
         elif u == "box":
             if self.default_items_per_box is None:
                 raise ValueError("default_items_per_box is required when default_unit is box")
@@ -1933,7 +1936,7 @@ async def create_catalog_item(
             },
         )
     u = body.default_unit
-    dkg = body.default_kg_per_bag if u == "bag" else None
+    dkg = body.default_kg_per_bag if u in ("bag", "piece") else None
     dbox = body.default_items_per_box if u == "box" else None
     dwt = body.default_weight_per_tin if u == "tin" else None
     purchase_u = body.default_purchase_unit or body.default_unit
@@ -1964,6 +1967,24 @@ async def create_catalog_item(
         default_landing_cost=body.default_landing_cost,
         default_selling_cost=body.default_selling_cost,
     )
+    if u == "piece" and dkg:
+        from decimal import Decimal as _Dec
+
+        i.package_type = "RETAIL_PACKET"
+        i.package_size = _Dec(str(dkg))
+        i.package_measurement = "KG"
+        i.stock_unit = "PIECE"
+        i.selling_unit = "PCS"
+        i.validation_status = "unit_profile_verified"
+    elif u == "bag" and dkg:
+        from decimal import Decimal as _Dec
+
+        i.package_type = "SACK"
+        i.package_size = _Dec(str(dkg))
+        i.package_measurement = "KG"
+        i.stock_unit = "BAG"
+        i.selling_unit = "BAG"
+        i.validation_status = "unit_profile_verified"
     db.add(i)
     await db.flush()
     crn0 = await db.execute(

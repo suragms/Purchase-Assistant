@@ -13,6 +13,7 @@ import '../../../core/router/post_auth_route.dart';
 import '../../../core/utils/unit_utils.dart';
 import '../../../core/widgets/friendly_load_error.dart';
 import '../../../core/widgets/list_skeleton.dart';
+import '../../../shared/widgets/unit_engine_summary_card.dart';
 import '../../../core/widgets/warehouse_compact_card.dart';
 
 /// Per-item warehouse detail: stock, purchases, adjustments.
@@ -95,9 +96,19 @@ class _DetailBody extends StatelessWidget {
     final barcode = data['barcode']?.toString();
     final cur = coerceToDouble(data['current_stock']);
     final purchased = coerceToDouble(data['period_purchased_qty']);
-    final moved = coerceToDouble(data['period_variance_qty']);
+    final moved = coerceToDouble(
+      data['ledger_variance_qty'] ?? data['period_variance_qty'],
+    );
     final reorder = coerceToDouble(data['reorder_level']);
-    final unit = data['unit']?.toString() ?? '';
+    final unit =
+        data['stock_unit']?.toString() ?? data['unit']?.toString() ?? '';
+    final stockKg = coerceToDoubleNullable(data['current_stock_kg']);
+    final onHandDual = dualStockDisplay(
+      qty: cur,
+      unit: unit.isEmpty ? 'piece' : unit,
+      kgPerBag: coerceToDoubleNullable(data['default_kg_per_bag']),
+      currentStockKg: stockKg,
+    );
     final status = data['stock_status']?.toString() ?? '';
     final verify = data['needs_verification'] == true;
     final supplier = data['supplier_name']?.toString();
@@ -113,9 +124,24 @@ class _DetailBody extends StatelessWidget {
         DateFormat('dd MMM, h:mm a').format(DateTime.parse(updatedAt).toLocal()),
     ].join(' • ');
 
+    final itemMap = <String, dynamic>{
+      'name': name,
+      'default_unit': unit,
+      'default_kg_per_bag': data['default_kg_per_bag'],
+      'package_type': data['stock_tracking'] is Map
+          ? (data['stock_tracking'] as Map)['mode']
+          : null,
+    };
+
     return ListView(
       padding: const EdgeInsets.all(12),
       children: [
+        UnitEngineSummaryCard(
+          item: itemMap,
+          stock: data,
+          intel: data,
+        ),
+        const SizedBox(height: 10),
         WarehouseCompactCard(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -179,12 +205,19 @@ class _DetailBody extends StatelessWidget {
                 spacing: 6,
                 runSpacing: 6,
                 children: [
-                  _metricBox('Current', stockDisplayPrimary(cur, unit)),
-                  _metricBox('Reorder', stockDisplayPrimary(reorder, unit)),
-                  _metricBox('Purchased', stockDisplayPrimary(purchased, unit)),
                   _metricBox(
-                    'Stock moved',
-                    '${moved >= 0 ? '+' : ''}${stockDisplayPrimary(moved, unit)}',
+                    'Current',
+                    onHandDual.secondary == null
+                        ? onHandDual.primary
+                        : '${onHandDual.primary}\n${onHandDual.secondary}',
+                  ),
+                  _metricBox('Reorder', stockDisplayPrimary(reorder, unit)),
+                  _metricBox('Bought', stockDisplayPrimary(purchased, unit)),
+                  _metricBox(
+                    'Variance',
+                    moved.abs() > 0.0001
+                        ? '${moved >= 0 ? '+' : ''}${stockDisplayPrimary(moved, unit)}'
+                        : '—',
                   ),
                 ],
               ),

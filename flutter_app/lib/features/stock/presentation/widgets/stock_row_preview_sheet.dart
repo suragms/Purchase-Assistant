@@ -48,7 +48,19 @@ class _StockRowPreviewBody extends ConsumerWidget {
     final name = item['name']?.toString() ?? 'Item';
     final purchased = coerceToDouble(item['period_purchased_qty']);
     final current = coerceToDouble(item['current_stock']);
-    final moved = coerceToDouble(item['period_variance_qty']);
+    final stockUnit =
+        item['stock_unit']?.toString() ?? item['unit']?.toString() ?? 'piece';
+    final kgPerBag = coerceToDouble(item['default_kg_per_bag']);
+    final stockKg = coerceToDouble(item['current_stock_kg']);
+    final nowDual = dualStockDisplay(
+      qty: current,
+      unit: stockUnit,
+      kgPerBag: kgPerBag > 0 ? kgPerBag : null,
+      currentStockKg: stockKg > 0 ? stockKg : null,
+    );
+    final moved = coerceToDouble(
+      item['ledger_variance_qty'] ?? item['period_variance_qty'],
+    );
     final hid = item['last_purchase_human_id']?.toString() ?? '';
     final delivered = item['last_purchase_delivered'];
     final pending = delivered == false && hid.isNotEmpty;
@@ -90,9 +102,15 @@ class _StockRowPreviewBody extends ConsumerWidget {
             const SizedBox(height: 12),
             Row(
               children: [
-                _metric('Buy', formatStockQtyNumber(purchased)),
-                _metric('Now', formatStockQtyNumber(current)),
-                _metric('Δ', formatStockQtyNumber(moved)),
+                _metric(
+                  'Buy',
+                  stockDisplayPrimary(purchased, stockUnit),
+                ),
+                _metric('Now', nowDual.primary, subtitle: nowDual.secondary),
+                _metric(
+                  'Var',
+                  moved.abs() > 0.0001 ? formatStockQtyNumber(moved) : '—',
+                ),
               ],
             ),
             const SizedBox(height: 12),
@@ -191,7 +209,7 @@ class _StockRowPreviewBody extends ConsumerWidget {
     );
   }
 
-  Widget _metric(String label, String value) {
+  Widget _metric(String label, String value, {String? subtitle}) {
     return Expanded(
       child: Column(
         children: [
@@ -201,8 +219,19 @@ class _StockRowPreviewBody extends ConsumerWidget {
           ),
           Text(
             value,
-            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w900),
+            textAlign: TextAlign.center,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w900),
           ),
+          if (subtitle != null && subtitle.isNotEmpty)
+            Text(
+              subtitle,
+              textAlign: TextAlign.center,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 9, color: Colors.black45),
+            ),
         ],
       ),
     );

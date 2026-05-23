@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import CatalogItem, User
 from app.models.stock_adjustment import StockAdjustmentLog
+from app.services.unit_normalization import fetch_catalog_items_map, line_qty_in_stock_unit
 
 
 def stock_status(current: Decimal | None, reorder: Decimal | None) -> str:
@@ -98,17 +99,31 @@ async def compute_inventory_summary(
     }
 
 
-def _qty_by_catalog_item(lines: list) -> dict[uuid.UUID, Decimal]:
-    """Sum line qty per catalog_item_id (ORM lines or pydantic line bodies)."""
+async def _qty_by_catalog_item(
+    db: AsyncSession,
+    business_id: uuid.UUID,
+    lines: list,
+) -> dict[uuid.UUID, Decimal]:
+    """Sum normalized line qty per catalog_item_id (stock unit)."""
     totals: dict[uuid.UUID, Decimal] = defaultdict(lambda: Decimal(0))
+    item_ids: set[uuid.UUID] = set()
+    for li in lines:
+        cid = getattr(li, "catalog_item_id", None)
+        if cid is not None:
+            item_ids.add(uuid.UUID(str(cid)))
+    items = await fetch_catalog_items_map(db, business_id, item_ids)
     for li in lines:
         cid = getattr(li, "catalog_item_id", None)
         if cid is None:
             continue
-        qty = Decimal(getattr(li, "qty", 0) or 0)
+        cid_u = uuid.UUID(str(cid))
+        item = items.get(cid_u)
+        if not item:
+            continue
+        qty = line_qty_in_stock_unit(li, item)
         if qty <= 0:
             continue
-        totals[uuid.UUID(str(cid))] += qty
+        totals[cid_u] += qty
     return dict(totals)
 
 
@@ -194,7 +209,7 @@ async def apply_confirmed_purchase_stock(
         db,
         business_id,
         user_id,
-        _qty_by_catalog_item(lines),
+        await _qty_by_catalog_item(db, business_id, lines),
         reason=reason,
         adjustment_type="purchase",
         touch_last_purchase_at=True,
@@ -210,7 +225,7 @@ async def revert_confirmed_purchase_stock(
     purchase_human_id: str | None = None,
 ) -> list[dict]:
     """Decrement stock for a previously confirmed purchase (cancel/delete/unconfirm)."""
-    by_item = _qty_by_catalog_item(lines)
+    by_item = await _qty_by_catalog_item(db, business_id, lines)
     if not by_item:
         return []
     deltas = {cid: -qty for cid, qty in by_item.items()}
@@ -236,8 +251,8 @@ async def sync_confirmed_purchase_stock_diff(
     purchase_human_id: str | None = None,
 ) -> list[dict]:
     """Apply qty delta when editing an already-confirmed purchase."""
-    old_map = _qty_by_catalog_item(old_lines)
-    new_map = _qty_by_catalog_item(new_lines)
+    old_map = await _qty_by_catalog_item(db, business_id, old_lines)
+    new_map = await _qty_by_catalog_item(db, business_id, new_lines)
     all_ids = set(old_map) | set(new_map)
     deltas: dict[uuid.UUID, Decimal] = {}
     for cid in all_ids:

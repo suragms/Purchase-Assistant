@@ -1,4 +1,5 @@
 import uuid
+from collections import defaultdict
 from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
 from typing import Annotated, Literal
@@ -57,6 +58,12 @@ from app.services.stock_inventory import (
 from app.services.stock_variance_notifications import (
     _last_purchase_expected_qty,
     maybe_notify_stock_variance,
+)
+from app.services.stock_tracking_profile import profile_from_catalog_item
+from app.services.unit_normalization import (
+    catalog_stock_unit,
+    current_stock_kg as stock_qty_kg_equivalent,
+    line_qty_in_stock_unit,
 )
 
 router = APIRouter(prefix="/v1/businesses/{business_id}/stock", tags=["stock"])
@@ -138,7 +145,11 @@ def _item_to_list_row(
     supplier_name: str | None,
     *,
     period_purchased_qty: Decimal | None = None,
+    period_usage_qty: Decimal | None = None,
     period_variance_qty: Decimal | None = None,
+    ledger_variance_qty: Decimal | None = None,
+    current_stock_kg: Decimal | None = None,
+    stock_unit: str | None = None,
     needs_verification: bool = False,
     purchased_today_qty: Decimal | None = None,
     usage_today_qty: Decimal | None = None,
@@ -148,7 +159,13 @@ def _item_to_list_row(
 ) -> StockListItemOut:
     cur = catalog_stock_qty(item)
     ro = catalog_reorder(item)
-    unit = item.stock_unit or item.default_unit or item.selling_unit
+    unit = stock_unit or item.stock_unit or item.default_unit or item.selling_unit
+    kg_equiv = (
+        current_stock_kg
+        if current_stock_kg is not None
+        else stock_qty_kg_equivalent(item, cur)
+    )
+    ledger_var = ledger_variance_qty if ledger_variance_qty is not None else period_variance_qty
     return StockListItemOut(
         id=item.id,
         item_code=item.item_code,
@@ -158,13 +175,17 @@ def _item_to_list_row(
         current_stock=cur,
         reorder_level=ro,
         unit=unit,
+        stock_unit=unit,
+        current_stock_kg=kg_equiv,
         rack_location=item.rack_location,
         supplier_name=supplier_name,
         stock_status=stock_status(cur, ro),
         last_stock_updated_at=item.last_stock_updated_at,
         last_stock_updated_by=item.last_stock_updated_by,
         period_purchased_qty=period_purchased_qty,
-        period_variance_qty=period_variance_qty,
+        period_usage_qty=period_usage_qty,
+        period_variance_qty=ledger_var,
+        ledger_variance_qty=ledger_var,
         needs_verification=needs_verification,
         purchased_today_qty=purchased_today_qty,
         usage_today_qty=usage_today_qty,
@@ -226,24 +247,113 @@ async def _period_purchased_map(
     period_start: date,
     period_end: date,
 ) -> dict[uuid.UUID, Decimal]:
+    """Sum purchase line qty normalized to each item's stock unit."""
     if not item_ids:
         return {}
     r = await db.execute(
-        select(
-            TradePurchaseLine.catalog_item_id,
-            func.coalesce(func.sum(TradePurchaseLine.qty), 0),
-        )
+        select(TradePurchaseLine, CatalogItem)
         .join(TradePurchase, TradePurchaseLine.trade_purchase_id == TradePurchase.id)
+        .join(CatalogItem, TradePurchaseLine.catalog_item_id == CatalogItem.id)
         .where(
             TradePurchase.business_id == business_id,
             TradePurchase.purchase_date >= period_start,
             TradePurchase.purchase_date <= period_end,
             TradePurchase.status != "cancelled",
             TradePurchaseLine.catalog_item_id.in_(item_ids),
+            CatalogItem.business_id == business_id,
+            CatalogItem.deleted_at.is_(None),
         )
-        .group_by(TradePurchaseLine.catalog_item_id)
+    )
+    totals: dict[uuid.UUID, Decimal] = defaultdict(lambda: Decimal(0))
+    for line, item in r.all():
+        totals[item.id] += line_qty_in_stock_unit(line, item)
+    return dict(totals)
+
+
+async def _period_usage_map(
+    db: AsyncSession,
+    business_id: uuid.UUID,
+    item_ids: list[uuid.UUID],
+    period_start: date,
+    period_end: date,
+) -> dict[uuid.UUID, Decimal]:
+    if not item_ids:
+        return {}
+    r = await db.execute(
+        select(
+            DailyUsageLog.item_id,
+            func.coalesce(func.sum(DailyUsageLog.used_qty), 0),
+        )
+        .where(
+            DailyUsageLog.business_id == business_id,
+            DailyUsageLog.usage_date >= period_start,
+            DailyUsageLog.usage_date <= period_end,
+            DailyUsageLog.item_id.in_(item_ids),
+        )
+        .group_by(DailyUsageLog.item_id)
     )
     return {row[0]: Decimal(row[1] or 0) for row in r.all()}
+
+
+_PURCHASE_ADJ_TYPES = frozenset({"purchase", "purchase_reversal", "purchase_adjustment"})
+
+
+async def _ledger_variance_map(
+    db: AsyncSession,
+    business_id: uuid.UUID,
+    items: list[CatalogItem],
+) -> dict[uuid.UUID, Decimal | None]:
+    """
+    Reconcile on-hand stock vs all-time purchases − usage ± manual adjustments.
+
+    Returns None when item has no movement history to reconcile.
+    """
+    if not items:
+        return {}
+    item_ids = [i.id for i in items]
+    all_purchased = await _period_purchased_map(
+        db,
+        business_id,
+        item_ids,
+        date(1970, 1, 1),
+        date(2099, 12, 31),
+    )
+    usage_r = await db.execute(
+        select(
+            DailyUsageLog.item_id,
+            func.coalesce(func.sum(DailyUsageLog.used_qty), 0),
+        )
+        .where(
+            DailyUsageLog.business_id == business_id,
+            DailyUsageLog.item_id.in_(item_ids),
+        )
+        .group_by(DailyUsageLog.item_id)
+    )
+    all_usage = {row[0]: Decimal(row[1] or 0) for row in usage_r.all()}
+    adj_r = await db.execute(
+        select(
+            StockAdjustmentLog.item_id,
+            func.coalesce(func.sum(StockAdjustmentLog.new_qty - StockAdjustmentLog.old_qty), 0),
+        )
+        .where(
+            StockAdjustmentLog.business_id == business_id,
+            StockAdjustmentLog.item_id.in_(item_ids),
+            StockAdjustmentLog.adjustment_type.notin_(_PURCHASE_ADJ_TYPES),
+        )
+        .group_by(StockAdjustmentLog.item_id)
+    )
+    adj_net = {row[0]: Decimal(row[1] or 0) for row in adj_r.all()}
+    out: dict[uuid.UUID, Decimal | None] = {}
+    for item in items:
+        purchased = all_purchased.get(item.id, Decimal(0))
+        usage = all_usage.get(item.id, Decimal(0))
+        adj = adj_net.get(item.id, Decimal(0))
+        if purchased == 0 and usage == 0 and adj == 0:
+            out[item.id] = None
+            continue
+        expected = purchased - usage + adj
+        out[item.id] = catalog_stock_qty(item) - expected
+    return out
 
 
 def _needs_verification(
@@ -484,10 +594,12 @@ async def list_stock(
         per_page=per_page,
     )
     period_map: dict[uuid.UUID, Decimal] = {}
+    period_usage_map: dict[uuid.UUID, Decimal] = {}
     ps, pe = _parse_period_dates(period_start, period_end)
     item_ids = [item.id for item, _, _ in rows]
     if include_period and ps and pe:
         period_map = await _period_purchased_map(db, business_id, item_ids, ps, pe)
+        period_usage_map = await _period_usage_map(db, business_id, item_ids, ps, pe)
     today = date.today()
     today_purchased: dict[uuid.UUID, Decimal] = {}
     today_usage: dict[uuid.UUID, Decimal] = {}
@@ -505,17 +617,22 @@ async def list_stock(
         perishable_by_cat = {row[0]: bool(row[1]) for row in cr.all()}
     catalog_items = [item for item, _, _ in rows]
     trade_meta = await _last_trade_meta_map(db, catalog_items)
+    ledger_map = await _ledger_variance_map(db, business_id, catalog_items)
     items: list[StockListItemOut] = []
     for item, cat_name, type_name in rows:
         sup = await _supplier_name(db, item)
         meta = trade_meta.get(item.id, (None, None))
         purchased = period_map.get(item.id) if include_period else None
+        usage = period_usage_map.get(item.id) if include_period else None
         cur = catalog_stock_qty(item)
-        variance = (cur - purchased) if purchased is not None else None
-        verify = (
-            _needs_verification(cur, purchased) if purchased is not None else False
-        )
+        ledger_var = ledger_map.get(item.id)
+        verify = False
+        if ledger_var is not None and purchased is not None and purchased > 0:
+            verify = abs(ledger_var) / purchased > Decimal("0.1")
+        elif purchased is not None and purchased > 0:
+            verify = _needs_verification(cur, purchased)
         perishable = perishable_by_cat.get(item.category_id, False) if item.category_id else False
+        su = catalog_stock_unit(item)
         items.append(
             _item_to_list_row(
                 item,
@@ -523,7 +640,9 @@ async def list_stock(
                 type_name,
                 sup,
                 period_purchased_qty=purchased,
-                period_variance_qty=variance,
+                period_usage_qty=usage,
+                ledger_variance_qty=ledger_var,
+                stock_unit=su,
                 needs_verification=verify,
                 purchased_today_qty=today_purchased.get(item.id),
                 usage_today_qty=today_usage.get(item.id),
@@ -867,7 +986,7 @@ async def _barcode_label(
     if item.category_id:
         cr = await db.execute(select(ItemCategory.name).where(ItemCategory.id == item.category_id))
         cat_name = cr.scalar_one_or_none()
-    purchases = await _recent_purchases(db, item.id, limit=1)
+    purchases = await _recent_purchases(db, item, limit=1)
     lp = purchases[0] if purchases else None
     sup = await _supplier_name(db, item)
     bc = getattr(item, "barcode", None) or item.item_code
@@ -930,15 +1049,20 @@ async def barcode_batch(
     return BarcodeBatchOut(labels=labels)
 
 
-async def _recent_purchases(db: AsyncSession, item_id: uuid.UUID, limit: int = 5) -> list[RecentPurchaseOut]:
+async def _recent_purchases(
+    db: AsyncSession,
+    item: CatalogItem,
+    limit: int = 5,
+) -> list[RecentPurchaseOut]:
     r = await db.execute(
         select(TradePurchaseLine, TradePurchase, Supplier.name)
         .join(TradePurchase, TradePurchaseLine.trade_purchase_id == TradePurchase.id)
         .outerjoin(Supplier, TradePurchase.supplier_id == Supplier.id)
-        .where(TradePurchaseLine.catalog_item_id == item_id)
+        .where(TradePurchaseLine.catalog_item_id == item.id)
         .order_by(desc(TradePurchase.purchase_date))
         .limit(limit)
     )
+    su = catalog_stock_unit(item)
     out: list[RecentPurchaseOut] = []
     for line, tp, sup_name in r.all():
         pd = tp.purchase_date
@@ -947,6 +1071,7 @@ async def _recent_purchases(db: AsyncSession, item_id: uuid.UUID, limit: int = 5
 
             if isinstance(pd, date_cls):
                 pd = datetime.combine(pd, datetime.min.time(), tzinfo=timezone.utc)
+        qty_su = line_qty_in_stock_unit(line, item)
         out.append(
             RecentPurchaseOut(
                 id=tp.id,
@@ -955,6 +1080,10 @@ async def _recent_purchases(db: AsyncSession, item_id: uuid.UUID, limit: int = 5
                 purchase_date=pd,
                 qty=line.qty,
                 unit=line.unit,
+                entered_qty=line.qty,
+                entered_unit=line.unit,
+                qty_in_stock_unit=qty_su,
+                stock_unit=su,
                 rate=getattr(line, "landing_cost", None) or getattr(line, "purchase_rate", None),
                 supplier_name=sup_name,
             )
@@ -990,7 +1119,7 @@ async def list_reorder_entries(
         cur = catalog_stock_qty(item)
         ro = catalog_reorder(item)
         sup = await _supplier_name(db, item)
-        purchases = await _recent_purchases(db, item.id, limit=1)
+        purchases = await _recent_purchases(db, item, limit=1)
         lp = purchases[0] if purchases else None
         items.append(
             ReorderListEntryOut(
@@ -1099,12 +1228,17 @@ async def get_stock_intelligence(
     ro = catalog_reorder(item)
     unit = item.stock_unit or item.default_unit or item.selling_unit
     purchased = Decimal("0")
+    period_usage = Decimal("0")
     ps, pe = _parse_period_dates(period_start, period_end)
     if ps and pe:
         m = await _period_purchased_map(db, business_id, [item_id], ps, pe)
         purchased = m.get(item_id, Decimal("0"))
-    variance = cur - purchased
-    purchases = await _recent_purchases(db, item_id)
+        um = await _period_usage_map(db, business_id, [item_id], ps, pe)
+        period_usage = um.get(item_id, Decimal("0"))
+    ledger_map = await _ledger_variance_map(db, business_id, [item])
+    ledger_var = ledger_map.get(item_id)
+    su = catalog_stock_unit(item)
+    purchases = await _recent_purchases(db, item)
     if should_redact_financials(_m.role):
         purchases = [
             p.model_copy(update={"rate": None}) if hasattr(p, "model_copy") else p
@@ -1122,6 +1256,7 @@ async def get_stock_intelligence(
     adjustments = [
         StockAdjustmentOut.model_validate(a) for a in adj_r.scalars().all()
     ]
+    profile = profile_from_catalog_item(item)
     return StockIntelligenceOut(
         id=item.id,
         item_code=item.item_code,
@@ -1131,6 +1266,9 @@ async def get_stock_intelligence(
         supplier_name=supplier_name,
         barcode=getattr(item, "barcode", None),
         default_kg_per_bag=getattr(item, "default_kg_per_bag", None),
+        stock_unit=su,
+        stock_tracking=profile.as_dict(),
+        current_stock_kg=stock_qty_kg_equivalent(item, cur),
         last_stock_updated_at=getattr(item, "last_stock_updated_at", None),
         last_stock_updated_by=getattr(item, "last_stock_updated_by", None),
         current_stock=cur,
@@ -1138,8 +1276,14 @@ async def get_stock_intelligence(
         unit=unit,
         stock_status=stock_status(cur, ro),
         period_purchased_qty=purchased,
-        period_variance_qty=variance,
-        needs_verification=_needs_verification(cur, purchased),
+        period_usage_qty=period_usage,
+        period_variance_qty=ledger_var,
+        ledger_variance_qty=ledger_var,
+        needs_verification=(
+            abs(ledger_var) / purchased > Decimal("0.1")
+            if ledger_var is not None and purchased > 0
+            else _needs_verification(cur, purchased)
+        ),
         recent_purchases=purchases,
         recent_adjustments=adjustments,
     )
@@ -1168,7 +1312,7 @@ async def get_stock_item(
     item, cat_name, type_name = row
     sup = await _supplier_name(db, item)
     base = _item_to_list_row(item, cat_name, type_name, sup)
-    purchases = await _recent_purchases(db, item_id)
+    purchases = await _recent_purchases(db, item)
     if should_redact_financials(_m.role):
         purchases = [
             p.model_copy(update={"rate": None}) if hasattr(p, "model_copy") else p

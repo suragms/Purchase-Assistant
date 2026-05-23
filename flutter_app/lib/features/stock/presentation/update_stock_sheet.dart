@@ -10,6 +10,7 @@ import '../../../core/providers/catalog_providers.dart';
 import '../../../core/providers/home_owner_dashboard_providers.dart';
 import '../../../core/providers/staff_home_providers.dart';
 import '../../../core/providers/stock_providers.dart';
+import '../../../core/utils/unit_utils.dart';
 
 const _kAdjustmentTypes = <String, String>{
   'verification': 'Verification',
@@ -357,7 +358,7 @@ class _UpdateStockSheetBodyState extends ConsumerState<_UpdateStockSheetBody> {
                       if (newQty != null) ...[
                         const SizedBox(height: 8),
                         Text(
-                          'Change: ${(newQty - oldQty) > 0 ? '+' : ''}${(newQty - oldQty).toStringAsFixed(3).replaceAll(RegExp(r'\.?0+$'), '')}${unit.isNotEmpty ? ' $unit' : ''}',
+                          'Change: ${(newQty - oldQty) > 0 ? '+' : ''}${formatStockQtyNumber(newQty - oldQty)}${unit.isNotEmpty ? ' $unit' : ''}',
                           style: theme.textTheme.bodySmall?.copyWith(
                             fontWeight: FontWeight.w700,
                           ),

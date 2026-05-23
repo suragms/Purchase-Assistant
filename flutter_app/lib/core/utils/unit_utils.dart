@@ -22,7 +22,7 @@ String? stockDisplaySecondary(
   double? kgPerTin,
 ) {
   final u = unit.trim().toLowerCase();
-  if (u == 'bag' || u == 'sack') {
+  if (u == 'bag' || u == 'sack' || u == 'piece') {
     if (kgPerBag != null && kgPerBag > 0) {
       return '(${_fmtQty(qty * kgPerBag)} kg)';
     }
@@ -45,3 +45,56 @@ String formatStockQtyNumber(double n) {
 }
 
 String _fmtQty(double n) => formatStockQtyNumber(n);
+
+/// All warehouse qty labels (no `.000` on whole numbers).
+String formatQtyForDisplay(num? value) {
+  if (value == null) return '—';
+  return formatStockQtyNumber(value.toDouble());
+}
+
+/// Primary stock label + optional kg subtitle from API fields.
+class DualStockDisplay {
+  const DualStockDisplay({required this.primary, this.secondary});
+
+  final String primary;
+  final String? secondary;
+}
+
+DualStockDisplay dualStockDisplay({
+  required double qty,
+  String? unit,
+  double? kgPerBag,
+  double? currentStockKg,
+}) {
+  final u = (unit ?? '').trim().toLowerCase();
+  final primary = stockDisplayPrimary(qty, u.isEmpty ? 'piece' : u);
+  String? secondary = stockDisplaySecondary(qty, u, kgPerBag, null);
+  if (secondary == null && currentStockKg != null && currentStockKg > 0) {
+    secondary = '(${_fmtQty(currentStockKg)} kg)';
+  }
+  return DualStockDisplay(primary: primary, secondary: secondary);
+}
+
+/// Purchase row: entered unit + normalized stock-unit qty from API.
+DualStockDisplay dualPurchaseQtyDisplay({
+  required double enteredQty,
+  String? enteredUnit,
+  double? qtyInStockUnit,
+  String? stockUnit,
+  double? kgPerBag,
+}) {
+  final eu = (enteredUnit ?? '').trim().toLowerCase();
+  final entered = stockDisplayPrimary(enteredQty, eu.isEmpty ? 'piece' : eu);
+  if (qtyInStockUnit == null || stockUnit == null) {
+    return DualStockDisplay(primary: entered);
+  }
+  final su = stockUnit.trim().toLowerCase();
+  final normalized = stockDisplayPrimary(qtyInStockUnit, su);
+  if (entered == normalized) {
+    final sec = stockDisplaySecondary(qtyInStockUnit, su, kgPerBag, null);
+    return DualStockDisplay(primary: entered, secondary: sec);
+  }
+  final sec = stockDisplaySecondary(enteredQty, eu, kgPerBag, null) ??
+      '($normalized)';
+  return DualStockDisplay(primary: entered, secondary: sec);
+}

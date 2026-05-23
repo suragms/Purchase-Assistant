@@ -37,6 +37,7 @@ import '../../../core/widgets/list_skeleton.dart';
 import '../../stock/presentation/widgets/edit_item_code_sheet.dart';
 import '../../../shared/widgets/bag_default_unit_hint.dart';
 import '../../../shared/widgets/trade_intel_cards.dart';
+import '../../../shared/widgets/unit_engine_summary_card.dart';
 import '../../../shared/widgets/search_picker_sheet.dart';
 import '../../../core/providers/trade_purchases_provider.dart';
 import '../../stock/presentation/update_stock_sheet.dart';
@@ -1107,15 +1108,38 @@ class _CatalogItemStockSection extends ConsumerWidget {
 
         final intel = intelAsync.valueOrNull ?? const <String, dynamic>{};
         final purchased = intel['period_purchased_qty'] ?? st['period_purchased_qty'];
-        final moved = intel['period_variance_qty'] ?? st['period_variance_qty'];
+        final usage = intel['period_usage_qty'];
+        final moved =
+            intel['ledger_variance_qty'] ?? intel['period_variance_qty'] ?? st['period_variance_qty'];
+        final stockUnit = (intel['stock_unit'] ?? st['stock_unit'] ?? st['unit'] ?? 'piece')
+            .toString();
+        final purchasedN = coerceToDouble(purchased);
+        final purchasedLabel = purchasedN > 0
+            ? stockDisplayPrimary(purchasedN, stockUnit)
+            : '—';
+        final movedN = coerceToDouble(moved);
+        final movedLabel =
+            movedN.abs() > 0.0001 ? formatStockQtyNumber(movedN) : '—';
 
-        return _CatalogItemDetailPanel(
-          title: 'Stock',
-          rows: [
-            ('Current', qtyNum(st['current_stock'])),
-            ('Purchased (period)', qtyNum(purchased)),
-            ('Moved', qtyNum(moved)),
-            ('Low threshold', qtyNum(st['reorder_level'])),
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            UnitEngineSummaryCard(
+              item: item,
+              stock: st,
+              intel: intel,
+            ),
+            const SizedBox(height: 8),
+            _CatalogItemDetailPanel(
+              title: 'Period activity',
+              rows: [
+                ('Purchased (period)', purchasedLabel),
+                if (usage != null && coerceToDouble(usage) > 0)
+                  ('Used (period)', qtyNum(usage)),
+                ('Variance', movedLabel),
+                ('Low threshold', qtyNum(st['reorder_level'])),
+              ],
+            ),
           ],
         );
       },
@@ -1868,13 +1892,24 @@ class _ItemWarehouseHeroHeader extends StatelessWidget {
       'low' => const Color(0xFFE65100),
       _ => const Color(0xFF2E7D32),
     };
-    final unit = (stock?['unit'] ?? item['default_unit'] ?? '').toString().trim();
+    final unit = (stock?['stock_unit'] ?? stock?['unit'] ?? item['default_unit'] ?? '')
+        .toString()
+        .trim();
     final curN = coerceToDouble(stock?['current_stock']);
-    final kgBag = coerceToDoubleNullable(item['default_kg_per_bag']);
+    final kgBag = coerceToDoubleNullable(
+      stock?['default_kg_per_bag'] ?? item['default_kg_per_bag'],
+    );
     final kgTin = coerceToDoubleNullable(item['default_weight_per_tin']);
+    final stockKg = coerceToDoubleNullable(stock?['current_stock_kg']);
     final unitForDisplay = unit.isEmpty ? 'bag' : unit;
-    final onHandPrimary = stockDisplayPrimary(curN, unitForDisplay);
-    final onHandSecondary =
+    final onHandDual = dualStockDisplay(
+      qty: curN,
+      unit: unitForDisplay,
+      kgPerBag: kgBag,
+      currentStockKg: stockKg,
+    );
+    final onHandPrimary = onHandDual.primary;
+    final onHandSecondary = onHandDual.secondary ??
         stockDisplaySecondary(curN, unitForDisplay, kgBag, kgTin);
 
     return Column(
@@ -2098,11 +2133,22 @@ class _RecentStockPurchasesSection extends ConsumerWidget {
     final date = at != null
         ? DateFormat('d MMM yyyy').format(at.toLocal())
         : '—';
-    final qty = r['qty']?.toString() ?? '—';
-    final unit = r['unit']?.toString() ?? '';
+    final enteredQty = coerceToDouble(r['entered_qty'] ?? r['qty']);
+    final enteredUnit = r['entered_unit']?.toString() ?? r['unit']?.toString() ?? '';
+    final qtySu = coerceToDoubleNullable(r['qty_in_stock_unit']);
+    final stockU = r['stock_unit']?.toString();
+    final dual = dualPurchaseQtyDisplay(
+      enteredQty: enteredQty,
+      enteredUnit: enteredUnit,
+      qtyInStockUnit: qtySu,
+      stockUnit: stockU,
+    );
+    final qtyLabel = dual.secondary == null
+        ? dual.primary
+        : '${dual.primary} ${dual.secondary}';
     final rate = r['rate']?.toString() ?? '—';
     final sup = r['supplier_name']?.toString() ?? '';
-    return '$date · $qty $unit · ₹$rate · $sup';
+    return '$date · $qtyLabel · ₹$rate · $sup';
   }
 }
 
@@ -2113,10 +2159,7 @@ String _fmtDate(String raw) {
   return DateFormat('d MMM').format(d);
 }
 
-String _fmtNum(double n) =>
-    (n - n.roundToDouble()).abs() < 0.001
-        ? n.round().toString()
-        : n.toStringAsFixed(2);
+String _fmtNum(double n) => formatStockQtyNumber(n);
 
 class _ItemSectionLabel extends StatelessWidget {
   const _ItemSectionLabel({required this.label});
@@ -2227,8 +2270,8 @@ class _TradeHistoryLedgerTable extends StatelessWidget {
                             ),
                             _tdCell(
                               Text(
-                                '${fmtNum(r.line.qty)} ${r.line.unit}',
-                                maxLines: 1,
+                                _purchaseQtyCell(r),
+                                maxLines: 2,
                                 overflow: TextOverflow.ellipsis,
                                 style: HexaDsType.purchaseQtyUnit
                                     .copyWith(fontSize: 12),
@@ -2267,6 +2310,11 @@ class _TradeHistoryLedgerTable extends StatelessWidget {
         );
       },
     );
+  }
+
+  static String _purchaseQtyCell(ItemTradeHistoryRow r) {
+    final ln = r.line;
+    return '${formatStockQtyNumber(ln.qty)} ${ln.unit}';
   }
 
   static Widget _thCell(

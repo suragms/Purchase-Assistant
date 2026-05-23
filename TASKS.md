@@ -1,6 +1,39 @@
 # Purchase Assistant — Living task board
 
-**Last updated:** 2026-05-23 (Stock/search/bulk print UX gaps from screenshots)
+**Last updated:** 2026-05-23 (Unit normalization + stock reconciliation)
+
+---
+
+## Unit normalization + stock reconciliation (2026-05-23)
+
+- [x] Backend SSOT: `unit_normalization.py` — `default_unit` wins over AI `stock_unit`; kg→bag via `default_kg_per_bag`
+- [x] Period purchased sum uses normalized lines (not raw `SUM(qty)`)
+- [x] Stock apply/revert/diff on confirm uses normalized qty
+- [x] API: `ledger_variance_qty`, `period_usage_qty`, `qty_in_stock_unit` on recent purchases, `current_stock_kg`
+- [x] Migration `backend/sql/033_trade_line_qty_in_stock_unit.sql` + backfill/repair scripts
+- [x] Flutter dual display (BAG + kg subtitle) on stock row, preview, item detail, intelligence
+- [x] `invalidatePurchaseWorkspace` → `invalidateWarehouseSurfaces` for realtime stock refresh
+- [x] **Prod (Supabase MCP 2026-05-23):** migration `trade_line_qty_in_stock_unit`, `fix_prod_catalog_unit_profiles.sql`, SQL backfill 96/109 lines (`qty_in_stock_unit`); 13 edge unit mismatches remain (runtime normalize)
+
+## Smart unit engine V2 (2026-05-23)
+
+- [x] `stock_tracking_profile.py` — wholesale bag vs retail packet vs loose kg (ATTA 5KG → piece, SUGAR 50KG → bag)
+- [x] Purchase line unit validation blocks bag on retail packet / piece on wholesale bag
+- [x] Catalog create: `piece` + `default_kg_per_bag` → `RETAIL_PACKET` + verified profile
+- [x] Flutter: `PackagingTypeSelector` on add-item; `detectUnitFromName` no longer maps all `*KG` to bag
+- [x] Item detail: Unit engine panel (display unit, packaging, weight)
+- [ ] Re-tag existing production items with wrong `package_type` (audit `data/products_categories_items/Products list.xlsx` vs DB)
+
+### Unit engine UX rollout (pages)
+
+- [x] Add item: packaging type picker + labels + autofill kg from name
+- [x] Item detail + stock intelligence: `UnitEngineSummaryCard`
+- [x] Stock list row: subcategory-only line (no duplicate category trail)
+- [x] Purchase line sheet: block wrong unit before save (client + API)
+- [x] Quick stock patch: `opening_stock` reason chip
+- [ ] Quick add / batch create: same packaging picker
+- [ ] Staff home / barcode create: packaging picker
+- [ ] Seed script from `data/files/products_by_category_seed.json`
 
 ---
 

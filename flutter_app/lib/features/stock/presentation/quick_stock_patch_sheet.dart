@@ -11,11 +11,11 @@ import '../../../core/providers/stock_providers.dart';
 import '../../../core/utils/unit_utils.dart';
 
 const _kReasonChips = <(String label, String type)>[
-  ('Sale', 'sale'),
-  ('Return', 'correction'),
-  ('Damaged', 'damaged'),
+  ('Opening stock', 'opening_stock'),
   ('Physical count', 'verification'),
-  ('Purchase', 'purchase'),
+  ('Sale', 'sale'),
+  ('Damaged', 'damaged'),
+  ('Correction', 'correction'),
   ('Other', 'manual'),
 ];
 
@@ -71,7 +71,10 @@ class _QuickStockPatchBodyState extends ConsumerState<_QuickStockPatchBody> {
 
   String get _itemId => widget.item['id']?.toString() ?? '';
 
-  String get _unit => widget.item['unit']?.toString() ?? '';
+  String get _unit =>
+      widget.item['stock_unit']?.toString() ??
+      widget.item['unit']?.toString() ??
+      'piece';
 
   void _syncQtyField(double qty) {
     _current = qty;
