@@ -42,6 +42,7 @@
 
 - [x] Stock row: **Buy / Now / Δ** numeric columns (no `150 bags` suffix); no horizontal scroll
 - [x] Bulk print: same qty columns; **100-label cap** before PDF; **Download** opens PDF preview page with app-bar download
+- [x] Bulk print: split PDFs **30/40/60** labels per file; label footer **stock + last purchase**; scan sheet shows purchase + **Update** stock
 - [x] Staff search: catalog item → **item detail** (history, ledger, purchases); purchase bills visible; staff bill → `/staff/purchase-history/:id`
 - [x] Search PO lines: qty numbers only (no bag/kg); PUR id bold primary
 - [x] Item detail stock panel: purchased/moved period numbers without unit suffix

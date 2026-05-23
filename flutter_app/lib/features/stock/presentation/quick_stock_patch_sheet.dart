@@ -8,7 +8,7 @@ import '../../../core/json_coerce.dart';
 import '../../../core/providers/business_aggregates_invalidation.dart';
 import '../../../core/providers/home_owner_dashboard_providers.dart';
 import '../../../core/providers/stock_providers.dart';
-import '../../../core/utils/unit_utils.dart';
+import '../../barcode/presentation/widgets/scan_item_stock_summary_card.dart';
 
 const _kReasonChips = <(String label, String type)>[
   ('Opening stock', 'opening_stock'),
@@ -151,7 +151,6 @@ class _QuickStockPatchBodyState extends ConsumerState<_QuickStockPatchBody> {
 
   @override
   Widget build(BuildContext context) {
-    final name = widget.item['name']?.toString() ?? 'Item';
     final unitLabel = _unit.isNotEmpty ? _unit.toUpperCase() : '';
     final canSave = !_saving && _reasonType != null;
     return Padding(
@@ -166,12 +165,7 @@ class _QuickStockPatchBodyState extends ConsumerState<_QuickStockPatchBody> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text(name, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
-            const SizedBox(height: 8),
-            Text(
-              'Current: ${stockDisplayPrimary(_current, _unit)}',
-              style: const TextStyle(fontSize: 14),
-            ),
+            ScanItemStockSummaryCard(item: widget.item),
             const SizedBox(height: 12),
             Row(
               children: [
@@ -181,7 +175,7 @@ class _QuickStockPatchBodyState extends ConsumerState<_QuickStockPatchBody> {
                     keyboardType:
                         const TextInputType.numberWithOptions(decimal: true),
                     decoration: InputDecoration(
-                      labelText: 'Set stock to',
+                      labelText: 'Current stock',
                       suffixText: unitLabel,
                       isDense: true,
                       border: const OutlineInputBorder(),
@@ -195,7 +189,7 @@ class _QuickStockPatchBodyState extends ConsumerState<_QuickStockPatchBody> {
                 const SizedBox(width: 8),
                 FilledButton(
                   onPressed: canSave ? _setAbsolute : null,
-                  child: const Text('Set'),
+                  child: const Text('Update'),
                 ),
               ],
             ),

@@ -64,7 +64,11 @@ def test_from_scan_create_and_lookup():
         params={"code": "8901234567890"},
     )
     assert lookup.status_code == 200, lookup.text
-    assert lookup.json()["item_code"] == "RICE-PONNI-50KG"
+    body = lookup.json()
+    assert body["item_code"] == "RICE-PONNI-50KG"
+    assert "last_purchase_date" in body
+    assert "last_purchase_qty" in body
+    assert "supplier_name" in body
 
     dup = client.post(
         f"/v1/businesses/{bid}/catalog-items/from-scan",

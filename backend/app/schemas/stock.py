@@ -172,6 +172,11 @@ class BarcodeLookupOut(BaseModel):
     current_stock: Decimal
     reorder_level: Decimal
     unit: str | None
+    last_purchase_date: datetime | None = None
+    last_purchase_qty: Decimal | None = None
+    last_purchase_unit: str | None = None
+    last_purchase_rate: Decimal | None = None
+    supplier_name: str | None = None
 
 
 class BarcodeLabelOut(BaseModel):

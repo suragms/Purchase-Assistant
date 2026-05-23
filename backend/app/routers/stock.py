@@ -799,14 +799,20 @@ async def barcode_lookup(
         item = r2.scalar_one_or_none()
     if not item:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Item not found")
+    label = await _barcode_label(db, business_id, item)
     return BarcodeLookupOut(
         id=item.id,
         name=item.name,
         item_code=item.item_code,
         barcode=getattr(item, "barcode", None),
-        current_stock=catalog_stock_qty(item),
+        current_stock=label.current_stock or catalog_stock_qty(item),
         reorder_level=catalog_reorder(item),
-        unit=item.stock_unit or item.default_unit,
+        unit=label.unit,
+        last_purchase_date=label.last_purchase_date,
+        last_purchase_qty=label.last_purchase_qty,
+        last_purchase_unit=label.last_purchase_unit,
+        last_purchase_rate=label.last_purchase_rate,
+        supplier_name=label.supplier_name,
     )
 
 

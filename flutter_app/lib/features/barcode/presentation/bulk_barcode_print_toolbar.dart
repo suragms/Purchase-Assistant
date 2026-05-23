@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../../../core/design_system/hexa_operational_tokens.dart';
 import '../../../core/widgets/operational_async_button.dart';
+import '../services/bulk_pdf_chunks.dart';
+
 class BulkBarcodePrintToolbar extends StatelessWidget {
   const BulkBarcodePrintToolbar({
     super.key,
@@ -10,11 +12,13 @@ class BulkBarcodePrintToolbar extends StatelessWidget {
     required this.denseA4,
     required this.useQr,
     required this.copies,
+    required this.labelsPerPdfFile,
     required this.progress,
     required this.statusText,
     required this.onDenseA4Changed,
     required this.onQrChanged,
     required this.onCopiesChanged,
+    required this.onLabelsPerPdfFileChanged,
     required this.onPreview,
     required this.onPdf,
     required this.onPrint,
@@ -26,11 +30,13 @@ class BulkBarcodePrintToolbar extends StatelessWidget {
   final bool denseA4;
   final bool useQr;
   final int copies;
+  final BulkLabelsPerPdfFile labelsPerPdfFile;
   final double? progress;
   final String? statusText;
   final ValueChanged<bool> onDenseA4Changed;
   final ValueChanged<bool> onQrChanged;
   final ValueChanged<int> onCopiesChanged;
+  final ValueChanged<BulkLabelsPerPdfFile> onLabelsPerPdfFileChanged;
   final Future<void> Function() onPreview;
   final Future<void> Function() onPdf;
   final Future<void> Function() onPrint;
@@ -92,6 +98,27 @@ class BulkBarcodePrintToolbar extends StatelessWidget {
                       value: copies,
                       enabled: !busy,
                       onChanged: onCopiesChanged,
+                    ),
+                    const SizedBox(width: 8),
+                    SegmentedButton<BulkLabelsPerPdfFile>(
+                      segments: const [
+                        ButtonSegment(
+                          value: BulkLabelsPerPdfFile.n30,
+                          label: Text('30/PDF'),
+                        ),
+                        ButtonSegment(
+                          value: BulkLabelsPerPdfFile.n40,
+                          label: Text('40/PDF'),
+                        ),
+                        ButtonSegment(
+                          value: BulkLabelsPerPdfFile.n60,
+                          label: Text('60/PDF'),
+                        ),
+                      ],
+                      selected: {labelsPerPdfFile},
+                      onSelectionChanged: busy
+                          ? null
+                          : (s) => onLabelsPerPdfFileChanged(s.first),
                     ),
                   ],
                 ),

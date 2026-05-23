@@ -481,16 +481,40 @@ class BarcodePdfService {
       ]);
     }
 
+    if (data.currentStock != null) {
+      final stockQty = data.currentStock!;
+      final rounded = stockQty.roundToDouble();
+      final stockStr = (stockQty - rounded).abs() < 0.001
+          ? '${rounded.round()}'
+          : stockQty.toStringAsFixed(1);
+      final u = (data.unit ?? '').trim();
+      children.add(pw.SizedBox(height: 2));
+      children.add(
+        pw.Text(
+          'Stock: $stockStr${u.isEmpty ? '' : ' $u'}',
+          style: pw.TextStyle(
+            fontSize: codeSize - 1,
+            fontWeight: pw.FontWeight.bold,
+          ),
+        ),
+      );
+    }
+
     final lastLine = _lastPurchaseLine(
       data,
       showLastPurchase: showLastPurchase,
       size: size,
       hideFinancials: hideFinancials,
+      compact: size != LabelSize.large,
     );
     if (lastLine != null) {
-      children.add(pw.SizedBox(height: 2));
+      children.add(pw.SizedBox(height: 1));
       children.add(
-        pw.Text(lastLine, style: pw.TextStyle(fontSize: codeSize - 1)),
+        pw.Text(
+          size == LabelSize.small ? 'Last: $lastLine' : lastLine,
+          style: pw.TextStyle(fontSize: codeSize - 1.5),
+          maxLines: 2,
+        ),
       );
     }
 
@@ -509,8 +533,10 @@ class BarcodePdfService {
     required bool showLastPurchase,
     required LabelSize size,
     bool hideFinancials = false,
+    bool compact = false,
   }) {
-    if (!showLastPurchase || size == LabelSize.small) return null;
+    if (!showLastPurchase) return null;
+    if (size == LabelSize.small && !compact) return null;
     final parts = <String>[];
     if (data.lastPurchaseDate != null) {
       final d = data.lastPurchaseDate!;

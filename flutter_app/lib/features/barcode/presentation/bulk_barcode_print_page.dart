@@ -16,6 +16,7 @@ import '../../../core/widgets/hexa_error_card.dart';
 import '../../stock/presentation/widgets/operational_stock_filter_sheet.dart';
 import '../services/barcode_pdf_service.dart';
 import '../services/bulk_label_batch.dart';
+import '../services/bulk_pdf_chunks.dart';
 import 'bulk_barcode_print_controller.dart';
 import 'bulk_barcode_print_preview_panel.dart';
 import 'bulk_barcode_print_toolbar.dart';
@@ -37,6 +38,7 @@ class _BulkBarcodePrintPageState extends ConsumerState<BulkBarcodePrintPage> {
   bool _busy = false;
   bool _denseA4 = true;
   bool _useQr = true;
+  BulkLabelsPerPdfFile _labelsPerPdfFile = BulkLabelsPerPdfFile.n40;
   String? _pdfStatus;
   int _labelProgressDone = 0;
   int _labelProgressTotal = 0;
@@ -97,7 +99,7 @@ class _BulkBarcodePrintPageState extends ConsumerState<BulkBarcodePrintPage> {
   static const int _kMaxLabelsPerPdf = 100;
 
   Future<void> _runPdfFlow({
-    required Future<void> Function(Uint8List pdf) action,
+    required Future<void> Function(List<Uint8List> pdfs) action,
     required Future<void> Function() retry,
   }) async {
     if (_selected.isEmpty || _busy) return;
@@ -140,7 +142,7 @@ class _BulkBarcodePrintPageState extends ConsumerState<BulkBarcodePrintPage> {
       final symbol = _useQr
           ? BarcodeSymbolMode.code128WithQr
           : BarcodeSymbolMode.code128;
-      final pdf = await generateBulkPdfBytes(
+      final pdfs = await generateBulkPdfParts(
         context: context,
         ref: ref,
         batch: batch,
@@ -149,8 +151,20 @@ class _BulkBarcodePrintPageState extends ConsumerState<BulkBarcodePrintPage> {
         perRow: _perRow,
         symbol: symbol,
         thermalSize: _thermalSize,
+        labelsPerFile: _labelsPerPdfFile.count,
       );
-      await action(pdf);
+      await action(pdfs);
+      if (!mounted) return;
+      final perFile = _labelsPerPdfFile.count;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            pdfs.length == 1
+                ? 'PDF ready ($perFile labels max per file).'
+                : '${pdfs.length} PDFs ready (up to $perFile labels each).',
+          ),
+        ),
+      );
     } on BarcodeOperationException catch (e) {
       if (!mounted) return;
       _showError(e.message);
@@ -185,8 +199,28 @@ class _BulkBarcodePrintPageState extends ConsumerState<BulkBarcodePrintPage> {
     );
   }
 
-  Future<void> _openPdfPage(Uint8List pdf, {required String title}) async {
+  String _bulkBarcodeFilename({int? part, int? partCount}) {
+    final q = ref.read(stockListQueryProvider);
+    final raw = q.category.trim().isNotEmpty ? q.category.trim() : 'all_items';
+    final category = raw
+        .replaceAll(RegExp(r'[^A-Za-z0-9_-]+'), '_')
+        .replaceAll(RegExp(r'_+'), '_');
+    final date = DateFormat('yyyyMMdd').format(DateTime.now());
+    final base =
+        'harisree_barcodes_${category.isEmpty ? 'all_items' : category}_$date';
+    if (part != null && partCount != null && partCount > 1) {
+      return '${base}_part${part}_of_$partCount.pdf';
+    }
+    return '$base.pdf';
+  }
+
+  Future<void> _openPdfPage(
+    Uint8List pdf, {
+    required String title,
+    String? filename,
+  }) async {
     if (!mounted) return;
+    final name = filename ?? _bulkBarcodeFilename();
     await Navigator.of(context).push<void>(
       MaterialPageRoute(
         builder: (ctx) => Scaffold(
@@ -197,7 +231,7 @@ class _BulkBarcodePrintPageState extends ConsumerState<BulkBarcodePrintPage> {
                 onPressed: () => unawaited(
                   Printing.sharePdf(
                     bytes: pdf,
-                    filename: _bulkBarcodeFilename(),
+                    filename: name,
                   ),
                 ),
                 icon: const Icon(Icons.download_rounded),
@@ -219,72 +253,83 @@ class _BulkBarcodePrintPageState extends ConsumerState<BulkBarcodePrintPage> {
 
   Future<void> _preview() => _runPdfFlow(
         retry: _preview,
-        action: (pdf) async {
-    if (!mounted) return;
-    final count = _selected.length * _copies;
-    await _openPdfPage(pdf, title: 'Preview ($count labels)');
-  },
+        action: (pdfs) async {
+          if (!mounted || pdfs.isEmpty) return;
+          final total = _selected.length * _copies;
+          await _openPdfPage(
+            pdfs.first,
+            title: pdfs.length == 1
+                ? 'Preview ($total labels)'
+                : 'Preview part 1 of ${pdfs.length}',
+            filename: _bulkBarcodeFilename(part: 1, partCount: pdfs.length),
+          );
+        },
       );
 
   Future<void> _downloadPdf() => _runPdfFlow(
         retry: _downloadPdf,
-        action: (pdf) async {
-    if (kIsWeb) {
-      await _openPdfPage(
-        pdf,
-        title: 'Download labels (${_selected.length})',
-      );
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Use Download PDF in the app bar, or the share sheet below the preview.',
-          ),
-        ),
-      );
-      return;
-    }
-    await Printing.sharePdf(
-      bytes: pdf,
-      filename: _bulkBarcodeFilename(),
-    );
-  },
+        action: (pdfs) async {
+          if (!mounted) return;
+          final n = pdfs.length;
+          for (var i = 0; i < n; i++) {
+            final name = _bulkBarcodeFilename(part: i + 1, partCount: n);
+            if (kIsWeb && i == 0) {
+              await _openPdfPage(
+                pdfs[i],
+                title: n == 1
+                    ? 'Download labels (${_selected.length})'
+                    : 'Download part 1 of $n',
+                filename: name,
+              );
+            } else {
+              await Printing.sharePdf(bytes: pdfs[i], filename: name);
+            }
+          }
+          if (kIsWeb && mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  n == 1
+                      ? 'Use Download PDF in the app bar, or the share sheet below the preview.'
+                      : 'Downloaded $n PDF files (check your downloads folder).',
+                ),
+              ),
+            );
+          }
+        },
       );
 
   Future<void> _print() => _runPdfFlow(
         retry: _print,
-        action: (pdf) async {
-    if (kIsWeb) {
-      await Printing.sharePdf(
-        bytes: pdf,
-        filename: _bulkBarcodeFilename(),
+        action: (pdfs) async {
+          if (!mounted) return;
+          final n = pdfs.length;
+          for (var i = 0; i < n; i++) {
+            final name = _bulkBarcodeFilename(part: i + 1, partCount: n);
+            if (kIsWeb) {
+              await Printing.sharePdf(bytes: pdfs[i], filename: name);
+            } else {
+              await guardWebPrint(
+                () => Printing.layoutPdf(
+                  name: name,
+                  onLayout: (_) async => pdfs[i],
+                ),
+              );
+            }
+          }
+          if (kIsWeb && mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  n == 1
+                      ? 'On web, use the downloaded PDF to print from your browser.'
+                      : 'Shared $n PDFs — print each from your browser.',
+                ),
+              ),
+            );
+          }
+        },
       );
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'On web, use the downloaded PDF to print from your browser.',
-          ),
-        ),
-      );
-      return;
-    }
-    await guardWebPrint(() => Printing.layoutPdf(
-          name: _bulkBarcodeFilename(),
-          onLayout: (_) async => pdf,
-        ));
-  },
-      );
-
-  String _bulkBarcodeFilename() {
-    final q = ref.read(stockListQueryProvider);
-    final raw = q.category.trim().isNotEmpty ? q.category.trim() : 'all_items';
-    final category = raw
-        .replaceAll(RegExp(r'[^A-Za-z0-9_-]+'), '_')
-        .replaceAll(RegExp(r'_+'), '_');
-    final date = DateFormat('yyyyMMdd').format(DateTime.now());
-    return 'harisree_barcodes_${category.isEmpty ? 'all_items' : category}_$date.pdf';
-  }
 
   List<Map<String, dynamic>> _applyClientFilters(List<Map<String, dynamic>> items) {
     final op = ref.read(stockOperationalFiltersProvider);
@@ -464,11 +509,13 @@ class _BulkBarcodePrintPageState extends ConsumerState<BulkBarcodePrintPage> {
         denseA4: _denseA4,
         useQr: _useQr,
         copies: _copies,
+        labelsPerPdfFile: _labelsPerPdfFile,
         progress: progress,
         statusText: _pdfStatus,
         onDenseA4Changed: (v) => setState(() => _denseA4 = v),
         onQrChanged: (v) => setState(() => _useQr = v),
         onCopiesChanged: (v) => setState(() => _copies = v),
+        onLabelsPerPdfFileChanged: (v) => setState(() => _labelsPerPdfFile = v),
         onPreview: _preview,
         onPdf: _downloadPdf,
         onPrint: _print,

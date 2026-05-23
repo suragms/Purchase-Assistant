@@ -10,6 +10,7 @@ import '../../../core/errors/barcode_operation_errors.dart';
 import '../../../core/router/post_auth_route.dart';
 import '../services/barcode_pdf_service.dart';
 import '../services/bulk_label_batch.dart';
+import '../services/bulk_pdf_chunks.dart';
 
 Future<BulkLabelBatchResult> fetchBulkLabels({
   required WidgetRef ref,
@@ -72,6 +73,36 @@ Future<BulkLabelBatchResult> fetchBulkLabels({
   );
 }
 
+Future<Uint8List> _generatePdfForLabelChunk({
+  required BuildContext context,
+  required WidgetRef ref,
+  required List<BarcodeLabelData> labels,
+  required bool denseA4,
+  required int perRow,
+  required BarcodeSymbolMode symbol,
+  required LabelSize thermalSize,
+  required bool hideFinancials,
+}) async {
+  if (denseA4) {
+    final cols = MediaQuery.sizeOf(context).width >= 600 ? 4 : 2;
+    return await BarcodePdfService.generateBatchA4Dense(
+      items: labels,
+      size: thermalSize,
+      copiesPerItem: 1,
+      hideFinancials: hideFinancials,
+      columns: cols,
+    );
+  }
+  return await BarcodePdfService.generateBatch(
+    items: labels,
+    size: thermalSize,
+    copiesPerItem: 1,
+    labelsPerRow: perRow,
+    hideFinancials: hideFinancials,
+    symbol: symbol,
+  );
+}
+
 Future<Uint8List> generateBulkPdfBytes({
   required BuildContext context,
   required WidgetRef ref,
@@ -82,6 +113,38 @@ Future<Uint8List> generateBulkPdfBytes({
   required BarcodeSymbolMode symbol,
   required LabelSize thermalSize,
 }) async {
+  final parts = await generateBulkPdfParts(
+    context: context,
+    ref: ref,
+    batch: batch,
+    denseA4: denseA4,
+    copies: copies,
+    perRow: perRow,
+    symbol: symbol,
+    thermalSize: thermalSize,
+    labelsPerFile: batch.labels.length * copies.clamp(1, 5),
+  );
+  if (parts.isEmpty) {
+    throw BarcodeOperationException(
+      'No printable labels in selection.',
+      kind: BarcodeOperationKind.emptySelection,
+    );
+  }
+  return parts.first;
+}
+
+/// One PDF per chunk (30 / 40 / 60 expanded labels). Copies are applied before chunking.
+Future<List<Uint8List>> generateBulkPdfParts({
+  required BuildContext context,
+  required WidgetRef ref,
+  required BulkLabelBatchResult batch,
+  required bool denseA4,
+  required int copies,
+  required int perRow,
+  required BarcodeSymbolMode symbol,
+  required LabelSize thermalSize,
+  required int labelsPerFile,
+}) async {
   if (batch.labels.isEmpty) {
     throw BarcodeOperationException(
       'No printable labels in selection.',
@@ -91,25 +154,28 @@ Future<Uint8List> generateBulkPdfBytes({
   final session = ref.read(sessionProvider);
   final hideFinancials =
       session != null && !sessionCanSeeFinancials(session);
+  final chunks = chunkExpandedLabelsForPdfFiles(
+    items: batch.labels,
+    copiesPerItem: copies,
+    perFile: labelsPerFile.clamp(1, 100),
+  );
   try {
-    if (denseA4) {
-      final cols = MediaQuery.sizeOf(context).width >= 600 ? 4 : 2;
-      return await BarcodePdfService.generateBatchA4Dense(
-        items: batch.labels,
-        size: thermalSize,
-        copiesPerItem: copies,
-        hideFinancials: hideFinancials,
-        columns: cols,
+    final out = <Uint8List>[];
+    for (final chunk in chunks) {
+      out.add(
+        await _generatePdfForLabelChunk(
+          context: context,
+          ref: ref,
+          labels: chunk,
+          denseA4: denseA4,
+          perRow: perRow,
+          symbol: symbol,
+          thermalSize: thermalSize,
+          hideFinancials: hideFinancials,
+        ),
       );
     }
-    return await BarcodePdfService.generateBatch(
-      items: batch.labels,
-      size: thermalSize,
-      copiesPerItem: copies,
-      labelsPerRow: perRow,
-      hideFinancials: hideFinancials,
-      symbol: symbol,
-    );
+    return out;
   } catch (e, st) {
     logBarcodeOperationError(e, st);
     if (e is BarcodeOperationException) rethrow;

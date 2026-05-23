@@ -10,7 +10,7 @@ import '../../../core/json_coerce.dart';
 import '../../../core/providers/business_aggregates_invalidation.dart';
 import '../../../core/providers/stock_audit_providers.dart';
 import '../../../core/providers/stock_providers.dart';
-import '../../../core/theme/hexa_colors.dart';
+import 'widgets/scan_item_stock_summary_card.dart';
 
 /// Compact post-scan warehouse sheet: counted stock, reconciliation, reasons, ledger preview.
 Future<bool> showWarehouseScanActionSheet({
@@ -209,22 +209,10 @@ class _WarehouseScanActionBodyState extends ConsumerState<_WarehouseScanActionBo
       child: ListView(
         controller: widget.scrollController,
         children: [
-          Text(
-            widget.item['name']?.toString() ?? 'Item',
-            style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-          ),
-          const SizedBox(height: 4),
-          Text(
-            '${widget.item['item_code'] ?? '—'} · ${widget.item['barcode'] ?? '—'}',
-            style: const TextStyle(fontSize: 12, color: HexaColors.textBody),
-          ),
-          const SizedBox(height: 10),
-          _stockCard(unitLabel),
+          ScanItemStockSummaryCard(item: widget.item),
           const SizedBox(height: 12),
           Text(
-            'Counted stock',
+            'Update stock (counted)',
             style: Theme.of(context).textTheme.titleSmall?.copyWith(
                   fontWeight: FontWeight.w800,
                 ),
@@ -340,36 +328,11 @@ class _WarehouseScanActionBodyState extends ConsumerState<_WarehouseScanActionBo
                           height: 18,
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
-                      : const Text('Save count'),
+                      : const Text('Update'),
                 ),
               ),
             ],
           ),
-        ],
-      ),
-    );
-  }
-
-  Widget _stockCard(String unitLabel) {
-    return Container(
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF8FAFC),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Current: ${formatQty(_systemQty)} $unitLabel',
-            style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14),
-          ),
-          if (widget.item['last_stock_updated_at'] != null)
-            Text(
-              'Updated: ${widget.item['last_stock_updated_at']}',
-              style: const TextStyle(fontSize: 11, color: HexaColors.textBody),
-            ),
         ],
       ),
     );
