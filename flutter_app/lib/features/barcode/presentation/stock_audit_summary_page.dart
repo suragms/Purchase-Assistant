@@ -4,7 +4,6 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/auth/session_notifier.dart';
 import '../../../core/json_coerce.dart';
-import '../../../core/router/navigation_ext.dart';
 
 /// Post-audit summary (matched vs discrepant lines).
 class StockAuditSummaryPage extends ConsumerStatefulWidget {
