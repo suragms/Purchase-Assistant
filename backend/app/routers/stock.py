@@ -581,25 +581,61 @@ async def list_stock(
     period_start: str | None = Query(None),
     period_end: str | None = Query(None),
     include_today: bool = Query(True),
+    purchased_in_period: bool = Query(False),
 ):
-    total, rows = await _query_items(
-        db,
-        business_id,
-        q=q,
-        category=category,
-        subcategory=subcategory,
-        status_val=status,
-        sort=sort,
-        page=page,
-        per_page=per_page,
-    )
+    ps, pe = _parse_period_dates(period_start, period_end)
+    if purchased_in_period and include_period and ps and pe:
+        _, all_rows = await _query_items(
+            db,
+            business_id,
+            q=q,
+            category=category,
+            subcategory=subcategory,
+            status_val=status,
+            sort=sort,
+            page=1,
+            per_page=10000,
+        )
+        all_ids = [item.id for item, _, _ in all_rows]
+        period_map_all = await _period_purchased_map(
+            db, business_id, all_ids, ps, pe
+        )
+        filtered = [
+            row
+            for row in all_rows
+            if period_map_all.get(row[0].id, Decimal(0)) > 0
+        ]
+        total = len(filtered)
+        start = (page - 1) * per_page
+        rows = filtered[start : start + per_page]
+    else:
+        total, rows = await _query_items(
+            db,
+            business_id,
+            q=q,
+            category=category,
+            subcategory=subcategory,
+            status_val=status,
+            sort=sort,
+            page=page,
+            per_page=per_page,
+        )
     period_map: dict[uuid.UUID, Decimal] = {}
     period_usage_map: dict[uuid.UUID, Decimal] = {}
-    ps, pe = _parse_period_dates(period_start, period_end)
     item_ids = [item.id for item, _, _ in rows]
     if include_period and ps and pe:
-        period_map = await _period_purchased_map(db, business_id, item_ids, ps, pe)
-        period_usage_map = await _period_usage_map(db, business_id, item_ids, ps, pe)
+        if purchased_in_period:
+            period_map = {
+                iid: period_map_all.get(iid, Decimal(0))
+                for iid in item_ids
+            }
+        else:
+            period_map = await _period_purchased_map(
+                db, business_id, item_ids, ps, pe
+            )
+        period_usage_map = await _period_usage_map(
+            db, business_id, item_ids, ps, pe
+        )
     today = date.today()
     today_purchased: dict[uuid.UUID, Decimal] = {}
     today_usage: dict[uuid.UUID, Decimal] = {}

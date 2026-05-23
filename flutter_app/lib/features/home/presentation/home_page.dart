@@ -35,7 +35,9 @@ import 'widgets/home_compact_header.dart';
 import 'widgets/home_low_stock_section.dart';
 import 'widgets/home_multi_alert_strip.dart';
 import 'widgets/home_stock_audit_strip.dart';
+import 'widgets/home_contacts_quick_row.dart';
 import 'widgets/home_period_filter_row.dart';
+import 'widgets/home_purchase_stats_card.dart';
 import 'widgets/home_quick_actions_grid.dart';
 import 'widgets/home_stock_totals_card.dart';
 import 'widgets/home_analytics_comparison_strip.dart';
@@ -349,6 +351,10 @@ class _HomePageState extends ConsumerState<HomePage>
               if (isOwner) ...[
                 const SizedBox(height: 8),
                 const HomePeriodFilterRow(),
+                const SizedBox(height: 8),
+                const HomePurchaseStatsCard(),
+                const SizedBox(height: 8),
+                const HomeContactsQuickRow(),
                 const SizedBox(height: 8),
               ],
               HomeQuickActionsGrid(

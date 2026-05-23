@@ -54,16 +54,13 @@ class _StockPageState extends ConsumerState<StockPage> {
     _searchCtrl.addListener(_onSearchChanged);
     _subcatCtrl.text = ref.read(stockListQueryProvider).subcategory;
     _scroll.addListener(_onScroll);
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      applyStockPagePeriod(ref, ref.read(stockPagePeriodProvider));
-      ref.read(stockListQueryProvider.notifier).state =
-          ref.read(stockListQueryProvider).copyWith(
-                q: '',
-                perPage: 50,
-                page: 1,
-              );
-    });
+    applyStockPagePeriod(ref, ref.read(stockPagePeriodProvider));
+    ref.read(stockListQueryProvider.notifier).state =
+        ref.read(stockListQueryProvider).copyWith(
+              q: '',
+              perPage: 50,
+              page: 1,
+            );
   }
 
   @override
@@ -265,9 +262,7 @@ class _StockPageState extends ConsumerState<StockPage> {
         if (e is Map) Map<String, dynamic>.from(e),
     ];
     final items = _prepareItems(raw);
-    final bottomPad = kBottomNavigationBarHeight +
-        MediaQuery.paddingOf(context).bottom +
-        16;
+    final bottomPad = MediaQuery.paddingOf(context).bottom + 16;
 
     return RefreshIndicator(
       onRefresh: () async {
@@ -299,7 +294,7 @@ class _StockPageState extends ConsumerState<StockPage> {
               child: Center(
                 child: Text(
                   purchasedFilterOnly
-                      ? 'No purchases in this period for current filters'
+                      ? 'No purchases in this period — try All time or clear Purchased'
                       : 'No items match filters',
                   style: const TextStyle(fontSize: 13, color: Colors.black54),
                 ),
@@ -417,6 +412,11 @@ class _StockPageState extends ConsumerState<StockPage> {
       appBar: AppBar(
         backgroundColor: const Color(0xFFF5F3EE),
         foregroundColor: const Color(0xFF1A1A1A),
+        leading: IconButton(
+          icon: const Icon(Icons.home_outlined),
+          tooltip: 'Home',
+          onPressed: () => context.go('/home'),
+        ),
         title: const Text('Stock', style: TextStyle(fontSize: 18)),
         actions: [
           if (!_isStaffMode)

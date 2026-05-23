@@ -31,16 +31,22 @@ class StockPageFilterHeader extends ConsumerWidget {
     final total = listData?['total'] ?? loaded;
 
     final periodLabels = showYearPeriod
-        ? const ['Today', 'Week', 'Month', 'Year']
-        : const ['Today', 'Week', 'Month'];
+        ? const ['Today', 'Week', 'Month', 'Year', 'All time']
+        : const ['Today', 'Week', 'Month', 'All time'];
     final periodValues = showYearPeriod
         ? [
             HomePeriod.today,
             HomePeriod.week,
             HomePeriod.month,
             HomePeriod.year,
+            HomePeriod.allTime,
           ]
-        : [HomePeriod.today, HomePeriod.week, HomePeriod.month];
+        : [
+            HomePeriod.today,
+            HomePeriod.week,
+            HomePeriod.month,
+            HomePeriod.allTime,
+          ];
 
     return ColoredBox(
       color: const Color(0xFFF5F3EE),
@@ -141,12 +147,14 @@ class StockPageFilterHeader extends ConsumerWidget {
                   label: const Text('Purchased', style: TextStyle(fontSize: 11)),
                   selected: op.purchasedInPeriodOnly,
                   onSelected: (_) {
+                    final next = !op.purchasedInPeriodOnly;
                     ref.read(stockOperationalFiltersProvider.notifier).state =
-                        op.copyWith(
-                      purchasedInPeriodOnly: !op.purchasedInPeriodOnly,
-                    );
+                        op.copyWith(purchasedInPeriodOnly: next);
                     ref.read(stockListQueryProvider.notifier).state =
-                        ref.read(stockListQueryProvider).copyWith(page: 1);
+                        ref.read(stockListQueryProvider).copyWith(
+                              purchasedInPeriod: next,
+                              page: 1,
+                            );
                   },
                   visualDensity: VisualDensity.compact,
                   materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,

@@ -164,10 +164,8 @@ class HomeStockTotalsCard extends ConsumerWidget {
                     children: [
                       miniStat('Bags', _fmtNum(bags), const Color(0xFF3B6D11)),
                       miniStat('KG', _fmtNum(kg), const Color(0xFF185FA5)),
-                      if (boxes > 0)
-                        miniStat('Boxes', _fmtNum(boxes), const Color(0xFF6D4C1B)),
-                      if (tins > 0)
-                        miniStat('Tins', _fmtNum(tins), const Color(0xFF7C3D3D)),
+                      miniStat('Boxes', _fmtNum(boxes), const Color(0xFF6D4C1B)),
+                      miniStat('Tins', _fmtNum(tins), const Color(0xFF7C3D3D)),
                     ],
                   ),
                   const SizedBox(height: 10),

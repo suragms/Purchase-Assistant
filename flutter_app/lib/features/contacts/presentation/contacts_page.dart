@@ -360,8 +360,31 @@ class _BrokerCard extends StatelessWidget {
   }
 }
 
+int contactsTabIndexFromQuery(String? tab) {
+  switch (tab?.trim().toLowerCase()) {
+    case 'brokers':
+    case 'broker':
+      return 1;
+    case 'categories':
+    case 'category':
+      return 2;
+    case 'types':
+    case 'type':
+      return 3;
+    case 'items':
+    case 'item':
+      return 4;
+    case 'suppliers':
+    case 'supplier':
+    default:
+      return 0;
+  }
+}
+
 class ContactsPage extends ConsumerStatefulWidget {
-  const ContactsPage({super.key});
+  const ContactsPage({super.key, this.initialTab = 0});
+
+  final int initialTab;
 
   @override
   ConsumerState<ContactsPage> createState() => _ContactsPageState();
@@ -383,7 +406,8 @@ class _ContactsPageState extends ConsumerState<ContactsPage>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 5, vsync: this);
+    final tab = widget.initialTab.clamp(0, 4);
+    _tabController = TabController(length: 5, vsync: this, initialIndex: tab);
     _tabController.addListener(_onTabChanged);
     _searchFocus.addListener(() => setState(() {}));
   }

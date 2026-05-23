@@ -50,4 +50,10 @@ void main() {
     expect(rFrom, homeFromYmd);
     expect(rTo, homeToYmd);
   });
+
+  test('all time: wide inclusive window for stock period API', () {
+    final h = homePeriodRange(HomePeriod.allTime, now: DateTime(2026, 5, 23));
+    expect(h.start.year, 1970);
+    expect(h.end.year, greaterThanOrEqualTo(2099));
+  });
 }

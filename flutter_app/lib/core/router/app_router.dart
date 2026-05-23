@@ -272,7 +272,11 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         name: 'contacts',
         pageBuilder: (context, state) => iosPushPage(
           key: state.pageKey,
-          child: const ContactsPage(),
+          child: ContactsPage(
+            initialTab: contactsTabIndexFromQuery(
+              state.uri.queryParameters['tab'],
+            ),
+          ),
         ),
       ),
       GoRoute(

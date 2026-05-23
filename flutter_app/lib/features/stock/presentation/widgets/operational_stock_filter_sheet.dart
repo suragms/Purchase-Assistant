@@ -53,9 +53,9 @@ Future<void> showOperationalStockFilter({
     useSafeArea: true,
     builder: (ctx) => DraggableScrollableSheet(
       expand: false,
-      initialChildSize: 0.55,
-      minChildSize: 0.4,
-      maxChildSize: 0.92,
+      initialChildSize: 0.75,
+      minChildSize: 0.45,
+      maxChildSize: 0.95,
       builder: (_, scrollCtrl) => _OperationalFilterBody(
         subcategoryCtrl: subcategoryCtrl,
         includeSupplier: includeSupplier,
@@ -129,6 +129,7 @@ class _OperationalFilterBodyState extends ConsumerState<_OperationalFilterBody> 
               category: _category,
               supplier: _supplier,
               subcategory: _subcatField.text.trim(),
+              purchasedInPeriod: _purchasedInPeriodOnly,
               page: 1,
             );
     ref.read(stockOperationalFiltersProvider.notifier).state =
@@ -383,19 +384,39 @@ class _OperationalFilterBodyState extends ConsumerState<_OperationalFilterBody> 
               return Row(
                 children: [
                   Expanded(
-                    child: InputDecorator(
-                      decoration: const InputDecoration(
-                        border: OutlineInputBorder(),
-                        isDense: true,
-                        contentPadding: EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 10,
+                    child: Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        onTap: () => _pickSupplier(rows),
+                        borderRadius: BorderRadius.circular(8),
+                        child: InputDecorator(
+                          decoration: const InputDecoration(
+                            border: OutlineInputBorder(),
+                            isDense: true,
+                            contentPadding: EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 10,
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  _supplier.isEmpty
+                                      ? 'All suppliers'
+                                      : _supplier,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              const Icon(
+                                Icons.search_rounded,
+                                size: 20,
+                                color: Colors.black45,
+                              ),
+                            ],
+                          ),
                         ),
-                      ),
-                      child: Text(
-                        _supplier.isEmpty ? 'All suppliers' : _supplier,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                   ),

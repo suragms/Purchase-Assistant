@@ -31,6 +31,7 @@
 - [x] Stock list row: subcategory-only line (no duplicate category trail)
 - [x] Purchase line sheet: block wrong unit before save (client + API)
 - [x] Quick stock patch: `opening_stock` reason chip
+- [x] Stock UX: All time period, server purchased filter, full-screen stock (no bottom nav), purchase stats + contacts row on home
 - [ ] Quick add / batch create: same packaging picker
 - [ ] Staff home / barcode create: packaging picker
 - [ ] Seed script from `data/files/products_by_category_seed.json`

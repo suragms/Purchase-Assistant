@@ -105,7 +105,9 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
     final loc = routePath;
     final hideShellChrome = loc == '/reports' ||
         loc.startsWith('/reports/') ||
-        loc == '/purchase';
+        loc == '/purchase' ||
+        idx == ShellBranch.stock ||
+        loc.startsWith('/stock');
 
     // Do not use a shell [Scaffold] with [bottomNavigationBar]: on web, nested
     // GoRouter [Navigator]s can interact badly with scaffold body layout so the

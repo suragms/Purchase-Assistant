@@ -19,6 +19,7 @@ class StockListQuery {
     this.includePeriod = false,
     this.periodStart,
     this.periodEnd,
+    this.purchasedInPeriod = false,
   });
 
   final int page;
@@ -40,6 +41,9 @@ class StockListQuery {
   final String? periodStart;
   final String? periodEnd;
 
+  /// Server-side: only items with period purchases (requires [includePeriod]).
+  final bool purchasedInPeriod;
+
   StockListQuery copyWith({
     int? page,
     int? perPage,
@@ -52,6 +56,7 @@ class StockListQuery {
     bool? includePeriod,
     String? periodStart,
     String? periodEnd,
+    bool? purchasedInPeriod,
   }) {
     return StockListQuery(
       page: page ?? this.page,
@@ -65,6 +70,7 @@ class StockListQuery {
       includePeriod: includePeriod ?? this.includePeriod,
       periodStart: periodStart ?? this.periodStart,
       periodEnd: periodEnd ?? this.periodEnd,
+      purchasedInPeriod: purchasedInPeriod ?? this.purchasedInPeriod,
     );
   }
 }
@@ -195,6 +201,8 @@ final stockListProvider = FutureProvider.autoDispose((ref) async {
         includePeriod: query.includePeriod,
         periodStart: query.periodStart,
         periodEnd: query.periodEnd,
+        purchasedInPeriod: query.purchasedInPeriod ||
+            ref.read(stockOperationalFiltersProvider).purchasedInPeriodOnly,
       );
 });
 

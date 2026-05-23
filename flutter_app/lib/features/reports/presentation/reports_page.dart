@@ -266,6 +266,7 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
         HomePeriod.week => _DatePreset.week,
         HomePeriod.month => _DatePreset.month,
         HomePeriod.year => _DatePreset.year,
+        HomePeriod.allTime => _DatePreset.year,
         HomePeriod.custom => _DatePreset.custom,
       };
       _visibleCap = 40;

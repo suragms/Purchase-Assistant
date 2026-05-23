@@ -26,6 +26,7 @@ class HomeStockMovementSection extends ConsumerWidget {
       HomePeriod.week => "Week stock movement",
       HomePeriod.month => "Month stock movement",
       HomePeriod.year => "Year stock movement",
+      HomePeriod.allTime => 'All-time stock movement',
       HomePeriod.custom => 'Stock movement',
     };
 

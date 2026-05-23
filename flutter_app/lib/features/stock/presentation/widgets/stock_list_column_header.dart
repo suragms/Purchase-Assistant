@@ -25,7 +25,7 @@ class StockListColumnHeader extends StatelessWidget {
           SizedBox(
             width: 40,
             child: Text(
-              'Buy',
+              'Bought',
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 9,
@@ -51,7 +51,7 @@ class StockListColumnHeader extends StatelessWidget {
           SizedBox(
             width: 40,
             child: Text(
-              'Δ',
+              'Var',
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 9,

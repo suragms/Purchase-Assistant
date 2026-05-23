@@ -17,7 +17,7 @@ import 'catalog_providers.dart';
 
 /// Period chips on the home dashboard. [custom] uses
 /// [homeCustomDateRangeProvider] (inclusive start/end dates).
-enum HomePeriod { today, week, month, year, custom }
+enum HomePeriod { today, week, month, year, allTime, custom }
 
 extension HomePeriodX on HomePeriod {
   String get label => switch (this) {
@@ -25,6 +25,7 @@ extension HomePeriodX on HomePeriod {
         HomePeriod.week => 'Week',
         HomePeriod.month => 'Month',
         HomePeriod.year => 'Year',
+        HomePeriod.allTime => 'All time',
         HomePeriod.custom => 'Custom',
       };
 }
@@ -74,6 +75,10 @@ final homeCustomDateRangeProvider =
         end: endOfDay,
       ),
     HomePeriod.year => (start: DateTime(t.year, 1, 1), end: endOfDay),
+    HomePeriod.allTime => (
+        start: DateTime(1970, 1, 1),
+        end: DateTime(2099, 12, 31, 23, 59, 59, 999),
+      ),
     HomePeriod.custom => (
         start: DateTime(t.year, t.month, 1),
         end: endOfDay,
