@@ -1,5 +1,28 @@
 # Purchase Assistant — Living task board
 
+**Last updated:** 2026-05-23 (Stock/search/bulk print UX gaps from screenshots)
+
+---
+
+## Screenshot UX fixes (2026-05-23)
+
+- [x] Stock row: **Buy / Now / Δ** numeric columns (no `150 bags` suffix); no horizontal scroll
+- [x] Bulk print: same qty columns; **100-label cap** before PDF; **Download** opens PDF preview page with app-bar download
+- [x] Staff search: catalog item → **item detail** (history, ledger, purchases); purchase bills visible; staff bill → `/staff/purchase-history/:id`
+- [x] Search PO lines: qty numbers only (no bag/kg); PUR id bold primary
+- [x] Item detail stock panel: purchased/moved period numbers without unit suffix
+
+## Stock Page UX V8 (2026-05-23)
+
+- [x] Stale-while-revalidate stock list (no full-page skeleton on filter/period change)
+- [x] Column header sliver + row preview sheet + PENDING badge + purchased line
+- [x] Filter: subcategory `Autocomplete`, supplier `SearchPickerSheet`, purchased-in-period toggle
+- [x] Backend: `sort=recent` by `last_purchase_at`; list fields `last_purchase_human_id` / `last_purchase_delivered`
+- [x] Stock list bottom padding for bottom nav; filter sheet inset
+- [x] Header **Purchased** chip + reload progress bar
+
+---
+
 **Last updated:** 2026-05-23 (Production audit P0 fixes)
 
 ---

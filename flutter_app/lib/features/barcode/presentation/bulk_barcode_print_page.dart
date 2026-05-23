@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -10,7 +9,9 @@ import 'package:printing/printing.dart';
 
 import '../../../core/design_system/hexa_operational_tokens.dart';
 import '../../../core/errors/barcode_operation_errors.dart';
+import '../../../core/json_coerce.dart';
 import '../../../core/providers/stock_providers.dart';
+import '../../stock/presentation/widgets/stock_qty_metric_column.dart';
 import '../../../core/widgets/hexa_error_card.dart';
 import '../../stock/presentation/widgets/operational_stock_filter_sheet.dart';
 import '../services/barcode_pdf_service.dart';
@@ -39,6 +40,7 @@ class _BulkBarcodePrintPageState extends ConsumerState<BulkBarcodePrintPage> {
   String? _pdfStatus;
   int _labelProgressDone = 0;
   int _labelProgressTotal = 0;
+  Future<void> Function()? _lastPdfRetry;
 
   @override
   void initState() {
@@ -96,48 +98,30 @@ class _BulkBarcodePrintPageState extends ConsumerState<BulkBarcodePrintPage> {
 
   Future<void> _runPdfFlow({
     required Future<void> Function(Uint8List pdf) action,
+    required Future<void> Function() retry,
   }) async {
     if (_selected.isEmpty || _busy) return;
+    _lastPdfRetry = retry;
     setState(() => _busy = true);
     try {
       var targetIds = ref.read(bulkBarcodeSelectionProvider).toList();
       if (targetIds.length > _kMaxLabelsPerPdf) {
-        final batches = (targetIds.length / _kMaxLabelsPerPdf).ceil();
-        final confirm = await showDialog<bool>(
-          context: context,
-          builder: (ctx) => AlertDialog(
-            title: const Text('Large selection'),
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
             content: Text(
-              '${targetIds.length} labels selected. Print in batches of '
-              '$_kMaxLabelsPerPdf for reliability ($batches batches needed).',
+              'Select at most $_kMaxLabelsPerPdf labels per PDF. '
+              'You have ${targetIds.length} selected.',
             ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx, false),
-                child: const Text('Cancel'),
-              ),
-              FilledButton(
-                onPressed: () => Navigator.pop(ctx, true),
-                child: Text('Print batch 1 of $batches'),
-              ),
-            ],
+            action: SnackBarAction(
+              label: 'Use first $_kMaxLabelsPerPdf',
+              onPressed: () {
+                _setSelected(targetIds.take(_kMaxLabelsPerPdf).toSet());
+              },
+            ),
           ),
         );
-        if (confirm != true) return;
-        targetIds = targetIds.sublist(
-          0,
-          math.min(_kMaxLabelsPerPdf, targetIds.length),
-        );
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                'Printing labels 1–${targetIds.length}. '
-                'Select again for the next batch.',
-              ),
-            ),
-          );
-        }
+        return;
       }
       var batch = await _loadLabels(ids: targetIds);
       if (batch.isTotalFailure) {
@@ -187,6 +171,7 @@ class _BulkBarcodePrintPageState extends ConsumerState<BulkBarcodePrintPage> {
   }
 
   void _showError(String message) {
+    final retry = _lastPdfRetry;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
@@ -194,38 +179,81 @@ class _BulkBarcodePrintPageState extends ConsumerState<BulkBarcodePrintPage> {
         action: SnackBarAction(
           label: 'Retry',
           textColor: Colors.white,
-          onPressed: () {},
+          onPressed: retry == null ? () {} : () => unawaited(retry()),
         ),
       ),
     );
   }
 
-  Future<void> _preview() => _runPdfFlow(action: (pdf) async {
+  Future<void> _openPdfPage(Uint8List pdf, {required String title}) async {
     if (!mounted) return;
-    final count = _selected.length * _copies;
     await Navigator.of(context).push<void>(
       MaterialPageRoute(
         builder: (ctx) => Scaffold(
-          appBar: AppBar(title: Text('Preview ($count labels)')),
+          appBar: AppBar(
+            title: Text(title),
+            actions: [
+              TextButton.icon(
+                onPressed: () => unawaited(
+                  Printing.sharePdf(
+                    bytes: pdf,
+                    filename: _bulkBarcodeFilename(),
+                  ),
+                ),
+                icon: const Icon(Icons.download_rounded),
+                label: const Text('Download PDF'),
+              ),
+            ],
+          ),
           body: PdfPreview(
             build: (_) async => pdf,
             canChangeOrientation: false,
             canChangePageFormat: false,
             canDebug: false,
+            actions: const [],
           ),
         ),
       ),
     );
-  });
+  }
 
-  Future<void> _downloadPdf() => _runPdfFlow(action: (pdf) async {
+  Future<void> _preview() => _runPdfFlow(
+        retry: _preview,
+        action: (pdf) async {
+    if (!mounted) return;
+    final count = _selected.length * _copies;
+    await _openPdfPage(pdf, title: 'Preview ($count labels)');
+  },
+      );
+
+  Future<void> _downloadPdf() => _runPdfFlow(
+        retry: _downloadPdf,
+        action: (pdf) async {
+    if (kIsWeb) {
+      await _openPdfPage(
+        pdf,
+        title: 'Download labels (${_selected.length})',
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Use Download PDF in the app bar, or the share sheet below the preview.',
+          ),
+        ),
+      );
+      return;
+    }
     await Printing.sharePdf(
       bytes: pdf,
       filename: _bulkBarcodeFilename(),
     );
-  });
+  },
+      );
 
-  Future<void> _print() => _runPdfFlow(action: (pdf) async {
+  Future<void> _print() => _runPdfFlow(
+        retry: _print,
+        action: (pdf) async {
     if (kIsWeb) {
       await Printing.sharePdf(
         bytes: pdf,
@@ -245,7 +273,8 @@ class _BulkBarcodePrintPageState extends ConsumerState<BulkBarcodePrintPage> {
           name: _bulkBarcodeFilename(),
           onLayout: (_) async => pdf,
         ));
-  });
+  },
+      );
 
   String _bulkBarcodeFilename() {
     final q = ref.read(stockListQueryProvider);
@@ -276,6 +305,10 @@ class _BulkBarcodePrintPageState extends ConsumerState<BulkBarcodePrintPage> {
     if (op.unit.isNotEmpty) {
       final u = (it['unit']?.toString() ?? '').toLowerCase();
       if (u != op.unit) return false;
+    }
+    if (op.purchasedInPeriodOnly) {
+      final p = double.tryParse('${it['period_purchased_qty']}') ?? 0;
+      if (p <= 0) return false;
     }
     return true;
   }
@@ -439,6 +472,7 @@ class _BulkBarcodePrintPageState extends ConsumerState<BulkBarcodePrintPage> {
         onPreview: _preview,
         onPdf: _downloadPdf,
         onPrint: _print,
+        pdfButtonLabel: kIsWeb ? 'Download' : 'PDF',
       ),
       body: LayoutBuilder(
         builder: (context, constraints) {
@@ -519,11 +553,61 @@ class _BulkBarcodePrintPageState extends ConsumerState<BulkBarcodePrintPage> {
               TextButton(
                 onPressed: visible.isEmpty
                     ? null
-                    : () => _setSelected({
-                          for (final e in visible)
+                    : () {
+                        final ids = <String>{
+                          for (final e in visible.take(_kMaxLabelsPerPdf))
                             if (e['id'] != null) e['id'].toString(),
-                        }),
-                child: const Text('Select all'),
+                        };
+                        _setSelected(ids);
+                        if (visible.length > _kMaxLabelsPerPdf && mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                'Selected first $_kMaxLabelsPerPdf of '
+                                '${visible.length} items (batch limit).',
+                              ),
+                            ),
+                          );
+                        }
+                      },
+                child: Text(
+                  visible.length > _kMaxLabelsPerPdf
+                      ? 'Select $_kMaxLabelsPerPdf'
+                      : 'Select all',
+                ),
+              ),
+            ],
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(HexaOp.pageGutter, 0, 56, 2),
+          child: Row(
+            children: const [
+              Expanded(child: SizedBox()),
+              SizedBox(
+                width: 40,
+                child: Text(
+                  'Buy',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 9,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.black38,
+                  ),
+                ),
+              ),
+              SizedBox(width: 2),
+              SizedBox(
+                width: 40,
+                child: Text(
+                  'Now',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 9,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.black38,
+                  ),
+                ),
               ),
             ],
           ),
@@ -538,7 +622,10 @@ class _BulkBarcodePrintPageState extends ConsumerState<BulkBarcodePrintPage> {
               final code = it['item_code']?.toString() ?? '';
               final barcode = it['barcode']?.toString() ?? '';
               final st = it['stock_status']?.toString() ?? '';
-              final stock = it['current_stock']?.toString() ?? '—';
+              final cur = coerceToDouble(it['current_stock']);
+              final purchased = coerceToDouble(
+                it['period_purchased_qty'] ?? it['purchased_today_qty'],
+              );
               final sub = barcode.isEmpty
                   ? (code.isEmpty ? 'No barcode · $st' : '$code · $st')
                   : (code.isEmpty ? '$barcode · $st' : '$code · $barcode · $st');
@@ -546,8 +633,9 @@ class _BulkBarcodePrintPageState extends ConsumerState<BulkBarcodePrintPage> {
                 selected: selected.contains(id),
                 name: name,
                 subtitle: sub,
-                stock: stock,
-                stockHighlight: st == 'low' || st == 'critical',
+                purchased: purchased,
+                current: cur,
+                stockHighlight: st == 'low' || st == 'critical' || st == 'out',
                 onChanged: (v) => _toggleSelected(id, v),
                 onPreview: id.isEmpty
                     ? null
@@ -595,7 +683,8 @@ class _BulkPrintRow extends StatelessWidget {
     required this.selected,
     required this.name,
     required this.subtitle,
-    required this.stock,
+    required this.purchased,
+    required this.current,
     required this.stockHighlight,
     required this.onChanged,
     this.onPreview,
@@ -604,7 +693,8 @@ class _BulkPrintRow extends StatelessWidget {
   final bool selected;
   final String name;
   final String subtitle;
-  final String stock;
+  final double purchased;
+  final double current;
   final bool stockHighlight;
   final ValueChanged<bool> onChanged;
   final VoidCallback? onPreview;
@@ -655,13 +745,11 @@ class _BulkPrintRow extends StatelessWidget {
                     icon: const Icon(Icons.visibility_outlined, size: 20),
                     onPressed: onPreview,
                   ),
-                Text(
-                  stock,
-                  style: TextStyle(
-                    fontWeight: FontWeight.w800,
-                    fontSize: 12,
-                    color: stockHighlight ? const Color(0xFFE65100) : null,
-                  ),
+                StockQtyMetricTriple(
+                  purchased: purchased,
+                  current: current,
+                  moved: 0,
+                  highlightCurrent: stockHighlight,
                 ),
               ],
             ),

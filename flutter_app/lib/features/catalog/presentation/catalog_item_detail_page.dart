@@ -1089,33 +1089,33 @@ class _CatalogItemStockSection extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final stockAsync = ref.watch(stockItemDetailProvider(itemId));
+    final intelAsync = ref.watch(stockItemIntelligenceProvider(itemId));
     return stockAsync.when(
       loading: () => const _CatalogItemDetailPanel(
         title: 'Stock',
-        rows: [('Current', '…'), ('Low threshold', '…')],
+        rows: [('Current', '…'), ('Purchased', '…'), ('Moved', '…')],
       ),
       error: (_, __) => const SizedBox.shrink(),
       data: (st) {
         if (st.isEmpty) return const SizedBox.shrink();
-        String qty(dynamic v) {
+        String qtyNum(dynamic v) {
           if (v == null) return '—';
-          if (v is num) {
-            final rounded = v.roundToDouble();
-            return (v - rounded).abs() < 0.001
-                ? rounded.round().toString()
-                : v.toString();
-          }
-          return v.toString();
+          if (v is num) return formatStockQtyNumber(v.toDouble());
+          final p = double.tryParse(v.toString());
+          return p == null ? v.toString() : formatStockQtyNumber(p);
         }
 
-        final unit =
-            (st['unit'] ?? item['default_unit'] ?? '').toString().trim();
-        final unitSuffix = unit.isNotEmpty ? ' $unit' : '';
+        final intel = intelAsync.valueOrNull ?? const <String, dynamic>{};
+        final purchased = intel['period_purchased_qty'] ?? st['period_purchased_qty'];
+        final moved = intel['period_variance_qty'] ?? st['period_variance_qty'];
+
         return _CatalogItemDetailPanel(
           title: 'Stock',
           rows: [
-            ('Current', '${qty(st['current_stock'])}$unitSuffix'),
-            ('Low threshold', '${qty(st['reorder_level'])}$unitSuffix'),
+            ('Current', qtyNum(st['current_stock'])),
+            ('Purchased (period)', qtyNum(purchased)),
+            ('Moved', qtyNum(moved)),
+            ('Low threshold', qtyNum(st['reorder_level'])),
           ],
         );
       },

@@ -18,6 +18,7 @@ class BulkBarcodePrintToolbar extends StatelessWidget {
     required this.onPreview,
     required this.onPdf,
     required this.onPrint,
+    this.pdfButtonLabel = 'PDF',
   });
 
   final int selectedCount;
@@ -33,6 +34,7 @@ class BulkBarcodePrintToolbar extends StatelessWidget {
   final Future<void> Function() onPreview;
   final Future<void> Function() onPdf;
   final Future<void> Function() onPrint;
+  final String pdfButtonLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -108,7 +110,7 @@ class BulkBarcodePrintToolbar extends StatelessWidget {
                   const SizedBox(width: 8),
                   Expanded(
                     child: OperationalAsyncButton(
-                      label: 'PDF',
+                      label: pdfButtonLabel,
                       busy: busy,
                       enabled: enabled,
                       onPressed: enabled ? onPdf : null,

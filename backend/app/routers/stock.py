@@ -107,6 +107,30 @@ def _needs_eviction(
     return since > days
 
 
+async def _last_trade_meta_map(
+    db: AsyncSession,
+    items: list[CatalogItem],
+) -> dict[uuid.UUID, tuple[str | None, bool | None]]:
+    tp_ids = {i.last_trade_purchase_id for i in items if i.last_trade_purchase_id}
+    if not tp_ids:
+        return {}
+    r = await db.execute(
+        select(
+            TradePurchase.id,
+            TradePurchase.human_id,
+            TradePurchase.is_delivered,
+        ).where(TradePurchase.id.in_(tp_ids))
+    )
+    by_tp = {row[0]: (row[1], row[2]) for row in r.all()}
+    out: dict[uuid.UUID, tuple[str | None, bool | None]] = {}
+    for item in items:
+        tid = item.last_trade_purchase_id
+        if tid and tid in by_tp:
+            hid, delivered = by_tp[tid]
+            out[item.id] = (hid, delivered)
+    return out
+
+
 def _item_to_list_row(
     item: CatalogItem,
     category_name: str | None,
@@ -119,6 +143,8 @@ def _item_to_list_row(
     purchased_today_qty: Decimal | None = None,
     usage_today_qty: Decimal | None = None,
     is_perishable: bool = False,
+    last_purchase_human_id: str | None = None,
+    last_purchase_delivered: bool | None = None,
 ) -> StockListItemOut:
     cur = catalog_stock_qty(item)
     ro = catalog_reorder(item)
@@ -148,6 +174,8 @@ def _item_to_list_row(
         missing_barcode=not (getattr(item, "barcode", None) and str(item.barcode).strip()),
         missing_item_code=not (item.item_code and str(item.item_code).strip()),
         barcode=getattr(item, "barcode", None),
+        last_purchase_human_id=last_purchase_human_id,
+        last_purchase_delivered=last_purchase_delivered,
     )
 
 
@@ -237,7 +265,7 @@ def _sort_stock_rows(
         rows.sort(key=lambda t: catalog_stock_qty(t[0]), reverse=True)
     elif sort == "recent":
         rows.sort(
-            key=lambda t: t[0].last_stock_updated_at
+            key=lambda t: t[0].last_purchase_at
             or datetime.min.replace(tzinfo=timezone.utc),
             reverse=True,
         )
@@ -475,9 +503,12 @@ async def list_stock(
             )
         )
         perishable_by_cat = {row[0]: bool(row[1]) for row in cr.all()}
+    catalog_items = [item for item, _, _ in rows]
+    trade_meta = await _last_trade_meta_map(db, catalog_items)
     items: list[StockListItemOut] = []
     for item, cat_name, type_name in rows:
         sup = await _supplier_name(db, item)
+        meta = trade_meta.get(item.id, (None, None))
         purchased = period_map.get(item.id) if include_period else None
         cur = catalog_stock_qty(item)
         variance = (cur - purchased) if purchased is not None else None
@@ -497,6 +528,8 @@ async def list_stock(
                 purchased_today_qty=today_purchased.get(item.id),
                 usage_today_qty=today_usage.get(item.id),
                 is_perishable=perishable,
+                last_purchase_human_id=meta[0],
+                last_purchase_delivered=meta[1],
             )
         )
     return StockListOut(items=items, total=total, page=page, per_page=per_page)

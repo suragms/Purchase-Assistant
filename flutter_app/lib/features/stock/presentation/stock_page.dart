@@ -16,8 +16,10 @@ import '../stock_period_utils.dart';
 import 'quick_stock_patch_sheet.dart';
 import 'widgets/assign_barcode_sheet.dart';
 import 'widgets/operational_stock_filter_sheet.dart';
+import 'widgets/stock_list_column_header.dart';
 import 'widgets/stock_operational_row.dart';
 import 'widgets/stock_page_filter_header.dart';
+import 'widgets/stock_row_preview_sheet.dart';
 import 'stock_item_intelligence_page.dart';
 
 enum StockPageMode { auto, staff, owner }
@@ -41,6 +43,7 @@ class _StockPageState extends ConsumerState<StockPage> {
   bool _loadingMore = false;
   bool _fabVisible = true;
   String _searchQuery = '';
+  Map<String, dynamic>? _cachedListData;
 
   @override
   void initState() {
@@ -105,7 +108,7 @@ class _StockPageState extends ConsumerState<StockPage> {
     if (!_scroll.hasClients || _loadingMore) return;
     if (_scroll.position.extentAfter > 240) return;
     final q = ref.read(stockListQueryProvider);
-    final data = ref.read(stockListProvider).valueOrNull;
+    final data = ref.read(stockListProvider).valueOrNull ?? _cachedListData;
     if (data == null) return;
     final total = coerceToInt(data['total']);
     final loaded = (data['items'] as List?)?.length ?? 0;
@@ -140,19 +143,23 @@ class _StockPageState extends ConsumerState<StockPage> {
           )
           .toList();
     }
-    sortStockListOperational(items, searchQuery: _searchQuery);
+    sortStockListOperational(
+      items,
+      searchQuery: _searchQuery,
+      sort: q.sort,
+    );
     return items;
   }
 
-  void _openItem(Map<String, dynamic> item) {
-    final id = item['id']?.toString();
-    if (id == null || id.isEmpty) return;
-    final wide = MediaQuery.sizeOf(context).width >= _kStockDetailPaneBreakpoint;
-    if (wide) {
-      ref.read(stockSelectedItemIdProvider.notifier).state = id;
-    } else {
-      context.push('/stock/intelligence/$id');
-    }
+  void _openItemPreview(Map<String, dynamic> item) {
+    unawaited(
+      showStockRowPreviewSheet(
+        context: context,
+        ref: ref,
+        item: item,
+        isStaffMode: _isStaffMode,
+      ),
+    );
   }
 
   Future<void> _openStockActions(Map<String, dynamic> item) async {
@@ -247,22 +254,163 @@ class _StockPageState extends ConsumerState<StockPage> {
     }
   }
 
+  Widget _buildListBody({
+    required Map<String, dynamic> data,
+    required bool includePeriod,
+    required bool isReloading,
+    required bool purchasedFilterOnly,
+  }) {
+    final raw = [
+      for (final e in (data['items'] as List? ?? []))
+        if (e is Map) Map<String, dynamic>.from(e),
+    ];
+    final items = _prepareItems(raw);
+    final bottomPad = kBottomNavigationBarHeight +
+        MediaQuery.paddingOf(context).bottom +
+        16;
+
+    return RefreshIndicator(
+      onRefresh: () async {
+        ref.invalidate(stockListProvider);
+        await ref.read(stockListProvider.future);
+      },
+      child: CustomScrollView(
+        controller: _scroll,
+        slivers: [
+          SliverPersistentHeader(
+            pinned: true,
+            delegate: StockPageFilterSliverDelegate(
+              searchController: _searchCtrl,
+              onOpenFilters: () => showOperationalStockFilter(
+                context: context,
+                ref: ref,
+                subcategoryCtrl: _subcatCtrl,
+                isStaffMode: _isStaffMode,
+                bottomNavInset: bottomPad,
+              ),
+              showYearPeriod: !_isStaffMode,
+              isReloading: isReloading,
+            ),
+          ),
+          if (items.isNotEmpty) const SliverToBoxAdapter(child: StockListColumnHeader()),
+          if (items.isEmpty)
+            SliverFillRemaining(
+              hasScrollBody: false,
+              child: Center(
+                child: Text(
+                  purchasedFilterOnly
+                      ? 'No purchases in this period for current filters'
+                      : 'No items match filters',
+                  style: const TextStyle(fontSize: 13, color: Colors.black54),
+                ),
+              ),
+            )
+          else
+            SliverList(
+              delegate: SliverChildBuilderDelegate(
+                (ctx, i) {
+                  if (i >= items.length) {
+                    return _loadingMore
+                        ? const Padding(
+                            padding: EdgeInsets.all(16),
+                            child: Center(
+                              child: CircularProgressIndicator(),
+                            ),
+                          )
+                        : SizedBox(height: bottomPad);
+                  }
+                  final item = items[i];
+                  return RepaintBoundary(
+                    child: StockOperationalRow(
+                      item: item,
+                      includePeriod: includePeriod,
+                      canEdit: true,
+                      onTap: () => _openItemPreview(item),
+                      onAction: () => unawaited(_openStockActions(item)),
+                    ),
+                  );
+                },
+                childCount: items.length + 1,
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     ref.listen(stockListProvider, (prev, next) {
       if (next is! AsyncData) return;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
-        setState(() => _loadingMore = false);
+        setState(() {
+          _loadingMore = false;
+          _cachedListData = next.value;
+        });
       });
     });
 
     final listAsync = ref.watch(stockListProvider);
+    if (listAsync.hasValue && listAsync.value != null) {
+      _cachedListData = listAsync.value;
+    }
+
     final listQ = ref.watch(stockListQueryProvider);
+    final op = ref.watch(stockOperationalFiltersProvider);
     final selectedId = ref.watch(stockSelectedItemIdProvider);
     final width = MediaQuery.sizeOf(context).width;
     final useSplit = width >= _kStockDetailPaneBreakpoint;
     final includePeriod = listQ.includePeriod;
+    final data = listAsync.valueOrNull ?? _cachedListData;
+    final isReloading = listAsync.isLoading && data != null;
+
+    Widget body;
+    if (data == null && listAsync.isLoading) {
+      body = const ListSkeleton(rowCount: 10);
+    } else if (listAsync.hasError && data == null) {
+      body = FriendlyLoadError(
+        onRetry: () => ref.invalidate(stockListProvider),
+      );
+    } else if (data != null) {
+      final listBody = _buildListBody(
+        data: data,
+        includePeriod: includePeriod,
+        isReloading: isReloading,
+        purchasedFilterOnly: op.purchasedInPeriodOnly,
+      );
+      if (!useSplit) {
+        body = listBody;
+      } else {
+        body = Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(flex: 3, child: listBody),
+            const VerticalDivider(width: 1),
+            Expanded(
+              flex: 2,
+              child: selectedId == null
+                  ? const Center(
+                      child: Text(
+                        'Select an item',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: Colors.black45,
+                        ),
+                      ),
+                    )
+                  : StockItemIntelligencePage(
+                      itemId: selectedId,
+                      embedded: true,
+                      hideOwnerAnalytics: _isStaffMode,
+                    ),
+            ),
+          ],
+        );
+      }
+    } else {
+      body = const ListSkeleton(rowCount: 10);
+    }
 
     return Scaffold(
       backgroundColor: const Color(0xFFF5F3EE),
@@ -292,112 +440,7 @@ class _StockPageState extends ConsumerState<StockPage> {
         ],
       ),
       floatingActionButton: null,
-      body: listAsync.when(
-        loading: () => const ListSkeleton(rowCount: 10),
-        error: (e, _) => FriendlyLoadError(
-          onRetry: () => ref.invalidate(stockListProvider),
-        ),
-        data: (data) {
-          final raw = [
-            for (final e in (data['items'] as List? ?? []))
-              if (e is Map) Map<String, dynamic>.from(e),
-          ];
-          final items = _prepareItems(raw);
-
-          final listBody = RefreshIndicator(
-            onRefresh: () async {
-              ref.invalidate(stockListProvider);
-              await ref.read(stockListProvider.future);
-            },
-            child: CustomScrollView(
-              controller: _scroll,
-              slivers: [
-                SliverPersistentHeader(
-                  pinned: true,
-                  delegate: StockPageFilterSliverDelegate(
-                    searchController: _searchCtrl,
-                    onOpenFilters: () => showOperationalStockFilter(
-                      context: context,
-                      ref: ref,
-                      subcategoryCtrl: _subcatCtrl,
-                      isStaffMode: _isStaffMode,
-                    ),
-                    showYearPeriod: !_isStaffMode,
-                  ),
-                ),
-                if (items.isEmpty)
-                  const SliverFillRemaining(
-                    hasScrollBody: false,
-                    child: Center(
-                      child: Text(
-                        'No items match filters',
-                        style: TextStyle(fontSize: 13, color: Colors.black54),
-                      ),
-                    ),
-                  )
-                else
-                  SliverList(
-                    delegate: SliverChildBuilderDelegate(
-                      (ctx, i) {
-                        if (i >= items.length) {
-                          return _loadingMore
-                              ? const Padding(
-                                  padding: EdgeInsets.all(16),
-                                  child: Center(
-                                    child: CircularProgressIndicator(),
-                                  ),
-                                )
-                              : const SizedBox(height: 72);
-                        }
-                        final item = items[i];
-                        return RepaintBoundary(
-                          child: StockOperationalRow(
-                            item: item,
-                            includePeriod: includePeriod,
-                            canEdit: true,
-                            onTap: () => _openItem(item),
-                            onAction: () => unawaited(_openStockActions(item)),
-                          ),
-                        );
-                      },
-                      childCount: items.length + 1,
-                    ),
-                  ),
-              ],
-            ),
-          );
-
-          if (!useSplit) {
-            return listBody;
-          }
-
-          return Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Expanded(flex: 3, child: listBody),
-              const VerticalDivider(width: 1),
-              Expanded(
-                flex: 2,
-                child: selectedId == null
-                    ? const Center(
-                        child: Text(
-                          'Select an item',
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: Colors.black45,
-                          ),
-                        ),
-                      )
-                    : StockItemIntelligencePage(
-                        itemId: selectedId,
-                        embedded: true,
-                        hideOwnerAnalytics: _isStaffMode,
-                      ),
-              ),
-            ],
-          );
-        },
-      ),
+      body: body,
     );
   }
 }

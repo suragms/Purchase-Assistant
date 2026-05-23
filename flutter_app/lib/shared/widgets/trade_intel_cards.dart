@@ -148,6 +148,19 @@ String tradeIntelRatePairLine(
   return 'Last: $b${suf(buyQ)} → $s${suf(sellQ)}';
 }
 
+/// Last purchase qty as plain number (no bag/kg suffix).
+String tradeIntelLastPurchaseQtyNumber(Map<String, dynamic> m) {
+  final qty = tradeIntelToDouble(m['last_line_qty']);
+  if (qty != null && qty > 1e-6) {
+    return tradeIntelFormatQty(qty);
+  }
+  final kg = tradeIntelToDouble(m['last_line_weight_kg']);
+  if (kg != null && kg > 1e-6) {
+    return tradeIntelFormatQty(kg);
+  }
+  return '';
+}
+
 /// Last-line bags / tins / est. bags from kg ÷ kg-per-bag (compact).
 String tradeIntelLastPurchaseBagsLabel(Map<String, dynamic> m) {
   final qty = tradeIntelToDouble(m['last_line_qty']);
@@ -261,15 +274,23 @@ Widget tradeIntelCatalogSearchFactRichText(
       );
     }
   }
-  final bags = tradeIntelLastPurchaseBagsLabel(m);
-  if (bags.isNotEmpty) {
+  final qtyNum = tradeIntelLastPurchaseQtyNumber(m);
+  if (qtyNum.isNotEmpty) {
     addSep();
-    spans.add(TextSpan(text: bags, style: qtyStyle));
+    spans.add(TextSpan(text: qtyNum, style: qtyStyle));
   }
   final hid = (m['last_purchase_human_id'] ?? '').toString().trim();
   if (hid.isNotEmpty) {
     addSep();
-    spans.add(TextSpan(text: hid, style: hidStyle));
+    spans.add(
+      TextSpan(
+        text: hid,
+        style: hidStyle?.copyWith(
+          fontWeight: FontWeight.w900,
+          color: cs.primary,
+        ),
+      ),
+    );
   }
   if (spans.isEmpty) return const SizedBox.shrink();
   return Text.rich(TextSpan(children: spans));

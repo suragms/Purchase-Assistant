@@ -6,6 +6,7 @@ import '../../../../core/json_coerce.dart';
 import '../../../../core/utils/operational_date_format.dart';
 import '../../../../core/utils/unit_utils.dart';
 import 'edit_item_code_sheet.dart';
+import 'stock_qty_metric_column.dart';
 
 /// Dense 72dp warehouse stock row.
 class StockOperationalRow extends ConsumerWidget {
@@ -29,25 +30,23 @@ class StockOperationalRow extends ConsumerWidget {
     final name = item['name']?.toString() ?? '—';
     final codeRaw = item['item_code']?.toString().trim() ?? '';
     final missingCode = item['missing_item_code'] == true || codeRaw.isEmpty;
-    final unit = item['unit']?.toString() ?? '';
-    final packType = item['pack_type']?.toString() ??
-        item['default_pack_type']?.toString();
     final cat = item['category_name']?.toString() ?? '';
     final sub = item['subcategory_name']?.toString() ?? '';
     final supplier = item['supplier_name']?.toString() ?? '';
     final cur = coerceToDouble(item['current_stock']);
-    final kgPerBag = coerceToDoubleNullable(item['default_kg_per_bag']) ??
-        coerceToDoubleNullable(item['kg_per_bag']);
 
     final purchased = includePeriod
         ? coerceToDouble(item['period_purchased_qty'])
         : coerceToDouble(item['purchased_today_qty']);
 
-    final stockPrimary = stockDisplayPrimary(cur, unit, packType);
-    final stockSecondary = stockDisplaySecondary(cur, unit, kgPerBag, null);
-    final purchasedLabel = purchased > 0
-        ? '↑ bought today: ${stockDisplayPrimary(purchased, unit, packType)}'
-        : '';
+    final moved = includePeriod
+        ? coerceToDouble(item['period_variance_qty'])
+        : 0.0;
+
+    final status =
+        (item['stock_status']?.toString() ?? 'healthy').toLowerCase();
+    final highlightCurrent =
+        status == 'low' || status == 'critical' || status == 'out';
     final daysSinceRaw = item['days_since_last_purchase'];
     final daysSince = daysSinceRaw is num ? daysSinceRaw.toInt() : null;
     final purchaseAgingColor = daysSince == null
@@ -57,8 +56,6 @@ class StockOperationalRow extends ConsumerWidget {
             : daysSince <= 30
                 ? const Color(0xFFE65100)
                 : const Color(0xFFA32D2D);
-
-    final status = (item['stock_status']?.toString() ?? 'healthy').toLowerCase();
     final missingBarcode = item['missing_barcode'] == true;
     final badge = _statusBadge(status);
     final updateLine = formatStockRowUpdateLine(
@@ -71,13 +68,19 @@ class StockOperationalRow extends ConsumerWidget {
       supplier,
     ].where((s) => s.isNotEmpty).join(' • ');
     final itemId = item['id']?.toString() ?? '';
+    final hid = item['last_purchase_human_id']?.toString() ?? '';
+    final delivered = item['last_purchase_delivered'];
+    final pendingDelivery = delivered == false && hid.isNotEmpty;
+    final boughtLine = includePeriod && purchased > 0
+        ? 'Bought ${formatStockQtyNumber(purchased)} this period'
+        : '';
 
     return Material(
       color: Colors.white,
       child: InkWell(
         onTap: onTap,
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxHeight: 84),
+          constraints: const BoxConstraints(maxHeight: 96),
           child: Padding(
             padding: const EdgeInsets.symmetric(
               horizontal: HexaOp.pageGutter,
@@ -100,8 +103,8 @@ class StockOperationalRow extends ConsumerWidget {
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: const TextStyle(
-                              fontWeight: FontWeight.w700,
-                              fontSize: 14,
+                              fontWeight: FontWeight.w800,
+                              fontSize: 15,
                             ),
                           ),
                           GestureDetector(
@@ -142,17 +145,25 @@ class StockOperationalRow extends ConsumerWidget {
                                 )
                               else
                                 badge,
-                              if (purchasedLabel.isNotEmpty)
-                                Text(
-                                  purchasedLabel,
-                                  style: const TextStyle(
-                                    fontSize: 11,
-                                    color: Color(0xFF3B6D11),
-                                    fontWeight: FontWeight.w700,
-                                  ),
+                              if (pendingDelivery)
+                                _badge(
+                                  'PENDING',
+                                  const Color(0xFFFFF3E0),
+                                  const Color(0xFFE65100),
                                 ),
                             ],
                           ),
+                          if (boughtLine.isNotEmpty)
+                            Text(
+                              boughtLine,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                color: Color(0xFF3B6D11),
+                              ),
+                            ),
                           if (catLine.isNotEmpty)
                             Text(
                               catLine,
@@ -163,67 +174,34 @@ class StockOperationalRow extends ConsumerWidget {
                                 color: Colors.black45,
                               ),
                             ),
-                          if (unit.toLowerCase() == 'bag' &&
-                              kgPerBag != null &&
-                              kgPerBag > 0)
-                            Text(
-                              '${(kgPerBag - kgPerBag.roundToDouble()).abs() < 0.001 ? kgPerBag.round() : kgPerBag}kg/bag',
-                              style: const TextStyle(
-                                fontSize: 10,
-                                color: Colors.black38,
-                              ),
-                            ),
                         ],
                       ),
                     ),
-                    Expanded(
-                      flex: 3,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          Text(
-                            stockPrimary,
-                            style: const TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w900,
-                            ),
-                            textAlign: TextAlign.center,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
+                    StockQtyMetricTriple(
+                      purchased: purchased,
+                      current: cur,
+                      moved: moved,
+                      highlightCurrent: highlightCurrent,
+                    ),
+                    if (daysSince != null)
+                      Padding(
+                        padding: const EdgeInsets.only(left: 2),
+                        child: Tooltip(
+                          message: 'Days since last purchase: $daysSince',
+                          child: _badge(
+                            '${daysSince}d',
+                            purchaseAgingColor!.withValues(alpha: 0.12),
+                            purchaseAgingColor,
                           ),
-                          if (stockSecondary != null)
-                            Text(
-                              stockSecondary,
-                              style: const TextStyle(
-                                fontSize: 10,
-                                color: Colors.black45,
-                              ),
-                              textAlign: TextAlign.center,
-                            ),
-                          const SizedBox(height: 2),
-                          Wrap(
-                            alignment: WrapAlignment.center,
-                            spacing: 4,
-                            runSpacing: 2,
-                            children: [
-                              if (daysSince != null)
-                                Tooltip(
-                                  message:
-                                      'Days since last purchase: $daysSince',
-                                  child: _badge(
-                                    '${daysSince}d',
-                                    purchaseAgingColor!.withValues(alpha: 0.12),
-                                    purchaseAgingColor,
-                                  ),
-                                ),
-                              if (missingBarcode) badge,
-                            ],
-                          ),
-                        ],
+                        ),
                       ),
+                    const Icon(
+                      Icons.chevron_right_rounded,
+                      size: 22,
+                      color: Colors.black26,
                     ),
                     SizedBox(
-                      width: 48,
+                      width: 40,
                       child: IconButton(
                         tooltip: 'Actions',
                         onPressed: onAction ?? onTap,

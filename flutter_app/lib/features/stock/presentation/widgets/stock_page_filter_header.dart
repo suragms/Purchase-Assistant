@@ -12,11 +12,13 @@ class StockPageFilterHeader extends ConsumerWidget {
     required this.searchController,
     required this.onOpenFilters,
     this.showYearPeriod = true,
+    this.isReloading = false,
   });
 
   final TextEditingController searchController;
   final VoidCallback onOpenFilters;
   final bool showYearPeriod;
+  final bool isReloading;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -46,6 +48,8 @@ class StockPageFilterHeader extends ConsumerWidget {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          if (isReloading)
+            const LinearProgressIndicator(minHeight: 2),
           Padding(
             padding: const EdgeInsets.fromLTRB(
               HexaOp.pageGutter,
@@ -133,6 +137,20 @@ class StockPageFilterHeader extends ConsumerWidget {
                 _summaryChip('Loaded $loaded / $total'),
                 if (filterCount > 0) _summaryChip('$filterCount filters'),
                 _summaryChip(period.label),
+                FilterChip(
+                  label: const Text('Purchased', style: TextStyle(fontSize: 11)),
+                  selected: op.purchasedInPeriodOnly,
+                  onSelected: (_) {
+                    ref.read(stockOperationalFiltersProvider.notifier).state =
+                        op.copyWith(
+                      purchasedInPeriodOnly: !op.purchasedInPeriodOnly,
+                    );
+                    ref.read(stockListQueryProvider.notifier).state =
+                        ref.read(stockListQueryProvider).copyWith(page: 1);
+                  },
+                  visualDensity: VisualDensity.compact,
+                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
               ],
             ),
           ),
@@ -167,11 +185,13 @@ class StockPageFilterSliverDelegate extends SliverPersistentHeaderDelegate {
     required this.searchController,
     required this.onOpenFilters,
     required this.showYearPeriod,
+    this.isReloading = false,
   });
 
   final TextEditingController searchController;
   final VoidCallback onOpenFilters;
   final bool showYearPeriod;
+  final bool isReloading;
 
   @override
   double get minExtent => _extent;
@@ -179,7 +199,7 @@ class StockPageFilterSliverDelegate extends SliverPersistentHeaderDelegate {
   @override
   double get maxExtent => _extent;
 
-  double get _extent => 32.0 * 2 + 52 + 42;
+  double get _extent => 32.0 * 2 + 52 + 42 + (isReloading ? 2 : 0);
 
   @override
   Widget build(
@@ -191,11 +211,13 @@ class StockPageFilterSliverDelegate extends SliverPersistentHeaderDelegate {
       searchController: searchController,
       onOpenFilters: onOpenFilters,
       showYearPeriod: showYearPeriod,
+      isReloading: isReloading,
     );
   }
 
   @override
   bool shouldRebuild(covariant StockPageFilterSliverDelegate old) {
-    return old.showYearPeriod != showYearPeriod;
+    return old.showYearPeriod != showYearPeriod ||
+        old.isReloading != isReloading;
   }
 }

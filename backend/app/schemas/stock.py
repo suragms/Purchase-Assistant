@@ -45,6 +45,8 @@ class StockListItemOut(BaseModel):
     missing_barcode: bool = False
     missing_item_code: bool = False
     barcode: str | None = None
+    last_purchase_human_id: str | None = None
+    last_purchase_delivered: bool | None = None
 
 
 class StockListOut(BaseModel):

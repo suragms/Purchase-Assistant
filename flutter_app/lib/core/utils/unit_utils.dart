@@ -31,7 +31,8 @@ String? stockDisplaySecondary(
   return null;
 }
 
-String _fmtQty(double n) {
+/// Warehouse list qty: no trailing `.000`, comma thousands for ints.
+String formatStockQtyNumber(double n) {
   final rounded = n.roundToDouble();
   if ((n - rounded).abs() < 0.001) {
     return rounded.toInt().toString().replaceAllMapped(
@@ -39,5 +40,8 @@ String _fmtQty(double n) {
           (m) => '${m[1]},',
         );
   }
-  return n.toStringAsFixed(3);
+  final s = n.toStringAsFixed(2);
+  return s.endsWith('0') ? s.substring(0, s.length - 1) : s;
 }
+
+String _fmtQty(double n) => formatStockQtyNumber(n);

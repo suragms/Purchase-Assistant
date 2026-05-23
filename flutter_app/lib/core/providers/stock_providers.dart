@@ -100,6 +100,7 @@ class StockOperationalFilters {
     this.missingItemCodeOnly = false,
     this.reorderOnly = false,
     this.evictionOnly = false,
+    this.purchasedInPeriodOnly = false,
     this.unit = '',
   });
 
@@ -107,6 +108,7 @@ class StockOperationalFilters {
   final bool missingItemCodeOnly;
   final bool reorderOnly;
   final bool evictionOnly;
+  final bool purchasedInPeriodOnly;
   /// Empty = all units; else match `unit` field lowercased.
   final String unit;
 
@@ -115,6 +117,7 @@ class StockOperationalFilters {
     bool? missingItemCodeOnly,
     bool? reorderOnly,
     bool? evictionOnly,
+    bool? purchasedInPeriodOnly,
     String? unit,
     bool clearUnit = false,
     bool clearMissingItemCode = false,
@@ -127,6 +130,8 @@ class StockOperationalFilters {
           : (missingItemCodeOnly ?? this.missingItemCodeOnly),
       reorderOnly: reorderOnly ?? this.reorderOnly,
       evictionOnly: clearEviction ? false : (evictionOnly ?? this.evictionOnly),
+      purchasedInPeriodOnly:
+          purchasedInPeriodOnly ?? this.purchasedInPeriodOnly,
       unit: clearUnit ? '' : (unit ?? this.unit),
     );
   }
@@ -149,6 +154,7 @@ int countOperationalActiveFilters(StockListQuery q, StockOperationalFilters op) 
   if (op.missingItemCodeOnly) n++;
   if (op.reorderOnly) n++;
   if (op.evictionOnly) n++;
+  if (op.purchasedInPeriodOnly) n++;
   if (op.unit.isNotEmpty) n++;
   return n;
 }

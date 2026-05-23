@@ -8,7 +8,6 @@ import 'package:intl/intl.dart';
 import '../../../core/auth/session_notifier.dart';
 import '../../../core/providers/recent_unified_search_provider.dart';
 import '../../../core/providers/search_focus_provider.dart';
-import '../../stock/presentation/quick_stock_patch_sheet.dart';
 import '../../../core/router/navigation_ext.dart';
 import '../../../core/router/post_auth_route.dart';
 import '../../../core/widgets/friendly_load_error.dart';
@@ -157,7 +156,6 @@ Widget _purchaseLineSummaryRich(
   final nm = line['item_name']?.toString() ?? 'Line';
   final qty = _fmtQty(line['qty']);
   final unit = line['unit']?.toString().trim().toLowerCase();
-  final unitLabel = unit == 'sack' ? 'bag' : (line['unit']?.toString() ?? '');
   final pr = line['purchase_rate'];
   final lc = line['landing_cost'];
   final prN = _toD(pr);
@@ -183,10 +181,10 @@ Widget _purchaseLineSummaryRich(
       children: [
         TextSpan(text: nm),
         const TextSpan(text: ' · '),
-        TextSpan(text: '$qty $unitLabel'.trim(), style: qtyStyle),
-        if (tw != null && tw > 1e-6) ...[
+        TextSpan(text: qty, style: qtyStyle),
+        if (tw != null && tw > 1e-6 && unit == 'bag') ...[
           const TextSpan(text: ' · '),
-          TextSpan(text: '${_fmtQty(tw)} kg', style: qtyStyle),
+          TextSpan(text: _fmtQty(tw), style: qtyStyle),
         ],
         if (rate.isNotEmpty) TextSpan(text: ' · $rate', style: base),
       ],
@@ -216,6 +214,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
   final _focus = FocusNode();
   Timer? _debounce;
   String _debounced = '';
+  Map<String, dynamic>? _cachedSearchData;
   String _section = 'all';
   /// Avoid recording the same completed search repeatedly on rebuilds.
   String? _recordedQueryKey;
@@ -424,6 +423,11 @@ class _SearchPageState extends ConsumerState<SearchPage> {
     final searchAsync = q.isNotEmpty
         ? ref.watch(unifiedSearchProvider(_debounced))
         : const AsyncValue<Map<String, dynamic>>.data({});
+    if (searchAsync.hasValue && q.isNotEmpty) {
+      _cachedSearchData = searchAsync.value;
+    }
+    final searchReloading =
+        searchAsync.isLoading && _cachedSearchData != null && q.isNotEmpty;
     final recents = ref.watch(recentUnifiedSearchQueriesProvider);
     final session = ref.watch(sessionProvider);
     final hideFinancials =
@@ -539,11 +543,32 @@ class _SearchPageState extends ConsumerState<SearchPage> {
     } else {
       scrollBody = searchAsync.when(
         skipLoadingOnReload: true,
-        loading: () => _SearchLoadingFallback(
-          padding: listPadding,
-          recents: recents,
-          onApplyQuery: _applyQuery,
-        ),
+        loading: () {
+          if (searchReloading) {
+            return ListView(
+              padding: listPadding,
+              children: [
+                const LinearProgressIndicator(minHeight: 2),
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  child: Text(
+                    'Updating results…',
+                    style: tt.bodySmall?.copyWith(
+                      color: cs.onSurfaceVariant,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+              ],
+            );
+          }
+          return _SearchLoadingFallback(
+            padding: listPadding,
+            recents: recents,
+            onApplyQuery: _applyQuery,
+          );
+        },
         error: (_, __) => ListView(
           padding: listPadding,
           children: [
@@ -921,23 +946,12 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                             hideFinancials: hideFinancials,
                             onTap: id.isEmpty
                                 ? null
-                                : () {
-                                    if (widget.staffShellEmbedded) {
-                                      showQuickStockPatchSheet(
-                                        context: context,
-                                        ref: ref,
-                                        item: Map<String, dynamic>.from(m),
-                                      );
-                                      return;
-                                    }
-                                    context.push('/catalog/item/$id');
-                                  },
+                                : () => context.push('/catalog/item/$id'),
                           );
                         }),
                       const SizedBox(height: 20),
                     ],
-                    if (!widget.staffShellEmbedded &&
-                        (_section == 'all' || _section == 'bills')) ...[
+                    if (_section == 'all' || _section == 'bills') ...[
                       Text(
                         'Recent purchase bills',
                         style: tt.titleSmall?.copyWith(
@@ -979,9 +993,19 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                             isThreeLine: line != null,
                             leading: Icon(Icons.receipt_long_outlined,
                                 color: cs.secondary),
-                            title: Text(
-                              hid.isEmpty ? 'Purchase' : hid,
-                              style: const TextStyle(fontWeight: FontWeight.w700),
+                            title: Text.rich(
+                              TextSpan(
+                                children: [
+                                  TextSpan(
+                                    text: hid.isEmpty ? 'Purchase' : hid,
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w900,
+                                      color: cs.primary,
+                                      fontSize: tt.titleSmall?.fontSize,
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
                             subtitle: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
@@ -1031,8 +1055,15 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                                 const Icon(Icons.chevron_right_rounded),
                             onTap: id.isEmpty
                                 ? null
-                                : () =>
-                                    context.push('/purchase/detail/$id'),
+                                : () {
+                                    if (widget.staffShellEmbedded) {
+                                      context.push(
+                                        '/staff/purchase-history/$id',
+                                      );
+                                    } else {
+                                      context.push('/purchase/detail/$id');
+                                    }
+                                  },
                           );
                         }),
                       const SizedBox(height: 20),

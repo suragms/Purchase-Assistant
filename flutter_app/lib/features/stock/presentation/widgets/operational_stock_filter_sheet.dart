@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+
 import '../../../../core/design_system/hexa_operational_tokens.dart';
 import '../../../../core/providers/catalog_providers.dart';
 import '../../../../core/providers/stock_providers.dart';
 import '../../../../core/providers/suppliers_list_provider.dart';
+import '../../../../shared/widgets/search_picker_sheet.dart';
 import 'stock_bulk_actions_sheet.dart';
 
 const kOperationalDesktopBreakpoint = 1100.0;
@@ -15,6 +18,7 @@ Future<void> showOperationalStockFilter({
   TextEditingController? subcategoryCtrl,
   bool includeSupplier = true,
   bool isStaffMode = false,
+  double bottomNavInset = 0,
 }) async {
   final width = MediaQuery.sizeOf(context).width;
   if (width >= kOperationalDesktopBreakpoint) {
@@ -34,6 +38,7 @@ Future<void> showOperationalStockFilter({
                 subcategoryCtrl: subcategoryCtrl,
                 includeSupplier: includeSupplier,
                 isStaffMode: isStaffMode,
+                bottomNavInset: bottomNavInset,
               ),
             ),
           ),
@@ -50,12 +55,13 @@ Future<void> showOperationalStockFilter({
       expand: false,
       initialChildSize: 0.55,
       minChildSize: 0.4,
-      maxChildSize: 0.85,
+      maxChildSize: 0.92,
       builder: (_, scrollCtrl) => _OperationalFilterBody(
         subcategoryCtrl: subcategoryCtrl,
         includeSupplier: includeSupplier,
         isStaffMode: isStaffMode,
         scrollController: scrollCtrl,
+        bottomNavInset: bottomNavInset,
       ),
     ),
   );
@@ -67,12 +73,14 @@ class _OperationalFilterBody extends ConsumerStatefulWidget {
     this.includeSupplier = true,
     this.isStaffMode = false,
     this.scrollController,
+    this.bottomNavInset = 0,
   });
 
   final TextEditingController? subcategoryCtrl;
   final bool includeSupplier;
   final bool isStaffMode;
   final ScrollController? scrollController;
+  final double bottomNavInset;
 
   @override
   ConsumerState<_OperationalFilterBody> createState() =>
@@ -86,6 +94,7 @@ class _OperationalFilterBodyState extends ConsumerState<_OperationalFilterBody> 
   late bool _missingBarcode;
   late bool _missingItemCode;
   late bool _reorderOnly;
+  late bool _purchasedInPeriodOnly;
   late String _unit;
   late final TextEditingController _subcatField;
 
@@ -100,6 +109,7 @@ class _OperationalFilterBodyState extends ConsumerState<_OperationalFilterBody> 
     _missingBarcode = op.missingBarcodeOnly;
     _missingItemCode = op.missingItemCodeOnly;
     _reorderOnly = op.reorderOnly;
+    _purchasedInPeriodOnly = op.purchasedInPeriodOnly;
     _unit = op.unit;
     _subcatField = TextEditingController(
       text: widget.subcategoryCtrl?.text ?? q.subcategory,
@@ -126,6 +136,7 @@ class _OperationalFilterBodyState extends ConsumerState<_OperationalFilterBody> 
           missingBarcodeOnly: _missingBarcode,
           missingItemCodeOnly: _missingItemCode,
           reorderOnly: _reorderOnly,
+          purchasedInPeriodOnly: _purchasedInPeriodOnly,
           unit: _unit,
         );
     ref.read(stockSelectedItemIdProvider.notifier).state = null;
@@ -153,13 +164,49 @@ class _OperationalFilterBodyState extends ConsumerState<_OperationalFilterBody> 
       _missingBarcode = false;
       _missingItemCode = false;
       _reorderOnly = false;
+      _purchasedInPeriodOnly = false;
     });
+  }
+
+  List<String> _subcategoryOptions(List<Map<String, dynamic>> types) {
+    final cat = _category.trim().toLowerCase();
+    final out = <String>[];
+    for (final t in types) {
+      final name = (t['name'] ?? '').toString().trim();
+      if (name.isEmpty) continue;
+      final cname = (t['category_name'] ?? '').toString().trim().toLowerCase();
+      if (cat.isNotEmpty && cname != cat) continue;
+      out.add(name);
+    }
+    out.sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+    return out;
+  }
+
+  Future<void> _pickSupplier(List<Map<String, dynamic>> rows) async {
+    final pickRows = <SearchPickerRow<String>>[
+      for (final s in rows)
+        if ((s['name'] ?? '').toString().trim().isNotEmpty)
+          SearchPickerRow<String>(
+            value: s['name'].toString().trim(),
+            title: s['name'].toString().trim(),
+            subtitle: s['phone']?.toString(),
+          ),
+    ]..sort((a, b) => a.title.compareTo(b.title));
+    final picked = await showSearchPickerSheet<String>(
+      context: context,
+      title: 'Select supplier',
+      rows: pickRows,
+      selectedValue: _supplier.isEmpty ? null : _supplier,
+    );
+    if (!mounted) return;
+    if (picked != null) setState(() => _supplier = picked);
   }
 
   @override
   Widget build(BuildContext context) {
     final catsAsync = ref.watch(itemCategoriesListProvider);
     final suppliersAsync = ref.watch(suppliersListProvider);
+    final typesAsync = ref.watch(categoryTypesIndexProvider);
 
     final bottomInset = MediaQuery.viewInsetsOf(context).bottom;
     return ListView(
@@ -168,7 +215,7 @@ class _OperationalFilterBodyState extends ConsumerState<_OperationalFilterBody> 
         HexaOp.pageGutter,
         12,
         HexaOp.pageGutter,
-        24 + bottomInset,
+        24 + bottomInset + widget.bottomNavInset,
       ),
       keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
       children: [
@@ -220,6 +267,15 @@ class _OperationalFilterBodyState extends ConsumerState<_OperationalFilterBody> 
         ),
         SwitchListTile(
           contentPadding: EdgeInsets.zero,
+          title: const Text(
+            'Purchased in period',
+            style: TextStyle(fontSize: 14),
+          ),
+          value: _purchasedInPeriodOnly,
+          onChanged: (v) => setState(() => _purchasedInPeriodOnly = v),
+        ),
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
           title: const Text('Missing barcode', style: TextStyle(fontSize: 14)),
           value: _missingBarcode,
           onChanged: (v) => setState(() => _missingBarcode = v),
@@ -264,13 +320,57 @@ class _OperationalFilterBodyState extends ConsumerState<_OperationalFilterBody> 
             );
           },
         ),
-        TextField(
-          controller: _subcatField,
-          decoration: const InputDecoration(
-            labelText: 'Subcategory',
-            border: OutlineInputBorder(),
-            isDense: true,
+        typesAsync.when(
+          loading: () => TextField(
+            controller: _subcatField,
+            decoration: const InputDecoration(
+              labelText: 'Subcategory',
+              border: OutlineInputBorder(),
+              isDense: true,
+            ),
           ),
+          error: (_, __) => TextField(
+            controller: _subcatField,
+            decoration: const InputDecoration(
+              labelText: 'Subcategory',
+              border: OutlineInputBorder(),
+              isDense: true,
+            ),
+          ),
+          data: (types) {
+            final options = _subcategoryOptions(types);
+            return Autocomplete<String>(
+              initialValue: TextEditingValue(text: _subcatField.text),
+              optionsBuilder: (text) {
+                final q = text.text.trim().toLowerCase();
+                if (q.isEmpty) return options.take(12);
+                return options.where((o) => o.toLowerCase().contains(q));
+              },
+              onSelected: (v) {
+                _subcatField.text = v;
+                setState(() {});
+              },
+              fieldViewBuilder: (ctx, controller, focusNode, onSubmitted) {
+                if (controller.text != _subcatField.text) {
+                  controller.text = _subcatField.text;
+                }
+                controller.addListener(() {
+                  _subcatField.text = controller.text;
+                });
+                return TextField(
+                  controller: controller,
+                  focusNode: focusNode,
+                  decoration: const InputDecoration(
+                    labelText: 'Subcategory',
+                    hintText: 'Type to search types…',
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                  onSubmitted: (_) => onSubmitted(),
+                );
+              },
+            );
+          },
         ),
         if (widget.includeSupplier) ...[
           const SizedBox(height: 12),
@@ -280,26 +380,53 @@ class _OperationalFilterBodyState extends ConsumerState<_OperationalFilterBody> 
             loading: () => const LinearProgressIndicator(),
             error: (_, __) => const SizedBox.shrink(),
             data: (rows) {
-              final names = [
-                for (final s in rows)
-                  if ((s['name'] ?? '').toString().trim().isNotEmpty)
-                    s['name'].toString().trim(),
-              ]..sort();
-              return DropdownButtonFormField<String>(
-                value: _supplier.isEmpty ? '' : _supplier,
-                decoration: const InputDecoration(
-                  border: OutlineInputBorder(),
-                  isDense: true,
-                ),
-                items: [
-                  const DropdownMenuItem(value: '', child: Text('All suppliers')),
-                  for (final n in names.take(120))
-                    DropdownMenuItem(value: n, child: Text(n)),
+              return Row(
+                children: [
+                  Expanded(
+                    child: InputDecorator(
+                      decoration: const InputDecoration(
+                        border: OutlineInputBorder(),
+                        isDense: true,
+                        contentPadding: EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 10,
+                        ),
+                      ),
+                      child: Text(
+                        _supplier.isEmpty ? 'All suppliers' : _supplier,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  IconButton(
+                    tooltip: 'Search supplier',
+                    onPressed: () => _pickSupplier(rows),
+                    icon: const Icon(Icons.search_rounded),
+                  ),
+                  if (_supplier.isNotEmpty)
+                    IconButton(
+                      tooltip: 'Clear supplier',
+                      onPressed: () => setState(() => _supplier = ''),
+                      icon: const Icon(Icons.close_rounded),
+                    ),
                 ],
-                onChanged: (v) => setState(() => _supplier = v ?? ''),
               );
             },
           ),
+          if (!widget.isStaffMode)
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                onPressed: () {
+                  Navigator.pop(context);
+                  context.push('/contacts');
+                },
+                icon: const Icon(Icons.add, size: 18),
+                label: const Text('Add supplier'),
+              ),
+            ),
         ],
         const SizedBox(height: 12),
         Text('Unit', style: Theme.of(context).textTheme.labelLarge),
@@ -363,6 +490,7 @@ String stockActiveFilterSummary(StockListQuery q, StockOperationalFilters op) {
   if (op.missingBarcodeOnly) parts.add('No barcode');
   if (op.missingItemCodeOnly) parts.add('No code');
   if (op.reorderOnly) parts.add('Reorder');
+  if (op.purchasedInPeriodOnly) parts.add('Purchased');
   if (op.unit.isNotEmpty) parts.add(op.unit.toUpperCase());
   if (q.sort == 'recent') parts.add('Recent');
   return parts.join(' · ');

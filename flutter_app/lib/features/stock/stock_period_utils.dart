@@ -42,6 +42,10 @@ List<Map<String, dynamic>> filterStockListClient(
       final u = (it['unit']?.toString() ?? '').toLowerCase();
       if (u != op.unit.toLowerCase()) return false;
     }
+    if (op.purchasedInPeriodOnly) {
+      final purchased = _num(it['period_purchased_qty']);
+      if (purchased <= 0) return false;
+    }
     return true;
   }).toList();
 }
@@ -74,19 +78,50 @@ int _stockNamePrefixRank(Map<String, dynamic> item, String query) {
   return 2;
 }
 
+int _compareByApiSort(
+  Map<String, dynamic> a,
+  Map<String, dynamic> b,
+  String sort,
+) {
+  switch (sort) {
+    case 'stock_asc':
+      return _num(a['current_stock']).compareTo(_num(b['current_stock']));
+    case 'stock_desc':
+      return _num(b['current_stock']).compareTo(_num(a['current_stock']));
+    case 'recent':
+      final da = a['days_since_last_purchase'];
+      final db = b['days_since_last_purchase'];
+      final na = da is num ? da.toInt() : 99999;
+      final nb = db is num ? db.toInt() : 99999;
+      return na.compareTo(nb);
+    default:
+      return (a['name']?.toString() ?? '')
+          .toLowerCase()
+          .compareTo((b['name']?.toString() ?? '').toLowerCase());
+  }
+}
+
 void sortStockListOperational(
   List<Map<String, dynamic>> items, {
   String? searchQuery,
+  String sort = 'name',
 }) {
   final q = searchQuery?.trim().toLowerCase() ?? '';
+  final apiSort = sort.trim().toLowerCase();
+  final useWarehouseKey = apiSort == 'name' || apiSort.isEmpty;
   items.sort((a, b) {
     if (q.isNotEmpty) {
       final pr = _stockNamePrefixRank(a, q).compareTo(_stockNamePrefixRank(b, q));
       if (pr != 0) return pr;
     }
-    final ka = stockRowSortKey(a);
-    final kb = stockRowSortKey(b);
-    if (ka != kb) return ka.compareTo(kb);
+    if (!useWarehouseKey) {
+      final sr = _compareByApiSort(a, b, apiSort);
+      if (sr != 0) return sr;
+    } else {
+      final ka = stockRowSortKey(a);
+      final kb = stockRowSortKey(b);
+      if (ka != kb) return ka.compareTo(kb);
+    }
     return (a['name']?.toString() ?? '')
         .toLowerCase()
         .compareTo((b['name']?.toString() ?? '').toLowerCase());
