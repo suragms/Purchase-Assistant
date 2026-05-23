@@ -1,4 +1,4 @@
-/// Client mirror of backend stock-tracking modes (packaging type SSOT).
+// Client mirror of backend stock-tracking modes (packaging type SSOT).
 
 class StockTrackingMode {
   StockTrackingMode._();

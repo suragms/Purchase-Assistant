@@ -133,6 +133,7 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
         AppPeriod.week => _DatePreset.week,
         AppPeriod.month => _DatePreset.month,
         AppPeriod.year => _DatePreset.year,
+        AppPeriod.allTime => _DatePreset.year,
         AppPeriod.custom => _DatePreset.custom,
       };
       if (_preset != synced) {

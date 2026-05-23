@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:flutter/cupertino.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -42,56 +41,6 @@ enum _HistPeriodPreset { today, week, month, year, custom }
 
 bool _purchaseHistSameDay(DateTime a, DateTime b) =>
     a.year == b.year && a.month == b.month && a.day == b.day;
-
-/// Pack summary: bold **numbers** (teal) + **unit words** (cyan/slate) for bags/kg/box/tin.
-List<InlineSpan> _packSummaryStyledSpans(String pack) {
-  const base = TextStyle(
-    fontSize: 10.5,
-    fontWeight: FontWeight.w600,
-    color: Color(0xFF64748B),
-    height: 1.15,
-  );
-  const numStyle = TextStyle(
-    fontSize: 11,
-    fontWeight: FontWeight.w900,
-    color: Color(0xFF0D9488),
-    height: 1.15,
-    letterSpacing: -0.2,
-  );
-  const unitStyle = TextStyle(
-    fontSize: 10.5,
-    fontWeight: FontWeight.w900,
-    color: Color(0xFF0E7490),
-    height: 1.15,
-  );
-  final token = RegExp(
-    r'[\d,]+(?:\.\d+)?|BAGS?|SACKS?|BOX(?:ES)?|TIN(?:S)?|KG',
-    caseSensitive: false,
-  );
-  final isNumOnly = RegExp(r'^[\d,]+(?:\.\d+)?$');
-  final spans = <InlineSpan>[];
-  var i = 0;
-  for (final m in token.allMatches(pack)) {
-    if (m.start > i) {
-      spans.add(TextSpan(text: pack.substring(i, m.start), style: base));
-    }
-    final t = m.group(0)!;
-    spans.add(
-      TextSpan(
-        text: t,
-        style: isNumOnly.hasMatch(t) ? numStyle : unitStyle,
-      ),
-    );
-    i = m.end;
-  }
-  if (i < pack.length) {
-    spans.add(TextSpan(text: pack.substring(i), style: base));
-  }
-  if (spans.isEmpty) {
-    spans.add(TextSpan(text: pack.isEmpty ? '—' : pack, style: base));
-  }
-  return spans;
-}
 
 Widget _historyMetaChip({
   required String label,
@@ -333,18 +282,6 @@ String _historyPaymentChipLabel(PurchaseStatus st) {
   }
 }
 
-/// Avoid repeating “Pending” beside the delivery-aging chip (same row = clutter).
-bool _purchaseRowHidePaymentMiniBadge(TradePurchase p) {
-  final st = p.statusEnum;
-  if (st == PurchaseStatus.deleted || st == PurchaseStatus.cancelled) {
-    return false;
-  }
-  if (!p.isDelivered && (st == PurchaseStatus.confirmed || st == PurchaseStatus.saved)) {
-    return true;
-  }
-  return false;
-}
-
 String _histCsvCell(String raw) {
   final s = raw.replaceAll('\r\n', ' ').replaceAll('\n', ' ').trim();
   if (s.contains(',') || s.contains('"')) {
@@ -386,132 +323,6 @@ bool _purchaseHistoryMatchesDuePrimary(TradePurchase p) {
     return true;
   }
   return false;
-}
-
-void _purchaseHistorySortPurchases(
-  List<TradePurchase> list,
-  bool newestFirst,
-  String primaryFilter,
-) {
-  int pendingAge(TradePurchase p) {
-    if (p.isDelivered) return -1;
-    final st = p.statusEnum;
-    if (st == PurchaseStatus.deleted || st == PurchaseStatus.cancelled) {
-      return -1;
-    }
-    return undeliveredDaysSincePurchase(p);
-  }
-
-  if (primaryFilter == 'pending_delivery' || primaryFilter == 'delivery_stuck') {
-    _purchaseHistorySortByUndeliveredAgeDesc(list, pendingAge);
-    return;
-  }
-
-  // Strict ERP sorting rule:
-  // 1. Overdue purchases first (by days overdue, then by amount)
-  // 2. Highest due amount (for non-overdue but pending)
-  // 3. Drafts last, Paid lowest priority.
-
-  int overdueDays(TradePurchase p) {
-    if (p.statusEnum != PurchaseStatus.overdue) return -1;
-    final due = p.dueDate ?? p.purchaseDate;
-    final days = DateTime.now().difference(due).inDays;
-    return days > 0 ? days : 1;
-  }
-
-  int rankStatus(TradePurchase p) {
-    final st = p.statusEnum;
-    if (st == PurchaseStatus.overdue) return 0;
-    if (st == PurchaseStatus.dueSoon) return 1;
-    if (st == PurchaseStatus.partiallyPaid) return 2;
-    if (st == PurchaseStatus.confirmed) return 3;
-    if (st == PurchaseStatus.saved) return 4;
-    if (st == PurchaseStatus.draft) return 5;
-    if (st == PurchaseStatus.paid) return 6;
-    return 7;
-  }
-
-  list.sort((a, b) {
-    final ra = rankStatus(a);
-    final rb = rankStatus(b);
-    if (ra != rb) return ra.compareTo(rb);
-
-    if (ra == 0) {
-      // both overdue: sort by most urgent (highest days)
-      final oDa = overdueDays(a);
-      final oDb = overdueDays(b);
-      if (oDa != oDb) return oDb.compareTo(oDa); // descending
-    }
-
-    // sort by pending amount desc
-    if (a.remaining != b.remaining) {
-      return b.remaining.compareTo(a.remaining); // descending
-    }
-
-    // fallback to date
-    if (newestFirst) {
-      final c = b.purchaseDate.compareTo(a.purchaseDate);
-      if (c != 0) return c;
-      return b.humanId.compareTo(a.humanId);
-    }
-    final c = a.purchaseDate.compareTo(b.purchaseDate);
-    if (c != 0) return c;
-    return a.humanId.compareTo(b.humanId);
-  });
-}
-
-void _purchaseHistorySortByUndeliveredAgeDesc(
-  List<TradePurchase> list,
-  int Function(TradePurchase p) pendingAge,
-) {
-  list.sort((a, b) {
-    final da = pendingAge(a);
-    final db = pendingAge(b);
-    if (da != db) return db.compareTo(da);
-    final c = b.purchaseDate.compareTo(a.purchaseDate);
-    if (c != 0) return c;
-    return b.humanId.compareTo(a.humanId);
-  });
-}
-
-/// Fullscreen / inline **search**: surface the longest-wait undelivered rows first,
-/// then keep normal date order for the rest (matches trader “who is stuck?” workflow).
-void _purchaseHistorySortSearchPromoteUndelivered(
-  List<TradePurchase> list,
-  bool newestFirst,
-) {
-  bool liveUndelivered(TradePurchase p) {
-    final st = p.statusEnum;
-    if (st == PurchaseStatus.deleted || st == PurchaseStatus.cancelled) {
-      return false;
-    }
-    return !p.isDelivered;
-  }
-
-  int age(TradePurchase p) =>
-      liveUndelivered(p) ? undeliveredDaysSincePurchase(p) : -1;
-
-  list.sort((a, b) {
-    final ua = liveUndelivered(a);
-    final ub = liveUndelivered(b);
-    if (ua != ub) {
-      if (ua) return -1;
-      if (ub) return 1;
-    }
-    if (ua && ub) {
-      final da = age(a);
-      final db = age(b);
-      if (da != db) return db.compareTo(da);
-    }
-    if (newestFirst) {
-      final c = b.purchaseDate.compareTo(a.purchaseDate);
-      if (c != 0) return c;
-      return b.humanId.compareTo(a.humanId);
-    }
-    final c = a.purchaseDate.compareTo(b.purchaseDate);
-    if (c != 0) return c;
-    return a.humanId.compareTo(b.humanId);
-  });
 }
 
 /// Shared filter + sort pipeline for Purchase History (main screen + fullscreen search).
@@ -594,7 +405,6 @@ List<TradePurchase> purchaseHistoryVisibleSortedForRef(
   }
   v = _filterPurchasesBySearch(v, searchQ);
   final out = List<TradePurchase>.of(v);
-  final newestFirst = ref.read(purchaseHistorySortNewestFirstProvider);
   final undeliveredSort = ref.read(purchaseHistoryUndeliveredSortProvider);
 
   // Undelivered-days sort overrides everything except active filters: most days waiting → top.
