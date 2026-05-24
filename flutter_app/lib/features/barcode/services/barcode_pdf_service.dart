@@ -311,6 +311,10 @@ class BarcodePdfService {
     /// When set, fits about this many stickers per A4 page (e.g. 50).
     int? targetLabelsPerPage,
     BarcodeSymbolMode symbol = BarcodeSymbolMode.code128WithQr,
+    /// Global serial for first label in this PDF (1-based).
+    int serialStart = 1,
+    /// Total labels in full batch (for page header "3 of 556").
+    int? totalLabelCount,
   }) async {
     final printable = _requirePrintable(dedupeLabels(items));
     final expanded = <BarcodeLabelData>[];
@@ -328,6 +332,8 @@ class BarcodePdfService {
       if (targetLabelsPerPage != null)
         'targetLabelsPerPage': targetLabelsPerPage.clamp(20, 60),
       'symbol': symbol.index,
+      'serialStart': serialStart,
+      if (totalLabelCount != null) 'totalLabelCount': totalLabelCount,
     };
     try {
       if (kIsWeb) {
@@ -346,6 +352,8 @@ class BarcodePdfService {
           columns: columns,
           targetLabelsPerPage: targetLabelsPerPage,
           symbol: BarcodeSymbolMode.code128,
+          serialStart: serialStart,
+          totalLabelCount: totalLabelCount,
         );
       }
       rethrow;
@@ -381,6 +389,8 @@ class BarcodePdfService {
     final innerH = sheet.height - 2 * margin;
 
     final targetPerPage = payload['targetLabelsPerPage'] as int?;
+    final serialStart = (payload['serialStart'] as int?) ?? 1;
+    final totalLabelCount = payload['totalLabelCount'] as int?;
     late final int cols;
     late final int rows;
     late final double labelW;
@@ -433,6 +443,8 @@ class BarcodePdfService {
         await Future<void>.delayed(Duration.zero);
       }
       final chunk = labels.sublist(base, math.min(base + perPage, labels.length));
+      final pageFirstSl = serialStart + base;
+      final pageLastSl = serialStart + base + chunk.length - 1;
       doc.addPage(
         pw.Page(
           pageFormat: sheet,
@@ -446,35 +458,20 @@ class BarcodePdfService {
                 final right = c < cols - 1 ? gap : 0.0;
                 final bottom = r < rows - 1 ? gap : 0.0;
                 if (idx < chunk.length) {
+                  final sl = pageFirstSl + idx;
                   rowCells.add(
                     pw.Padding(
                       padding: pw.EdgeInsets.only(right: right, bottom: bottom),
-                      child: pw.Container(
+                      child: _tableLabelCell(
                         width: labelW,
                         height: labelH,
-                        padding: const pw.EdgeInsets.all(0.5),
-                        decoration: pw.BoxDecoration(
-                          border: pw.Border.all(
-                            color: PdfColors.grey400,
-                            width: 0.25,
-                          ),
-                        ),
-                        child: pw.FittedBox(
-                          fit: pw.BoxFit.scaleDown,
-                          alignment: pw.Alignment.topCenter,
-                          child: pw.Column(
-                            crossAxisAlignment: pw.CrossAxisAlignment.stretch,
-                            mainAxisSize: pw.MainAxisSize.min,
-                            children: _labelBody(
-                              data: chunk[idx],
-                              size: cellSize,
-                              showLastPurchase: showLastPurchase,
-                              hideFinancials: hideFinancials,
-                              symbol: symbol,
-                              compact: compact,
-                            ),
-                          ),
-                        ),
+                        data: chunk[idx],
+                        serialNumber: sl,
+                        cellSize: cellSize,
+                        showLastPurchase: showLastPurchase,
+                        hideFinancials: hideFinancials,
+                        symbol: symbol,
+                        compact: compact,
                       ),
                     ),
                   );
@@ -482,7 +479,16 @@ class BarcodePdfService {
                   rowCells.add(
                     pw.Padding(
                       padding: pw.EdgeInsets.only(right: right, bottom: bottom),
-                      child: pw.SizedBox(width: labelW, height: labelH),
+                      child: pw.Container(
+                        width: labelW,
+                        height: labelH,
+                        decoration: pw.BoxDecoration(
+                          border: pw.Border.all(
+                            color: PdfColors.grey300,
+                            width: 0.5,
+                          ),
+                        ),
+                      ),
                     ),
                   );
                 }
@@ -490,13 +496,87 @@ class BarcodePdfService {
               pageRows.add(
                 pw.Row(
                   crossAxisAlignment: pw.CrossAxisAlignment.start,
-                  children: rowCells,
+                  children: [
+                    pw.Container(
+                      width: 10,
+                      height: labelH,
+                      alignment: pw.Alignment.center,
+                      child: pw.Text(
+                        '${r + 1}',
+                        style: pw.TextStyle(
+                          fontSize: 6,
+                          fontWeight: pw.FontWeight.bold,
+                          color: PdfColors.grey700,
+                        ),
+                      ),
+                    ),
+                    ...rowCells,
+                  ],
                 ),
               );
             }
+            final header = pw.Container(
+              width: double.infinity,
+              padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3),
+              margin: const pw.EdgeInsets.only(bottom: 3),
+              decoration: pw.BoxDecoration(
+                border: pw.Border.all(color: PdfColors.black, width: 0.6),
+                color: PdfColors.grey100,
+              ),
+              child: pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Text(
+                    'Harisree Warehouse',
+                    style: pw.TextStyle(
+                      fontSize: 8,
+                      fontWeight: pw.FontWeight.bold,
+                    ),
+                  ),
+                  pw.Text(
+                    totalLabelCount != null
+                        ? 'SL $pageFirstSl–$pageLastSl of $totalLabelCount'
+                        : 'SL $pageFirstSl–$pageLastSl',
+                    style: pw.TextStyle(
+                      fontSize: 7,
+                      fontWeight: pw.FontWeight.bold,
+                    ),
+                  ),
+                  pw.Text(
+                    'Cut on box borders',
+                    style: pw.TextStyle(fontSize: 6, color: PdfColors.grey700),
+                  ),
+                ],
+              ),
+            );
+            final colHeader = pw.Padding(
+              padding: const pw.EdgeInsets.only(left: 10, bottom: 2),
+              child: pw.Row(
+                children: [
+                  for (var c = 0; c < cols; c++)
+                    pw.SizedBox(
+                      width: labelW + (c < cols - 1 ? gap : 0),
+                      child: pw.Center(
+                        child: pw.Text(
+                          '${c + 1}',
+                          style: pw.TextStyle(
+                            fontSize: 6,
+                            fontWeight: pw.FontWeight.bold,
+                            color: PdfColors.grey600,
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            );
             return pw.Column(
               crossAxisAlignment: pw.CrossAxisAlignment.start,
-              children: pageRows,
+              children: [
+                header,
+                colHeader,
+                ...pageRows,
+              ],
             );
           },
         ),
@@ -521,6 +601,83 @@ class BarcodePdfService {
             LabelSize.medium => (8.0, 7.0, 36.0, 28.0),
           };
 
+  /// Bordered grid cell with serial number badge (A4 table layout).
+  static pw.Widget _tableLabelCell({
+    required double width,
+    required double height,
+    required BarcodeLabelData data,
+    required int serialNumber,
+    required LabelSize cellSize,
+    required bool showLastPurchase,
+    required bool hideFinancials,
+    required BarcodeSymbolMode symbol,
+    required bool compact,
+  }) {
+    return pw.Container(
+      width: width,
+      height: height,
+      padding: const pw.EdgeInsets.fromLTRB(2, 1, 2, 1),
+      decoration: pw.BoxDecoration(
+        border: pw.Border.all(color: PdfColors.black, width: 0.75),
+        color: PdfColors.white,
+      ),
+      child: pw.Column(
+        crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+        children: [
+          pw.Row(
+            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+            children: [
+              pw.Container(
+                padding: const pw.EdgeInsets.symmetric(horizontal: 3, vertical: 1),
+                decoration: pw.BoxDecoration(
+                  border: pw.Border.all(color: PdfColors.black, width: 0.5),
+                  color: PdfColors.grey200,
+                ),
+                child: pw.Text(
+                  'SL $serialNumber',
+                  style: pw.TextStyle(
+                    fontSize: compact ? 5.5 : 7,
+                    fontWeight: pw.FontWeight.bold,
+                  ),
+                ),
+              ),
+              pw.Expanded(
+                child: pw.Text(
+                  data.itemCode.trim().isEmpty
+                      ? ''
+                      : data.itemCode.trim(),
+                  maxLines: 1,
+                  textAlign: pw.TextAlign.right,
+                  style: pw.TextStyle(fontSize: compact ? 4.5 : 6),
+                ),
+              ),
+            ],
+          ),
+          pw.Expanded(
+            child: pw.FittedBox(
+              fit: pw.BoxFit.scaleDown,
+              alignment: pw.Alignment.topCenter,
+              child: pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+                mainAxisSize: pw.MainAxisSize.min,
+                children: _labelBody(
+                  data: data,
+                  size: cellSize,
+                  showLastPurchase: showLastPurchase,
+                  hideFinancials: hideFinancials,
+                  symbol: symbol,
+                  compact: compact,
+                  serialNumber: serialNumber,
+                  showSerialBadge: false,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   static List<pw.Widget> _labelBody({
     required BarcodeLabelData data,
     required LabelSize size,
@@ -528,6 +685,8 @@ class BarcodePdfService {
     bool hideFinancials = false,
     BarcodeSymbolMode symbol = BarcodeSymbolMode.code128WithQr,
     bool compact = false,
+    int? serialNumber,
+    bool showSerialBadge = true,
   }) {
     if (size == LabelSize.small) {
       return [
@@ -536,6 +695,8 @@ class BarcodePdfService {
           symbol: symbol,
           showLastPurchase: showLastPurchase,
           compact: compact,
+          serialNumber: serialNumber,
+          showSerialBadge: showSerialBadge,
         ),
       ];
     }
@@ -659,6 +820,8 @@ class BarcodePdfService {
     required BarcodeSymbolMode symbol,
     required bool showLastPurchase,
     bool compact = false,
+    int? serialNumber,
+    bool showSerialBadge = true,
   }) {
     final code = data.symbologyValue.isEmpty
         ? sanitizePrintPayload(data.itemName, forQr: symbol == BarcodeSymbolMode.qrCode)
@@ -676,7 +839,7 @@ class BarcodePdfService {
           '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${(d.year % 100).toString().padLeft(2, '0')}';
     }
 
-    return pw.Row(
+    final row = pw.Row(
       crossAxisAlignment: pw.CrossAxisAlignment.stretch,
       children: [
         pw.Expanded(
@@ -729,6 +892,26 @@ class BarcodePdfService {
         ),
       ],
     );
+    if (serialNumber != null && showSerialBadge) {
+      return pw.Column(
+        crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+        children: [
+          pw.Align(
+            alignment: pw.Alignment.centerLeft,
+            child: pw.Text(
+              'SL $serialNumber',
+              style: pw.TextStyle(
+                fontSize: compact ? 5 : 6,
+                fontWeight: pw.FontWeight.bold,
+              ),
+            ),
+          ),
+          pw.SizedBox(height: 1),
+          row,
+        ],
+      );
+    }
+    return row;
   }
 
   static String? _lastPurchaseLine(

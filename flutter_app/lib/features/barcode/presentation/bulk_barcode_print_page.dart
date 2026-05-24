@@ -46,6 +46,7 @@ class _BulkBarcodePrintPageState extends ConsumerState<BulkBarcodePrintPage> {
   int _labelProgressTotal = 0;
   Future<void> Function()? _lastPdfRetry;
   bool _pdfCancelled = false;
+  BuildContext? _pdfProgressDialogContext;
 
   @override
   void initState() {
@@ -203,37 +204,40 @@ class _BulkBarcodePrintPageState extends ConsumerState<BulkBarcodePrintPage> {
         }
       }
       _pdfCancelled = false;
+      _pdfProgressDialogContext = null;
       if (!mounted) return;
-      final rootNav = Navigator.of(context, rootNavigator: true);
       unawaited(
         showDialog<void>(
           context: context,
           barrierDismissible: false,
-          builder: (dlgCtx) => AlertDialog(
-            content: Row(
-              children: [
-                const SizedBox(
-                  width: 22,
-                  height: 22,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Text(_pdfStatus ?? 'Generating PDF…'),
+          builder: (dlgCtx) {
+            _pdfProgressDialogContext = dlgCtx;
+            return AlertDialog(
+              content: Row(
+                children: [
+                  const SizedBox(
+                    width: 22,
+                    height: 22,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Text(_pdfStatus ?? 'Generating PDF…'),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    _pdfCancelled = true;
+                    Navigator.pop(dlgCtx);
+                  },
+                  child: const Text('Cancel'),
                 ),
               ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: () {
-                  _pdfCancelled = true;
-                  Navigator.pop(dlgCtx);
-                },
-                child: const Text('Cancel'),
-              ),
-            ],
-          ),
-        ),
+            );
+          },
+        ).whenComplete(() => _pdfProgressDialogContext = null),
       );
       setState(() => _pdfStatus = 'Generating PDF…');
       final symbol = bulkPrintSymbolMode(denseA4: denseA4, useQr: _useQr);
@@ -253,9 +257,7 @@ class _BulkBarcodePrintPageState extends ConsumerState<BulkBarcodePrintPage> {
         if (_pdfCancelled) return;
         await action(pdfs);
       } finally {
-        if (mounted && rootNav.canPop()) {
-          rootNav.pop();
-        }
+        _dismissPdfProgressDialog();
       }
       if (!mounted || _pdfCancelled) return;
       final perFile = _labelsPerPdfFile.count;
@@ -291,6 +293,30 @@ class _BulkBarcodePrintPageState extends ConsumerState<BulkBarcodePrintPage> {
     }
   }
 
+  void _dismissPdfProgressDialog() {
+    final dlg = _pdfProgressDialogContext;
+    if (dlg != null && dlg.mounted) {
+      Navigator.of(dlg).pop();
+    }
+    _pdfProgressDialogContext = null;
+  }
+
+  Future<bool> _sharePdfSafe(Uint8List bytes, String filename) async {
+    try {
+      await Printing.sharePdf(bytes: bytes, filename: filename);
+      return true;
+    } catch (e, st) {
+      logBarcodeOperationError(e, st);
+      if (!mounted) return false;
+      _showError(
+        kIsWeb
+            ? 'Download blocked by browser. Allow downloads, or use Preview then Download PDF.'
+            : barcodeMessageForUser(e),
+      );
+      return false;
+    }
+  }
+
   void _showError(String message) {
     final retry = _lastPdfRetry;
     ScaffoldMessenger.of(context).showSnackBar(
@@ -299,7 +325,7 @@ class _BulkBarcodePrintPageState extends ConsumerState<BulkBarcodePrintPage> {
         duration: const Duration(seconds: 6),
         backgroundColor: Colors.red.shade700,
         action: SnackBarAction(
-          label: 'Retry',
+          label: retry == null ? 'Dismiss' : 'Retry',
           textColor: Colors.white,
           onPressed: retry == null ? () {} : () => unawaited(retry()),
         ),
@@ -336,12 +362,7 @@ class _BulkBarcodePrintPageState extends ConsumerState<BulkBarcodePrintPage> {
             title: Text(title),
             actions: [
               TextButton.icon(
-                onPressed: () => unawaited(
-                  Printing.sharePdf(
-                    bytes: pdf,
-                    filename: name,
-                  ),
-                ),
+                onPressed: () => unawaited(_sharePdfSafe(pdf, name)),
                 icon: const Icon(Icons.download_rounded),
                 label: const Text('Download PDF'),
               ),
@@ -388,12 +409,14 @@ class _BulkBarcodePrintPageState extends ConsumerState<BulkBarcodePrintPage> {
                 filename: name,
               );
             } else if (kIsWeb) {
-              await Printing.sharePdf(bytes: pdfs[i], filename: name);
+              final ok = await _sharePdfSafe(pdfs[i], name);
+              if (!ok) return;
               if (i < n - 1) {
                 await Future<void>.delayed(const Duration(milliseconds: 350));
               }
             } else {
-              await Printing.sharePdf(bytes: pdfs[i], filename: name);
+              final ok = await _sharePdfSafe(pdfs[i], name);
+              if (!ok) return;
             }
           }
           if (kIsWeb && mounted) {
@@ -419,7 +442,7 @@ class _BulkBarcodePrintPageState extends ConsumerState<BulkBarcodePrintPage> {
           for (var i = 0; i < n; i++) {
             final name = _bulkBarcodeFilename(part: i + 1, partCount: n);
             if (kIsWeb) {
-              await Printing.sharePdf(bytes: pdfs[i], filename: name);
+              await _sharePdfSafe(pdfs[i], name);
             } else {
               await guardWebPrint(
                 () => Printing.layoutPdf(

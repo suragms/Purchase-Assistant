@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:barcode/barcode.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -121,14 +122,7 @@ class _BarcodePrintPageState extends ConsumerState<BarcodePrintPage> {
         hideFinancials: hideFinancials,
       );
       if (kIsWeb) {
-        await Printing.sharePdf(
-          bytes: bytes,
-          filename: _singleBarcodeFilename(label),
-        );
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Label PDF ready to download')),
-        );
+        await _openLabelPdfPreview(bytes, label);
         return;
       }
       await guardWebPrint(() => Printing.layoutPdf(
@@ -147,6 +141,49 @@ class _BarcodePrintPageState extends ConsumerState<BarcodePrintPage> {
     }
   }
 
+  Future<void> _openLabelPdfPreview(Uint8List bytes, BarcodeLabelData label) async {
+    if (!mounted) return;
+    final name = _singleBarcodeFilename(label);
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (ctx) => Scaffold(
+          appBar: AppBar(
+            title: Text(label.itemName),
+            actions: [
+              TextButton.icon(
+                onPressed: () async {
+                  try {
+                    await Printing.sharePdf(bytes: bytes, filename: name);
+                  } catch (e, st) {
+                    logBarcodeOperationError(e, st);
+                    if (!ctx.mounted) return;
+                    ScaffoldMessenger.of(ctx).showSnackBar(
+                      SnackBar(
+                        content: const Text(
+                          'Download blocked. Allow pop-ups/downloads, or use the browser print menu.',
+                        ),
+                        duration: Duration(seconds: 6),
+                      ),
+                    );
+                  }
+                },
+                icon: const Icon(Icons.download_rounded),
+                label: const Text('Download PDF'),
+              ),
+            ],
+          ),
+          body: PdfPreview(
+            build: (_) async => bytes,
+            canChangeOrientation: false,
+            canChangePageFormat: false,
+            canDebug: false,
+            actions: const [],
+          ),
+        ),
+      ),
+    );
+  }
+
   Future<void> _download() async {
     final label = _label;
     if (label == null) return;
@@ -162,6 +199,10 @@ class _BarcodePrintPageState extends ConsumerState<BarcodePrintPage> {
         showLastPurchase: _showLastPurchase,
         hideFinancials: hideFinancials,
       );
+      if (kIsWeb) {
+        await _openLabelPdfPreview(bytes, label);
+        return;
+      }
       await Printing.sharePdf(
         bytes: bytes,
         filename: _singleBarcodeFilename(label),
@@ -182,7 +223,9 @@ class _BarcodePrintPageState extends ConsumerState<BarcodePrintPage> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
+        duration: const Duration(seconds: 6),
         backgroundColor: Colors.red.shade700,
+        action: SnackBarAction(label: 'Dismiss', onPressed: () {}),
       ),
     );
   }

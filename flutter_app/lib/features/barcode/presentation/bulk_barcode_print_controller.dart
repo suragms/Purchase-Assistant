@@ -172,6 +172,8 @@ Future<Uint8List> _generatePdfForLabelChunk({
   required LabelSize thermalSize,
   required bool hideFinancials,
   int? targetLabelsPerPage,
+  int serialStart = 1,
+  int? totalLabelCount,
 }) async {
   if (denseA4) {
     return await BarcodePdfService.generateBatchA4Dense(
@@ -182,6 +184,8 @@ Future<Uint8List> _generatePdfForLabelChunk({
       columns: MediaQuery.sizeOf(context).width >= 600 ? 5 : 4,
       targetLabelsPerPage: targetLabelsPerPage,
       symbol: symbol,
+      serialStart: serialStart,
+      totalLabelCount: totalLabelCount,
     );
   }
   return await BarcodePdfService.generateBatch(
@@ -266,7 +270,9 @@ Future<List<Uint8List>> generateBulkPdfParts({
         copiesPerItem: copyN,
         perFile: perFile,
       );
+      final totalExpanded = uniqueLabels.length * copyN;
       final out = <Uint8List>[];
+      var serial = 1;
       for (final chunk in chunks) {
         out.add(
           await _generatePdfForLabelChunk(
@@ -279,8 +285,11 @@ Future<List<Uint8List>> generateBulkPdfParts({
             thermalSize: thermalSize,
             hideFinancials: hideFinancials,
             targetLabelsPerPage: perFile,
+            serialStart: serial,
+            totalLabelCount: totalExpanded,
           ),
         );
+        serial += chunk.length;
       }
       return out;
     }
@@ -290,7 +299,9 @@ Future<List<Uint8List>> generateBulkPdfParts({
       copiesPerItem: copyN,
       perFile: perFile,
     );
+    final totalExpanded = batch.labels.length * copyN;
     final out = <Uint8List>[];
+    var serial = 1;
     for (final chunk in chunks) {
       out.add(
         await _generatePdfForLabelChunk(
@@ -302,8 +313,11 @@ Future<List<Uint8List>> generateBulkPdfParts({
           symbol: symbol,
           thermalSize: thermalSize,
           hideFinancials: hideFinancials,
+          serialStart: serial,
+          totalLabelCount: totalExpanded,
         ),
       );
+      serial += chunk.length;
     }
     return out;
   } catch (e, st) {
