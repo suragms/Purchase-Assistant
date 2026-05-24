@@ -374,6 +374,9 @@ class _HomePageState extends ConsumerState<HomePage>
                 onReports: () => context.go('/reports'),
                 onBarcode: () => context.push('/barcode/bulk-print'),
                 onUsers: () => context.push('/settings/users'),
+                onAddItem: isOwner
+                    ? () => context.push('/catalog/quick-add')
+                    : null,
               ),
               const SizedBox(height: HexaOp.cardGap),
               if (isOwner) ...[

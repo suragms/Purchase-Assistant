@@ -4,7 +4,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/auth/auth_error_messages.dart';
 import '../../../core/auth/session_notifier.dart';
-import '../../../core/json_coerce.dart';
 import '../../../core/providers/stock_providers.dart';
 import '../../../core/theme/hexa_colors.dart';
 import '../../../core/widgets/friendly_load_error.dart';
@@ -28,7 +27,7 @@ class _StaffLowStockPageState extends ConsumerState<StaffLowStockPage>
   @override
   void initState() {
     super.initState();
-    _tabs = TabController(length: 3, vsync: this);
+    _tabs = TabController(length: 4, vsync: this);
     _searchCtrl.addListener(() {
       final q = _searchCtrl.text.trim();
       if (q != _search && mounted) setState(() => _search = q);
@@ -40,30 +39,6 @@ class _StaffLowStockPageState extends ConsumerState<StaffLowStockPage>
     _tabs.dispose();
     _searchCtrl.dispose();
     super.dispose();
-  }
-
-  int _countForTab(
-    Map<String, Map<String, List<Map<String, dynamic>>>> grouped,
-    LowStockTreeTab tab,
-  ) {
-    var n = 0;
-    for (final subMap in grouped.values) {
-      for (final items in subMap.values) {
-        for (final item in items) {
-          final status = (item['stock_status']?.toString() ?? '').toLowerCase();
-          final stock = coerceToDouble(item['current_stock']);
-          final pending = item['has_pending_order'] == true;
-          final ok = switch (tab) {
-            LowStockTreeTab.pendingOrder => pending,
-            LowStockTreeTab.outOfStock => stock <= 0 || status == 'out',
-            LowStockTreeTab.allLow =>
-              status == 'low' || status == 'critical',
-          };
-          if (ok) n++;
-        }
-      }
-    }
-    return n;
   }
 
   Future<void> _notifyOwner(Map<String, dynamic> item) async {
@@ -126,7 +101,7 @@ class _StaffLowStockPageState extends ConsumerState<StaffLowStockPage>
         foregroundColor: HexaColors.brandPrimary,
         bottom: groupedAsync.maybeWhen(
           data: (grouped) {
-            final n = _countForTab(grouped, LowStockTreeTab.allLow);
+            final n = countLowStockForTab(grouped, LowStockTreeTab.allLow);
             return PreferredSize(
               preferredSize: const Size.fromHeight(96),
               child: Column(
@@ -162,11 +137,15 @@ class _StaffLowStockPageState extends ConsumerState<StaffLowStockPage>
                       Tab(text: 'All low ($n)'),
                       Tab(
                         text:
-                            'Pending (${_countForTab(grouped, LowStockTreeTab.pendingOrder)})',
+                            'Pending (${countLowStockForTab(grouped, LowStockTreeTab.pendingOrder)})',
                       ),
                       Tab(
                         text:
-                            'Out (${_countForTab(grouped, LowStockTreeTab.outOfStock)})',
+                            'Out (${countLowStockForTab(grouped, LowStockTreeTab.outOfStock)})',
+                      ),
+                      Tab(
+                        text:
+                            'Purchased (${countLowStockForTab(grouped, LowStockTreeTab.purchasedInPeriod)})',
                       ),
                     ],
                   ),
@@ -205,6 +184,14 @@ class _StaffLowStockPageState extends ConsumerState<StaffLowStockPage>
             LowStockCategoryTree(
               grouped: grouped,
               tab: LowStockTreeTab.outOfStock,
+              searchQuery: _search,
+              staffMode: true,
+              onNotifyOwner: _notifyOwner,
+              onEditReorder: _editReorder,
+            ),
+            LowStockCategoryTree(
+              grouped: grouped,
+              tab: LowStockTreeTab.purchasedInPeriod,
               searchQuery: _search,
               staffMode: true,
               onNotifyOwner: _notifyOwner,

@@ -4,7 +4,46 @@ import '../../../../core/json_coerce.dart';
 import '../../../../core/utils/unit_utils.dart';
 import '../../../../shared/widgets/stock_number_display.dart';
 
-enum LowStockTreeTab { allLow, pendingOrder, outOfStock }
+enum LowStockTreeTab { allLow, pendingOrder, outOfStock, purchasedInPeriod }
+
+bool lowStockItemNeedsAttention(Map<String, dynamic> item) {
+  final status = (item['stock_status']?.toString() ?? '').toLowerCase();
+  final stock = coerceToDouble(item['current_stock']);
+  return status == 'low' ||
+      status == 'critical' ||
+      status == 'out' ||
+      stock <= 0;
+}
+
+bool lowStockMatchesTab(Map<String, dynamic> item, LowStockTreeTab tab) {
+  final status = (item['stock_status']?.toString() ?? '').toLowerCase();
+  final stock = coerceToDouble(item['current_stock']);
+  final pending = item['has_pending_order'] == true;
+  final purchasedQty = coerceToDouble(item['period_purchased_qty']);
+  return switch (tab) {
+    LowStockTreeTab.pendingOrder => pending,
+    LowStockTreeTab.outOfStock => stock <= 0 || status == 'out',
+    LowStockTreeTab.purchasedInPeriod =>
+      lowStockItemNeedsAttention(item) &&
+          (purchasedQty > 0 || pending),
+    LowStockTreeTab.allLow => lowStockItemNeedsAttention(item),
+  };
+}
+
+int countLowStockForTab(
+  Map<String, Map<String, List<Map<String, dynamic>>>> grouped,
+  LowStockTreeTab tab,
+) {
+  var n = 0;
+  for (final subMap in grouped.values) {
+    for (final items in subMap.values) {
+      for (final item in items) {
+        if (lowStockMatchesTab(item, tab)) n++;
+      }
+    }
+  }
+  return n;
+}
 
 /// Expandable category → subcategory → item list for low-stock dashboards.
 class LowStockCategoryTree extends StatefulWidget {
@@ -34,17 +73,8 @@ class LowStockCategoryTree extends StatefulWidget {
 class _LowStockCategoryTreeState extends State<LowStockCategoryTree> {
   final _expandedCats = <String>{};
 
-  bool _matchesTab(Map<String, dynamic> item) {
-    final status = (item['stock_status']?.toString() ?? '').toLowerCase();
-    final stock = coerceToDouble(item['current_stock']);
-    final pending = item['has_pending_order'] == true;
-    return switch (widget.tab) {
-      LowStockTreeTab.pendingOrder => pending,
-      LowStockTreeTab.outOfStock => stock <= 0 || status == 'out',
-      LowStockTreeTab.allLow =>
-        status == 'low' || status == 'critical' || (stock > 0 && status != 'out'),
-    };
-  }
+  bool _matchesTab(Map<String, dynamic> item) =>
+      lowStockMatchesTab(item, widget.tab);
 
   bool _matchesSearch(Map<String, dynamic> item) {
     final q = widget.searchQuery.trim().toLowerCase();

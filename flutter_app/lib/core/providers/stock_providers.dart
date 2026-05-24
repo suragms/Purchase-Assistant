@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../api/hexa_api.dart';
 import '../auth/session_notifier.dart';
+import 'analytics_kpi_provider.dart' show analyticsDateRangeProvider;
 import 'app_period_provider.dart';
 import 'home_dashboard_provider.dart';
 
@@ -391,21 +392,27 @@ final stockStatusCountsProvider =
 typedef LowStockByCategoryMap =
     Map<String, Map<String, List<Map<String, dynamic>>>>;
 
-final lowStockByCategoryProvider =
-    FutureProvider.autoDispose<LowStockByCategoryMap>((ref) async {
-  final session = ref.watch(sessionProvider);
-  if (session == null) return {};
-  final api = ref.read(hexaApiProvider);
-  final bid = session.primaryBusiness.id;
+Future<List<Map<String, dynamic>>> _fetchStockListAllPages({
+  required HexaApi api,
+  required String businessId,
+  required String status,
+  int maxPages = 15,
+  bool includePeriod = false,
+  String? periodStart,
+  String? periodEnd,
+}) async {
   var page = 1;
   final merged = <Map<String, dynamic>>[];
-  while (page <= 10) {
+  while (page <= maxPages) {
     final res = await api.listStock(
-      businessId: bid,
+      businessId: businessId,
       page: page,
       perPage: 200,
-      status: 'low',
+      status: status,
       sort: 'stock_asc',
+      includePeriod: includePeriod,
+      periodStart: periodStart,
+      periodEnd: periodEnd,
     );
     final total = (res['total'] as num?)?.toInt() ?? 0;
     final raw = (res['items'] as List?) ?? const [];
@@ -416,6 +423,54 @@ final lowStockByCategoryProvider =
     if (merged.length >= total) break;
     page++;
   }
+  return merged;
+}
+
+final lowStockByCategoryProvider =
+    FutureProvider.autoDispose<LowStockByCategoryMap>((ref) async {
+  final session = ref.watch(sessionProvider);
+  if (session == null) return {};
+  final api = ref.read(hexaApiProvider);
+  final bid = session.primaryBusiness.id;
+  final period = ref.watch(homePeriodProvider);
+  final customRange = ref.watch(analyticsDateRangeProvider);
+  final range = homePeriodRange(
+    period,
+    now: DateTime.now(),
+    custom: period == HomePeriod.custom
+        ? (start: customRange.from, endInclusive: customRange.to)
+        : null,
+  );
+  final periodStart =
+      '${range.start.year}-${range.start.month.toString().padLeft(2, '0')}-${range.start.day.toString().padLeft(2, '0')}';
+  final periodEnd =
+      '${range.end.year}-${range.end.month.toString().padLeft(2, '0')}-${range.end.day.toString().padLeft(2, '0')}';
+  final lowRows = await _fetchStockListAllPages(
+    api: api,
+    businessId: bid,
+    status: 'low',
+    includePeriod: true,
+    periodStart: periodStart,
+    periodEnd: periodEnd,
+  );
+  final outRows = await _fetchStockListAllPages(
+    api: api,
+    businessId: bid,
+    status: 'out',
+    includePeriod: true,
+    periodStart: periodStart,
+    periodEnd: periodEnd,
+  );
+  final byId = <String, Map<String, dynamic>>{};
+  for (final item in [...lowRows, ...outRows]) {
+    final id = item['id']?.toString();
+    if (id != null && id.isNotEmpty) {
+      byId[id] = item;
+    } else {
+      byId['_${byId.length}'] = item;
+    }
+  }
+  final merged = byId.values.toList();
 
   final result = <String, Map<String, List<Map<String, dynamic>>>>{};
   for (final item in merged) {

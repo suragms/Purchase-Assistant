@@ -41,6 +41,15 @@
 - [x] Receive shipment: `/staff/receive` list + `/staff/receive/:id` checklist + mark delivered
 - [ ] Push + Vercel redeploy (web title + bulk PDF fixes)
 
+### Low stock + alerts parity (2026-05-24)
+- [x] `lowStockByCategoryProvider`: merge API `low` + `out` pages (was low-only → empty while Stock showed 534 out)
+- [x] Low stock tabs: **Purchased** (period qty or pending order, still low/out)
+- [x] Alert tap → `/stock/low-stock` or `/staff/low-stock` (not generic stock list)
+- [x] `StockNumberDisplay`: bold unit label, red low / orange out
+- [x] Bulk PDF web sheet: **Download all N PDFs** (staggered; per-part still available)
+- [x] Owner home quick action: **Add item** → `/catalog/quick-add`
+- [ ] Full app page-by-page QA (filters, suggestions scroll, 401 cloud businesses on stale session)
+
 ---
 
 ## Harisree Warehouse Master Fix v3 (2026-05-24)

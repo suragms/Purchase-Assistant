@@ -565,10 +565,49 @@ class _BulkBarcodePrintPageState extends ConsumerState<BulkBarcodePrintPage> {
                   style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
                 ),
                 const SizedBox(height: 12),
-                for (var i = 0; i < n; i++)
+                if (n > 1)
                   Padding(
                     padding: const EdgeInsets.only(bottom: 8),
                     child: FilledButton.icon(
+                      onPressed: () async {
+                        Navigator.pop(ctx);
+                        if (!mounted) return;
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              forPrint
+                                  ? 'Downloading $n PDFs — allow multiple downloads if prompted'
+                                  : 'Downloading $n PDF files…',
+                            ),
+                            duration: const Duration(seconds: 5),
+                          ),
+                        );
+                        for (var i = 0; i < n; i++) {
+                          if (!mounted) return;
+                          await _sharePdfSafe(pdfs[i], names[i]);
+                          if (i < n - 1) {
+                            await Future<void>.delayed(
+                              const Duration(milliseconds: 900),
+                            );
+                          }
+                        }
+                      },
+                      icon: Icon(
+                        forPrint
+                            ? Icons.download_for_offline_rounded
+                            : Icons.file_download_done_rounded,
+                      ),
+                      label: Text(
+                        forPrint
+                            ? 'Download all $n PDFs to print'
+                            : 'Download all $n PDFs',
+                      ),
+                    ),
+                  ),
+                for (var i = 0; i < n; i++)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: OutlinedButton.icon(
                       onPressed: () =>
                           unawaited(_sharePdfSafe(pdfs[i], names[i])),
                       icon: Icon(
@@ -578,8 +617,8 @@ class _BulkBarcodePrintPageState extends ConsumerState<BulkBarcodePrintPage> {
                       ),
                       label: Text(
                         forPrint
-                            ? 'Download part ${i + 1} of $n to print'
-                            : 'Download part ${i + 1} of $n',
+                            ? 'Part ${i + 1} of $n'
+                            : 'Part ${i + 1} of $n',
                       ),
                     ),
                   ),

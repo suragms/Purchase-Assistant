@@ -13,6 +13,7 @@ class HomeQuickActionsGrid extends StatelessWidget {
     required this.onReports,
     required this.onBarcode,
     required this.onUsers,
+    this.onAddItem,
   });
 
   final bool isOwner;
@@ -22,6 +23,7 @@ class HomeQuickActionsGrid extends StatelessWidget {
   final VoidCallback onReports;
   final VoidCallback onBarcode;
   final VoidCallback onUsers;
+  final VoidCallback? onAddItem;
 
   @override
   Widget build(BuildContext context) {
@@ -38,6 +40,13 @@ class HomeQuickActionsGrid extends StatelessWidget {
         color: const Color(0xFF1565C0),
         onTap: onStock,
       ),
+      if (isOwner && onAddItem != null)
+        _QuickActionSpec(
+          label: 'Add item',
+          icon: Icons.add_box_rounded,
+          color: const Color(0xFF7C3AED),
+          onTap: onAddItem!,
+        ),
       _QuickActionSpec(
         label: 'Purchase',
         icon: Icons.add_shopping_cart_rounded,

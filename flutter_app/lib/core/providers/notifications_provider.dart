@@ -177,7 +177,7 @@ final warehouseAlertNotificationItemsProvider =
         subtitle: '$low low · $outN out — open stock list to update',
         createdAt: DateTime.now(),
         isRead: false,
-        actionRoute: isStaff ? '/staff/stock' : '/stock',
+        actionRoute: isStaff ? '/staff/low-stock' : '/stock/low-stock',
         serverKind: 'low_stock',
       ));
     }

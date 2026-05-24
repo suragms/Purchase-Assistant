@@ -23,7 +23,7 @@ StockDisplayStatus stockDisplayStatusFromApi(String? status) {
 Color stockNumberColor(StockDisplayStatus status) {
   return switch (status) {
     StockDisplayStatus.low => const Color(0xFFDC2626),
-    StockDisplayStatus.out => const Color(0xFF6B7280),
+    StockDisplayStatus.out => const Color(0xFFEA580C),
     StockDisplayStatus.ok => const Color(0xFF16A34A),
     StockDisplayStatus.normal => HexaColors.brandPrimary,
   };
@@ -95,13 +95,14 @@ class StockNumberDisplay extends StatelessWidget {
           ),
         ),
         if (unitLabel.isNotEmpty) ...[
-          const SizedBox(width: 3),
+          const SizedBox(width: 4),
           Text(
             unitLabel,
-            style: const TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
-              color: Color(0xFF6B7280),
+            style: TextStyle(
+              fontSize: (fontSize * 0.62).clamp(11.0, 14.0),
+              fontWeight: FontWeight.w900,
+              color: numColor,
+              letterSpacing: 0.2,
             ),
           ),
         ],
