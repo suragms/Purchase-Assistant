@@ -261,24 +261,28 @@ Future<List<Uint8List>> generateBulkPdfParts({
 
   try {
     if (denseA4) {
-      final expanded = <BarcodeLabelData>[];
-      for (final data in uniqueLabels) {
-        for (var c = 0; c < copyN; c++) {
-          expanded.add(data);
-        }
-      }
-      final pdf = await _generatePdfForLabelChunk(
-        context: context,
-        ref: ref,
-        labels: expanded,
-        denseA4: true,
-        perRow: perRow,
-        symbol: symbol,
-        thermalSize: thermalSize,
-        hideFinancials: hideFinancials,
-        targetLabelsPerPage: perFile,
+      final chunks = chunkExpandedLabelsForPdfFiles(
+        items: uniqueLabels,
+        copiesPerItem: copyN,
+        perFile: perFile,
       );
-      return [pdf];
+      final out = <Uint8List>[];
+      for (final chunk in chunks) {
+        out.add(
+          await _generatePdfForLabelChunk(
+            context: context,
+            ref: ref,
+            labels: chunk,
+            denseA4: true,
+            perRow: perRow,
+            symbol: symbol,
+            thermalSize: thermalSize,
+            hideFinancials: hideFinancials,
+            targetLabelsPerPage: perFile,
+          ),
+        );
+      }
+      return out;
     }
 
     final chunks = chunkExpandedLabelsForPdfFiles(

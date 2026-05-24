@@ -4,46 +4,55 @@ import '../../../../core/design_system/hexa_ds_tokens.dart';
 import '../../../../core/design_system/hexa_operational_tokens.dart';
 import 'stock_table_layout.dart';
 
-/// Column labels aligned with [StockQtyMetricTriple] / bordered rows.
+/// Warehouse table header: ITEM | STOCK | STATUS.
 class StockListColumnHeader extends StatelessWidget {
   const StockListColumnHeader({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final hdr = HexaDsType.label(11).copyWith(
+    final hdr = HexaDsType.label(10).copyWith(
       fontWeight: FontWeight.w800,
       color: const Color(0xFF475569),
-      letterSpacing: 0.15,
+      letterSpacing: 0.3,
     );
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(HexaOp.pageGutter, 4, HexaOp.pageGutter, 6),
+      padding: const EdgeInsets.symmetric(horizontal: HexaOp.pageGutter),
       child: DecoratedBox(
         decoration: BoxDecoration(
-          color: const Color(0xFFE8E6E1),
+          color: StockTableLayout.headerFill,
           border: Border.all(color: StockTableLayout.borderColor),
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(2)),
         ),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+        child: IntrinsicHeight(
           child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Expanded(child: Text('Item', style: hdr)),
-              SizedBox(
-                width: StockTableLayout.metricWidth,
-                child: Text('Purchased', textAlign: TextAlign.center, style: hdr),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: StockTableLayout.cellHPadding,
+                    vertical: 6,
+                  ),
+                  child: Text('ITEM', style: hdr),
+                ),
               ),
-              const SizedBox(width: StockTableLayout.metricGap),
-              SizedBox(
-                width: StockTableLayout.metricWidth,
-                child: Text('Stock', textAlign: TextAlign.center, style: hdr),
+              Container(
+                width: StockTableLayout.stockColWidth,
+                decoration: StockTableLayout.cellDecoration(),
+                alignment: Alignment.center,
+                padding: const EdgeInsets.symmetric(vertical: 6),
+                child: Text('STOCK', style: hdr),
               ),
-              const SizedBox(width: StockTableLayout.metricGap),
               SizedBox(
-                width: StockTableLayout.metricWidth,
-                child: Text('Diff', textAlign: TextAlign.center, style: hdr),
+                width: StockTableLayout.statusColWidth,
+                child: Center(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 6),
+                    child: Text('STATUS', style: hdr),
+                  ),
+                ),
               ),
-              const SizedBox(width: StockTableLayout.actionsWidth - 8),
             ],
           ),
         ),

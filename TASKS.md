@@ -4,9 +4,18 @@
 
 ---
 
+## Stock warehouse rebuild (2026-05-24)
+
+- [x] Compact top nav: period dropdown + filter + search toggle (no TabBar)
+- [x] Sticky collapsible search row; warehouse filter sheet (subcategory, status, unit, missing flags)
+- [x] Table layout **ITEM | STOCK | STATUS** with bordered rows (`stock_table_row.dart`)
+- [x] Row tap → compact update sheet (Physical/Sale/Damage/Correction); default period **All time**
+- [x] Changes on separate route `/stock/changes` and `/staff/stock/changes`
+- [x] Staff: no purchased/diff columns; owner metadata footer (diff, updated by)
+- [x] Widget tests: `stock_status_badge_test.dart`
+
 ## Stock / staff UX overhaul (2026-05-23)
 
-- [x] Stock **All | Changes** tabs; Changes = audit feed newest first (`stockChangesFeedProvider`)
 - [x] Stock list **page merge** + Prev/Next footer; `Showing N of total` (fixes load-more replacing rows)
 - [x] Search: API `q=` only, **clear (X)**, no initState `q` wipe
 - [x] Inline **category + subcategory** autocomplete on All tab; **Clear filters**
@@ -57,7 +66,8 @@
 
 - [x] Stock row: **Buy / Now / Δ** numeric columns (no `150 bags` suffix); no horizontal scroll
 - [x] Bulk print: same qty columns; **100-label cap** before PDF; **Download** opens PDF preview page with app-bar download
-- [x] Bulk print: **A4 = one PDF**, **30/40/50/60 labels per page** (cut sheet); thermal still splits multi-PDF; footer **stock + last purchase**; scan **Update stock**; auth/offline errors on label fetch
+- [x] Bulk print: **A4 splits by 30/40/50/60 labels per PDF file** (web-safe); **30/40/50/60 per page** inside each file; thermal splits multi-PDF; footer **stock + last purchase**; scan **Update stock**; auth/offline errors on label fetch
+- [x] Bulk print: fix **`Infinity.toInt()`** PDF crash (sanitize qty); auto **A4 + Code128 + 50/file** when selection > 25
 - [x] Staff search: catalog item → **item detail** (history, ledger, purchases); purchase bills visible; staff bill → `/staff/purchase-history/:id`
 - [x] Search PO lines: qty numbers only (no bag/kg); PUR id bold primary
 - [x] Item detail stock panel: purchased/moved period numbers without unit suffix

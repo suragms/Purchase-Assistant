@@ -65,6 +65,7 @@ import '../../features/barcode/presentation/barcode_scan_history_page.dart';
 import '../../features/barcode/presentation/stock_audit_session_page.dart';
 import '../../features/barcode/presentation/stock_audit_summary_page.dart';
 import '../../features/stock/presentation/stock_page.dart';
+import '../../features/stock/presentation/stock_changes_page.dart';
 import '../../features/stock/presentation/reorder_list_page.dart';
 import '../../features/stock/presentation/stock_history_page.dart';
 import '../../features/stock/presentation/stock_item_intelligence_page.dart';
@@ -437,6 +438,13 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         pageBuilder: (context, state) => iosPushPage(
           key: state.pageKey,
           child: const StockMovementPage(),
+        ),
+      ),
+      GoRoute(
+        path: '/stock/changes',
+        pageBuilder: (context, state) => iosPushPage(
+          key: state.pageKey,
+          child: const StockChangesPage(mode: StockChangesPageMode.owner),
         ),
       ),
       GoRoute(
@@ -1039,6 +1047,17 @@ final appRouterProvider = Provider<GoRouter>((ref) {
                 name: 'staff_stock',
                 builder: (context, state) =>
                     const StockPage(mode: StockPageMode.staff),
+                routes: [
+                  GoRoute(
+                    path: 'changes',
+                    pageBuilder: (context, state) => iosPushPage(
+                      key: state.pageKey,
+                      child: const StockChangesPage(
+                        mode: StockChangesPageMode.staff,
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),

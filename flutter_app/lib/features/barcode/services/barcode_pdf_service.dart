@@ -61,6 +61,12 @@ class BarcodeLabelData {
         'supplierName': supplierName,
       };
 
+  /// Drops NaN/Infinity so PDF layout never calls [double.toInt] on bad API values.
+  static double? finiteQty(double? v) {
+    if (v == null || !v.isFinite) return null;
+    return v;
+  }
+
   factory BarcodeLabelData.fromJson(Map<String, dynamic> j) {
     DateTime? lpDate;
     final lpRaw = j['lastPurchaseDate'];
@@ -72,11 +78,11 @@ class BarcodeLabelData {
       itemCode: j['itemCode'] as String? ?? '',
       itemName: j['itemName'] as String? ?? '',
       unit: j['unit'] as String?,
-      currentStock: coerceToDoubleNullable(j['currentStock']),
+      currentStock: finiteQty(coerceToDoubleNullable(j['currentStock'])),
       lastPurchaseDate: lpDate,
-      lastPurchaseQty: coerceToDoubleNullable(j['lastPurchaseQty']),
+      lastPurchaseQty: finiteQty(coerceToDoubleNullable(j['lastPurchaseQty'])),
       lastPurchaseUnit: j['lastPurchaseUnit'] as String?,
-      lastPurchaseRate: coerceToDoubleNullable(j['lastPurchaseRate']),
+      lastPurchaseRate: finiteQty(coerceToDoubleNullable(j['lastPurchaseRate'])),
       supplierName: j['supplierName'] as String?,
     );
   }
@@ -95,17 +101,30 @@ class BarcodeLabelData {
       itemCode: ic.isEmpty ? bc : ic,
       itemName: j['item_name']?.toString() ?? (ic.isNotEmpty ? ic : bc),
       unit: j['unit']?.toString(),
-      currentStock: coerceToDoubleNullable(j['current_stock']),
+      currentStock: finiteQty(coerceToDoubleNullable(j['current_stock'])),
       lastPurchaseDate: lpDate,
-      lastPurchaseQty: coerceToDoubleNullable(j['last_purchase_qty']),
+      lastPurchaseQty: finiteQty(coerceToDoubleNullable(j['last_purchase_qty'])),
       lastPurchaseUnit: j['last_purchase_unit']?.toString(),
-      lastPurchaseRate: coerceToDoubleNullable(j['last_purchase_rate']),
+      lastPurchaseRate: finiteQty(coerceToDoubleNullable(j['last_purchase_rate'])),
       supplierName: j['supplier_name']?.toString(),
     );
   }
 }
 
 class BarcodePdfService {
+  /// Safe qty text for PDF (avoids `Infinity.toInt()` on bad doubles).
+  static String? pdfQtyDisplayString(double? qty) {
+    final q = BarcodeLabelData.finiteQty(qty);
+    if (q == null || q <= 0) return null;
+    final rounded = q.roundToDouble();
+    if (!rounded.isFinite) return null;
+    if ((q - rounded).abs() < 0.001) {
+      final asInt = rounded.round();
+      return asInt.isFinite ? '$asInt' : null;
+    }
+    return q.toStringAsFixed(1);
+  }
+
   /// Strip characters that break Code128 / overflow QR on web PDF.
   static String sanitizePrintPayload(String raw, {bool forQr = false}) {
     var s = raw.trim();
@@ -397,6 +416,16 @@ class BarcodePdfService {
       perPage = cols * rows;
     }
 
+    if (!labelW.isFinite ||
+        labelW <= 0 ||
+        !labelH.isFinite ||
+        labelH <= 0 ||
+        cols < 1 ||
+        rows < 1 ||
+        perPage < 1) {
+      throw StateError('Invalid A4 label grid ($cols×$rows, ${labelW}x$labelH)');
+    }
+
     final doc = pw.Document();
     final compact = targetPerPage != null && targetPerPage > 0;
     for (var base = 0; base < labels.length; base += perPage) {
@@ -543,6 +572,8 @@ class BarcodePdfService {
       );
     }
 
+    final stockDisplay = pdfQtyDisplayString(data.currentStock);
+
     if (!compact &&
         qrSize > 0 &&
         symbol == BarcodeSymbolMode.code128WithQr) {
@@ -558,9 +589,9 @@ class BarcodePdfService {
               width: qrSize,
               height: qrSize,
             ),
-            if (data.currentStock != null && size == LabelSize.large)
+            if (stockDisplay != null && size == LabelSize.large)
               pw.Text(
-                'Stock: ${data.currentStock!.toStringAsFixed(0)} ${data.unit ?? ''}',
+                'Stock: $stockDisplay ${data.unit ?? ''}',
                 style: pw.TextStyle(fontSize: codeSize - 1),
               ),
           ],
@@ -568,12 +599,8 @@ class BarcodePdfService {
       ]);
     }
 
-    if (data.currentStock != null) {
-      final stockQty = data.currentStock!;
-      final rounded = stockQty.roundToDouble();
-      final stockStr = (stockQty - rounded).abs() < 0.001
-          ? '${rounded.round()}'
-          : stockQty.toStringAsFixed(1);
+    final stockStr = stockDisplay;
+    if (stockStr != null) {
       final u = (data.unit ?? '').trim();
       children.add(pw.SizedBox(height: compact ? 1 : 2));
       children.add(
@@ -632,19 +659,14 @@ class BarcodePdfService {
           '${d.day.toString().padLeft(2, '0')} ${_month(d.month)} ${d.year % 100}';
       parts.add(ds);
     }
-    final qty = data.lastPurchaseQty;
-    if (qty != null && qty > 0) {
-      final rounded = qty.roundToDouble();
-      final qtyStr = (qty - rounded).abs() < 0.001
-          ? '${rounded.toInt()}'
-          : qty.toStringAsFixed(1);
+    final qtyStr = pdfQtyDisplayString(data.lastPurchaseQty);
+    if (qtyStr != null) {
       final u = (data.lastPurchaseUnit ?? data.unit ?? '').trim();
       parts.add('$qtyStr${u.isEmpty ? '' : ' $u'}');
     }
-    if (!hideFinancials &&
-        data.lastPurchaseRate != null &&
-        data.lastPurchaseRate! > 0) {
-      parts.add('₹${data.lastPurchaseRate!.toStringAsFixed(0)}');
+    final rate = BarcodeLabelData.finiteQty(data.lastPurchaseRate);
+    if (!hideFinancials && rate != null && rate > 0) {
+      parts.add('₹${rate.toStringAsFixed(0)}');
     }
     final sup = data.supplierName?.trim() ?? '';
     if (sup.isNotEmpty) {
@@ -656,14 +678,10 @@ class BarcodePdfService {
   }
 
   static String? _bagsLine(BarcodeLabelData data) {
-    final qty = data.lastPurchaseQty;
-    if (qty == null || qty <= 0) return null;
+    final n = pdfQtyDisplayString(data.lastPurchaseQty);
+    if (n == null) return null;
     final u = (data.lastPurchaseUnit ?? data.unit ?? '').toLowerCase();
     if (u.contains('bag') || u == 'sack') {
-      final rounded = qty.roundToDouble();
-      final n = (qty - rounded).abs() < 0.001
-          ? '${rounded.round()}'
-          : qty.toStringAsFixed(1);
       return 'Bags: $n';
     }
     return null;

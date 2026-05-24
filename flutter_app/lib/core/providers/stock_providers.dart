@@ -96,7 +96,7 @@ final stockListQueryProvider =
 
 /// Stock list period chips (Today / Week / Month / Year).
 final stockPagePeriodProvider =
-    StateProvider<HomePeriod>((_) => HomePeriod.today);
+    StateProvider<HomePeriod>((_) => HomePeriod.allTime);
 
 /// Tablet/desktop split pane selection.
 final stockSelectedItemIdProvider = StateProvider<String?>((ref) => null);

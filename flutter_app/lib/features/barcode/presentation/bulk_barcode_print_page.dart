@@ -50,6 +50,10 @@ class _BulkBarcodePrintPageState extends ConsumerState<BulkBarcodePrintPage> {
   void initState() {
     super.initState();
     _searchCtrl.text = ref.read(stockListQueryProvider).q;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _syncPdfFormatForSelection(ref.read(bulkBarcodeSelectionProvider).length);
+    });
   }
 
   @override
@@ -63,6 +67,7 @@ class _BulkBarcodePrintPageState extends ConsumerState<BulkBarcodePrintPage> {
 
   void _setSelected(Set<String> next) {
     ref.read(bulkBarcodeSelectionProvider.notifier).state = next;
+    _syncPdfFormatForSelection(next.length);
   }
 
   void _toggleSelected(String id, bool on) {
@@ -73,6 +78,25 @@ class _BulkBarcodePrintPageState extends ConsumerState<BulkBarcodePrintPage> {
       next.remove(id);
     }
     _setSelected(next);
+  }
+
+  /// Large batches: A4 sheet + Code128 + 50 labels per PDF file (web-safe).
+  void _syncPdfFormatForSelection(int count) {
+    if (count <= 25) return;
+    var changed = false;
+    if (!_denseA4) {
+      _denseA4 = true;
+      changed = true;
+    }
+    if (_useQr) {
+      _useQr = false;
+      changed = true;
+    }
+    if (_labelsPerPdfFile != BulkLabelsPerPdfFile.n50) {
+      _labelsPerPdfFile = BulkLabelsPerPdfFile.n50;
+      changed = true;
+    }
+    if (changed && mounted) setState(() {});
   }
 
   Map<String, Map<String, dynamic>> _stockRowsById() {
@@ -199,7 +223,7 @@ class _BulkBarcodePrintPageState extends ConsumerState<BulkBarcodePrintPage> {
             _denseA4
                 ? (pdfs.length == 1
                     ? 'One A4 PDF ready — up to $perFile labels per page. Print once and cut.'
-                    : '${pdfs.length} PDFs ready.')
+                    : '${pdfs.length} A4 PDFs ready — up to $perFile labels each file.')
                 : (pdfs.length == 1
                     ? 'PDF ready (up to $perFile labels per file).'
                     : '${pdfs.length} PDFs ready (up to $perFile labels each).'),
@@ -314,14 +338,17 @@ class _BulkBarcodePrintPageState extends ConsumerState<BulkBarcodePrintPage> {
           final n = pdfs.length;
           for (var i = 0; i < n; i++) {
             final name = _bulkBarcodeFilename(part: i + 1, partCount: n);
-            if (kIsWeb && i == 0) {
+            if (kIsWeb && n == 1) {
               await _openPdfPage(
                 pdfs[i],
-                title: n == 1
-                    ? 'Download labels (${_selected.length})'
-                    : 'Download part 1 of $n',
+                title: 'Download labels (${_selected.length})',
                 filename: name,
               );
+            } else if (kIsWeb) {
+              await Printing.sharePdf(bytes: pdfs[i], filename: name);
+              if (i < n - 1) {
+                await Future<void>.delayed(const Duration(milliseconds: 350));
+              }
             } else {
               await Printing.sharePdf(bytes: pdfs[i], filename: name);
             }
@@ -332,7 +359,8 @@ class _BulkBarcodePrintPageState extends ConsumerState<BulkBarcodePrintPage> {
                 content: Text(
                   n == 1
                       ? 'Use Download PDF in the app bar, or the share sheet below the preview.'
-                      : 'Downloaded $n PDF files (check your downloads folder).',
+                      : 'Started $n downloads (up to $_kMaxLabelsPerPdf labels per file). '
+                          'Allow multiple files if the browser asks.',
                 ),
               ),
             );

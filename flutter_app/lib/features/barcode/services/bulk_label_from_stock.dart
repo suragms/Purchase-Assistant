@@ -29,13 +29,19 @@ BarcodeLabelData? labelDataFromStockRow(Map<String, dynamic>? row) {
         ? row['name'].toString().trim()
         : (ic.isNotEmpty ? ic : bc),
     unit: unit?.isEmpty == true ? null : unit,
-    currentStock: coerceToDoubleNullable(row['current_stock']),
+    currentStock: BarcodeLabelData.finiteQty(
+      coerceToDoubleNullable(row['current_stock']),
+    ),
     lastPurchaseDate: lpDate,
-    lastPurchaseQty: coerceToDoubleNullable(
-      row['last_purchase_qty'] ?? row['period_purchased_qty'],
+    lastPurchaseQty: BarcodeLabelData.finiteQty(
+      coerceToDoubleNullable(
+        row['last_purchase_qty'] ?? row['period_purchased_qty'],
+      ),
     ),
     lastPurchaseUnit: row['last_purchase_unit']?.toString() ?? unit,
-    lastPurchaseRate: coerceToDoubleNullable(row['last_purchase_rate']),
+    lastPurchaseRate: BarcodeLabelData.finiteQty(
+      coerceToDoubleNullable(row['last_purchase_rate']),
+    ),
     supplierName: row['supplier_name']?.toString().trim(),
   );
 }
