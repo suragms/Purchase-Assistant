@@ -1,4 +1,4 @@
-"""Stock must revert when a confirmed trade purchase is cancelled."""
+"""Delivered purchase stock must revert when delivery is revoked or cancelled."""
 
 import uuid
 from decimal import Decimal
@@ -23,7 +23,7 @@ def _register_owner():
     return h, bid
 
 
-def test_cancel_confirmed_purchase_reverts_stock():
+def test_cancel_delivered_purchase_reverts_stock():
     h, bid = _register_owner()
     cat = client.post(
         f"/v1/businesses/{bid}/item-categories", headers=h, json={"name": "Cat"}
@@ -68,6 +68,13 @@ def test_cancel_confirmed_purchase_reverts_stock():
     assert purchase.status_code in (200, 201), purchase.text
     pid = purchase.json()["id"]
 
+    delivered = client.patch(
+        f"/v1/businesses/{bid}/trade-purchases/{pid}/delivery",
+        headers=h,
+        json={"is_delivered": True},
+    )
+    assert delivered.status_code == 200, delivered.text
+
     stock = client.get(f"/v1/businesses/{bid}/stock/{iid}", headers=h)
     assert Decimal(str(stock.json()["current_stock"])) == Decimal("10")
 
@@ -81,7 +88,7 @@ def test_cancel_confirmed_purchase_reverts_stock():
     assert Decimal(str(stock2.json()["current_stock"])) == Decimal("0")
 
 
-def test_edit_confirmed_purchase_adjusts_stock():
+def test_delivery_revoke_reverts_stock():
     h, bid = _register_owner()
     cat = client.post(
         f"/v1/businesses/{bid}/item-categories", headers=h, json={"name": "Cat2"}
@@ -126,26 +133,22 @@ def test_edit_confirmed_purchase_adjusts_stock():
     assert purchase.status_code in (200, 201), purchase.text
     pid = purchase.json()["id"]
 
-    upd = client.put(
-        f"/v1/businesses/{bid}/trade-purchases/{pid}",
+    delivered = client.patch(
+        f"/v1/businesses/{bid}/trade-purchases/{pid}/delivery",
         headers=h,
-        json={
-            "supplier_id": sup,
-            "purchase_date": "2026-05-21",
-            "status": "confirmed",
-            "lines": [
-                {
-                    "catalog_item_id": iid,
-                    "item_name": "Dal Bag",
-                    "qty": "8",
-                    "unit": "piece",
-                    "purchase_rate": "50",
-                    "landing_cost": "50",
-                }
-            ],
-        },
+        json={"is_delivered": True},
     )
-    assert upd.status_code == 200, upd.text
+    assert delivered.status_code == 200, delivered.text
 
     stock = client.get(f"/v1/businesses/{bid}/stock/{iid}", headers=h)
-    assert Decimal(str(stock.json()["current_stock"])) == Decimal("8")
+    assert Decimal(str(stock.json()["current_stock"])) == Decimal("10")
+
+    revoked = client.patch(
+        f"/v1/businesses/{bid}/trade-purchases/{pid}/delivery",
+        headers=h,
+        json={"is_delivered": False},
+    )
+    assert revoked.status_code == 200, revoked.text
+
+    stock = client.get(f"/v1/businesses/{bid}/stock/{iid}", headers=h)
+    assert Decimal(str(stock.json()["current_stock"])) == Decimal("0")

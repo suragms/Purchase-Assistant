@@ -25,7 +25,7 @@ class NotificationsPage extends ConsumerStatefulWidget {
 }
 
 class _NotificationsPageState extends ConsumerState<NotificationsPage> {
-  String _filter = 'all'; // all | stock | purchase | system
+  String _filter = 'stock'; // stock | purchase | system
   final _textSearch = TextEditingController();
 
   @override
@@ -52,13 +52,11 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
         return n.type == NotificationType.system ||
             n.type == NotificationType.reminder ||
             n.type == NotificationType.whatsapp ||
-            n.type == NotificationType.cloudCost ||
-            n.type == NotificationType.maintenance ||
             (n.type == NotificationType.serverInApp &&
                 n.serverKind != null &&
                 n.serverKind != 'low_stock');
       default:
-        return true;
+        return false;
     }
   }
 
@@ -102,9 +100,17 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
         actions: [
           if (hasUnread)
             TextButton(
-              onPressed: () => _markAllVisibleRead(visible),
+              onPressed: () => _markAllRead(),
               child: const Text('Mark all read'),
             ),
+          IconButton(
+            tooltip: 'Clear server notifications',
+            icon: Icon(Icons.delete_sweep_outlined,
+                color: Theme.of(context).colorScheme.onSurfaceVariant),
+            onPressed: serverAsync.valueOrNull?.isEmpty == true
+                ? null
+                : () => _clearServerNotifications(),
+          ),
           IconButton(
             tooltip: 'Notification settings',
             icon: Icon(Icons.tune_rounded,
@@ -209,17 +215,13 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
             child: Wrap(
               spacing: 8,
               runSpacing: 8,
-              children: [
+                  children: [
                 _FilterChip(
-                    label: 'All',
-                    selected: _filter == 'all',
-                    onTap: () => setState(() => _filter = 'all')),
-                _FilterChip(
-                    label: 'Stock alerts',
+                    label: 'Stock Alerts',
                     selected: _filter == 'stock',
                     onTap: () => setState(() => _filter = 'stock')),
                 _FilterChip(
-                    label: 'Purchase',
+                    label: 'Purchases',
                     selected: _filter == 'purchase',
                     onTap: () => setState(() => _filter = 'purchase')),
                 _FilterChip(
@@ -273,7 +275,7 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
                             q.isNotEmpty
                                 ? 'Try a different search or clear the search box.'
                                 : filterEmptyButHasItems
-                                    ? 'Switch to All or another category — your notifications are only hidden by the current filter.'
+                                    ? 'Switch to another tab — your notifications are hidden by the current filter.'
                                     : 'Payment due alerts and reminders will appear here.',
                             textAlign: TextAlign.center,
                             style: tt.bodySmall?.copyWith(
@@ -287,8 +289,8 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
                             const SizedBox(height: 20),
                             FilledButton(
                               onPressed: () =>
-                                  setState(() => _filter = 'all'),
-                              child: const Text('Show all'),
+                                  setState(() => _filter = 'stock'),
+                              child: const Text('Show stock alerts'),
                             ),
                           ],
                           if (items.isEmpty) ...[
@@ -325,23 +327,55 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
     );
   }
 
-  Future<void> _markAllVisibleRead(List<NotificationItem> visible) async {
+  Future<void> _markAllRead() async {
     final session = ref.read(sessionProvider);
     final api = ref.read(hexaApiProvider);
-    for (final n in visible) {
+    if (session != null) {
+      try {
+        await api.markAllAppNotificationsRead(
+          businessId: session.primaryBusiness.id,
+        );
+      } catch (_) {}
+    }
+    final items = ref.read(mergedNotificationFeedProvider);
+    for (final n in items) {
       if (n.isRead) continue;
-      final sid = n.serverNotificationId;
-      if (sid != null && sid.isNotEmpty && session != null) {
-        try {
-          await api.patchAppNotificationRead(
-            businessId: session.primaryBusiness.id,
-            notificationId: sid,
-          );
-        } catch (_) {}
-      } else if (!n.id.startsWith('pur_')) {
+      if (n.serverNotificationId == null && !n.id.startsWith('pur_')) {
         ref.read(notificationsProvider.notifier).markRead(n.id);
       }
     }
+    ref.invalidate(appNotificationsListProvider);
+    ref.invalidate(appNotificationUnreadCountProvider);
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _clearServerNotifications() async {
+    final session = ref.read(sessionProvider);
+    if (session == null) return;
+    final ok = await showDialog<bool>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            title: const Text('Clear server notifications?'),
+            content: const Text(
+              'Stock alerts generated from live warehouse data will still appear until the stock issue is fixed.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(false),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(dialogContext).pop(true),
+                child: const Text('Clear'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+    if (!ok) return;
+    await ref.read(hexaApiProvider).clearAllAppNotifications(
+          businessId: session.primaryBusiness.id,
+        );
     ref.invalidate(appNotificationsListProvider);
     ref.invalidate(appNotificationUnreadCountProvider);
     if (mounted) setState(() {});
@@ -438,9 +472,6 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
                         NotificationType.whatsapp => const Color(0xFF25D366),
                         NotificationType.purchaseDue => const Color(0xFFF59E0B),
                         NotificationType.purchaseOverdue => HexaColors.loss,
-                        NotificationType.cloudCost => const Color(0xFF17A8A7),
-                        NotificationType.maintenance =>
-                            const Color(0xFF6366F1),
                         NotificationType.serverInApp => n.serverKind == 'low_stock'
                             ? HexaColors.warning
                             : Theme.of(context).colorScheme.onSurfaceVariant,
@@ -458,9 +489,6 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
                         NotificationType.purchaseDue => Icons.event_rounded,
                         NotificationType.purchaseOverdue =>
                             Icons.gavel_rounded,
-                        NotificationType.cloudCost => Icons.cloud_outlined,
-                        NotificationType.maintenance =>
-                          Icons.build_circle_outlined,
                         NotificationType.serverInApp => n.serverKind == 'low_stock'
                             ? Icons.inventory_2_outlined
                             : Icons.notifications_active_outlined,

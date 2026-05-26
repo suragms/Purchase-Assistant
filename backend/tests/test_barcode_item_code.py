@@ -40,9 +40,12 @@ def _type_id(h, bid):
 def test_from_scan_create_and_lookup():
     h, bid = _owner_headers()
     tid = _type_id(h, bid)
+    suffix = uuid.uuid4().hex[:8]
+    barcode = f"890123{suffix[:6]}"
+    item_code = f"RICE-PONNI-{suffix}".upper()
     body = {
-        "barcode": "8901234567890",
-        "item_code": "RICE-PONNI-50KG",
+        "barcode": barcode,
+        "item_code": item_code,
         "name": "Rice Ponni Test",
         "type_id": tid,
         "default_unit": "bag",
@@ -55,20 +58,20 @@ def test_from_scan_create_and_lookup():
     )
     assert created.status_code == 201, created.text
     data = created.json()
-    assert data["barcode"] == "8901234567890"
-    assert data["item_code"] == "RICE-PONNI-50KG"
+    assert data["barcode"] == barcode
+    assert data["item_code"] == item_code
 
     lookup = client.get(
         f"/v1/businesses/{bid}/stock/barcode/lookup",
         headers=h,
-        params={"code": "8901234567890"},
+        params={"code": barcode},
     )
     assert lookup.status_code == 200, lookup.text
-    body = lookup.json()
-    assert body["item_code"] == "RICE-PONNI-50KG"
-    assert "last_purchase_date" in body
-    assert "last_purchase_qty" in body
-    assert "supplier_name" in body
+    lookup_body = lookup.json()
+    assert lookup_body["item_code"] == item_code
+    assert "last_purchase_date" in lookup_body
+    assert "last_purchase_qty" in lookup_body
+    assert "supplier_name" in lookup_body
 
     dup = client.post(
         f"/v1/businesses/{bid}/catalog-items/from-scan",

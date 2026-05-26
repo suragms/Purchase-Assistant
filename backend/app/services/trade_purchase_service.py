@@ -938,15 +938,6 @@ async def create_trade_purchase(
             )
         )
     await _sync_purchase_memory(db, business_id, body, trade_purchase_id=tp.id)
-    stock_updates: list[dict] = []
-    if initial_status == "confirmed":
-        stock_updates = await apply_confirmed_purchase_stock(
-            db,
-            business_id,
-            user_id,
-            body.lines,
-            purchase_human_id=human_id,
-        )
     await db.commit()
     bump_trade_read_caches_for_business(business_id)
     res = await db.execute(
@@ -955,7 +946,7 @@ async def create_trade_purchase(
         .options(*_trade_purchase_load_opts())
     )
     loaded = res.scalar_one()
-    return trade_purchase_to_out(loaded, stock_updates=stock_updates)
+    return trade_purchase_to_out(loaded, stock_updates=[])
 
 
 async def update_trade_purchase(
@@ -986,12 +977,12 @@ async def update_trade_purchase(
     tp = res.scalar_one_or_none()
     if not tp:
         return None
-    prev_status = (tp.status or "").lower()
     if (tp.status or "").lower() == "deleted":
         raise ValueError("Cannot edit a deleted purchase")
     if (tp.status or "").lower() == "cancelled":
         raise ValueError("Cannot edit a cancelled purchase")
     old_lines_snapshot = list(tp.lines)
+    was_delivered = bool(getattr(tp, "is_delivered", False))
     qty_sum, amt_sum = compute_totals(body)
     land_s, sell_s, prof = aggregate_landing_selling_profit(body)
     if not body.force_duplicate:
@@ -1090,28 +1081,12 @@ async def update_trade_purchase(
     await _sync_purchase_memory(db, business_id, body, trade_purchase_id=tp.id)
     stock_updates: list[dict] = []
     try:
-        if prev_status == "confirmed" and new_status == "confirmed":
+        if was_delivered:
             stock_updates = await sync_confirmed_purchase_stock_diff(
                 db,
                 business_id,
                 tp.user_id,
                 old_lines_snapshot,
-                body.lines,
-                purchase_human_id=tp.human_id,
-            )
-        elif prev_status == "confirmed" and new_status != "confirmed":
-            stock_updates = await revert_confirmed_purchase_stock(
-                db,
-                business_id,
-                tp.user_id,
-                old_lines_snapshot,
-                purchase_human_id=tp.human_id,
-            )
-        elif new_status == "confirmed" and prev_status not in ("confirmed",):
-            stock_updates = await apply_confirmed_purchase_stock(
-                db,
-                business_id,
-                tp.user_id,
                 body.lines,
                 purchase_human_id=tp.human_id,
             )
@@ -1187,6 +1162,11 @@ async def patch_trade_purchase_delivery(
     st = (tp.status or "").lower()
     if st == "deleted":
         return None
+    if st == "cancelled":
+        raise ValueError("Delivery changes are not allowed for cancelled purchases")
+    was_delivered = bool(getattr(tp, "is_delivered", False))
+    lines_snapshot = list(tp.lines)
+    stock_updates: list[dict] = []
     tp.is_delivered = body.is_delivered
     if body.is_delivered:
         tp.delivered_at = body.delivered_at or utcnow()
@@ -1196,9 +1176,34 @@ async def patch_trade_purchase_delivery(
         notes = body.delivery_notes.strip()
         tp.delivery_notes = notes or None
     tp.updated_at = utcnow()
+    try:
+        if not was_delivered and body.is_delivered:
+            stock_updates = await apply_confirmed_purchase_stock(
+                db,
+                business_id,
+                tp.user_id,
+                lines_snapshot,
+                purchase_human_id=tp.human_id,
+            )
+        elif was_delivered and not body.is_delivered:
+            stock_updates = await revert_confirmed_purchase_stock(
+                db,
+                business_id,
+                tp.user_id,
+                lines_snapshot,
+                purchase_human_id=tp.human_id,
+            )
+    except ValueError:
+        await db.rollback()
+        raise
     await db.commit()
     bump_trade_read_caches_for_business(business_id)
-    return await get_trade_purchase(db, business_id, purchase_id)
+    res2 = await db.execute(
+        select(TradePurchase)
+        .where(TradePurchase.id == purchase_id)
+        .options(*_trade_purchase_load_opts())
+    )
+    return trade_purchase_to_out(res2.scalar_one(), stock_updates=stock_updates)
 
 
 async def mark_trade_purchase_paid(
@@ -1258,11 +1263,13 @@ async def cancel_trade_purchase(
         return None
     if (tp.status or "").lower() == "deleted":
         return None
-    was_confirmed = (tp.status or "").lower() == "confirmed"
-    old_lines = list(tp.lines) if was_confirmed else []
+    was_delivered = bool(getattr(tp, "is_delivered", False))
+    old_lines = list(tp.lines) if was_delivered else []
     tp.status = "cancelled"
+    tp.is_delivered = False
+    tp.delivered_at = None
     tp.updated_at = utcnow()
-    if was_confirmed and old_lines:
+    if was_delivered and old_lines:
         try:
             await revert_confirmed_purchase_stock(
                 db,
@@ -1295,11 +1302,13 @@ async def delete_trade_purchase(
         return False
     if (tp.status or "").lower() == "deleted":
         return False
-    was_confirmed = (tp.status or "").lower() == "confirmed"
-    old_lines = list(tp.lines) if was_confirmed else []
+    was_delivered = bool(getattr(tp, "is_delivered", False))
+    old_lines = list(tp.lines) if was_delivered else []
     tp.status = "deleted"
+    tp.is_delivered = False
+    tp.delivered_at = None
     tp.updated_at = utcnow()
-    if was_confirmed and old_lines:
+    if was_delivered and old_lines:
         try:
             await revert_confirmed_purchase_stock(
                 db,

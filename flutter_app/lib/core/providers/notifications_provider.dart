@@ -2,12 +2,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../config/app_config.dart';
 import '../models/trade_purchase_models.dart';
-import 'package:harisree_warehouse/core/maintenance/maintenance_month_record.dart';
-import 'package:harisree_warehouse/core/maintenance/maintenance_ui_status.dart';
-import 'package:harisree_warehouse/core/providers/maintenance_payment_provider.dart';
 
 import '../auth/session_notifier.dart';
-import 'cloud_expense_provider.dart';
 import 'server_notifications_provider.dart';
 import 'staff_home_providers.dart';
 import 'stock_providers.dart';
@@ -21,8 +17,6 @@ enum NotificationType {
   whatsapp,
   purchaseDue,
   purchaseOverdue,
-  cloudCost,
-  maintenance,
   serverInApp,
 }
 
@@ -129,15 +123,11 @@ final mergedNotificationFeedProvider =
       .watch(purchaseDueAlertItemsProvider)
       .where((n) => !dismissed.contains(n.id))
       .toList();
-  final cloudItems = ref.watch(cloudCostNotificationItemsProvider);
-  final maintItems = ref.watch(maintenanceNotificationItemsProvider);
   final warehouse = ref.watch(warehouseAlertNotificationItemsProvider);
   final byId = <String, NotificationItem>{};
   for (final n in [
     ...serverRows,
     ...warehouse,
-    ...cloudItems,
-    ...maintItems,
     ...tradeAlerts,
     ...manual,
   ]) {
@@ -149,8 +139,10 @@ final mergedNotificationFeedProvider =
 });
 
 final notificationsUnreadCountProvider = Provider<int>((ref) {
+  final serverUnread = ref.watch(appNotificationUnreadCountProvider).valueOrNull;
+  if (serverUnread != null && serverUnread > 0) return serverUnread;
   return ref
-      .watch(mergedNotificationFeedProvider)
+      .watch(warehouseAlertNotificationItemsProvider)
       .where((e) => !e.isRead)
       .length;
 });
@@ -346,119 +338,6 @@ final purchaseActionAlertCountProvider = Provider<int>((ref) {
   final all = ref.watch(purchaseDueAlertItemsProvider);
   final dis = ref.watch(dismissedPurchaseAlertIdsProvider);
   return all.where((n) => !dis.contains(n.id)).length;
-});
-
-/// 1 when the cloud card is visible (pre-due window or overdue).
-final cloudCostAlertCountProvider = Provider<int>((ref) {
-  final async = ref.watch(cloudCostProvider);
-  return async.maybeWhen(
-    data: (m) {
-      if (m['show_home_card'] == false) return 0;
-      if (m['show_alert'] == true || m['in_pre_due_window'] == true) {
-        return 1;
-      }
-      return 0;
-    },
-    orElse: () => 0,
-  );
-});
-
-/// In-app row when cloud billing needs attention (matches home card visibility).
-final cloudCostNotificationItemsProvider = Provider<List<NotificationItem>>((ref) {
-  final async = ref.watch(cloudCostProvider);
-  return async.maybeWhen(
-    data: (m) {
-      if (m['show_home_card'] == false) return [];
-      if (m['show_alert'] != true && m['in_pre_due_window'] != true) {
-        return [];
-      }
-      final name = m['name']?.toString() ?? 'Cloud Cost';
-      final amt = m['amount_inr'];
-      final next = m['next_due_date']?.toString() ?? '—';
-      final overdue = m['show_alert'] == true;
-      final pre = m['in_pre_due_window'] == true;
-      return [
-        NotificationItem(
-          id: 'cloud_cost_due',
-          type: NotificationType.cloudCost,
-          title: overdue ? 'Overdue: $name' : (pre ? 'Due soon: $name' : 'Cloud: $name'),
-          subtitle:
-              'Rs. ${amt is num ? amt.round() : amt} · $next — pay via UPI or mark paid in Home / Settings.',
-          createdAt: DateTime.now(),
-          isRead: false,
-          actionRoute: '/settings',
-        ),
-      ];
-    },
-    orElse: () => const [],
-  );
-});
-
-String _mtSubtitle({
-  required MaintenanceMonthRecord? cur,
-  required MaintenanceUiStatus st,
-  required int amount,
-}) {
-  final amt = '₹$amount';
-  switch (st) {
-    case MaintenanceUiStatus.paid:
-      final p = cur?.paidAt;
-      if (p == null) return '$amt · Paid';
-      return '$amt · Paid on ${p.year}-${p.month.toString().padLeft(2, "0")}-${p.day.toString().padLeft(2, "0")}';
-    case MaintenanceUiStatus.upcoming:
-      return '$amt · Due on last day of this month';
-    case MaintenanceUiStatus.dueToday:
-      return '$amt · Due by 9:00 today';
-    case MaintenanceUiStatus.overdue:
-      return '$amt · Past due time — pay or mark as paid';
-  }
-}
-
-/// In-app row(s) for Alerts — same state as the Home maintenance card.
-final maintenanceNotificationItemsProvider =
-    Provider<List<NotificationItem>>((ref) {
-  final async = ref.watch(maintenancePaymentControllerProvider);
-  return async.maybeWhen(
-    data: (v) {
-      if (v?.userVisibleError != null) return const [];
-      final cur = v?.current;
-      final st = v?.status;
-      if (cur == null || st == null) return const [];
-      if (st == MaintenanceUiStatus.upcoming) return const [];
-      final amount = cur.amount;
-      String title;
-      switch (st) {
-        case MaintenanceUiStatus.paid:
-          title = 'Maintenance paid';
-        case MaintenanceUiStatus.dueToday:
-          title = 'Maintenance due today';
-        case MaintenanceUiStatus.overdue:
-          title = 'Maintenance overdue';
-        case MaintenanceUiStatus.upcoming:
-          return const [];
-      }
-      return [
-        NotificationItem(
-          id: 'maintenance_${cur.month}',
-          type: NotificationType.maintenance,
-          title: title,
-          subtitle: _mtSubtitle(
-            cur: cur,
-            st: st,
-            amount: amount,
-          ),
-          createdAt: cur.paidAt ?? DateTime.now(),
-          isRead: false,
-          actionRoute: '/home',
-        ),
-      ];
-    },
-    orElse: () => const [],
-  );
-});
-
-final maintenanceAlertCountProvider = Provider<int>((ref) {
-  return ref.watch(maintenanceNotificationItemsProvider).length;
 });
 
 NotificationItem notificationItemFromServerRow(Map<String, dynamic> row) {

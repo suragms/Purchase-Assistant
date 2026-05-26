@@ -1,4 +1,4 @@
-"""Confirmed purchases must apply stock in catalog stock unit (bags not raw kg)."""
+"""Delivered purchases must apply stock in catalog stock unit (bags not raw kg)."""
 
 import uuid
 from decimal import Decimal
@@ -10,7 +10,7 @@ from app.main import app
 client = TestClient(app)
 
 
-def test_kg_purchase_increments_bags_not_kg():
+def test_delivered_kg_purchase_increments_bags_not_kg():
     u = uuid.uuid4().hex[:8]
     email = f"bagkg{u}@test.hexa.local"
     r = client.post(
@@ -63,6 +63,18 @@ def test_kg_purchase_increments_bags_not_kg():
         },
     )
     assert purchase.status_code in (200, 201), purchase.text
+    pid = purchase.json()["id"]
+
+    stock = client.get(f"/v1/businesses/{bid}/stock/{iid}", headers=h)
+    assert stock.status_code == 200, stock.text
+    assert Decimal(str(stock.json()["current_stock"])) == Decimal("0")
+
+    delivered = client.patch(
+        f"/v1/businesses/{bid}/trade-purchases/{pid}/delivery",
+        headers=h,
+        json={"is_delivered": True},
+    )
+    assert delivered.status_code == 200, delivered.text
 
     stock = client.get(f"/v1/businesses/{bid}/stock/{iid}", headers=h)
     assert stock.status_code == 200, stock.text

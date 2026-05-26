@@ -47,16 +47,17 @@ import '../../features/purchase/presentation/purchase_scan_draft_wizard_page.dar
 import '../../features/purchase/presentation/scan_purchase_page.dart';
 import '../../features/reports/presentation/reports_item_detail_page.dart';
 import '../../features/reports/presentation/reports_item_bi_page.dart';
+import '../../features/reports/presentation/sales_comparison_page.dart';
 import '../../features/reports/presentation/reports_category_drill_page.dart';
 import '../../features/reports/presentation/reports_subcategory_drill_page.dart';
 import '../../features/notifications/presentation/notifications_page.dart';
 import '../../features/settings/presentation/business_profile_page.dart';
-import '../../features/settings/presentation/maintenance_history_page.dart';
 import '../../features/settings/presentation/settings_page.dart';
 import '../../features/settings/presentation/user_management_page.dart';
 import '../../features/settings/presentation/user_profile_page.dart';
 import '../../features/staff/presentation/staff_dashboard_page.dart';
 import '../../features/settings/presentation/backup_page.dart';
+import '../../features/settings/presentation/help_guide_page.dart';
 import '../../features/search/presentation/search_page.dart';
 import '../../features/barcode/presentation/barcode_print_page.dart';
 import '../../features/barcode/presentation/bulk_barcode_print_page.dart';
@@ -65,6 +66,8 @@ import '../../features/barcode/presentation/barcode_scan_history_page.dart';
 import '../../features/barcode/presentation/stock_audit_session_page.dart';
 import '../../features/barcode/presentation/stock_audit_summary_page.dart';
 import '../../features/stock/presentation/stock_page.dart';
+import '../../features/stock/presentation/opening_stock_setup_page.dart';
+import '../../features/stock/presentation/staff_purchase_logs_page.dart';
 import '../../features/stock/presentation/low_stock_owner_page.dart';
 import '../../features/stock/presentation/stock_changes_page.dart';
 import '../../features/stock/presentation/reorder_list_page.dart';
@@ -73,10 +76,10 @@ import '../../features/stock/presentation/stock_item_intelligence_page.dart';
 import '../../features/stock/presentation/stock_today_feed_page.dart';
 import '../../features/stock/presentation/stock_movement_page.dart';
 import '../../features/stock/presentation/reorder_suggestions_page.dart';
-import '../../features/settings/presentation/ai_usage_page.dart';
 import '../../features/staff/presentation/staff_shell_screen.dart';
 import '../../features/staff/presentation/staff_activity_page.dart';
 import '../../features/staff/presentation/staff_purchase_history_page.dart';
+import '../../features/staff/presentation/staff_quick_purchase_page.dart';
 import '../../features/staff/presentation/staff_low_stock_page.dart';
 import '../../features/staff/presentation/staff_purchase_order_detail_page.dart';
 import '../../features/staff/presentation/staff_pending_deliveries_page.dart';
@@ -133,7 +136,6 @@ String _staffRedirectForBlockedRoute(String loc) {
     return '/staff/home';
   }
   if (loc.startsWith('/settings') ||
-      loc == '/voice' ||
       loc.startsWith('/contacts') ||
       loc.startsWith('/supplier') ||
       loc.startsWith('/broker') ||
@@ -199,9 +201,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       if (loc == '/signup') {
         return '/login?tab=signin&notice=owner_only';
       }
-      if (loc == '/assistant' || loc == '/ai') {
-        return authenticatedHomePath(session);
-      }
+      if (loc == '/ai') return authenticatedHomePath(session);
       if (loc == '/admin' && !session.isSuperAdmin) {
         return '/settings';
       }
@@ -365,8 +365,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/catalog/quick-add-from-scan',
         pageBuilder: (context, state) {
-          final barcode =
-              state.uri.queryParameters['barcode']?.trim() ?? '';
+          final barcode = state.uri.queryParameters['barcode']?.trim() ?? '';
           return iosPushPage(
             key: state.pageKey,
             child: BarcodeQuickCreatePage(barcode: barcode),
@@ -464,17 +463,24 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         ),
       ),
       GoRoute(
-        path: '/settings/ai-usage',
-        pageBuilder: (context, state) => iosPushPage(
-          key: state.pageKey,
-          child: const AiUsagePage(),
-        ),
-      ),
-      GoRoute(
         path: '/stock/reorder',
         pageBuilder: (context, state) => iosPushPage(
           key: state.pageKey,
           child: const ReorderListPage(),
+        ),
+      ),
+      GoRoute(
+        path: '/stock/opening-setup',
+        pageBuilder: (context, state) => iosPushPage(
+          key: state.pageKey,
+          child: const OpeningStockSetupPage(),
+        ),
+      ),
+      GoRoute(
+        path: '/stock/staff-purchases',
+        pageBuilder: (context, state) => iosPushPage(
+          key: state.pageKey,
+          child: const StaffPurchaseLogsPage(),
         ),
       ),
       GoRoute(
@@ -652,11 +658,11 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         ),
       ),
       GoRoute(
-        path: '/settings/maintenance/history',
-        name: 'settings_maintenance_history',
+        path: '/settings/help',
+        name: 'settings_help',
         pageBuilder: (context, state) => iosPushPage(
           key: state.pageKey,
-          child: const MaintenanceHistoryPage(),
+          child: const HelpGuidePage(),
         ),
       ),
       GoRoute(
@@ -713,6 +719,14 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         pageBuilder: (context, state) => iosPushPage(
           key: state.pageKey,
           child: const StaffLowStockPage(),
+        ),
+      ),
+      GoRoute(
+        path: '/staff/quick-purchase',
+        name: 'staff_quick_purchase',
+        pageBuilder: (context, state) => iosPushPage(
+          key: state.pageKey,
+          child: const StaffQuickPurchasePage(),
         ),
       ),
       GoRoute(
@@ -897,21 +911,24 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         path: '/stock/dead',
         pageBuilder: (context, state) => iosPushPage(
           key: state.pageKey,
-          child: const StockOperationalListPage(kind: StockOperationalListKind.dead),
+          child: const StockOperationalListPage(
+              kind: StockOperationalListKind.dead),
         ),
       ),
       GoRoute(
         path: '/stock/fast-moving',
         pageBuilder: (context, state) => iosPushPage(
           key: state.pageKey,
-          child: const StockOperationalListPage(kind: StockOperationalListKind.fast),
+          child: const StockOperationalListPage(
+              kind: StockOperationalListKind.fast),
         ),
       ),
       GoRoute(
         path: '/stock/slow-moving',
         pageBuilder: (context, state) => iosPushPage(
           key: state.pageKey,
-          child: const StockOperationalListPage(kind: StockOperationalListKind.slow),
+          child: const StockOperationalListPage(
+              kind: StockOperationalListKind.slow),
         ),
       ),
       GoRoute(
@@ -977,6 +994,13 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             ),
           );
         },
+      ),
+      GoRoute(
+        path: '/reports/sales-comparison',
+        pageBuilder: (context, state) => iosPushPage(
+          key: state.pageKey,
+          child: const SalesComparisonPage(),
+        ),
       ),
       // Main app tabs: keep navigation in this shell only; use `navigationShell.goBranch`
       // or `context.go('/home'|'/reports'|...)` — avoid `push` onto the root stack for these paths
@@ -1050,7 +1074,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
               ),
             ],
           ),
-          // Branch 4 — Global search (tab); Assistant is `/assistant` full-screen push.
+          // Branch 4 — Global search (tab).
           StatefulShellBranch(
             routes: [
               GoRoute(
@@ -1118,8 +1142,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
               GoRoute(
                 path: '/staff/purchase-history',
                 name: 'staff_purchase_history',
-                builder: (context, state) =>
-                    const StaffPurchaseHistoryPage(),
+                builder: (context, state) => const StaffPurchaseHistoryPage(),
               ),
             ],
           ),

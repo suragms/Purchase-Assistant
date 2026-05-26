@@ -22,3 +22,7 @@ class NotificationReadPatch(BaseModel):
 
 class UnreadCountOut(BaseModel):
     unread: int
+
+
+class NotificationBulkActionOut(BaseModel):
+    updated: int

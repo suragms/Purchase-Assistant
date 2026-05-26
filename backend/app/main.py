@@ -27,12 +27,9 @@ from app.database import async_session_factory, engine, is_sqlite_runtime
 from app.sqlite_bootstrap import apply_sqlite_bootstrap
 from app.routers import (
     admin,
-    ai_chat,
     analytics,
     auth,
-    billing,
     catalog,
-    cloud_expense,
     contacts,
     dashboard,
     entries,
@@ -41,12 +38,11 @@ from app.routers import (
     me,
     media,
     price_intelligence,
-    razorpay_webhook,
+    public_items,
     realtime,
     reports_trade,
     search,
     trade_purchases,
-    whatsapp_reports,
     stock,
     stock_audits,
     operations,
@@ -436,22 +432,17 @@ app.include_router(entries.router)
 app.include_router(exports.router)
 app.include_router(trade_purchases.router)
 app.include_router(reports_trade.router)
-app.include_router(whatsapp_reports.router)
-app.include_router(whatsapp_reports.internal_router)
 app.include_router(search.router)
-app.include_router(ai_chat.router)
 app.include_router(analytics.router)
 app.include_router(dashboard.router)
 app.include_router(price_intelligence.router)
 app.include_router(catalog.router)
-app.include_router(cloud_expense.router)
 app.include_router(contacts.router)
 app.include_router(media.router)
+app.include_router(public_items.router)
 app.include_router(realtime.router)
 app.include_router(notifications.router)
 app.include_router(admin.router)
-app.include_router(billing.router)
-app.include_router(razorpay_webhook.router)
 app.include_router(stock_audits.router)
 app.include_router(stock.router)
 app.include_router(operations.router)

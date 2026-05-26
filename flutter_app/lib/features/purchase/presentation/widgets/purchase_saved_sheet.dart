@@ -11,7 +11,8 @@ import '../../../../core/services/purchase_pdf.dart';
 import '../../../../core/theme/hexa_colors.dart';
 
 String _inr(num n) =>
-    NumberFormat.currency(locale: 'en_IN', symbol: '₹', decimalDigits: 0).format(n);
+    NumberFormat.currency(locale: 'en_IN', symbol: '₹', decimalDigits: 0)
+        .format(n);
 
 /// Merges wizard-local display fields when the create/update payload omits them
 /// (e.g. minimal API rows) so PDF filename, WhatsApp, and email stay accurate.
@@ -34,8 +35,7 @@ Map<String, dynamic> enrichSavedTradePurchaseJson(
   putIfBlank('broker_name', brokerNameFallback);
   final pd = o['purchase_date']?.toString().trim() ?? '';
   if (pd.isEmpty && purchaseDateFallback != null) {
-    o['purchase_date'] =
-        DateFormat('yyyy-MM-dd').format(purchaseDateFallback);
+    o['purchase_date'] = DateFormat('yyyy-MM-dd').format(purchaseDateFallback);
   }
   return o;
 }
@@ -48,7 +48,8 @@ String _whatsappSummary(TradePurchase p) {
     buf.writeln('Supplier: ${p.supplierName}');
   }
   for (final l in p.lines) {
-    final line = '${l.itemName}  ${l.qty} ${l.unit}  @ ${_inr(l.landingCost)}  →  ${_inr(l.qty * l.landingCost)}';
+    final line =
+        '${l.itemName}  ${l.qty} ${l.unit}  @ ${_inr(l.landingCost)}  →  ${_inr(l.qty * l.landingCost)}';
     buf.writeln(line);
   }
   buf.writeln('Total: ${_inr(p.totalAmount)}');
@@ -104,12 +105,14 @@ Future<String?> showPurchaseSavedSheet(
           children: [
             Row(
               children: [
-                const Icon(Icons.check_circle_rounded, color: HexaColors.brandAccent, size: 32),
+                const Icon(Icons.check_circle_rounded,
+                    color: HexaColors.brandAccent, size: 32),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(
                     wasEdit ? 'Purchase updated' : 'Purchase saved',
-                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+                    style: const TextStyle(
+                        fontSize: 18, fontWeight: FontWeight.w800),
                   ),
                 ),
               ],
@@ -156,14 +159,16 @@ Future<String?> showPurchaseSavedSheet(
                           ),
                         ),
                         const SizedBox(height: 6),
-                        for (final u in (savedJson['stock_updates'] as List).take(6))
+                        for (final u
+                            in (savedJson['stock_updates'] as List).take(6))
                           if (u is Map)
                             Padding(
                               padding: const EdgeInsets.symmetric(vertical: 2),
                               child: Text(
                                 '${u['item_name'] ?? u['name'] ?? 'Item'}: '
-                                '${u['old_qty'] ?? '—'} → ${u['new_qty'] ?? '—'} '
-                                '${u['unit'] ?? ''}'.trim(),
+                                        '${u['old_qty'] ?? '—'} → ${u['new_qty'] ?? '—'} '
+                                        '${u['unit'] ?? ''}'
+                                    .trim(),
                                 style: const TextStyle(fontSize: 12),
                               ),
                             ),
@@ -202,7 +207,8 @@ Future<String?> showPurchaseSavedSheet(
                         const SizedBox(height: 6),
                         Text(
                           'Broker, payment days, freight type/amount, or header discount were left blank.',
-                          style: TextStyle(fontSize: 12, color: Colors.grey.shade800),
+                          style: TextStyle(
+                              fontSize: 12, color: Colors.grey.shade800),
                         ),
                         const SizedBox(height: 12),
                         Row(
@@ -216,8 +222,7 @@ Future<String?> showPurchaseSavedSheet(
                             const SizedBox(width: 8),
                             Expanded(
                               child: FilledButton(
-                                onPressed: () =>
-                                    ctx.pop( 'edit_missing'),
+                                onPressed: () => ctx.pop('edit_missing'),
                                 child: const Text('Edit now'),
                               ),
                             ),
@@ -246,12 +251,16 @@ Future<String?> showPurchaseSavedSheet(
                 final messenger = ScaffoldMessenger.of(context);
                 ctx.pop('home');
                 Future<void> doShare() async {
-                  final ok = await sharePurchasePdf(p, biz);
+                  final result = await sharePurchasePdf(p, biz);
                   if (!context.mounted) return;
-                  if (ok) return;
+                  if (result.ok) {
+                    messenger
+                        .showSnackBar(SnackBar(content: Text(result.message)));
+                    return;
+                  }
                   messenger.showSnackBar(
                     SnackBar(
-                      content: const Text('Could not export PDF. Try again.'),
+                      content: Text(result.message),
                       action: SnackBarAction(
                         label: 'Retry',
                         onPressed: () => doShare(),
@@ -260,6 +269,7 @@ Future<String?> showPurchaseSavedSheet(
                     ),
                   );
                 }
+
                 await doShare();
               },
             ),
@@ -270,12 +280,16 @@ Future<String?> showPurchaseSavedSheet(
                 final messenger = ScaffoldMessenger.of(context);
                 ctx.pop('home');
                 Future<void> doPrint() async {
-                  final ok = await printPurchasePdf(p, biz);
+                  final result = await printPurchasePdf(p, biz);
                   if (!context.mounted) return;
-                  if (ok) return;
+                  if (result.ok) {
+                    messenger
+                        .showSnackBar(SnackBar(content: Text(result.message)));
+                    return;
+                  }
                   messenger.showSnackBar(
                     SnackBar(
-                      content: const Text('Could not print PDF. Try again.'),
+                      content: Text(result.message),
                       action: SnackBarAction(
                         label: 'Retry',
                         onPressed: () => doPrint(),
@@ -283,6 +297,7 @@ Future<String?> showPurchaseSavedSheet(
                     ),
                   );
                 }
+
                 await doPrint();
               },
             ),
@@ -305,9 +320,11 @@ Future<String?> showPurchaseSavedSheet(
               ),
               onTap: () async {
                 ctx.pop('home');
-                final dateStr = DateFormat('dd MMM yyyy').format(p.purchaseDate);
-                final sup =
-                    (p.supplierName ?? '').trim().isNotEmpty ? p.supplierName!.trim() : '—';
+                final dateStr =
+                    DateFormat('dd MMM yyyy').format(p.purchaseDate);
+                final sup = (p.supplierName ?? '').trim().isNotEmpty
+                    ? p.supplierName!.trim()
+                    : '—';
                 final sub = Uri.encodeComponent(
                   'Purchase ${p.humanId} · $dateStr · $sup',
                 );

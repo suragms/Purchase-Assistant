@@ -4,7 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../core/auth/session_notifier.dart' show hexaApiProvider, sessionProvider;
+import '../../../core/auth/session_notifier.dart'
+    show hexaApiProvider, sessionProvider;
 import '../../../core/models/session.dart';
 import '../../../core/models/trade_purchase_models.dart';
 import '../../../core/providers/app_period_provider.dart'
@@ -35,6 +36,8 @@ import '../../../core/design_system/hexa_operational_tokens.dart';
 import '../../../core/theme/hexa_colors.dart';
 import '../../purchase/presentation/widgets/purchase_saved_sheet.dart';
 import '../../purchase/presentation/widgets/resume_purchase_draft_banner.dart';
+import '../../stock/presentation/opening_stock_setup_page.dart'
+    show openingStockMissingProvider;
 import 'widgets/home_compact_header.dart';
 import 'widgets/home_low_stock_section.dart';
 import 'widgets/home_multi_alert_strip.dart';
@@ -200,9 +203,8 @@ class _HomePageState extends ConsumerState<HomePage>
     unawaited(
       LocalNotificationsService.instance.showStockOrInAppAlert(
         title: 'Harisree Agency',
-        body: delta == 1
-            ? 'You have 1 new alert'
-            : 'You have $delta new alerts',
+        body:
+            delta == 1 ? 'You have 1 new alert' : 'You have $delta new alerts',
         payload: 'notifications',
       ),
     );
@@ -281,7 +283,8 @@ class _HomePageState extends ConsumerState<HomePage>
       return const SizedBox.shrink();
     }
 
-    ref.listen<PurchasePostSavePayload?>(purchasePostSaveProvider, (prev, next) {
+    ref.listen<PurchasePostSavePayload?>(purchasePostSaveProvider,
+        (prev, next) {
       if (next == null || _handlingPurchasePostSave) return;
       _handlingPurchasePostSave = true;
       unawaited(_doHandlePurchasePostSave(next));
@@ -313,9 +316,8 @@ class _HomePageState extends ConsumerState<HomePage>
         } else {
           unawaited(LocalNotificationsService.instance.showLowStockItem(
             itemName: 'Inventory',
-            detail: count == 1
-                ? '1 item running low'
-                : '$count items running low',
+            detail:
+                count == 1 ? '1 item running low' : '$count items running low',
           ));
         }
       });
@@ -359,6 +361,8 @@ class _HomePageState extends ConsumerState<HomePage>
               if (isOwner) ...[
                 const SizedBox(height: 8),
                 const HomeSessionDataBanner(),
+                const _OpeningStockSetupBanner(),
+                const SizedBox(height: 8),
                 const HomePeriodFilterRow(),
                 const SizedBox(height: 8),
                 const HomePurchaseStatsCard(),
@@ -374,9 +378,8 @@ class _HomePageState extends ConsumerState<HomePage>
                 onReports: () => context.go('/reports'),
                 onBarcode: () => context.push('/barcode/bulk-print'),
                 onUsers: () => context.push('/settings/users'),
-                onAddItem: isOwner
-                    ? () => context.push('/catalog/quick-add')
-                    : null,
+                onAddItem:
+                    isOwner ? () => context.push('/catalog/quick-add') : null,
               ),
               const SizedBox(height: HexaOp.cardGap),
               if (isOwner) ...[
@@ -402,7 +405,8 @@ class _HomePageState extends ConsumerState<HomePage>
     );
   }
 
-  Future<void> _doHandlePurchasePostSave(PurchasePostSavePayload payload) async {
+  Future<void> _doHandlePurchasePostSave(
+      PurchasePostSavePayload payload) async {
     try {
       if (!mounted) return;
       final container = ProviderScope.containerOf(context, listen: false);
@@ -445,5 +449,28 @@ class _HomePageState extends ConsumerState<HomePage>
     c.invalidate(stockVariancesTodayProvider);
     c.invalidate(homeRecentActivityFeedProvider);
     c.invalidate(homeDashboardDataProvider);
+  }
+}
+
+class _OpeningStockSetupBanner extends ConsumerWidget {
+  const _OpeningStockSetupBanner();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final async = ref.watch(openingStockMissingProvider);
+    final missing = async.valueOrNull?['missing_count'];
+    final count = missing is num ? missing.toInt() : 0;
+    if (count <= 0) return const SizedBox.shrink();
+    return Card(
+      color: const Color(0xFFFFFBEB),
+      child: ListTile(
+        leading: const Icon(Icons.inventory_rounded, color: Color(0xFFB45309)),
+        title: const Text('Opening stock setup pending'),
+        subtitle:
+            Text('$count items need initial stock before daily operations.'),
+        trailing: const Icon(Icons.chevron_right_rounded),
+        onTap: () => context.push('/stock/opening-setup'),
+      ),
+    );
   }
 }

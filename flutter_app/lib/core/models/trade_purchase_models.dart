@@ -321,6 +321,7 @@ class TradePurchase {
     this.isDelivered = false,
     this.deliveredAt,
     this.deliveryNotes,
+    this.stockUpdatesCount = 0,
   });
 
   final String id;
@@ -365,6 +366,7 @@ class TradePurchase {
   final bool isDelivered;
   final DateTime? deliveredAt;
   final String? deliveryNotes;
+  final int stockUpdatesCount;
 
   PurchaseStatus get statusEnum => parsePurchaseStatus(derivedStatus);
 
@@ -446,6 +448,8 @@ class TradePurchase {
           ? DateTime.tryParse(j['delivered_at'].toString())
           : null,
       deliveryNotes: j['delivery_notes']?.toString(),
+      stockUpdatesCount:
+          j['stock_updates'] is List ? (j['stock_updates'] as List).length : 0,
     );
   }
 }

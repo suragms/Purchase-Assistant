@@ -203,7 +203,7 @@ async def apply_confirmed_purchase_stock(
     *,
     purchase_human_id: str | None = None,
 ) -> list[dict]:
-    """Increment catalog stock when a purchase is confirmed; return per-line updates for API."""
+    """Increment catalog stock when a purchase delivery is confirmed."""
     reason = f"Purchase received{f' ({purchase_human_id})' if purchase_human_id else ''}"
     return await _apply_catalog_stock_deltas(
         db,
@@ -224,7 +224,7 @@ async def revert_confirmed_purchase_stock(
     *,
     purchase_human_id: str | None = None,
 ) -> list[dict]:
-    """Decrement stock for a previously confirmed purchase (cancel/delete/unconfirm)."""
+    """Decrement stock for a previously delivered purchase."""
     by_item = await _qty_by_catalog_item(db, business_id, lines)
     if not by_item:
         return []
@@ -250,7 +250,7 @@ async def sync_confirmed_purchase_stock_diff(
     *,
     purchase_human_id: str | None = None,
 ) -> list[dict]:
-    """Apply qty delta when editing an already-confirmed purchase."""
+    """Apply qty delta when editing an already-delivered purchase."""
     old_map = await _qty_by_catalog_item(db, business_id, old_lines)
     new_map = await _qty_by_catalog_item(db, business_id, new_lines)
     all_ids = set(old_map) | set(new_map)

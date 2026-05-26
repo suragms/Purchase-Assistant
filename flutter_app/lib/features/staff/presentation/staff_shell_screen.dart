@@ -72,6 +72,7 @@ class _StaffShellScreenState extends ConsumerState<StaffShellScreen> {
     final offline =
         conn.valueOrNull != null && isOfflineResult(conn.valueOrNull!);
     final sessionHint = ref.watch(apiDegradedProvider);
+    final isDesktop = MediaQuery.sizeOf(context).width >= 900;
 
     void go(int branch) {
       HapticFeedback.selectionClick();
@@ -86,83 +87,124 @@ class _StaffShellScreenState extends ConsumerState<StaffShellScreen> {
         child: Stack(
           fit: StackFit.expand,
           children: [
-            Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            if (sessionHint != null)
-              Material(
-                color: const Color(0xFFFFEBEE),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: HexaDsLayout.pageGutter,
-                    vertical: HexaDsSpace.xs + 2,
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.lock_reset_rounded,
-                          size: 18, color: Color(0xFFC62828)),
-                      const SizedBox(width: HexaDsLayout.inlineGap),
-                      Expanded(
-                        child: Text(
-                          sessionHint,
-                          style: Theme.of(context)
-                              .textTheme
-                              .labelMedium
-                              ?.copyWith(
-                                color: const Color(0xFF7F1D1D),
-                                fontWeight: FontWeight.w600,
-                                fontSize: 12,
-                                height: 1.25,
-                              ),
-                        ),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (isDesktop)
+                  NavigationRail(
+                    selectedIndex: idx,
+                    extended: MediaQuery.sizeOf(context).width >= 1100,
+                    onDestinationSelected: go,
+                    destinations: const [
+                      NavigationRailDestination(
+                        icon: Icon(Icons.home_outlined),
+                        selectedIcon: Icon(Icons.home_rounded),
+                        label: Text('Home'),
+                      ),
+                      NavigationRailDestination(
+                        icon: Icon(Icons.inventory_2_outlined),
+                        selectedIcon: Icon(Icons.inventory_2_rounded),
+                        label: Text('Stock'),
+                      ),
+                      NavigationRailDestination(
+                        icon: Icon(Icons.qr_code_scanner_outlined),
+                        selectedIcon: Icon(Icons.qr_code_scanner_rounded),
+                        label: Text('Scan'),
+                      ),
+                      NavigationRailDestination(
+                        icon: Icon(Icons.receipt_long_outlined),
+                        selectedIcon: Icon(Icons.receipt_long_rounded),
+                        label: Text('History'),
+                      ),
+                      NavigationRailDestination(
+                        icon: Icon(Icons.search_outlined),
+                        selectedIcon: Icon(Icons.search_rounded),
+                        label: Text('Search'),
                       ),
                     ],
                   ),
-                ),
-              ),
-            if (offline)
-              Semantics(
-                liveRegion: true,
-                container: true,
-                label: "You're offline — showing cached data",
-                child: Material(
-                  color: const Color(0xFFF59E0B),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: HexaDsLayout.pageGutter,
-                      vertical: HexaDsSpace.xs + 2,
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.wifi_off_rounded,
-                            size: 18, color: Color(0xFF1C1917)),
-                        const SizedBox(width: HexaDsLayout.inlineGap),
-                        Expanded(
-                          child: Text(
-                            "You're offline — showing cached data",
-                            style: Theme.of(context)
-                                .textTheme
-                                .labelMedium
-                                ?.copyWith(
-                                  color: const Color(0xFF1C1917),
-                                  fontWeight: FontWeight.w600,
-                                  fontSize: 12,
-                                  height: 1.25,
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      if (sessionHint != null)
+                        Material(
+                          color: const Color(0xFFFFEBEE),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: HexaDsLayout.pageGutter,
+                              vertical: HexaDsSpace.xs + 2,
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.lock_reset_rounded,
+                                    size: 18, color: Color(0xFFC62828)),
+                                const SizedBox(width: HexaDsLayout.inlineGap),
+                                Expanded(
+                                  child: Text(
+                                    sessionHint,
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .labelMedium
+                                        ?.copyWith(
+                                          color: const Color(0xFF7F1D1D),
+                                          fontWeight: FontWeight.w600,
+                                          fontSize: 12,
+                                          height: 1.25,
+                                        ),
+                                  ),
                                 ),
+                              ],
+                            ),
                           ),
                         ),
-                      ],
-                    ),
+                      if (offline)
+                        Semantics(
+                          liveRegion: true,
+                          container: true,
+                          label: "You're offline — showing cached data",
+                          child: Material(
+                            color: const Color(0xFFF59E0B),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: HexaDsLayout.pageGutter,
+                                vertical: HexaDsSpace.xs + 2,
+                              ),
+                              child: Row(
+                                children: [
+                                  const Icon(Icons.wifi_off_rounded,
+                                      size: 18, color: Color(0xFF1C1917)),
+                                  const SizedBox(width: HexaDsLayout.inlineGap),
+                                  Expanded(
+                                    child: Text(
+                                      "You're offline — showing cached data",
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .labelMedium
+                                          ?.copyWith(
+                                            color: const Color(0xFF1C1917),
+                                            fontWeight: FontWeight.w600,
+                                            fontSize: 12,
+                                            height: 1.25,
+                                          ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      Expanded(child: navigationShell),
+                      if (!isDesktop)
+                        _StaffShellBottomBar(
+                          selectedIndex: idx,
+                          onDestinationSelected: go,
+                        ),
+                    ],
                   ),
                 ),
-              ),
-            Expanded(child: navigationShell),
-            _StaffShellBottomBar(
-              selectedIndex: idx,
-              onDestinationSelected: go,
+              ],
             ),
-          ],
-        ),
             if (idx != StaffShellBranch.scan && idx != StaffShellBranch.stock)
               Positioned(
                 right: 16,
@@ -196,8 +238,8 @@ class _StaffShellBottomBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final bottomPad = 6.0 +
-        math.max(0.0, MediaQuery.viewPaddingOf(context).bottom * 0.2);
+    final bottomPad =
+        6.0 + math.max(0.0, MediaQuery.viewPaddingOf(context).bottom * 0.2);
     return Padding(
       padding: EdgeInsets.fromLTRB(10, 0, 10, bottomPad),
       child: ClipRRect(

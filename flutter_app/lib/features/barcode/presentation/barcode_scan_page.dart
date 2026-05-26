@@ -29,7 +29,7 @@ import 'barcode_scan_web_stub.dart'
     if (dart.library.html) 'barcode_scan_web.dart';
 
 const _kMaxRecent = 10;
-const _kDebounceMs = 1500;
+const _kDebounceMs = 800;
 
 /// Warehouse barcode scan — camera + manual lookup → item detail.
 class BarcodeScanPage extends ConsumerStatefulWidget {
@@ -109,7 +109,8 @@ class _BarcodeScanPageState extends ConsumerState<BarcodeScanPage>
     if (kIsWeb) {
       try {
         _camera = MobileScannerController(
-          detectionSpeed: DetectionSpeed.normal,
+          detectionSpeed: DetectionSpeed.noDuplicates,
+          detectionTimeoutMs: _kDebounceMs,
           facing: CameraFacing.back,
           formats: const [BarcodeFormat.code128, BarcodeFormat.qrCode],
         );
@@ -143,7 +144,8 @@ class _BarcodeScanPageState extends ConsumerState<BarcodeScanPage>
     }
     if (!mounted) return;
     _camera = MobileScannerController(
-      detectionSpeed: DetectionSpeed.normal,
+      detectionSpeed: DetectionSpeed.noDuplicates,
+      detectionTimeoutMs: _kDebounceMs,
       facing: CameraFacing.back,
       formats: const [BarcodeFormat.code128, BarcodeFormat.qrCode],
     );
@@ -342,11 +344,6 @@ class _BarcodeScanPageState extends ConsumerState<BarcodeScanPage>
     final session = ref.read(sessionProvider);
     if (session == null) return;
     if (_busy) return;
-    if (!kIsWeb) {
-      try {
-        await _camera?.stop();
-      } catch (_) {}
-    }
     setState(() => _busy = true);
     try {
       final row = await ref
@@ -355,7 +352,7 @@ class _BarcodeScanPageState extends ConsumerState<BarcodeScanPage>
             businessId: session.primaryBusiness.id,
             code: code,
           )
-          .timeout(const Duration(seconds: 10));
+          .timeout(const Duration(seconds: 6));
       final id = row['id']?.toString();
       final name = row['name']?.toString() ?? code;
       if (id == null || id.isEmpty) {

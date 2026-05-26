@@ -287,6 +287,7 @@ class CatalogItemOut(BaseModel):
     hsn_code: str | None = None
     item_code: str | None = None
     barcode: str | None = None
+    public_token: str | None = None
     tax_percent: float | None = None
     default_landing_cost: float | None = None
     default_selling_cost: float | None = None
@@ -670,6 +671,7 @@ def _catalog_item_out(
         hsn_code=getattr(i, "hsn_code", None),
         item_code=getattr(i, "item_code", None),
         barcode=getattr(i, "barcode", None),
+        public_token=getattr(i, "public_token", None),
         tax_percent=float(i.tax_percent) if getattr(i, "tax_percent", None) is not None else None,
         default_landing_cost=float(i.default_landing_cost)
         if getattr(i, "default_landing_cost", None) is not None

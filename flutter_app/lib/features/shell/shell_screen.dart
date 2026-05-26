@@ -95,6 +95,7 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
         conn.valueOrNull != null && isOfflineResult(conn.valueOrNull!);
     final pendingSync = OfflineStore.getPendingEntries().length;
     final stockAlertN = ref.watch(stockLowCountProvider).valueOrNull ?? 0;
+    final isDesktop = MediaQuery.sizeOf(context).width >= 900;
 
     void go(int branch) {
       HapticFeedback.selectionClick();
@@ -115,86 +116,84 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
     // centered with a blank page. [SizedBox.expand] + [Column] keeps tabs + bar as
     // explicit flex siblings (see also [NoTransitionPage] in app_router).
     final shellBody = Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            if (offline)
-              Semantics(
-                liveRegion: true,
-                container: true,
-                label: "You're offline — showing cached data",
-                child: Material(
-                  color: const Color(0xFFF59E0B),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: HexaDsLayout.pageGutter,
-                      vertical: HexaDsSpace.xs + 2,
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.wifi_off_rounded,
-                            size: 18, color: Color(0xFF1C1917)),
-                        const SizedBox(width: HexaDsLayout.inlineGap),
-                        Expanded(
-                          child: Text(
-                            "You're offline — showing cached data",
-                            style: Theme.of(context)
-                                .textTheme
-                                .labelMedium
-                                ?.copyWith(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (offline)
+          Semantics(
+            liveRegion: true,
+            container: true,
+            label: "You're offline — showing cached data",
+            child: Material(
+              color: const Color(0xFFF59E0B),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: HexaDsLayout.pageGutter,
+                  vertical: HexaDsSpace.xs + 2,
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.wifi_off_rounded,
+                        size: 18, color: Color(0xFF1C1917)),
+                    const SizedBox(width: HexaDsLayout.inlineGap),
+                    Expanded(
+                      child: Text(
+                        "You're offline — showing cached data",
+                        style:
+                            Theme.of(context).textTheme.labelMedium?.copyWith(
                                   color: const Color(0xFF1C1917),
                                   fontWeight: FontWeight.w600,
                                   fontSize: 12,
                                   height: 1.25,
                                 ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        if (!offline && pendingSync > 0)
+          Material(
+            color: const Color(0xFFE3F2FD),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: HexaDsLayout.pageGutter,
+                vertical: HexaDsSpace.xs + 2,
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.sync, size: 18, color: Color(0xFF1565C0)),
+                  const SizedBox(width: HexaDsLayout.inlineGap),
+                  Expanded(
+                    child: Text(
+                      pendingSync == 1
+                          ? '1 change pending sync'
+                          : '$pendingSync changes pending sync',
+                      style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                            color: const Color(0xFF1565C0),
+                            fontWeight: FontWeight.w600,
+                            fontSize: 12,
                           ),
-                        ),
-                      ],
                     ),
                   ),
-                ),
+                ],
               ),
-            if (!offline && pendingSync > 0)
-              Material(
-                color: const Color(0xFFE3F2FD),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: HexaDsLayout.pageGutter,
-                    vertical: HexaDsSpace.xs + 2,
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.sync, size: 18, color: Color(0xFF1565C0)),
-                      const SizedBox(width: HexaDsLayout.inlineGap),
-                      Expanded(
-                        child: Text(
-                          pendingSync == 1
-                              ? '1 change pending sync'
-                              : '$pendingSync changes pending sync',
-                          style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                                color: const Color(0xFF1565C0),
-                                fontWeight: FontWeight.w600,
-                                fontSize: 12,
-                              ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            Expanded(child: navigationShell),
-            if (!hideShellChrome)
-              LayoutBuilder(
-                builder: (context, c) {
-                  if (c.maxWidth >= 900) return const SizedBox.shrink();
-                  return _ShellBottomBar(
-                    selectedIndex: idx,
-                    stockBadgeCount: stockAlertN,
-                    onDestinationSelected: go,
-                  );
-                },
-              ),
-          ],
-        );
+            ),
+          ),
+        Expanded(child: navigationShell),
+        if (!hideShellChrome)
+          LayoutBuilder(
+            builder: (context, c) {
+              if (c.maxWidth >= 900) return const SizedBox.shrink();
+              return _ShellBottomBar(
+                selectedIndex: idx,
+                stockBadgeCount: stockAlertN,
+                onDestinationSelected: go,
+              );
+            },
+          ),
+      ],
+    );
 
     final rail = NavigationRail(
       selectedIndex: idx,
@@ -237,7 +236,7 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
         key: const ValueKey<String>('main_shell'),
         color: Theme.of(context).scaffoldBackgroundColor,
         child: ResponsiveShellLayout(
-          rail: hideShellChrome ? const SizedBox.shrink() : rail,
+          rail: hideShellChrome && !isDesktop ? const SizedBox.shrink() : rail,
           body: shellBody,
         ),
       ),
@@ -261,8 +260,8 @@ class _ShellBottomBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final bottomPad = 8.0 +
-        math.max(8.0, MediaQuery.viewPaddingOf(context).bottom);
+    final bottomPad =
+        8.0 + math.max(8.0, MediaQuery.viewPaddingOf(context).bottom);
     return Padding(
       padding: EdgeInsets.fromLTRB(10, 0, 10, bottomPad),
       child: ClipRRect(
@@ -278,88 +277,88 @@ class _ShellBottomBar extends StatelessWidget {
               child: SizedBox(
                 height: HexaOp.bottomNavMax,
                 child: Padding(
-                padding: const EdgeInsets.fromLTRB(4, 4, 8, 4),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    Expanded(
-                      child: LayoutBuilder(
-                        builder: (context, constraints) {
-                          final maxW = constraints.maxWidth;
-                          const nTabs = 5;
-                          final per = maxW > 0 ? maxW / nTabs : 0.0;
-                          var w = math.max(42.0, per);
-                          if (w * nTabs > maxW) {
-                            w = per;
-                          }
-                          return Row(
-                            children: [
-                              SizedBox(
-                                width: w,
-                                child: _ShellNavTile(
-                                  selected: selectedIndex == 0,
-                                  icon: Icons.grid_view_outlined,
-                                  selectedIcon: Icons.grid_view_rounded,
-                                  label: 'Home',
-                                  onTap: () => onDestinationSelected(0),
+                  padding: const EdgeInsets.fromLTRB(4, 4, 8, 4),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Expanded(
+                        child: LayoutBuilder(
+                          builder: (context, constraints) {
+                            final maxW = constraints.maxWidth;
+                            const nTabs = 5;
+                            final per = maxW > 0 ? maxW / nTabs : 0.0;
+                            var w = math.max(42.0, per);
+                            if (w * nTabs > maxW) {
+                              w = per;
+                            }
+                            return Row(
+                              children: [
+                                SizedBox(
+                                  width: w,
+                                  child: _ShellNavTile(
+                                    selected: selectedIndex == 0,
+                                    icon: Icons.grid_view_outlined,
+                                    selectedIcon: Icons.grid_view_rounded,
+                                    label: 'Home',
+                                    onTap: () => onDestinationSelected(0),
+                                  ),
                                 ),
-                              ),
-                              SizedBox(
-                                width: w,
-                                child: _ShellNavTile(
-                                  selected: selectedIndex == 1,
-                                  icon: Icons.inventory_2_outlined,
-                                  selectedIcon: Icons.inventory_2_rounded,
-                                  label: 'Stock',
-                                  badgeCount: stockBadgeCount,
-                                  onTap: () => onDestinationSelected(1),
+                                SizedBox(
+                                  width: w,
+                                  child: _ShellNavTile(
+                                    selected: selectedIndex == 1,
+                                    icon: Icons.inventory_2_outlined,
+                                    selectedIcon: Icons.inventory_2_rounded,
+                                    label: 'Stock',
+                                    badgeCount: stockBadgeCount,
+                                    onTap: () => onDestinationSelected(1),
+                                  ),
                                 ),
-                              ),
-                              SizedBox(
-                                width: w,
-                                child: _ShellNavTile(
-                                  selected: selectedIndex == 2,
-                                  icon: Icons.bar_chart_outlined,
-                                  selectedIcon: Icons.bar_chart_rounded,
-                                  label: 'Reports',
-                                  onTap: () => onDestinationSelected(2),
+                                SizedBox(
+                                  width: w,
+                                  child: _ShellNavTile(
+                                    selected: selectedIndex == 2,
+                                    icon: Icons.bar_chart_outlined,
+                                    selectedIcon: Icons.bar_chart_rounded,
+                                    label: 'Reports',
+                                    onTap: () => onDestinationSelected(2),
+                                  ),
                                 ),
-                              ),
-                              SizedBox(
-                                width: w,
-                                child: _ShellNavTile(
-                                  selected: selectedIndex == 3,
-                                  icon: Icons.receipt_long_outlined,
-                                  selectedIcon: Icons.receipt_long_rounded,
-                                  label: 'History',
-                                  onTap: () => onDestinationSelected(3),
+                                SizedBox(
+                                  width: w,
+                                  child: _ShellNavTile(
+                                    selected: selectedIndex == 3,
+                                    icon: Icons.receipt_long_outlined,
+                                    selectedIcon: Icons.receipt_long_rounded,
+                                    label: 'History',
+                                    onTap: () => onDestinationSelected(3),
+                                  ),
                                 ),
-                              ),
-                              SizedBox(
-                                width: w,
-                                child: _ShellNavTile(
-                                  selected: selectedIndex == 4,
-                                  icon: Icons.search_rounded,
-                                  selectedIcon: Icons.manage_search_rounded,
-                                  label: 'Search',
-                                  onTap: () => onDestinationSelected(4),
+                                SizedBox(
+                                  width: w,
+                                  child: _ShellNavTile(
+                                    selected: selectedIndex == 4,
+                                    icon: Icons.search_rounded,
+                                    selectedIcon: Icons.manage_search_rounded,
+                                    label: 'Search',
+                                    onTap: () => onDestinationSelected(4),
+                                  ),
                                 ),
-                              ),
-                            ],
-                          );
-                        },
+                              ],
+                            );
+                          },
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 4),
-                    SizedBox(
-                      width: _fabOuter,
-                      child: const Center(
-                        child: _FabButton(),
+                      const SizedBox(width: 4),
+                      SizedBox(
+                        width: _fabOuter,
+                        child: const Center(
+                          child: _FabButton(),
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
               ),
             ),
           ),
@@ -412,12 +411,14 @@ class _ShellNavTile extends StatelessWidget {
                 isLabelVisible: badgeCount > 0,
                 label: Text(
                   badgeCount > 99 ? '99+' : '$badgeCount',
-                  style: const TextStyle(fontSize: 9, fontWeight: FontWeight.w800),
+                  style:
+                      const TextStyle(fontSize: 9, fontWeight: FontWeight.w800),
                 ),
                 child: Icon(
                   ic,
                   size: 20,
-                  color: selected ? HexaColors.brandPrimary : cs.onSurfaceVariant,
+                  color:
+                      selected ? HexaColors.brandPrimary : cs.onSurfaceVariant,
                 ),
               ),
             ),
@@ -503,8 +504,8 @@ class _FabButton extends StatelessWidget {
                   },
                 ),
                 ListTile(
-                  leading: Icon(Icons.tune_rounded,
-                      color: HexaColors.brandPrimary),
+                  leading:
+                      Icon(Icons.tune_rounded, color: HexaColors.brandPrimary),
                   title: Text('Stock adjustment',
                       style: HexaDsType.body(16,
                           color: HexaDsColors.textPrimary,
@@ -545,7 +546,7 @@ class _FabButton extends StatelessWidget {
             customBorder: const CircleBorder(),
             onTap: () {
               HapticFeedback.mediumImpact();
-              context.push('/purchase/new');
+              _openQuickActions(context);
             },
             child: const Icon(Icons.add_rounded, size: 24, color: Colors.white),
           ),

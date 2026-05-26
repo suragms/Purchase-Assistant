@@ -189,18 +189,6 @@ class Settings(BaseSettings):
     s3_secret_key: str | None = None
     s3_endpoint: str | None = None
 
-    razorpay_key_id: str | None = None
-    razorpay_key_secret: str | None = None
-    razorpay_webhook_secret: str | None = None
-    plan_basic_price_inr: int = 49900
-    plan_pro_price_inr: int = 99900
-    plan_premium_price_inr: int = 199900
-    # When true, WhatsApp/AI routes check BusinessSubscription (grandfather: no row = allowed).
-    billing_enforce: bool = False
-    # Default bundle pricing hints (paise): base cloud + optional WhatsApp+AI add-on (admin can override per business).
-    billing_cloud_infra_paise: int = 230_000  # ₹2,300 (paise)
-    billing_whatsapp_ai_addon_paise: int = 250_000  # ₹2,500 (paise)
-
     sentry_dsn: str | None = None
     log_level: str = "INFO"
     metrics_token: str | None = None
@@ -213,12 +201,6 @@ class Settings(BaseSettings):
     enable_ai: bool = True
     enable_ocr: bool = False
 
-    # WhatsApp Cloud API (server-side scheduled auto-send; optional)
-    whatsapp_cloud_access_token: str | None = None
-    whatsapp_cloud_phone_number_id: str | None = None
-    # Secret for Render cron → internal sender endpoint (set long random value in production)
-    whatsapp_reports_cron_secret: str | None = None
-    enable_voice: bool = False
     enable_realtime: bool = True
 
     trusted_hosts: str | None = None

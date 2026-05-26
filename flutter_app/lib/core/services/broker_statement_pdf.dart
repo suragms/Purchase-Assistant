@@ -1,13 +1,12 @@
 import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
-import 'package:printing/printing.dart';
-import 'package:share_plus/share_plus.dart';
 
 import '../calc_engine.dart';
 import '../models/business_profile.dart';
 import '../models/trade_purchase_models.dart';
 import '../utils/trade_purchase_commission.dart';
+import 'pdf_actions.dart';
 
 final _money = NumberFormat('#,##,##0', 'en_IN');
 final _df = DateFormat('dd MMM yyyy');
@@ -228,7 +227,7 @@ pw.Document _buildBrokerStatementDocument({
 }
 
 /// Broker commission statement for [purchases] (already date-filtered).
-Future<void> shareBrokerStatementPdf({
+Future<PdfActionResult> shareBrokerStatementPdf({
   required BusinessProfile business,
   required String brokerName,
   String? brokerPhone,
@@ -244,14 +243,16 @@ Future<void> shareBrokerStatementPdf({
     fromDate: fromDate,
     toDate: toDate,
   );
-  await Printing.sharePdf(
-    bytes: await doc.save(),
+  return sharePdfBytes(
+    buildBytes: () => doc.save(),
     filename: _brokerStatementFilename(brokerName, fromDate, toDate),
+    subject: 'Broker commission statement - $brokerName',
+    source: 'broker_statement_pdf',
   );
 }
 
 /// Same PDF via system share sheet (pick WhatsApp, Drive, etc.).
-Future<void> shareBrokerStatementPdfForChat({
+Future<PdfActionResult> shareBrokerStatementPdfForChat({
   required BusinessProfile business,
   required String brokerName,
   String? brokerPhone,
@@ -267,17 +268,11 @@ Future<void> shareBrokerStatementPdfForChat({
     fromDate: fromDate,
     toDate: toDate,
   );
-  final bytes = await doc.save();
-  final fn = _brokerStatementFilename(brokerName, fromDate, toDate);
-  await Share.shareXFiles(
-    [
-      XFile.fromData(
-        bytes,
-        mimeType: 'application/pdf',
-        name: fn,
-      ),
-    ],
-    text: 'Broker commission statement · $brokerName',
+  return sharePdfBytes(
+    buildBytes: () => doc.save(),
+    filename: _brokerStatementFilename(brokerName, fromDate, toDate),
+    subject: 'Broker commission statement - $brokerName',
+    source: 'broker_statement_pdf',
   );
 }
 

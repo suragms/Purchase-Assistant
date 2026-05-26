@@ -6,6 +6,7 @@ Production Postgres must use Alembic only; see `main.py` lifespan.
 from __future__ import annotations
 
 import logging
+import uuid
 
 from sqlalchemy import inspect
 
@@ -43,13 +44,16 @@ def apply_sqlite_bootstrap(sync_conn) -> None:
     _ensure_entries_place(sync_conn)
     _ensure_suppliers_whatsapp_number(sync_conn)
     _ensure_entry_line_items_stock_note(sync_conn)
-    _ensure_platform_integration_razorpay(sync_conn)
     _ensure_businesses_branding(sync_conn)
     _ensure_users_ai_budget_columns(sync_conn)
     _ensure_users_modern_columns(sync_conn)
     _ensure_catalog_items_type_id(sync_conn)
     _ensure_catalog_items_item_code(sync_conn)
     _ensure_catalog_items_barcode(sync_conn)
+    _ensure_catalog_items_public_token(sync_conn)
+    _ensure_catalog_items_opening_stock(sync_conn)
+    _ensure_stock_physical_counts(sync_conn)
+    _ensure_staff_purchase_logs(sync_conn)
     _ensure_supplier_wholesale_columns(sync_conn)
     _ensure_supplier_profile_columns(sync_conn)
     _ensure_broker_phone_column(sync_conn)
@@ -92,22 +96,6 @@ def _ensure_entry_line_items_stock_note(sync_conn):
     if "stock_note" in cols:
         return
     sync_conn.exec_driver_sql("ALTER TABLE entry_line_items ADD COLUMN stock_note VARCHAR(512)")
-
-
-def _ensure_platform_integration_razorpay(sync_conn):
-    insp = inspect(sync_conn)
-    if not insp.has_table("platform_integration"):
-        return
-    cols = {c["name"] for c in insp.get_columns("platform_integration")}
-    alters: list[str] = []
-    if "razorpay_key_id" not in cols:
-        alters.append("ALTER TABLE platform_integration ADD COLUMN razorpay_key_id VARCHAR(64)")
-    if "razorpay_key_secret" not in cols:
-        alters.append("ALTER TABLE platform_integration ADD COLUMN razorpay_key_secret TEXT")
-    if "razorpay_webhook_secret" not in cols:
-        alters.append("ALTER TABLE platform_integration ADD COLUMN razorpay_webhook_secret TEXT")
-    for sql in alters:
-        sync_conn.exec_driver_sql(sql)
 
 
 def _ensure_businesses_branding(sync_conn):
@@ -240,6 +228,107 @@ def _ensure_catalog_items_barcode(sync_conn):
         sync_conn.exec_driver_sql("ALTER TABLE catalog_items ADD COLUMN barcode VARCHAR(64) NULL")
     except Exception:  # noqa: BLE001
         pass
+
+
+def _ensure_catalog_items_public_token(sync_conn):
+    insp = inspect(sync_conn)
+    if not insp.has_table("catalog_items"):
+        return
+    cols = {c["name"] for c in insp.get_columns("catalog_items")}
+    if "public_token" not in cols:
+        try:
+            sync_conn.exec_driver_sql("ALTER TABLE catalog_items ADD COLUMN public_token VARCHAR(64) NULL")
+        except Exception:  # noqa: BLE001
+            pass
+    rows = sync_conn.exec_driver_sql(
+        "SELECT id FROM catalog_items WHERE public_token IS NULL OR public_token = ''"
+    ).fetchall()
+    for row in rows:
+        sync_conn.exec_driver_sql(
+            "UPDATE catalog_items SET public_token = ? WHERE id = ?",
+            (uuid.uuid4().hex, row[0]),
+        )
+
+
+def _ensure_stock_physical_counts(sync_conn):
+    insp = inspect(sync_conn)
+    if insp.has_table("stock_physical_counts"):
+        return
+    sync_conn.exec_driver_sql(
+        """
+        CREATE TABLE stock_physical_counts (
+            id CHAR(32) PRIMARY KEY,
+            business_id CHAR(32) NOT NULL,
+            item_id CHAR(32) NOT NULL,
+            system_qty NUMERIC(12,3) NOT NULL,
+            counted_qty NUMERIC(12,3) NOT NULL,
+            difference_qty NUMERIC(12,3) NOT NULL,
+            purchased_qty NUMERIC(12,3) NULL,
+            stock_unit VARCHAR(32) NULL,
+            period_start DATE NULL,
+            period_end DATE NULL,
+            notes TEXT NULL,
+            counted_by CHAR(32) NULL,
+            counted_by_name VARCHAR(255) NULL,
+            counted_at DATETIME NULL
+        )
+        """
+    )
+    sync_conn.exec_driver_sql(
+        "CREATE INDEX IF NOT EXISTS ix_stock_physical_counts_business_item_counted "
+        "ON stock_physical_counts (business_id, item_id, counted_at)"
+    )
+
+
+def _ensure_catalog_items_opening_stock(sync_conn):
+    insp = inspect(sync_conn)
+    if not insp.has_table("catalog_items"):
+        return
+    cols = {c["name"] for c in insp.get_columns("catalog_items")}
+    alters = []
+    if "opening_stock_qty" not in cols:
+        alters.append("ALTER TABLE catalog_items ADD COLUMN opening_stock_qty NUMERIC(12,3) NULL")
+    if "opening_stock_set_at" not in cols:
+        alters.append("ALTER TABLE catalog_items ADD COLUMN opening_stock_set_at DATETIME NULL")
+    if "opening_stock_set_by" not in cols:
+        alters.append("ALTER TABLE catalog_items ADD COLUMN opening_stock_set_by VARCHAR(255) NULL")
+    if "opening_stock_locked" not in cols:
+        alters.append(
+            "ALTER TABLE catalog_items ADD COLUMN opening_stock_locked BOOLEAN NOT NULL DEFAULT 0"
+        )
+    for sql in alters:
+        try:
+            sync_conn.exec_driver_sql(sql)
+        except Exception:  # noqa: BLE001
+            pass
+
+
+def _ensure_staff_purchase_logs(sync_conn):
+    insp = inspect(sync_conn)
+    if insp.has_table("staff_purchase_logs"):
+        return
+    sync_conn.exec_driver_sql(
+        """
+        CREATE TABLE staff_purchase_logs (
+            id CHAR(32) PRIMARY KEY,
+            business_id CHAR(32) NOT NULL,
+            item_id CHAR(32) NOT NULL,
+            item_name VARCHAR(512) NOT NULL,
+            qty NUMERIC(12,3) NOT NULL,
+            unit VARCHAR(32) NULL,
+            amount NUMERIC(12,2) NULL,
+            supplier_name VARCHAR(255) NULL,
+            notes TEXT NULL,
+            created_by CHAR(32) NULL,
+            created_by_name VARCHAR(255) NULL,
+            created_at DATETIME NULL
+        )
+        """
+    )
+    sync_conn.exec_driver_sql(
+        "CREATE INDEX IF NOT EXISTS ix_staff_purchase_logs_business_created "
+        "ON staff_purchase_logs (business_id, created_at)"
+    )
 
 
 def _ensure_supplier_wholesale_columns(sync_conn):

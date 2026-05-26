@@ -6,7 +6,6 @@ import 'package:quick_actions/quick_actions.dart';
 const String qaLauncherScan = 'qa_scan';
 const String qaLauncherNewPurchase = 'qa_new_purchase';
 const String qaLauncherResumeDraft = 'qa_resume_draft';
-const String qaLauncherVoice = 'qa_voice';
 const String qaLauncherHistory = 'qa_history';
 
 GoRouter? _launcherShortcutsRouter;
@@ -30,9 +29,6 @@ void _dispatchLauncherShortcut(String type) {
       break;
     case qaLauncherResumeDraft:
       r.go('/purchase/new?resumeDraft=true');
-      break;
-    case qaLauncherVoice:
-      r.push('/voice');
       break;
     case qaLauncherHistory:
       r.go('/purchase');
@@ -65,10 +61,6 @@ Future<void> setupLauncherQuickActions() async {
       type: qaLauncherResumeDraft,
       localizedTitle: 'Resume draft',
       localizedSubtitle: 'Continue saved entry',
-    ),
-    ShortcutItem(
-      type: qaLauncherVoice,
-      localizedTitle: 'Voice note',
     ),
     ShortcutItem(
       type: qaLauncherHistory,

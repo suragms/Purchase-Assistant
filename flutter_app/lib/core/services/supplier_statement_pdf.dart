@@ -1,10 +1,10 @@
 import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
-import 'package:printing/printing.dart';
 
 import '../models/business_profile.dart';
 import '../models/trade_purchase_models.dart';
+import 'pdf_actions.dart';
 
 final _money = NumberFormat('#,##,##0', 'en_IN');
 final _df = DateFormat('dd MMM yyyy');
@@ -27,7 +27,7 @@ String _filenameSlug(String raw, {String fallback = 'supplier'}) {
 }
 
 /// Share a supplier PUR statement for [purchases] (already date-filtered).
-Future<void> shareSupplierStatementPdf({
+Future<PdfActionResult> shareSupplierStatementPdf({
   required BusinessProfile business,
   required String supplierName,
   String? supplierAddress,
@@ -145,10 +145,12 @@ Future<void> shareSupplierStatementPdf({
     ),
   );
 
-  await Printing.sharePdf(
-    bytes: await doc.save(),
+  return sharePdfBytes(
+    buildBytes: () => doc.save(),
     filename:
         'harisree_statement_${_filenameSlug(supplierName)}_${_fileMonth.format(toDate)}.pdf',
+    subject: 'Supplier account statement - $supplierName',
+    source: 'supplier_statement_pdf',
   );
 }
 
@@ -165,9 +167,8 @@ pw.Widget _pcell(
         textAlign: right ? pw.TextAlign.right : pw.TextAlign.left,
         style: pw.TextStyle(
           fontSize: nameBold ? 12 : 8,
-          fontWeight: (bold || nameBold)
-              ? pw.FontWeight.bold
-              : pw.FontWeight.normal,
+          fontWeight:
+              (bold || nameBold) ? pw.FontWeight.bold : pw.FontWeight.normal,
         ),
       ),
     );

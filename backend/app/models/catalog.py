@@ -61,6 +61,10 @@ class CatalogItem(Base):
     hsn_code: Mapped[str | None] = mapped_column(String(32), nullable=True)
     # Packaging barcode (scanner / EAN); unique per business when set.
     barcode: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    # Opaque no-auth QR token for public stock/info page.
+    public_token: Mapped[str] = mapped_column(
+        String(64), nullable=False, default=lambda: uuid.uuid4().hex, index=True
+    )
     # Internal business tracking code (shelf label, PDFs, reports).
     item_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
     tax_percent: Mapped[Decimal | None] = mapped_column(Numeric(5, 2), nullable=True)
@@ -107,6 +111,10 @@ class CatalogItem(Base):
     validation_status: Mapped[str | None] = mapped_column(String(32), nullable=True)
     current_stock: Mapped[Decimal | None] = mapped_column(Numeric(12, 3), nullable=True, default=Decimal("0"))
     reorder_level: Mapped[Decimal | None] = mapped_column(Numeric(12, 3), nullable=True, default=Decimal("0"))
+    opening_stock_qty: Mapped[Decimal | None] = mapped_column(Numeric(12, 3), nullable=True)
+    opening_stock_set_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    opening_stock_set_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    opening_stock_locked: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     rack_location: Mapped[str | None] = mapped_column(String(100), nullable=True)
     last_stock_updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     last_stock_updated_by: Mapped[str | None] = mapped_column(String(255), nullable=True)

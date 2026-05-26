@@ -1,10 +1,10 @@
 import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
-import 'package:printing/printing.dart';
 
 import '../models/business_profile.dart';
 import '../models/trade_purchase_models.dart';
+import 'pdf_actions.dart';
 
 final _money = NumberFormat('#,##,##0', 'en_IN');
 final _df = DateFormat('dd MMM yyyy');
@@ -27,7 +27,7 @@ String _filenameSlug(String raw, {String fallback = 'item'}) {
 }
 
 /// Item-centric PUR statement for [purchases] (already filtered to the item).
-Future<void> shareItemStatementPdf({
+Future<PdfActionResult> shareItemStatementPdf({
   required BusinessProfile business,
   required String itemName,
   required List<TradePurchase> purchases,
@@ -132,10 +132,12 @@ Future<void> shareItemStatementPdf({
     ),
   );
 
-  await Printing.sharePdf(
-    bytes: await doc.save(),
+  return sharePdfBytes(
+    buildBytes: () => doc.save(),
     filename:
         'harisree_item_${_filenameSlug(itemName)}_${_fileDf.format(fromDate)}_${_fileDf.format(toDate)}.pdf',
+    subject: 'Item purchase statement - $itemName',
+    source: 'item_statement_pdf',
   );
 }
 

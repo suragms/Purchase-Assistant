@@ -4,6 +4,42 @@
 
 ---
 
+## Harisree Warehouse completion phases (2026-05-26)
+
+Canonical phase doc: [`docs/harisree/IMPLEMENTATION_PHASES.md`](docs/harisree/IMPLEMENTATION_PHASES.md)
+
+- [x] Phase 0 docs/tracker setup: ordered phase plan added to Harisree docs hub
+- [x] Phase 1 cleanup: remove AI/voice/WhatsApp scheduling/cloud expense/Razorpay/billing/maintenance billing surfaces
+- [x] Phase 2 delivery stock correctness: delivery confirmation updates stock once; revoke reverts
+- [x] Phase 3 notifications: truthful unified badge + Stock/Purchases/System tabs
+- [x] Phase 4 barcode speed + public QR item endpoint
+- [x] Phase 5 PDF reliability: logo-safe, share/download/print feedback
+- [x] Phase 6 stock physical/purchased/difference workflow
+- [x] Phase 7 opening stock setup and lock/override rules
+- [x] Phase 8 staff quick purchase logs + item purchase history
+- [x] Phase 9 responsive desktop/mobile UX audit
+- [x] Phase 10 performance: keep-alive providers, parallel calls, no double loading
+- [x] Phase 11 Help & Guide + backup flow
+- [x] Phase 12 sales comparison report
+
+### Pending audit reconciliation (2026-05-26)
+
+- [x] Section prompt md files reconciled through `dfiles/13_SALES_COMPARISON_REPORT.md`
+- [x] Docs now state local Alembic head and partial/deferred scope for auto backup and sales comparison upload
+- [ ] Cleanup audit: remove unwanted feature files still present outside active routes
+- [x] Schema validation: local Alembic head and backend import pass; Supabase schema has 033-036 applied and `alembic_version = 036_staff_purchase_logs`
+- [x] Feature gap decision: auto backup schedule/history explicitly deferred in `dfiles/12_AUTO_BACKUP.md`
+- [x] Feature gap decision: PDF/XLSX sales comparison upload explicitly deferred in `dfiles/13_SALES_COMPARISON_REPORT.md`
+- [x] Production QA automated pass: `flutter analyze`, `flutter build web`, backend pytest, Render health/ready, and Vercel smoke pass
+- [ ] Manual release QA still needs a physical Android camera/PDF/offline/keyboard/sign-out pass before store/client handoff
+
+Verification gates per phase:
+- Backend import/app tests, migration chain, stock SQL checks when relevant.
+- Flutter `pub get`, targeted analyze/tests, full analyze before push.
+- Business scenarios: purchase creation no stock change; delivery confirm adds; revoke reverts; opening stock initializes; physical count records; staff cash buy increments.
+
+---
+
 ## Master Fix v3 — DB + §29 completion (2026-05-24)
 
 - [x] Supabase MCP audit: critical columns present; `harisree_034_master_fix_v3_prod_parity` applied

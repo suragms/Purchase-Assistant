@@ -19,7 +19,11 @@ import '../../../core/providers/app_period_provider.dart';
 import '../../../core/providers/business_profile_provider.dart';
 import '../../../core/providers/home_dashboard_provider.dart';
 import '../../../core/providers/reports_provider.dart'
-    show ReportsPurchasePayload, reportsPurchasesPayloadProvider, reportsAggregateProvider, reportsPurchasesMergedProvider;
+    show
+        ReportsPurchasePayload,
+        reportsPurchasesPayloadProvider,
+        reportsAggregateProvider,
+        reportsPurchasesMergedProvider;
 import '../../../core/reporting/trade_report_aggregate.dart';
 import '../../../core/services/reports_pdf.dart';
 import '../../../core/theme/hexa_colors.dart';
@@ -28,7 +32,6 @@ import 'reports_full_list_page.dart';
 import 'reports_item_tile.dart';
 import 'operational_reports_section.dart';
 import 'reports_overview_chart_section.dart';
-import 'reports_whatsapp_sheet.dart';
 import '../reporting/reports_item_metrics.dart';
 import '../reports_bi_tab.dart';
 import '../../../core/providers/analytics_breakdown_providers.dart';
@@ -261,10 +264,14 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
     final today = DateTime(n.year, n.month, n.day);
     ref.read(analyticsDateRangeProvider.notifier).state = switch (p) {
       _DatePreset.today => (from: today, to: today),
-      _DatePreset.week =>
-        (from: today.subtract(const Duration(days: 6)), to: today),
-      _DatePreset.month =>
-        (from: today.subtract(const Duration(days: 29)), to: today),
+      _DatePreset.week => (
+          from: today.subtract(const Duration(days: 6)),
+          to: today
+        ),
+      _DatePreset.month => (
+          from: today.subtract(const Duration(days: 29)),
+          to: today
+        ),
       _DatePreset.year => (from: DateTime(n.year, 1, 1), to: today),
       _DatePreset.custom => ref.read(analyticsDateRangeProvider),
     };
@@ -320,7 +327,8 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
     };
   }
 
-  TradeReportAgg _aggForList(TradeReportAgg aggAll, TradeReportAgg aggFiltered) {
+  TradeReportAgg _aggForList(
+      TradeReportAgg aggAll, TradeReportAgg aggFiltered) {
     if (_packFilter == ReportsPackFilter.all) return aggAll;
     return aggFiltered;
   }
@@ -350,7 +358,8 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
         case ReportsBiTab.usage:
         case ReportsBiTab.stockMovement:
           if (mounted) {
-            showTopSnack(context, 'Switch to Items, Suppliers, or Brokers to export rows.');
+            showTopSnack(context,
+                'Switch to Items, Suppliers, or Brokers to export rows.');
           }
           return;
         case ReportsBiTab.items:
@@ -571,7 +580,8 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
           ),
         ),
         ActionChip(
-          label: Text('More', style: tt.labelSmall?.copyWith(fontWeight: FontWeight.w800)),
+          label: Text('More',
+              style: tt.labelSmall?.copyWith(fontWeight: FontWeight.w800)),
           onPressed: _openMoreTabsSheet,
           visualDensity: VisualDensity.compact,
           materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
@@ -740,8 +750,9 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
           };
           rows = sortTradeReportItemsAll(List.of(raw), _itemSort);
         }
-        final filtered =
-            q.isEmpty ? rows : rows.where((r) => r.name.toLowerCase().contains(q)).toList();
+        final filtered = q.isEmpty
+            ? rows
+            : rows.where((r) => r.name.toLowerCase().contains(q)).toList();
         if (filtered.isEmpty) {
           return Padding(
             padding: const EdgeInsets.all(24),
@@ -751,7 +762,8 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
             ),
           );
         }
-        final cap = _visibleCap < filtered.length ? _visibleCap : filtered.length;
+        final cap =
+            _visibleCap < filtered.length ? _visibleCap : filtered.length;
         final children = <Widget>[];
         if (q.isNotEmpty && filtered.length > 1) {
           children.add(_searchAggregateCard(filtered));
@@ -792,7 +804,8 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
                   builder: (ctx) => ReportsFullListPage(
                     kind: _fullListKind(),
                     searchQuery: _debouncedQuery,
-                    agg: _packFilter == ReportsPackFilter.all ? aggAll : aggList,
+                    agg:
+                        _packFilter == ReportsPackFilter.all ? aggAll : aggList,
                   ),
                 ),
               ),
@@ -833,7 +846,9 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
                 ? 'Last: ${DateFormat('d MMM yyyy').format(last)}'
                 : null,
           ));
-          if (i < cap - 1) ch.add(Divider(height: 1, color: HexaColors.brandBorder));
+          if (i < cap - 1) {
+            ch.add(Divider(height: 1, color: HexaColors.brandBorder));
+          }
         }
         if (cap < all.length) {
           ch.add(
@@ -856,7 +871,8 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
             ),
           );
         }
-        return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: ch);
+        return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch, children: ch);
 
       case ReportsBiTab.brokers:
         final all = q.isEmpty
@@ -877,8 +893,11 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
         final ch = <Widget>[];
         for (var i = 0; i < cap; i++) {
           final b = all[i];
-          ch.add(_supplierTile(b.name, 'Commission ${_inr0(b.commission.round())}'));
-          if (i < cap - 1) ch.add(Divider(height: 1, color: HexaColors.brandBorder));
+          ch.add(_supplierTile(
+              b.name, 'Commission ${_inr0(b.commission.round())}'));
+          if (i < cap - 1) {
+            ch.add(Divider(height: 1, color: HexaColors.brandBorder));
+          }
         }
         if (cap < all.length) {
           ch.add(
@@ -901,13 +920,15 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
             ),
           );
         }
-        return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: ch);
+        return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch, children: ch);
       default:
         return const SizedBox.shrink();
     }
   }
 
-  Future<void> _viewStatementPdfFullScreen(List<TradePurchase> purchases) async {
+  Future<void> _viewStatementPdfFullScreen(
+      List<TradePurchase> purchases) async {
     if (_exportingPdf || _exportingCsv) return;
     final range = ref.read(analyticsDateRangeProvider);
     final biz = ref.read(invoiceBusinessProfileProvider);
@@ -924,11 +945,15 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
     }
     setState(() => _exportingPdf = true);
     try {
-      await layoutTradeStatementSsotPdf(
+      final result = await layoutTradeStatementSsotPdf(
         business: biz,
         from: range.from,
         to: range.to,
         purchases: purchases,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(result.message)),
       );
     } catch (e, st) {
       logSilencedApiError(e, st);
@@ -966,19 +991,25 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
           'This will generate a purchase statement for ${df.format(range.from)} to ${df.format(range.to)}.',
         ),
         actions: [
-          TextButton(onPressed: () => ctx.pop(false), child: const Text('Cancel')),
-          FilledButton(onPressed: () => ctx.pop(true), child: const Text('Download')),
+          TextButton(
+              onPressed: () => ctx.pop(false), child: const Text('Cancel')),
+          FilledButton(
+              onPressed: () => ctx.pop(true), child: const Text('Download')),
         ],
       ),
     );
     if (ok != true || !mounted) return;
     setState(() => _exportingPdf = true);
     try {
-      await layoutTradeStatementSsotPdf(
+      final result = await layoutTradeStatementSsotPdf(
         business: biz,
         from: range.from,
         to: range.to,
         purchases: purchases,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(result.message)),
       );
     } catch (e, st) {
       logSilencedApiError(e, st);
@@ -1052,7 +1083,9 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
     if (hasFetchError && merged.isEmpty) {
       return _reportsFetchErrorCard(context, purchasesAsync.error);
     }
-    if (showEmpty && _biTab != ReportsBiTab.slowMoving && _biTab != ReportsBiTab.deadStock) {
+    if (showEmpty &&
+        _biTab != ReportsBiTab.slowMoving &&
+        _biTab != ReportsBiTab.deadStock) {
       return emptyCard();
     }
 
@@ -1134,27 +1167,6 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
     }
   }
 
-  void _openWhatsAppSheet(
-    TradeReportAgg aggAll,
-    DateTime from,
-    DateTime to,
-    List<TradePurchase> purchases,
-  ) {
-    final biz = ref.read(invoiceBusinessProfileProvider);
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      showDragHandle: true,
-      builder: (ctx) => ReportsWhatsAppSheet(
-        agg: aggAll,
-        from: from,
-        to: to,
-        business: biz,
-        purchases: purchases,
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final purchasesAsync = ref.watch(reportsPurchasesPayloadProvider);
@@ -1215,7 +1227,8 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
               const SizedBox(height: 8),
               OutlinedButton(
                 onPressed: _syncRangeWithHome,
-                child: Text(_matchHomePeriodButtonLabel(ref.watch(appSelectedPeriodProvider))),
+                child: Text(_matchHomePeriodButtonLabel(
+                    ref.watch(appSelectedPeriodProvider))),
               ),
               const SizedBox(height: 8),
               OutlinedButton(
@@ -1283,8 +1296,8 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
                   agg: aggList,
                   range: range,
                 );
-              } else if (v == 'wa') {
-                _openWhatsAppSheet(aggAll, range.from, range.to, merged);
+              } else if (v == 'sales') {
+                context.push('/reports/sales-comparison');
               } else if (v == 'refresh') {
                 _bumpInvalidate();
               }
@@ -1317,10 +1330,10 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
                 ),
               ),
               const PopupMenuItem(
-                value: 'wa',
+                value: 'sales',
                 child: ListTile(
-                  leading: Icon(Icons.chat_outlined),
-                  title: Text('WhatsApp summary'),
+                  leading: Icon(Icons.compare_arrows_rounded),
+                  title: Text('Sales comparison'),
                 ),
               ),
               const PopupMenuItem(
@@ -1358,215 +1371,224 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
                       ),
                       sliver: SliverList(
                         delegate: SliverChildListDelegate([
-                    if (purchasesAsync.isLoading && merged.isNotEmpty)
-                      const LinearProgressIndicator(minHeight: 2),
-                    if (_stallBanner &&
-                        purchasesAsync.isLoading &&
-                        merged.isEmpty)
-                      Material(
-                        color: Colors.amber.shade100,
-                        child: Padding(
-                          padding: const EdgeInsets.all(10),
-                          child: Row(
-                            children: [
-                              Icon(Icons.sync, color: Colors.amber.shade900),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  'Updating…',
-                                  style: TextStyle(color: Colors.amber.shade900),
+                          if (purchasesAsync.isLoading && merged.isNotEmpty)
+                            const LinearProgressIndicator(minHeight: 2),
+                          if (_stallBanner &&
+                              purchasesAsync.isLoading &&
+                              merged.isEmpty)
+                            Material(
+                              color: Colors.amber.shade100,
+                              child: Padding(
+                                padding: const EdgeInsets.all(10),
+                                child: Row(
+                                  children: [
+                                    Icon(Icons.sync,
+                                        color: Colors.amber.shade900),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        'Updating…',
+                                        style: TextStyle(
+                                            color: Colors.amber.shade900),
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
-                            ],
+                            ),
+                          // Only show the "saved copy" banner once we *know* live fetch
+                          // failed (i.e. provider completed with fromLiveFetch=false).
+                          // While loading, we may temporarily be showing Hive-cached data.
+                          if (purchasesAsync.hasValue &&
+                              !fromLive &&
+                              merged.isNotEmpty)
+                            Material(
+                              color: HexaColors.brandCard,
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 6),
+                                child: Row(
+                                  children: [
+                                    Icon(Icons.cloud_off_rounded,
+                                        size: 18, color: HexaColors.textBody),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        liveErr == null ||
+                                                liveErr.trim().isEmpty
+                                            ? 'Offline or server unreachable — showing saved copy. Pull down or tap Retry.'
+                                            : 'Live refresh failed — showing saved copy.\n$liveErr',
+                                        style: TextStyle(
+                                            fontSize: 12,
+                                            color: HexaColors.textBody),
+                                      ),
+                                    ),
+                                    TextButton(
+                                      onPressed: () => _bumpInvalidate(),
+                                      child: const Text('Retry'),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          TextField(
+                            controller: _searchCtl,
+                            focusNode: _reportsSearchFocus,
+                            onChanged: (_) => setState(() {}),
+                            scrollPadding: const EdgeInsets.only(bottom: 280),
+                            decoration: InputDecoration(
+                              hintText: _searchHintForTab(_biTab),
+                              isDense: true,
+                              prefixIcon:
+                                  const Icon(Icons.search_rounded, size: 20),
+                              suffixIcon: _searchCtl.text.trim().isNotEmpty
+                                  ? IconButton(
+                                      icon: const Icon(Icons.clear_rounded,
+                                          size: 18),
+                                      onPressed: _clearSearch,
+                                    )
+                                  : null,
+                              filled: true,
+                              fillColor: HexaColors.brandCard,
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide:
+                                    BorderSide(color: HexaColors.brandBorder),
+                              ),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide:
+                                    BorderSide(color: HexaColors.brandBorder),
+                              ),
+                            ),
                           ),
-                        ),
-                      ),
-                    // Only show the "saved copy" banner once we *know* live fetch
-                    // failed (i.e. provider completed with fromLiveFetch=false).
-                    // While loading, we may temporarily be showing Hive-cached data.
-                    if (purchasesAsync.hasValue && !fromLive && merged.isNotEmpty)
-                      Material(
-                        color: HexaColors.brandCard,
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 6),
-                          child: Row(
-                            children: [
-                              Icon(Icons.cloud_off_rounded,
-                                  size: 18, color: HexaColors.textBody),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  liveErr == null || liveErr.trim().isEmpty
-                                      ? 'Offline or server unreachable — showing saved copy. Pull down or tap Retry.'
-                                      : 'Live refresh failed — showing saved copy.\n$liveErr',
-                                  style: TextStyle(
-                                      fontSize: 12, color: HexaColors.textBody),
+                          const SizedBox(height: 6),
+                          _periodBar(),
+                          Builder(
+                            builder: (context) {
+                              final subCount = ref
+                                      .watch(analyticsTypesTableProvider)
+                                      .valueOrNull
+                                      ?.length ??
+                                  0;
+                              final comparison = ref
+                                  .watch(reportsPeriodComparisonProvider)
+                                  .valueOrNull;
+                              String? compLine;
+                              bool? compUp;
+                              final pct = comparison?['purchase_change_pct'];
+                              if (pct is num) {
+                                compUp = pct > 0;
+                                compLine = pct >= 0
+                                    ? '+${pct.toStringAsFixed(0)}% vs prior period'
+                                    : '${pct.toStringAsFixed(0)}% vs prior period';
+                              }
+                              return ReportsSummaryCard(
+                                totals: aggAll.totals,
+                                periodLabel: _presetLabel(_preset),
+                                rangeLabel: rangeFmt,
+                                purchaseCount: merged.length,
+                                itemCount: aggAll.itemsAll.length,
+                                supplierCount: aggAll.suppliers.length,
+                                subcategoryCount: subCount,
+                                comparisonLine: compLine,
+                                comparisonTrendUp: compUp,
+                                collapsed: _reportsSummaryCollapsed,
+                                onToggleCollapse: () => setState(
+                                  () => _reportsSummaryCollapsed =
+                                      !_reportsSummaryCollapsed,
                                 ),
-                              ),
-                              TextButton(
-                                onPressed: () => _bumpInvalidate(),
-                                child: const Text('Retry'),
-                              ),
-                            ],
+                              );
+                            },
                           ),
-                        ),
-                      ),
-                    TextField(
-                      controller: _searchCtl,
-                      focusNode: _reportsSearchFocus,
-                      onChanged: (_) => setState(() {}),
-                      scrollPadding: const EdgeInsets.only(bottom: 280),
-                      decoration: InputDecoration(
-                        hintText: _searchHintForTab(_biTab),
-                        isDense: true,
-                        prefixIcon:
-                            const Icon(Icons.search_rounded, size: 20),
-                        suffixIcon: _searchCtl.text.trim().isNotEmpty
-                            ? IconButton(
-                                icon: const Icon(Icons.clear_rounded, size: 18),
-                                onPressed: _clearSearch,
-                              )
-                            : null,
-                        filled: true,
-                        fillColor: HexaColors.brandCard,
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide:
-                              BorderSide(color: HexaColors.brandBorder),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide:
-                              BorderSide(color: HexaColors.brandBorder),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    _periodBar(),
-                    Builder(
-                      builder: (context) {
-                        final subCount = ref
-                                .watch(analyticsTypesTableProvider)
-                                .valueOrNull
-                                ?.length ??
-                            0;
-                        final comparison =
-                            ref.watch(reportsPeriodComparisonProvider).valueOrNull;
-                        String? compLine;
-                        bool? compUp;
-                        final pct = comparison?['purchase_change_pct'];
-                        if (pct is num) {
-                          compUp = pct > 0;
-                          compLine = pct >= 0
-                              ? '+${pct.toStringAsFixed(0)}% vs prior period'
-                              : '${pct.toStringAsFixed(0)}% vs prior period';
-                        }
-                        return ReportsSummaryCard(
-                          totals: aggAll.totals,
-                          periodLabel: _presetLabel(_preset),
-                          rangeLabel: rangeFmt,
-                          purchaseCount: merged.length,
-                          itemCount: aggAll.itemsAll.length,
-                          supplierCount: aggAll.suppliers.length,
-                          subcategoryCount: subCount,
-                          comparisonLine: compLine,
-                          comparisonTrendUp: compUp,
-                          collapsed: _reportsSummaryCollapsed,
-                          onToggleCollapse: () => setState(
-                            () => _reportsSummaryCollapsed =
-                                !_reportsSummaryCollapsed,
-                          ),
-                        );
-                      },
-                    ),
-                    const SizedBox(height: 8),
-                    _compactReportsTabs(),
-                    if (_biTab == ReportsBiTab.items) ...[
-                      const SizedBox(height: 6),
-                      SizedBox(
-                        height: 36,
-                        child: SingleChildScrollView(
-                          scrollDirection: Axis.horizontal,
-                          child: Row(
-                            children: [
-                              const Text(
-                                'Group:',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 12,
-                                  color: Color(0xFF333333),
+                          const SizedBox(height: 8),
+                          _compactReportsTabs(),
+                          if (_biTab == ReportsBiTab.items) ...[
+                            const SizedBox(height: 6),
+                            SizedBox(
+                              height: 36,
+                              child: SingleChildScrollView(
+                                scrollDirection: Axis.horizontal,
+                                child: Row(
+                                  children: [
+                                    const Text(
+                                      'Group:',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w700,
+                                        fontSize: 12,
+                                        color: Color(0xFF333333),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 6),
+                                    for (final f
+                                        in ReportsPackFilter.values) ...[
+                                      ChoiceChip(
+                                        label: Text(
+                                          switch (f) {
+                                            ReportsPackFilter.all => 'All',
+                                            ReportsPackFilter.bag => 'Bags',
+                                            ReportsPackFilter.box => 'Box',
+                                            ReportsPackFilter.tin => 'Tin',
+                                          },
+                                          style: const TextStyle(fontSize: 11),
+                                        ),
+                                        selected: _packFilter == f,
+                                        onSelected: (_) => setState(() {
+                                          _packFilter = f;
+                                          _visibleCap = 40;
+                                        }),
+                                        showCheckmark: false,
+                                        visualDensity: VisualDensity.compact,
+                                        materialTapTargetSize:
+                                            MaterialTapTargetSize.shrinkWrap,
+                                      ),
+                                      const SizedBox(width: 6),
+                                    ],
+                                    const SizedBox(width: 10),
+                                    const Text(
+                                      'Sort:',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w700,
+                                        fontSize: 12,
+                                        color: Color(0xFF333333),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 6),
+                                    ChoiceChip(
+                                      label: const Text(
+                                        'Latest',
+                                        style: TextStyle(fontSize: 11),
+                                      ),
+                                      selected: _itemSort ==
+                                          TradeReportItemSort.latest,
+                                      onSelected: (_) => setState(() {
+                                        _itemSort = TradeReportItemSort.latest;
+                                      }),
+                                      showCheckmark: false,
+                                      visualDensity: VisualDensity.compact,
+                                      materialTapTargetSize:
+                                          MaterialTapTargetSize.shrinkWrap,
+                                    ),
+                                    ChoiceChip(
+                                      label: const Text(
+                                        'High qty',
+                                        style: TextStyle(fontSize: 11),
+                                      ),
+                                      selected: _itemSort ==
+                                          TradeReportItemSort.highQty,
+                                      onSelected: (_) => setState(() {
+                                        _itemSort = TradeReportItemSort.highQty;
+                                      }),
+                                      showCheckmark: false,
+                                      visualDensity: VisualDensity.compact,
+                                      materialTapTargetSize:
+                                          MaterialTapTargetSize.shrinkWrap,
+                                    ),
+                                  ],
                                 ),
                               ),
-                              const SizedBox(width: 6),
-                              for (final f in ReportsPackFilter.values) ...[
-                                ChoiceChip(
-                                  label: Text(
-                                    switch (f) {
-                                      ReportsPackFilter.all => 'All',
-                                      ReportsPackFilter.bag => 'Bags',
-                                      ReportsPackFilter.box => 'Box',
-                                      ReportsPackFilter.tin => 'Tin',
-                                    },
-                                    style: const TextStyle(fontSize: 11),
-                                  ),
-                                  selected: _packFilter == f,
-                                  onSelected: (_) => setState(() {
-                                    _packFilter = f;
-                                    _visibleCap = 40;
-                                  }),
-                                  showCheckmark: false,
-                                  visualDensity: VisualDensity.compact,
-                                  materialTapTargetSize:
-                                      MaterialTapTargetSize.shrinkWrap,
-                                ),
-                                const SizedBox(width: 6),
-                              ],
-                              const SizedBox(width: 10),
-                              const Text(
-                                'Sort:',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 12,
-                                  color: Color(0xFF333333),
-                                ),
-                              ),
-                              const SizedBox(width: 6),
-                              ChoiceChip(
-                                label: const Text(
-                                  'Latest',
-                                  style: TextStyle(fontSize: 11),
-                                ),
-                                selected:
-                                    _itemSort == TradeReportItemSort.latest,
-                                onSelected: (_) => setState(() {
-                                  _itemSort = TradeReportItemSort.latest;
-                                }),
-                                showCheckmark: false,
-                                visualDensity: VisualDensity.compact,
-                                materialTapTargetSize:
-                                    MaterialTapTargetSize.shrinkWrap,
-                              ),
-                              ChoiceChip(
-                                label: const Text(
-                                  'High qty',
-                                  style: TextStyle(fontSize: 11),
-                                ),
-                                selected:
-                                    _itemSort == TradeReportItemSort.highQty,
-                                onSelected: (_) => setState(() {
-                                  _itemSort = TradeReportItemSort.highQty;
-                                }),
-                                showCheckmark: false,
-                                visualDensity: VisualDensity.compact,
-                                materialTapTargetSize:
-                                    MaterialTapTargetSize.shrinkWrap,
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ],
+                            ),
+                          ],
                         ]),
                       ),
                     ),

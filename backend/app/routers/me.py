@@ -530,7 +530,7 @@ async def scan_purchase_bill_v2_correct(
     del user
     from sqlalchemy import select
 
-    from app.models.ai_engine import CatalogAlias
+    from app.models.scanner_support import CatalogAlias
     from app.services.scanner_v2.matcher import normalize as norm
 
     alias_type = body.alias_type.strip().lower()

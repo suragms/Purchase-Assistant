@@ -292,24 +292,6 @@ class OfflineStore {
     await _cache.delete('dashboard');
   }
 
-  static String _cloudCostKey(String businessId) => 'cloud_cost|$businessId';
-
-  static Future<void> cacheCloudCost(
-    String businessId,
-    Map<String, dynamic> m,
-  ) async {
-    await _cache.put(_cloudCostKey(businessId), {
-      ...m,
-      'cachedAt': DateTime.now().toIso8601String(),
-    });
-  }
-
-  static Map<String, dynamic>? getCachedCloudCost(String businessId) {
-    final raw = _cache.get(_cloudCostKey(businessId));
-    if (raw is! Map) return null;
-    return Map<String, dynamic>.from(raw);
-  }
-
   static String _reportsTpKey(String businessId, String from, String to) =>
       'reports_tp|$businessId|$from|$to';
 
@@ -332,32 +314,4 @@ class OfflineStore {
     return null;
   }
 
-  static String _assistantChatKey(String businessId) => 'assistant_chat_v1|$businessId';
-
-  /// Last assistant thread turns (plain text only) for restore after navigation.
-  static Future<void> putAssistantChatMessages(
-    String businessId,
-    List<Map<String, dynamic>> rows,
-  ) async {
-    await _cache.put(_assistantChatKey(businessId), jsonEncode(rows));
-  }
-
-  static List<Map<String, dynamic>>? getAssistantChatMessages(String businessId) {
-    final s = _cache.get(_assistantChatKey(businessId));
-    if (s is! String || s.isEmpty) return null;
-    try {
-      final d = jsonDecode(s);
-      if (d is! List) return null;
-      return [
-        for (final e in d)
-          if (e is Map) Map<String, dynamic>.from(e),
-      ];
-    } catch (_) {
-      return null;
-    }
-  }
-
-  static Future<void> clearAssistantChatMessages(String businessId) async {
-    await _cache.delete(_assistantChatKey(businessId));
-  }
 }

@@ -3,9 +3,9 @@ import 'dart:typed_data';
 import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
-import 'package:printing/printing.dart';
 
 import '../json_coerce.dart';
+import 'pdf_actions.dart';
 import 'pdf_text_safe.dart';
 
 /// Simple warehouse stock list PDF (current filter snapshot).
@@ -50,7 +50,8 @@ Future<Uint8List> buildStockListPdf({
             'Unit',
             'Status',
           ],
-          headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9),
+          headerStyle:
+              pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9),
           cellStyle: const pw.TextStyle(fontSize: 8),
           data: [
             for (final r in rows)
@@ -80,9 +81,14 @@ String _fmtQty(double n) {
   return n.toStringAsFixed(1);
 }
 
-Future<void> shareStockListPdf({
+Future<PdfActionResult> shareStockListPdf({
   required Uint8List bytes,
   String filename = 'harisree_stock_statement.pdf',
-}) async {
-  await Printing.sharePdf(bytes: bytes, filename: filename);
+}) {
+  return sharePdfBytes(
+    buildBytes: () async => bytes,
+    filename: filename,
+    subject: 'Harisree stock statement',
+    source: 'stock_list_pdf',
+  );
 }

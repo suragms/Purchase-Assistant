@@ -20,7 +20,8 @@ import 'widgets/stock_pagination_bar.dart';
 import 'widgets/stock_search_sliver.dart';
 import 'widgets/stock_compact_top_bar.dart';
 import 'widgets/stock_table_row.dart';
-import 'widgets/operational_stock_filter_sheet.dart' show stockActiveFilterSummary;
+import 'widgets/operational_stock_filter_sheet.dart'
+    show stockActiveFilterSummary;
 import 'widgets/stock_warehouse_filter_sheet.dart';
 
 enum StockPageMode { auto, staff, owner }
@@ -148,8 +149,7 @@ class _StockPageState extends ConsumerState<StockPage> {
         }
       }
     });
-    ref.read(stockListQueryProvider.notifier).state =
-        q.copyWith(page: newPage);
+    ref.read(stockListQueryProvider.notifier).state = q.copyWith(page: newPage);
   }
 
   List<Map<String, dynamic>> _prepareItems(List<Map<String, dynamic>> raw) {
@@ -217,7 +217,12 @@ class _StockPageState extends ConsumerState<StockPage> {
         rows: items.take(500).toList(),
         filterSummary: summary.isEmpty ? null : summary,
       );
-      await shareStockListPdf(bytes: bytes);
+      final result = await shareStockListPdf(bytes: bytes);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(result.message)),
+        );
+      }
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -278,7 +283,8 @@ class _StockPageState extends ConsumerState<StockPage> {
               filterCount: filterCount,
             ),
           ),
-          SliverToBoxAdapter(child: _StockStatusFilterChips(isStaffMode: _isStaffMode)),
+          SliverToBoxAdapter(
+              child: _StockStatusFilterChips(isStaffMode: _isStaffMode)),
           if (items.isNotEmpty) ...[
             const SliverToBoxAdapter(child: StockListColumnHeader()),
             SliverList(
@@ -398,7 +404,8 @@ class _StockPageState extends ConsumerState<StockPage> {
         filterCount: filterCount,
         searchExpanded: _searchExpanded,
         isReloading: isReloading,
-        onToggleSearch: () => setState(() => _searchExpanded = !_searchExpanded),
+        onToggleSearch: () =>
+            setState(() => _searchExpanded = !_searchExpanded),
         onOpenFilters: _openFilters,
         onExportPdf: _exportStockPdf,
       ),
@@ -424,9 +431,9 @@ class _StockStatusFilterChips extends ConsumerWidget {
       data: (counts) {
         void applyStatus(String status) {
           ref.read(stockListQueryProvider.notifier).state = q.copyWith(
-                status: status,
-                page: 1,
-              );
+            status: status,
+            page: 1,
+          );
           ref.read(stockOperationalFiltersProvider.notifier).state =
               const StockOperationalFilters();
           ref.invalidate(stockListProvider);
@@ -435,8 +442,8 @@ class _StockStatusFilterChips extends ConsumerWidget {
         void applyMissingCode() {
           ref.read(stockListQueryProvider.notifier).state =
               q.copyWith(status: 'all', page: 1);
-          ref.read(stockOperationalFiltersProvider.notifier).state =
-              op.copyWith(missingItemCodeOnly: true, clearMissingItemCode: false);
+          ref.read(stockOperationalFiltersProvider.notifier).state = op
+              .copyWith(missingItemCodeOnly: true, clearMissingItemCode: false);
           ref.invalidate(stockListProvider);
         }
 

@@ -7,11 +7,6 @@ from typing import Any, Awaitable, Callable
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import Settings
-from app.services.platform_credentials import (
-    effective_google_ai_key,
-    effective_groq_key,
-    effective_openai_key,
-)
 
 ProviderFn = Callable[..., Awaitable[Any]]
 
@@ -20,11 +15,12 @@ async def resolve_provider_keys(
     settings: Settings,
     db: AsyncSession,
 ) -> dict[str, str | None]:
-    """Effective keys (env or platform_integration), never logged."""
+    """Effective provider keys from deployment env, never logged."""
+    del db
     return {
-        "gemini": await effective_google_ai_key(settings, db),
-        "groq": await effective_groq_key(settings, db),
-        "openai": await effective_openai_key(settings, db),
+        "gemini": settings.google_ai_api_key,
+        "groq": settings.groq_api_key,
+        "openai": settings.openai_api_key,
     }
 
 

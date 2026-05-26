@@ -26,7 +26,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import CatalogItem
-from app.models.ai_engine import CatalogAlias
+from app.models.scanner_support import CatalogAlias
 from app.models.contacts import Broker, Supplier
 from app.services.scanner_v2.types import Candidate, Match, MatchState
 

@@ -1,4 +1,4 @@
-"""Deduplicate provider webhook deliveries (Razorpay event id)."""
+"""Deduplicate provider webhook deliveries."""
 
 from datetime import datetime, timezone
 
@@ -12,7 +12,7 @@ class WebhookEventLog(Base):
     __tablename__ = "webhook_event_logs"
 
     id: Mapped[str] = mapped_column(String(128), primary_key=True)
-    provider: Mapped[str] = mapped_column(String(32), default="razorpay")
+    provider: Mapped[str] = mapped_column(String(32), default="external")
     received_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )

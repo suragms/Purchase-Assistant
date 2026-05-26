@@ -12,6 +12,7 @@ import '../../../core/design_system/hexa_ds_tokens.dart';
 import '../../../core/design_system/hexa_operational_tokens.dart';
 import '../../../core/errors/barcode_operation_errors.dart';
 import '../../../core/json_coerce.dart';
+import '../../../core/services/pdf_actions.dart';
 import '../../../core/providers/stock_providers.dart';
 import '../../stock/presentation/widgets/stock_table_layout.dart';
 import '../../../shared/widgets/stock_number_display.dart';
@@ -443,19 +444,14 @@ class _BulkBarcodePrintPageState extends ConsumerState<BulkBarcodePrintPage> {
   }
 
   Future<bool> _sharePdfSafe(Uint8List bytes, String filename) async {
-    try {
-      await Printing.sharePdf(bytes: bytes, filename: filename);
-      return true;
-    } catch (e, st) {
-      logBarcodeOperationError(e, st);
-      if (!mounted) return false;
-      _showError(
-        kIsWeb
-            ? 'Download blocked by browser. Allow downloads, or use Preview then Download PDF.'
-            : barcodeMessageForUser(e),
-      );
-      return false;
-    }
+    final result = await savePdfBytes(
+      buildBytes: () async => bytes,
+      filename: filename,
+      subject: 'Harisree barcode labels',
+      source: 'bulk_barcode_print_page',
+    );
+    if (!result.ok && mounted) _showError(result.message);
+    return result.ok;
   }
 
   void _showError(String message) {
@@ -611,9 +607,7 @@ class _BulkBarcodePrintPageState extends ConsumerState<BulkBarcodePrintPage> {
                       onPressed: () =>
                           unawaited(_sharePdfSafe(pdfs[i], names[i])),
                       icon: Icon(
-                        forPrint
-                            ? Icons.print_rounded
-                            : Icons.download_rounded,
+                        forPrint ? Icons.print_rounded : Icons.download_rounded,
                       ),
                       label: Text(
                         forPrint
@@ -631,12 +625,15 @@ class _BulkBarcodePrintPageState extends ConsumerState<BulkBarcodePrintPage> {
     }
     for (var i = 0; i < n; i++) {
       if (forPrint) {
-        await guardWebPrint(
-          () => Printing.layoutPdf(
-            name: names[i],
-            onLayout: (_) async => pdfs[i],
-          ),
+        final result = await printPdfBytes(
+          buildBytes: () async => pdfs[i],
+          filename: names[i],
+          source: 'bulk_barcode_print_page',
         );
+        if (!result.ok && mounted) {
+          _showError(result.message);
+          return;
+        }
       } else {
         final ok = await _sharePdfSafe(pdfs[i], names[i]);
         if (!ok) return;
@@ -685,7 +682,8 @@ class _BulkBarcodePrintPageState extends ConsumerState<BulkBarcodePrintPage> {
         },
       );
 
-  List<Map<String, dynamic>> _applyClientFilters(List<Map<String, dynamic>> items) {
+  List<Map<String, dynamic>> _applyClientFilters(
+      List<Map<String, dynamic>> items) {
     final op = ref.read(stockOperationalFiltersProvider);
     return [
       for (final it in items)
@@ -732,7 +730,8 @@ class _BulkBarcodePrintPageState extends ConsumerState<BulkBarcodePrintPage> {
           border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
           suffixIcon: IconButton(
             tooltip: 'Filters',
-            onPressed: () => showOperationalStockFilter(context: context, ref: ref),
+            onPressed: () =>
+                showOperationalStockFilter(context: context, ref: ref),
             icon: Badge(
               isLabelVisible: filterCount > 0,
               label: Text('$filterCount'),
@@ -762,8 +761,10 @@ class _BulkBarcodePrintPageState extends ConsumerState<BulkBarcodePrintPage> {
       child: Align(
         alignment: Alignment.centerLeft,
         child: ActionChip(
-          label: Text('Filters: $summary', style: const TextStyle(fontSize: 11)),
-          onPressed: () => showOperationalStockFilter(context: context, ref: ref),
+          label:
+              Text('Filters: $summary', style: const TextStyle(fontSize: 11)),
+          onPressed: () =>
+              showOperationalStockFilter(context: context, ref: ref),
         ),
       ),
     );
@@ -773,7 +774,8 @@ class _BulkBarcodePrintPageState extends ConsumerState<BulkBarcodePrintPage> {
     final q = ref.watch(stockListQueryProvider);
     final op = ref.watch(stockOperationalFiltersProvider);
     return Padding(
-      padding: const EdgeInsets.fromLTRB(HexaOp.pageGutter, 2, HexaOp.pageGutter, 6),
+      padding:
+          const EdgeInsets.fromLTRB(HexaOp.pageGutter, 2, HexaOp.pageGutter, 6),
       child: Wrap(
         spacing: 6,
         runSpacing: 6,
@@ -782,17 +784,20 @@ class _BulkBarcodePrintPageState extends ConsumerState<BulkBarcodePrintPage> {
             label: const Text('Missing code', style: TextStyle(fontSize: 11)),
             selected: op.missingItemCodeOnly,
             onSelected: (_) {
-              ref.read(stockOperationalFiltersProvider.notifier).state = op.copyWith(
+              ref.read(stockOperationalFiltersProvider.notifier).state =
+                  op.copyWith(
                 missingItemCodeOnly: !op.missingItemCodeOnly,
               );
             },
             visualDensity: VisualDensity.compact,
           ),
           FilterChip(
-            label: const Text('Missing barcode', style: TextStyle(fontSize: 11)),
+            label:
+                const Text('Missing barcode', style: TextStyle(fontSize: 11)),
             selected: op.missingBarcodeOnly,
             onSelected: (_) {
-              ref.read(stockOperationalFiltersProvider.notifier).state = op.copyWith(
+              ref.read(stockOperationalFiltersProvider.notifier).state =
+                  op.copyWith(
                 missingBarcodeOnly: !op.missingBarcodeOnly,
               );
             },
@@ -813,15 +818,18 @@ class _BulkBarcodePrintPageState extends ConsumerState<BulkBarcodePrintPage> {
             label: const Text('Reorder', style: TextStyle(fontSize: 11)),
             selected: op.reorderOnly,
             onSelected: (_) {
-              ref.read(stockOperationalFiltersProvider.notifier).state = op.copyWith(
+              ref.read(stockOperationalFiltersProvider.notifier).state =
+                  op.copyWith(
                 reorderOnly: !op.reorderOnly,
               );
             },
             visualDensity: VisualDensity.compact,
           ),
           ActionChip(
-            label: const Text('Category/Supplier', style: TextStyle(fontSize: 11)),
-            onPressed: () => showOperationalStockFilter(context: context, ref: ref),
+            label:
+                const Text('Category/Supplier', style: TextStyle(fontSize: 11)),
+            onPressed: () =>
+                showOperationalStockFilter(context: context, ref: ref),
             visualDensity: VisualDensity.compact,
           ),
         ],
@@ -850,7 +858,8 @@ class _BulkBarcodePrintPageState extends ConsumerState<BulkBarcodePrintPage> {
                 selected.isEmpty
                     ? 'None selected'
                     : '${selected.length} selected',
-                style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
+                style:
+                    const TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
               ),
             ),
           ),
@@ -1058,8 +1067,7 @@ class _BulkBarcodePrintPageState extends ConsumerState<BulkBarcodePrintPage> {
       for (final e in visible)
         if (e['id'] != null) e['id'].toString(),
     };
-    final selectedOnScreen =
-        selected.where(visibleIds.contains).length;
+    final selectedOnScreen = selected.where(visibleIds.contains).length;
     final hiddenSelected = selected.length - selectedOnScreen;
     final total = data['total'];
     final downloaded = ref.watch(bulkBarcodeDownloadedIdsProvider);
@@ -1079,7 +1087,8 @@ class _BulkBarcodePrintPageState extends ConsumerState<BulkBarcodePrintPage> {
                   '${visible.length} shown · $selectedOnScreen selected here'
                   '${hiddenSelected > 0 ? ' · $hiddenSelected hidden by filter' : ''}'
                   '${total != null ? ' · $total total' : ''}',
-                  style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
+                  style: const TextStyle(
+                      fontWeight: FontWeight.w800, fontSize: 13),
                 ),
               ),
               if (hiddenSelected > 0)
@@ -1143,7 +1152,8 @@ class _BulkBarcodePrintPageState extends ConsumerState<BulkBarcodePrintPage> {
           ),
         ),
         Padding(
-          padding: const EdgeInsets.fromLTRB(HexaOp.pageGutter, 0, HexaOp.pageGutter, 2),
+          padding: const EdgeInsets.fromLTRB(
+              HexaOp.pageGutter, 0, HexaOp.pageGutter, 2),
           child: Container(
             decoration: const BoxDecoration(
               color: StockTableLayout.headerFill,
@@ -1158,10 +1168,12 @@ class _BulkBarcodePrintPageState extends ConsumerState<BulkBarcodePrintPage> {
                 const SizedBox(width: 44),
                 Expanded(
                   child: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 6),
+                    padding:
+                        const EdgeInsets.symmetric(vertical: 6, horizontal: 6),
                     child: Text(
                       'Item',
-                      style: HexaDsType.label(10, color: HexaDsColors.textMuted),
+                      style:
+                          HexaDsType.label(10, color: HexaDsColors.textMuted),
                     ),
                   ),
                 ),
@@ -1200,13 +1212,16 @@ class _BulkBarcodePrintPageState extends ConsumerState<BulkBarcodePrintPage> {
               final purchased = coerceToDouble(
                 it['period_purchased_qty'] ?? it['purchased_today_qty'],
               );
-              final unit =
-                  it['stock_unit']?.toString() ?? it['unit']?.toString() ?? 'piece';
+              final unit = it['stock_unit']?.toString() ??
+                  it['unit']?.toString() ??
+                  'piece';
               final hasPending = it['has_pending_order'] == true;
               final pendingDays = (it['pending_order_days'] as num?)?.toInt();
               final sub = barcode.isEmpty
                   ? (code.isEmpty ? 'No barcode · $st' : '$code · $st')
-                  : (code.isEmpty ? '$barcode · $st' : '$code · $barcode · $st');
+                  : (code.isEmpty
+                      ? '$barcode · $st'
+                      : '$code · $barcode · $st');
               return _BulkPrintRow(
                 selected: selected.contains(id),
                 isFirstRow: i == 0,
@@ -1230,22 +1245,23 @@ class _BulkBarcodePrintPageState extends ConsumerState<BulkBarcodePrintPage> {
                             showDragHandle: true,
                             builder: (sheetCtx) => Padding(
                               padding: EdgeInsets.only(
-                                bottom: MediaQuery.viewInsetsOf(sheetCtx).bottom,
+                                bottom:
+                                    MediaQuery.viewInsetsOf(sheetCtx).bottom,
                               ),
                               child: SingleChildScrollView(
                                 child: SizedBox(
-                              height: 280,
-                              child: BulkBarcodePrintPreviewPanel(
-                                denseA4: _denseA4,
-                                useQr: _useQr,
-                                copies: _copies,
-                                selectedCount: selected.length,
-                                onPreviewAll: () {
-                                  Navigator.pop(context);
-                                  unawaited(_preview());
-                                },
-                              ),
-                            ),
+                                  height: 280,
+                                  child: BulkBarcodePrintPreviewPanel(
+                                    denseA4: _denseA4,
+                                    useQr: _useQr,
+                                    copies: _copies,
+                                    selectedCount: selected.length,
+                                    onPreviewAll: () {
+                                      Navigator.pop(context);
+                                      unawaited(_preview());
+                                    },
+                                  ),
+                                ),
                               ),
                             ),
                           );
@@ -1375,7 +1391,8 @@ class _BulkPrintRow extends StatelessWidget {
                     child: onPreview != null
                         ? IconButton(
                             tooltip: 'Preview label',
-                            icon: const Icon(Icons.visibility_outlined, size: 20),
+                            icon:
+                                const Icon(Icons.visibility_outlined, size: 20),
                             onPressed: onPreview,
                           )
                         : const SizedBox.shrink(),

@@ -6,10 +6,12 @@ import uuid
 from collections import OrderedDict
 from copy import deepcopy
 from datetime import date, datetime, timedelta, timezone
+from difflib import SequenceMatcher
 from time import monotonic
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pydantic import BaseModel, Field
 from sqlalchemy import String, and_, case, cast, func, literal, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -45,6 +47,20 @@ _trade_summary_last_good: OrderedDict[tuple[Any, ...], dict[str, Any]] = Ordered
 _trade_summary_last_good_max = 256
 
 
+class SalesCompareLineIn(BaseModel):
+    name: str = Field(min_length=1, max_length=255)
+    qty: float | None = None
+    amount: float | None = None
+
+
+class SalesCompareIn(BaseModel):
+    lines: list[SalesCompareLineIn] = Field(min_length=1, max_length=500)
+
+
+def _norm_name(value: str) -> str:
+    return " ".join(value.lower().replace("-", " ").replace("_", " ").split())
+
+
 def _normalize_optional_uuid_str(value: Any) -> str | None:
     """Hyphenated UUID for API JSON; SQLite max(cast(uuid, String)) can return 32-char hex."""
     if value is None:
@@ -66,6 +82,56 @@ def _normalize_optional_uuid_str(value: Any) -> str | None:
 
 def _strip_degraded_snapshot_fields(payload: dict[str, Any]) -> dict[str, Any]:
     return {k: v for k, v in payload.items() if k not in _DEGRADED_META}
+
+
+@router.post("/sales-comparison")
+async def compare_sales_lines(
+    business_id: uuid.UUID,
+    body: SalesCompareIn,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    _m: Annotated[Membership, Depends(require_membership)],
+) -> dict[str, Any]:
+    r = await db.execute(
+        select(CatalogItem.id, CatalogItem.name, CatalogItem.item_code).where(
+            CatalogItem.business_id == business_id,
+            CatalogItem.deleted_at.is_(None),
+        )
+    )
+    catalog = [
+        {"id": str(cid), "name": name, "item_code": code, "norm": _norm_name(name or "")}
+        for cid, name, code in r.all()
+    ]
+    out: list[dict[str, Any]] = []
+    for line in body.lines:
+        src = _norm_name(line.name)
+        best: dict[str, Any] | None = None
+        best_score = 0.0
+        for item in catalog:
+            score = SequenceMatcher(None, src, item["norm"]).ratio()
+            if src and item["norm"] and (src in item["norm"] or item["norm"] in src):
+                score = max(score, 0.92)
+            if score > best_score:
+                best_score = score
+                best = item
+        status_label = "matched" if best_score >= 0.82 else ("review" if best_score >= 0.62 else "missing")
+        out.append(
+            {
+                "source_name": line.name,
+                "qty": line.qty,
+                "amount": line.amount,
+                "match_status": status_label,
+                "match_score": round(best_score, 3),
+                "catalog_item_id": best["id"] if best else None,
+                "catalog_name": best["name"] if best else None,
+                "item_code": best["item_code"] if best else None,
+            }
+        )
+    return {
+        "rows": out,
+        "matched": sum(1 for r in out if r["match_status"] == "matched"),
+        "review": sum(1 for r in out if r["match_status"] == "review"),
+        "missing": sum(1 for r in out if r["match_status"] == "missing"),
+    }
 
 
 def _empty_snapshot_for_dates(ds_from: str, ds_to: str) -> dict[str, Any]:

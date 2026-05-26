@@ -61,7 +61,9 @@ def _catalog_item_id(h, bid, *, name: str = "PV rice") -> str:
             "category_id": cid,
             "type_id": tid,
             "name": name,
-            "default_unit": "kg",
+            "default_unit": "bag",
+            "stock_unit": "bag",
+            "default_kg_per_bag": 50,
             "default_supplier_ids": [sid],
         },
     )

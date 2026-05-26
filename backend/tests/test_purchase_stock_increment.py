@@ -8,7 +8,7 @@ from app.main import app
 client = TestClient(app)
 
 
-def test_confirmed_purchase_increments_stock():
+def test_delivery_confirmation_increments_stock():
     u = uuid.uuid4().hex[:8]
     email = f"stk{u}@test.hexa.local"
     r = client.post(
@@ -49,7 +49,7 @@ def test_confirmed_purchase_increments_stock():
             "lines": [
                 {
                     "catalog_item_id": iid,
-                        "item_name": "Soap Bar",
+                    "item_name": "Soap Bar",
                     "qty": "10",
                     "unit": "piece",
                     "purchase_rate": "100",
@@ -59,6 +59,18 @@ def test_confirmed_purchase_increments_stock():
         },
     )
     assert purchase.status_code in (200, 201), purchase.text
+    pid = purchase.json()["id"]
+
+    stock = client.get(f"/v1/businesses/{bid}/stock/{iid}", headers=h)
+    assert stock.status_code == 200, stock.text
+    assert Decimal(str(stock.json()["current_stock"])) == Decimal("0")
+
+    delivered = client.patch(
+        f"/v1/businesses/{bid}/trade-purchases/{pid}/delivery",
+        headers=h,
+        json={"is_delivered": True},
+    )
+    assert delivered.status_code == 200, delivered.text
 
     stock = client.get(f"/v1/businesses/{bid}/stock/{iid}", headers=h)
     assert stock.status_code == 200, stock.text

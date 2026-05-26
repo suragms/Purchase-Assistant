@@ -13,7 +13,7 @@ import pytest
 
 from app.database import async_session_factory
 from app.models import Business, CatalogItem, ItemCategory, User
-from app.models.ai_engine import CatalogAlias
+from app.models.scanner_support import CatalogAlias
 from app.models.contacts import Broker, Supplier
 from app.services.scanner_v2 import matcher
 from app.services.scanner_v2.matcher import classify

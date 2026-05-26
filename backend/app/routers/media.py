@@ -1,9 +1,9 @@
-"""Media endpoints: OCR and voice/STT — return structured preview only; no auto-save."""
+"""Media endpoints: OCR/plain-text preview only; no auto-save."""
 
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 
 from app.config import Settings, get_settings
@@ -11,7 +11,6 @@ from app.database import get_db
 from app.deps import require_membership
 from app.models import Membership
 from app.services.bill_line_extract import extract_purchase_lines_from_text
-from app.services.feature_flags import is_ocr_enabled, is_voice_enabled
 from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter(prefix="/v1/businesses/{business_id}/media", tags=["media"])
@@ -51,7 +50,7 @@ async def ocr_image(
     settings: Annotated[Settings, Depends(get_settings)],
     body: OcrRequest,
 ):
-    del business_id, _m
+    del business_id, _m, db
     paste = (body.paste_text or "").strip()
     raw_text = paste
     if not raw_text and body.image_base64:
@@ -72,7 +71,7 @@ async def ocr_image(
         )
         for e in extracted
     ]
-    ocr_on = await is_ocr_enabled(db, settings)
+    ocr_on = settings.enable_ocr
     if not ocr_on:
         return OcrResponse(
             text=raw_text[:5000],
@@ -90,36 +89,5 @@ async def ocr_image(
         missing_fields=[] if items else ["item_name", "qty", "unit", "buy_price", "landing_cost"],
         requires_user_confirmation=True,
         auto_save_allowed=False,
-        note="Stub OCR — wire provider + parsing; user must confirm before save.",
-    )
-
-
-class VoiceRequest(BaseModel):
-    audio_base64: str = Field(..., description="Base64 audio (dev stub)")
-
-
-class VoiceResponse(BaseModel):
-    transcript: str = ""
-    confidence: float = 0.0
-    requires_user_confirmation: bool = True
-    auto_save_allowed: bool = False
-    note: str = "STT provider not configured. Set STT_API_KEY and ENABLE_VOICE."
-
-
-@router.post("/voice", response_model=VoiceResponse)
-async def voice_transcribe(
-    business_id: uuid.UUID,
-    _m: Annotated[Membership, Depends(require_membership)],
-    db: Annotated[AsyncSession, Depends(get_db)],
-    settings: Annotated[Settings, Depends(get_settings)],
-    _body: VoiceRequest,
-):
-    del business_id, _m, _body
-    if not await is_voice_enabled(db, settings):
-        raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Voice is disabled for this deployment")
-    return VoiceResponse(
-        confidence=0.0,
-        requires_user_confirmation=True,
-        auto_save_allowed=False,
-        note="Stub STT — wire provider + parse; user must confirm before save.",
+        note="OCR flag on — user must confirm extracted lines before save.",
     )

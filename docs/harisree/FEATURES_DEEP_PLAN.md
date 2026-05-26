@@ -4,6 +4,37 @@
 
 ---
 
+## Completion Phase Index (2026-05-26)
+
+Detailed implementation order lives in [`IMPLEMENTATION_PHASES.md`](IMPLEMENTATION_PHASES.md). Feature design in this file should be read through that phase order:
+
+- Stock truth first: delivery confirmation, physical counts, opening stock, and staff quick purchase logs.
+- Alerts second: notification badge and 3-tab alerts must use the same warehouse truth as stock.
+- Scan/PDF reliability next: barcode and document actions must give immediate feedback and never fail silently.
+- Responsive UI last for touched pages: mobile-first, desktop-enhanced, no text overflow, keyboard-safe forms.
+
+### Mobile Wireframe Rules
+
+```
+Mobile (<600 px)
+Home bottom nav
+Single column content
+Stock row: Item | Stock | Status
+Purchased/diff appears as a sub-row
+Forms scroll above keyboard
+```
+
+### Desktop Wireframe Rules
+
+```
+Desktop (>=1024 px)
+Left NavigationRail
+Content max-width by page type
+Stock table: Item | Physical | Purchased | Difference | Status
+Reports: wider ring/list split where possible
+Bottom sheets become wider centered sheets
+```
+
 ## 🧠 USER INTENT MAP — WHO NEEDS WHAT
 
 ```

@@ -26,6 +26,3 @@ class Business(Base):
 
     memberships = relationship("Membership", back_populates="business")
     entries = relationship("Entry", back_populates="business")
-    subscription = relationship(
-        "BusinessSubscription", back_populates="business", uselist=False
-    )

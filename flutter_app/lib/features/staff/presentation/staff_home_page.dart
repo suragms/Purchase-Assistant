@@ -58,10 +58,12 @@ Future<void> _showStaffProfileSheet(BuildContext context, WidgetRef ref) async {
               children: [
                 CircleAvatar(
                   radius: 28,
-                  backgroundColor: HexaColors.brandPrimary.withValues(alpha: 0.15),
+                  backgroundColor:
+                      HexaColors.brandPrimary.withValues(alpha: 0.15),
                   child: Text(
                     _staffInitials(name),
-                    style: HexaDsType.heading(18, color: HexaColors.brandPrimary),
+                    style:
+                        HexaDsType.heading(18, color: HexaColors.brandPrimary),
                   ),
                 ),
                 const SizedBox(width: 14),
@@ -73,7 +75,8 @@ Future<void> _showStaffProfileSheet(BuildContext context, WidgetRef ref) async {
                       const SizedBox(height: 4),
                       Text(
                         'Role: Staff · $biz',
-                        style: HexaDsType.body(13, color: HexaDsColors.textMuted),
+                        style:
+                            HexaDsType.body(13, color: HexaDsColors.textMuted),
                       ),
                     ],
                   ),
@@ -93,7 +96,8 @@ Future<void> _showStaffProfileSheet(BuildContext context, WidgetRef ref) async {
                   context: context,
                   builder: (dCtx) => AlertDialog(
                     title: Text('Log out of ${HexaColors.appName}?'),
-                    content: const Text('You will need to sign in again to continue.'),
+                    content: const Text(
+                        'You will need to sign in again to continue.'),
                     actions: [
                       TextButton(
                         onPressed: () => Navigator.pop(dCtx, false),
@@ -176,27 +180,32 @@ class StaffHomePage extends ConsumerWidget {
                       children: [
                         Text(
                           'Hello, $name',
-                          style: HexaDsType.heading(20, color: HexaDsColors.textPrimary),
+                          style: HexaDsType.heading(20,
+                              color: HexaDsColors.textPrimary),
                         ),
                         const SizedBox(height: 4),
                         Row(
                           children: [
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 3),
                               decoration: BoxDecoration(
-                                color: HexaColors.brandPrimary.withValues(alpha: 0.12),
+                                color: HexaColors.brandPrimary
+                                    .withValues(alpha: 0.12),
                                 borderRadius: BorderRadius.circular(6),
                               ),
                               child: Text(
                                 'STAFF',
-                                style: HexaDsType.label(11, color: HexaColors.brandPrimary)
+                                style: HexaDsType.label(11,
+                                        color: HexaColors.brandPrimary)
                                     .copyWith(fontWeight: FontWeight.w900),
                               ),
                             ),
                             const SizedBox(width: 8),
                             Text(
                               DateFormat('EEE, d MMM').format(DateTime.now()),
-                              style: HexaDsType.body(13, color: HexaDsColors.textMuted),
+                              style: HexaDsType.body(13,
+                                  color: HexaDsColors.textMuted),
                             ),
                           ],
                         ),
@@ -210,7 +219,8 @@ class StaffHomePage extends ConsumerWidget {
                       isLabelVisible: bellCount > 0,
                       label: Text(
                         bellCount > 99 ? '99+' : '$bellCount',
-                        style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w800),
+                        style: const TextStyle(
+                            fontSize: 10, fontWeight: FontWeight.w800),
                       ),
                       child: const Icon(Icons.notifications_outlined),
                     ),
@@ -224,8 +234,9 @@ class StaffHomePage extends ConsumerWidget {
                           HexaColors.brandPrimary.withValues(alpha: 0.12),
                       child: Text(
                         initials,
-                        style: HexaDsType.label(12, color: HexaColors.brandPrimary)
-                            .copyWith(fontWeight: FontWeight.w900),
+                        style:
+                            HexaDsType.label(12, color: HexaColors.brandPrimary)
+                                .copyWith(fontWeight: FontWeight.w900),
                       ),
                     ),
                   ),
@@ -312,7 +323,8 @@ class StaffHomePage extends ConsumerWidget {
                     child: const Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(Icons.qr_code_scanner_rounded, color: Colors.white, size: 26),
+                        Icon(Icons.qr_code_scanner_rounded,
+                            color: Colors.white, size: 26),
                         SizedBox(width: 10),
                         Text(
                           'Scan barcode',
@@ -340,12 +352,12 @@ class StaffHomePage extends ConsumerWidget {
                   const SizedBox(width: 10),
                   Expanded(
                     child: FilledButton.icon(
-                      onPressed: () => context.push('/operations/usage'),
+                      onPressed: () => context.push('/staff/quick-purchase'),
                       style: FilledButton.styleFrom(
                         backgroundColor: const Color(0xFF3B6D11),
                       ),
-                      icon: const Icon(Icons.edit_note_outlined),
-                      label: const Text('Log usage'),
+                      icon: const Icon(Icons.add_shopping_cart_rounded),
+                      label: const Text('Cash buy'),
                     ),
                   ),
                 ],
@@ -420,7 +432,8 @@ class StaffHomePage extends ConsumerWidget {
                   final sup = p.supplierName ?? 'Supplier';
                   final summary = p.lines
                       .take(2)
-                      .map((l) => '${l.itemName} · ${formatLineQtyWeightFromTradeLine(l)}')
+                      .map((l) =>
+                          '${l.itemName} · ${formatLineQtyWeightFromTradeLine(l)}')
                       .join(' · ');
                   final status = p.isDelivered ? 'Delivered' : 'Pending';
                   return Card(
@@ -429,7 +442,8 @@ class StaffHomePage extends ConsumerWidget {
                       dense: true,
                       title: Text(
                         '${p.humanId} · $sup',
-                        style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
+                        style: const TextStyle(
+                            fontWeight: FontWeight.w800, fontSize: 13),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -437,9 +451,11 @@ class StaffHomePage extends ConsumerWidget {
                         summary.isEmpty ? status : '$summary · $status',
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
-                        style: HexaDsType.body(12, color: HexaDsColors.textMuted),
+                        style:
+                            HexaDsType.body(12, color: HexaDsColors.textMuted),
                       ),
-                      onTap: () => context.push('/staff/purchase-history/${p.id}'),
+                      onTap: () =>
+                          context.push('/staff/purchase-history/${p.id}'),
                     ),
                   );
                 }),
@@ -471,7 +487,8 @@ class StaffHomePage extends ConsumerWidget {
                             ? '${s.name.substring(0, 12)}…'
                             : s.name;
                         return ActionChip(
-                          label: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis),
+                          label: Text(label,
+                              maxLines: 1, overflow: TextOverflow.ellipsis),
                           onPressed: s.id.isEmpty
                               ? null
                               : () => context.push(
@@ -501,9 +518,12 @@ class StaffHomePage extends ConsumerWidget {
                         final nm = r['name']?.toString() ?? '';
                         final curN = coerceToDouble(r['current_stock']);
                         final unit =
-                            (r['default_unit'] ?? r['unit'])?.toString() ?? 'bag';
-                        final kgBag = coerceToDoubleNullable(r['default_kg_per_bag']);
-                        final kgTin = coerceToDoubleNullable(r['default_weight_per_tin']);
+                            (r['default_unit'] ?? r['unit'])?.toString() ??
+                                'bag';
+                        final kgBag =
+                            coerceToDoubleNullable(r['default_kg_per_bag']);
+                        final kgTin =
+                            coerceToDoubleNullable(r['default_weight_per_tin']);
                         final primary = stockDisplayPrimary(curN, unit);
                         final secondary =
                             stockDisplaySecondary(curN, unit, kgBag, kgTin);

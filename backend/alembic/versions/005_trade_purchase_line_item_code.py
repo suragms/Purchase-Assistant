@@ -1,7 +1,7 @@
 """Add item_code to trade_purchase_lines.
 
 Revision ID: 005_item_code_tpline
-Revises: 004_cloud_exp
+Revises: 003_contact_email
 """
 
 from __future__ import annotations
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision: str = "005_item_code_tpline"
-down_revision: Union[str, None] = "004_cloud_exp"
+down_revision: Union[str, None] = "003_contact_email"
 branch_labels = None
 depends_on = None
 

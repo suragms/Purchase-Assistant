@@ -59,7 +59,7 @@ class StockInlineCategoryFilters extends ConsumerWidget {
                     (c['name'] ?? '').toString().trim(),
               ]..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
               return DropdownButtonFormField<String>(
-                value: q.category.isEmpty ? null : q.category,
+                initialValue: q.category.isEmpty ? null : q.category,
                 isExpanded: true,
                 decoration: const InputDecoration(
                   labelText: 'Category',
@@ -69,7 +69,8 @@ class StockInlineCategoryFilters extends ConsumerWidget {
                   border: OutlineInputBorder(),
                 ),
                 items: [
-                  const DropdownMenuItem(value: null, child: Text('All categories')),
+                  const DropdownMenuItem(
+                      value: null, child: Text('All categories')),
                   for (final n in names)
                     DropdownMenuItem(value: n, child: Text(n)),
                 ],
@@ -108,7 +109,8 @@ class StockInlineCategoryFilters extends ConsumerWidget {
                 if (cat.isNotEmpty && cname != cat) continue;
                 options.add(name);
               }
-              options.sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+              options
+                  .sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
               return Autocomplete<String>(
                 initialValue: q.subcategory.isEmpty
                     ? null
@@ -138,7 +140,10 @@ class StockInlineCategoryFilters extends ConsumerWidget {
                     onChanged: (v) {
                       subcategoryController.text = v;
                       if (v.trim().isEmpty &&
-                          ref.read(stockListQueryProvider).subcategory.isNotEmpty) {
+                          ref
+                              .read(stockListQueryProvider)
+                              .subcategory
+                              .isNotEmpty) {
                         ref.read(stockListQueryProvider.notifier).state =
                             ref.read(stockListQueryProvider).copyWith(
                                   subcategory: '',
@@ -165,7 +170,9 @@ class StockInlineCategoryFilters extends ConsumerWidget {
                               onPressed: () {
                                 ctrl.clear();
                                 subcategoryController.clear();
-                                ref.read(stockListQueryProvider.notifier).state =
+                                ref
+                                        .read(stockListQueryProvider.notifier)
+                                        .state =
                                     ref.read(stockListQueryProvider).copyWith(
                                           subcategory: '',
                                           page: 1,

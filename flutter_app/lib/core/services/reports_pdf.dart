@@ -1,15 +1,14 @@
 import 'dart:typed_data';
 
-import 'package:dio/dio.dart';
 import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
-import 'package:printing/printing.dart';
 
 import '../json_coerce.dart';
 import '../models/business_profile.dart';
 import '../models/trade_purchase_models.dart';
 import '../reporting/trade_report_aggregate.dart';
+import 'pdf_actions.dart';
 import 'pdf_text_safe.dart';
 
 final _money = NumberFormat('#,##,##0', 'en_IN');
@@ -58,25 +57,6 @@ String buildItemStatementPdfFilename({
   return 'harisree_item_$slug.pdf';
 }
 
-Future<pw.ImageProvider?> _tryLogo(String? url) async {
-  final u = url?.trim();
-  if (u == null || u.isEmpty) return null;
-  try {
-    final r = await Dio().get<List<int>>(
-      u,
-      options: Options(
-        responseType: ResponseType.bytes,
-        receiveTimeout: const Duration(seconds: 8),
-      ),
-    );
-    final data = r.data;
-    if (data == null || data.isEmpty) return null;
-    return pw.MemoryImage(Uint8List.fromList(data));
-  } catch (_) {
-    return null;
-  }
-}
-
 String _businessTitle(BusinessProfile business) => safePdfText(
       business.displayTitle.trim().isNotEmpty
           ? business.displayTitle
@@ -90,7 +70,7 @@ Future<pw.Widget> _businessPdfHeader(
   String? headline,
   String? subline,
 }) async {
-  final logo = await _tryLogo(business.logoUrl);
+  final logo = await tryFetchPdfLogo(business.logoUrl);
   final title = _businessTitle(business);
   return pw.Row(
     crossAxisAlignment: pw.CrossAxisAlignment.start,
@@ -238,7 +218,7 @@ pw.Widget _tableSection({
 }
 
 /// Summary for the Reports screen — white/black, no colours, clean tables.
-Future<void> shareReportsSummaryPdf({
+Future<PdfActionResult> shareReportsSummaryPdf({
   required BusinessProfile business,
   required DateTime from,
   required DateTime to,
@@ -366,18 +346,20 @@ Future<void> shareReportsSummaryPdf({
       ],
     ),
   );
-  await Printing.sharePdf(
-    bytes: await doc.save(),
+  return sharePdfBytes(
+    buildBytes: () => doc.save(),
     filename: buildPurchaseReportPdfFilename(
       label: modeLabel,
       from: from,
       to: to,
     ),
+    subject: 'Purchase Report - $modeSafe',
+    source: 'reports_pdf',
   );
 }
 
 /// Item purchase statement from trade rows (black/white tables, ASCII-friendly).
-Future<void> shareItemPurchaseTradeHistoryPdf({
+Future<PdfActionResult> shareItemPurchaseTradeHistoryPdf({
   required BusinessProfile business,
   required String itemName,
   required List<List<String>> rows,
@@ -386,7 +368,9 @@ Future<void> shareItemPurchaseTradeHistoryPdf({
   String? periodDescription,
   String? totalLineLabel,
 }) async {
-  if (rows.isEmpty) return;
+  if (rows.isEmpty) {
+    return const PdfActionResult(ok: false, message: 'No rows to export.');
+  }
   final periodParts = <String>[];
   if (periodDescription != null && periodDescription.isNotEmpty) {
     periodParts.add(periodDescription);
@@ -500,13 +484,15 @@ Future<void> shareItemPurchaseTradeHistoryPdf({
       ],
     ),
   );
-  await Printing.sharePdf(
-    bytes: await doc.save(),
+  return sharePdfBytes(
+    buildBytes: () => doc.save(),
     filename: buildItemStatementPdfFilename(
       itemName: itemName,
       from: periodFrom,
       to: periodTo,
     ),
+    subject: 'Item statement - $cleanItem',
+    source: 'reports_pdf',
   );
 }
 
@@ -539,9 +525,8 @@ Future<Uint8List> buildTradeStatementSsotPdfBytes({
           textAlign: right ? pw.TextAlign.right : pw.TextAlign.left,
           style: pw.TextStyle(
             fontSize: hdr ? 8 : (bold ? 8 : 7.5),
-            fontWeight: (hdr || bold)
-                ? pw.FontWeight.bold
-                : pw.FontWeight.normal,
+            fontWeight:
+                (hdr || bold) ? pw.FontWeight.bold : pw.FontWeight.normal,
           ),
         ),
       );
@@ -688,19 +673,20 @@ Future<Uint8List> buildTradeStatementSsotPdfBytes({
 }
 
 /// Opens the print/share preview UI for the trade statement PDF.
-Future<void> layoutTradeStatementSsotPdf({
+Future<PdfActionResult> layoutTradeStatementSsotPdf({
   required BusinessProfile business,
   required DateTime from,
   required DateTime to,
   required List<TradePurchase> purchases,
-}) async {
-  await Printing.layoutPdf(
-    name: buildTradeStatementPdfFilename(from: from, to: to),
-    onLayout: (_) async => buildTradeStatementSsotPdfBytes(
+}) {
+  return printPdfBytes(
+    filename: buildTradeStatementPdfFilename(from: from, to: to),
+    buildBytes: () => buildTradeStatementSsotPdfBytes(
       business: business,
       from: from,
       to: to,
       purchases: purchases,
     ),
+    source: 'reports_pdf',
   );
 }

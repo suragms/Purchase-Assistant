@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -118,6 +120,7 @@ class StockOperationalFilters {
   final bool reorderOnly;
   final bool evictionOnly;
   final bool purchasedInPeriodOnly;
+
   /// Empty = all units; else match `unit` field lowercased.
   final String unit;
 
@@ -146,13 +149,14 @@ class StockOperationalFilters {
   }
 }
 
-final stockOperationalFiltersProvider =
-    StateProvider<StockOperationalFilters>((_) => const StockOperationalFilters());
+final stockOperationalFiltersProvider = StateProvider<StockOperationalFilters>(
+    (_) => const StockOperationalFilters());
 
 /// Selected row for bulk print desktop preview panel.
 final bulkPreviewItemIdProvider = StateProvider<String?>((ref) => null);
 
-int countOperationalActiveFilters(StockListQuery q, StockOperationalFilters op) {
+int countOperationalActiveFilters(
+    StockListQuery q, StockOperationalFilters op) {
   var n = 0;
   if (q.category.isNotEmpty) n++;
   if (q.subcategory.isNotEmpty) n++;
@@ -235,6 +239,9 @@ final stockChangesFeedProvider =
 });
 
 final stockListProvider = FutureProvider.autoDispose((ref) async {
+  final keepAlive = ref.keepAlive();
+  final timer = Timer(const Duration(seconds: 90), keepAlive.close);
+  ref.onDispose(timer.cancel);
   final session = ref.watch(sessionProvider);
   final query = ref.watch(stockListQueryProvider);
   if (session == null) {
@@ -268,7 +275,8 @@ final stockListProvider = FutureProvider.autoDispose((ref) async {
 final bulkBarcodeSelectionProvider = StateProvider<Set<String>>((ref) => {});
 
 /// Item ids successfully downloaded/printed this session (bulk barcode page).
-final bulkBarcodeDownloadedIdsProvider = StateProvider<Set<String>>((ref) => {});
+final bulkBarcodeDownloadedIdsProvider =
+    StateProvider<Set<String>>((ref) => {});
 
 final bulkStockListProvider =
     FutureProvider.autoDispose<Map<String, dynamic>>((ref) async {
@@ -389,8 +397,8 @@ final stockStatusCountsProvider =
 });
 
 /// Low-stock items grouped category → subcategory → rows.
-typedef LowStockByCategoryMap =
-    Map<String, Map<String, List<Map<String, dynamic>>>>;
+typedef LowStockByCategoryMap
+    = Map<String, Map<String, List<Map<String, dynamic>>>>;
 
 Future<List<Map<String, dynamic>>> _fetchStockListAllPages({
   required HexaApi api,

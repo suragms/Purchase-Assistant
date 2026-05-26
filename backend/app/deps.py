@@ -13,8 +13,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import Settings, get_settings
 from app.database import get_db
 from app.models import Membership, User
-from app.services.billing_entitlements import assert_ai_entitled
-from app.services.feature_flags import is_ai_parsing_enabled
 from app.services.jwt_tokens import decode_access_token
 from app.services.permissions import membership_permissions, require_permission_key
 
@@ -22,23 +20,21 @@ security = HTTPBearer(auto_error=False)
 
 
 async def require_ai_parse_enabled(
-    db: Annotated[AsyncSession, Depends(get_db)],
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> None:
-    """Env + DB feature flag for `/parse` and similar AI-assisted entry flows."""
+    """Env gate for purchase-bill AI parsing.
+
+    SaaS feature-flag/billing gates were removed for the single-client
+    warehouse app; OpenAI Vision scan remains controlled by deployment env.
+    """
     if not settings.enable_ai:
-        raise HTTPException(status.HTTP_403_FORBIDDEN, detail="AI parse is disabled")
-    if not await is_ai_parsing_enabled(db, settings):
         raise HTTPException(status.HTTP_403_FORBIDDEN, detail="AI parse is disabled")
 
 
 async def require_realtime_effective(
-    db: Annotated[AsyncSession, Depends(get_db)],
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> None:
-    from app.services.feature_flags import is_realtime_enabled
-
-    if not await is_realtime_enabled(db, settings):
+    if not settings.enable_realtime:
         raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Realtime is disabled")
 
 
@@ -62,62 +58,6 @@ async def get_current_user(
         raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Account is blocked")
     if not user.is_active:
         raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Account is inactive")
-    return user
-
-
-async def charge_ai_turn_for_business(
-    business_id: uuid.UUID,
-    user: Annotated[User, Depends(get_current_user)],
-    db: Annotated[AsyncSession, Depends(get_db)],
-    settings: Annotated[Settings, Depends(get_settings)],
-) -> User:
-    """AI routes: membership + feature flags + billing AI add-on + token budget."""
-    q = await db.execute(
-        select(Membership).where(
-            Membership.business_id == business_id,
-            Membership.user_id == user.id,
-        )
-    )
-    if q.scalar_one_or_none() is None:
-        raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Not a member of this business")
-    if not settings.enable_ai:
-        raise HTTPException(status.HTTP_403_FORBIDDEN, detail="AI is disabled for this deployment")
-    if not await is_ai_parsing_enabled(db, settings):
-        raise HTTPException(status.HTTP_403_FORBIDDEN, detail="AI parsing is disabled")
-    await assert_ai_entitled(db, business_id, settings)
-    budget = user.ai_monthly_token_budget
-    used = user.ai_tokens_used_month or 0
-    if budget is not None and budget > 0 and used >= budget:
-        raise HTTPException(
-            status.HTTP_402_PAYMENT_REQUIRED,
-            detail="Monthly AI limit reached — use manual entry or ask an owner to raise the cap.",
-        )
-    user.ai_tokens_used_month = used + 48
-    await db.commit()
-    await db.refresh(user)
-    return user
-
-
-async def charge_ai_stub_turn(
-    user: Annotated[User, Depends(get_current_user)],
-    db: Annotated[AsyncSession, Depends(get_db)],
-    settings: Annotated[Settings, Depends(get_settings)],
-) -> User:
-    """Gate AI routes: feature flag + monthly token budget (stub accounting)."""
-    if not settings.enable_ai:
-        raise HTTPException(status.HTTP_403_FORBIDDEN, detail="AI is disabled for this deployment")
-    if not await is_ai_parsing_enabled(db, settings):
-        raise HTTPException(status.HTTP_403_FORBIDDEN, detail="AI parsing is disabled")
-    budget = user.ai_monthly_token_budget
-    used = user.ai_tokens_used_month or 0
-    if budget is not None and budget > 0 and used >= budget:
-        raise HTTPException(
-            status.HTTP_402_PAYMENT_REQUIRED,
-            detail="Monthly AI limit reached — use manual entry or ask an owner to raise the cap.",
-        )
-    user.ai_tokens_used_month = used + 48
-    await db.commit()
-    await db.refresh(user)
     return user
 
 

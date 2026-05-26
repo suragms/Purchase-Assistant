@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:dio/dio.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -30,8 +29,7 @@ import '../../../core/widgets/hexa_error_card.dart';
 import '../../../core/widgets/list_skeleton.dart';
 import '../providers/trade_purchase_detail_provider.dart';
 
-String _inr(num n, {int fractionDigits = 2}) =>
-    NumberFormat.currency(
+String _inr(num n, {int fractionDigits = 2}) => NumberFormat.currency(
       locale: 'en_IN',
       symbol: '₹',
       decimalDigits: fractionDigits,
@@ -205,6 +203,7 @@ class PurchaseDetailPage extends ConsumerStatefulWidget {
   });
 
   final String purchaseId;
+
   /// Optional row from list/ledger while GET detail runs (same [id] as [purchaseId]).
   final TradePurchase? seedPurchase;
 
@@ -282,7 +281,8 @@ class _PurchaseDetailPageState extends ConsumerState<PurchaseDetailPage> {
                       _slowLoadPastSkeleton = false;
                       _slowLoadTimerArmed = false;
                     });
-                    ref.invalidate(tradePurchaseDetailProvider(widget.purchaseId));
+                    ref.invalidate(
+                        tradePurchaseDetailProvider(widget.purchaseId));
                   },
                 )
               : const DetailSkeleton(),
@@ -332,7 +332,8 @@ class _DetailSlowLoadBody extends StatelessWidget {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(Icons.hourglass_top_rounded, color: Colors.orange.shade800),
+                Icon(Icons.hourglass_top_rounded,
+                    color: Colors.orange.shade800),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(
@@ -392,8 +393,10 @@ class _LoadedPurchaseScaffold extends ConsumerWidget {
         title: const Text('Delete this purchase?'),
         content: Text('Remove ${p.humanId}?'),
         actions: [
-          TextButton(onPressed: () => ctx.pop(false), child: const Text('Cancel')),
-          FilledButton(onPressed: () => ctx.pop(true), child: const Text('Delete')),
+          TextButton(
+              onPressed: () => ctx.pop(false), child: const Text('Cancel')),
+          FilledButton(
+              onPressed: () => ctx.pop(true), child: const Text('Delete')),
         ],
       ),
     );
@@ -422,12 +425,13 @@ class _LoadedPurchaseScaffold extends ConsumerWidget {
 
   Future<void> _runPrintPdf(BuildContext context, WidgetRef ref) async {
     final biz = ref.read(invoiceBusinessProfileProvider);
-    final ok = await printPurchasePdf(p, biz);
+    showTopSnack(context, 'Preparing PDF...');
+    final result = await printPurchasePdf(p, biz);
     if (!context.mounted) return;
-    if (!ok) {
+    if (!result.ok) {
       showTopSnack(
         context,
-        'Could not print PDF. Try again.',
+        result.message,
         isError: true,
         action: SnackBarAction(
           label: 'Retry',
@@ -442,15 +446,16 @@ class _LoadedPurchaseScaffold extends ConsumerWidget {
   Future<void> _runSharePdf(BuildContext context, WidgetRef ref) async {
     final biz = ref.read(invoiceBusinessProfileProvider);
     try {
-      final ok = await sharePurchasePdf(p, biz);
+      showTopSnack(context, 'Preparing PDF...');
+      final result = await sharePurchasePdf(p, biz);
       if (!context.mounted) return;
-      if (ok) {
+      if (result.ok) {
         if (!context.mounted) return;
-        showTopSnack(context, 'PDF ready to share');
+        showTopSnack(context, result.message);
       } else {
         showTopSnack(
           context,
-          'Could not export PDF. Check connection and retry.',
+          result.message,
           isError: true,
           action: SnackBarAction(
             label: 'Retry',
@@ -464,15 +469,15 @@ class _LoadedPurchaseScaffold extends ConsumerWidget {
     }
   }
 
-
   Future<void> _runDownloadPdf(BuildContext context, WidgetRef ref) async {
     final biz = ref.read(invoiceBusinessProfileProvider);
-    final ok = await downloadPurchasePdf(p, biz);
+    showTopSnack(context, 'Preparing PDF...');
+    final result = await downloadPurchasePdf(p, biz);
     if (!context.mounted) return;
-    if (!ok) {
+    if (!result.ok) {
       showTopSnack(
         context,
-        'Could not open PDF. Try again.',
+        result.message,
         isError: true,
         action: SnackBarAction(
           label: 'Retry',
@@ -481,24 +486,13 @@ class _LoadedPurchaseScaffold extends ConsumerWidget {
       );
       return;
     }
-    if (kIsWeb) {
-      showTopSnack(
-        context,
-        'Use the browser print/save dialog to download PDF',
-      );
-    } else {
-      showTopSnack(
-        context,
-        'Use Save as PDF or share from the dialog to save the file',
-      );
-    }
+    showTopSnack(context, result.message);
   }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final session = ref.watch(sessionProvider);
-    final hideFinancials =
-        session != null && !sessionCanSeeFinancials(session);
+    final hideFinancials = session != null && !sessionCanSeeFinancials(session);
     final optim = ref.watch(tradePurchaseDeliveryOptimisticProvider(p.id));
     final displayP = optim == null ? p : p.withDelivered(optim);
     return Scaffold(
@@ -569,7 +563,8 @@ class _LoadedPurchaseScaffold extends ConsumerWidget {
             Material(
               color: const Color(0xFFE8F4F2),
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                 child: Text(
                   'Refreshing latest totals…',
                   style: Theme.of(context).textTheme.labelMedium?.copyWith(
@@ -602,7 +597,8 @@ class _PurchaseDetailBody extends ConsumerStatefulWidget {
   final bool hideFinancials;
 
   @override
-  ConsumerState<_PurchaseDetailBody> createState() => _PurchaseDetailBodyState();
+  ConsumerState<_PurchaseDetailBody> createState() =>
+      _PurchaseDetailBodyState();
 }
 
 class _PurchaseDetailBodyState extends ConsumerState<_PurchaseDetailBody> {
@@ -614,22 +610,57 @@ class _PurchaseDetailBodyState extends ConsumerState<_PurchaseDetailBody> {
     final session = ref.read(sessionProvider);
     if (session == null) return;
     final newDelivered = !p.isDelivered;
+    if (!newDelivered) {
+      final ok = await showDialog<bool>(
+            context: context,
+            builder: (dialogContext) => AlertDialog(
+              title: const Text('Mark delivery as pending?'),
+              content: const Text(
+                'This will reverse the stock added when the shipment was received.',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(false),
+                  child: const Text('Cancel'),
+                ),
+                FilledButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(true),
+                  child: const Text('Reverse stock'),
+                ),
+              ],
+            ),
+          ) ??
+          false;
+      if (!ok) return;
+    }
     ref.read(tradePurchaseDeliveryOptimisticProvider(p.id).notifier).state =
         newDelivered;
-    showTopSnack(
-      context,
-      newDelivered ? '✅ Marked as delivered' : 'Marked as pending delivery',
-    );
     try {
-      await ref.read(hexaApiProvider).markPurchaseDelivered(
+      final updated = await ref.read(hexaApiProvider).markPurchaseDelivered(
             businessId: session.primaryBusiness.id,
             purchaseId: p.id,
             isDelivered: newDelivered,
           );
+      final purchase = TradePurchase.fromJson(updated);
       invalidatePurchaseWorkspace(ref);
       ref.invalidate(tradePurchaseDetailProvider(p.id));
       ref.read(tradePurchaseDeliveryOptimisticProvider(p.id).notifier).state =
           null;
+      if (context.mounted) {
+        final itemCount = purchase.stockUpdatesCount > 0
+            ? purchase.stockUpdatesCount
+            : p.lines.length;
+        showTopSnack(
+          context,
+          newDelivered
+              ? (itemCount == 1
+                  ? 'Received · 1 item added to stock'
+                  : 'Received · $itemCount items added to stock')
+              : (itemCount == 1
+                  ? 'Delivery pending · 1 item reversed from stock'
+                  : 'Delivery pending · $itemCount items reversed from stock'),
+        );
+      }
     } catch (e) {
       ref.read(tradePurchaseDeliveryOptimisticProvider(p.id).notifier).state =
           null;
@@ -741,7 +772,8 @@ class _PurchaseDetailBodyState extends ConsumerState<_PurchaseDetailBody> {
                 await ref.read(tradePurchaseDetailProvider(p.id).future);
               },
               child: SingleChildScrollView(
-                keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+                keyboardDismissBehavior:
+                    ScrollViewKeyboardDismissBehavior.onDrag,
                 physics: const AlwaysScrollableScrollPhysics(
                   parent: BouncingScrollPhysics(),
                 ),
@@ -749,7 +781,8 @@ class _PurchaseDetailBodyState extends ConsumerState<_PurchaseDetailBody> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    if (p.hasMissingDetails) _pendingDetailsChip(context, p, cs),
+                    if (p.hasMissingDetails)
+                      _pendingDetailsChip(context, p, cs),
                     _compactMeta(context, p, st, paidPending, cs),
                     if (!hideFinancials) ...[
                       const SizedBox(height: 18),
@@ -783,35 +816,32 @@ class _PurchaseDetailBodyState extends ConsumerState<_PurchaseDetailBody> {
                           ),
                         ),
                         child: ListTile(
-                            leading: Icon(
-                              p.isDelivered
-                                  ? Icons.check_circle
-                                  : Icons.local_shipping,
-                              color: p.isDelivered
-                                  ? Colors.green.shade700
-                                  : Colors.orange.shade800,
+                          leading: Icon(
+                            p.isDelivered
+                                ? Icons.check_circle
+                                : Icons.local_shipping,
+                            color: p.isDelivered
+                                ? Colors.green.shade700
+                                : Colors.orange.shade800,
+                          ),
+                          title: Text(
+                            p.isDelivered
+                                ? 'Received at warehouse'
+                                : 'Pending delivery',
+                          ),
+                          subtitle: p.deliveredAt != null
+                              ? Text(
+                                  'Received on ${DateFormat('MMM d, y').format(p.deliveredAt!)}',
+                                )
+                              : const Text(
+                                  'Not yet confirmed as received',
+                                ),
+                          trailing: TextButton(
+                            onPressed: () => _toggleDelivery(context, ref, p),
+                            child: Text(
+                              p.isDelivered ? 'Mark Pending' : 'Mark Received',
                             ),
-                            title: Text(
-                              p.isDelivered
-                                  ? 'Received at warehouse'
-                                  : 'Pending delivery',
-                            ),
-                            subtitle: p.deliveredAt != null
-                                ? Text(
-                                    'Received on ${DateFormat('MMM d, y').format(p.deliveredAt!)}',
-                                  )
-                                : const Text(
-                                    'Not yet confirmed as received',
-                                  ),
-                            trailing: TextButton(
-                              onPressed: () =>
-                                  _toggleDelivery(context, ref, p),
-                              child: Text(
-                                p.isDelivered
-                                    ? 'Mark Pending'
-                                    : 'Mark Received',
-                              ),
-                            ),
+                          ),
                         ),
                       ),
                     ),
@@ -863,7 +893,8 @@ class _PurchaseDetailBodyState extends ConsumerState<_PurchaseDetailBody> {
             ),
           ),
           backgroundColor: Colors.amber.shade50,
-          side: BorderSide(color: Colors.amber.shade700.withValues(alpha: 0.35)),
+          side:
+              BorderSide(color: Colors.amber.shade700.withValues(alpha: 0.35)),
           onPressed: () => context.push('/purchase/edit/${p.id}'),
         ),
       ),
@@ -889,7 +920,8 @@ class _PurchaseDetailBodyState extends ConsumerState<_PurchaseDetailBody> {
             Expanded(
               child: Text(
                 sup.isEmpty ? '—' : sup,
-                style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
+                style:
+                    const TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
               ),
             ),
             Container(
@@ -1031,7 +1063,8 @@ class _PurchaseDetailBodyState extends ConsumerState<_PurchaseDetailBody> {
               ),
               SelectableText(
                 _inr(p.remaining),
-                style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15),
+                style:
+                    const TextStyle(fontWeight: FontWeight.w800, fontSize: 15),
               ),
             ],
           ),
@@ -1046,7 +1079,8 @@ class _PurchaseDetailBodyState extends ConsumerState<_PurchaseDetailBody> {
                 ),
                 Text(
                   DateFormat.yMMMd().format(p.dueDate!),
-                  style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14),
+                  style: const TextStyle(
+                      fontWeight: FontWeight.w800, fontSize: 14),
                 ),
               ],
             ),
@@ -1094,8 +1128,9 @@ class _PurchaseDetailBodyState extends ConsumerState<_PurchaseDetailBody> {
       i++;
       final pr = hideFinancials ? null : _effectiveLineProfit(l);
       final rates = hideFinancials ? null : _lineRateLabels(l);
-      final profitColor =
-          pr == null ? cs.onSurfaceVariant : (pr >= 0 ? const Color(0xFF0F766E) : HexaColors.loss);
+      final profitColor = pr == null
+          ? cs.onSurfaceVariant
+          : (pr >= 0 ? const Color(0xFF0F766E) : HexaColors.loss);
       out.add(
         Container(
           width: double.infinity,
@@ -1149,7 +1184,8 @@ class _PurchaseDetailBodyState extends ConsumerState<_PurchaseDetailBody> {
                 const SizedBox(height: 8),
                 Text(
                   'P: ${rates.purchase}  ·  S: ${rates.selling}',
-                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                  style: const TextStyle(
+                      fontSize: 13, fontWeight: FontWeight.w600),
                 ),
               ],
               if (!hideFinancials) ...[
@@ -1159,11 +1195,13 @@ class _PurchaseDetailBodyState extends ConsumerState<_PurchaseDetailBody> {
                   children: [
                     Text(
                       'Line total',
-                      style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+                      style:
+                          TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
                     ),
                     SelectableText(
                       _inr(_lineInclusive(l)),
-                      style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 15),
+                      style: const TextStyle(
+                          fontWeight: FontWeight.w900, fontSize: 15),
                     ),
                   ],
                 ),
@@ -1175,7 +1213,8 @@ class _PurchaseDetailBodyState extends ConsumerState<_PurchaseDetailBody> {
                   children: [
                     Text(
                       'Profit',
-                      style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+                      style:
+                          TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
                     ),
                     SelectableText(
                       _inr(pr),
@@ -1229,12 +1268,17 @@ class _PurchaseDetailBodyState extends ConsumerState<_PurchaseDetailBody> {
     }
     rows.add(tiny(
       'Freight',
-      agg.freightIncluded ? 'Included' : (agg.freight > 1e-6 ? _inr(agg.freight) : '—'),
+      agg.freightIncluded
+          ? 'Included'
+          : (agg.freight > 1e-6 ? _inr(agg.freight) : '—'),
     ));
-    rows.add(tiny('Commission', agg.commission > 1e-6 ? _inr(agg.commission) : '—'));
+    rows.add(
+        tiny('Commission', agg.commission > 1e-6 ? _inr(agg.commission) : '—'));
     rows.add(tiny('Billty', agg.billty > 1e-6 ? _inr(agg.billty) : '—'));
-    rows.add(tiny('Delivered', agg.delivered > 1e-6 ? _inr(agg.delivered) : '—'));
-    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: rows);
+    rows.add(
+        tiny('Delivered', agg.delivered > 1e-6 ? _inr(agg.delivered) : '—'));
+    return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch, children: rows);
   }
 
   Widget _stickyActionBar(
@@ -1249,12 +1293,13 @@ class _PurchaseDetailBodyState extends ConsumerState<_PurchaseDetailBody> {
     Future<void> share() async {
       final biz = ref.read(invoiceBusinessProfileProvider);
       try {
-        final ok = await sharePurchasePdf(p, biz);
+        showTopSnack(context, 'Preparing PDF...');
+        final result = await sharePurchasePdf(p, biz);
         if (!context.mounted) return;
-        if (!ok) {
+        if (!result.ok) {
           showTopSnack(
             context,
-            'Could not export PDF. Check connection and retry.',
+            result.message,
             isError: true,
             duration: const Duration(seconds: 6),
             action: SnackBarAction(
@@ -1264,22 +1309,23 @@ class _PurchaseDetailBodyState extends ConsumerState<_PurchaseDetailBody> {
           );
           return;
         }
+        showTopSnack(context, result.message);
+        return;
       } catch (e) {
         if (!context.mounted) return;
         showTopSnack(context, 'Failed to export PDF.', isError: true);
       }
-      if (!context.mounted) return;
-      showTopSnack(context, 'PDF ready to share');
     }
 
     Future<void> printPdf() async {
       final biz = ref.read(invoiceBusinessProfileProvider);
-      final ok = await printPurchasePdf(p, biz);
+      showTopSnack(context, 'Preparing PDF...');
+      final result = await printPurchasePdf(p, biz);
       if (!context.mounted) return;
-      if (!ok) {
+      if (!result.ok) {
         showTopSnack(
           context,
-          'Could not print PDF. Try again.',
+          result.message,
           isError: true,
           action: SnackBarAction(
             label: 'Retry',
@@ -1291,12 +1337,13 @@ class _PurchaseDetailBodyState extends ConsumerState<_PurchaseDetailBody> {
 
     Future<void> downloadPdf() async {
       final biz = ref.read(invoiceBusinessProfileProvider);
-      final ok = await downloadPurchasePdf(p, biz);
+      showTopSnack(context, 'Preparing PDF...');
+      final result = await downloadPurchasePdf(p, biz);
       if (!context.mounted) return;
-      if (!ok) {
+      if (!result.ok) {
         showTopSnack(
           context,
-          'Could not open PDF. Try again.',
+          result.message,
           isError: true,
           action: SnackBarAction(
             label: 'Retry',
@@ -1305,17 +1352,7 @@ class _PurchaseDetailBodyState extends ConsumerState<_PurchaseDetailBody> {
         );
         return;
       }
-      if (kIsWeb) {
-        showTopSnack(
-          context,
-          'Use the browser print/save dialog to download PDF',
-        );
-      } else {
-        showTopSnack(
-          context,
-          'Use Save as PDF or share from the dialog to save the file',
-        );
-      }
+      showTopSnack(context, result.message);
     }
 
     return Material(
@@ -1334,7 +1371,8 @@ class _PurchaseDetailBodyState extends ConsumerState<_PurchaseDetailBody> {
                 width: double.infinity,
                 child: FilledButton.icon(
                   onPressed: () => _markPaidSheet(context, ref, p),
-                  icon: const Icon(Icons.check_circle_outline_rounded, size: 18),
+                  icon:
+                      const Icon(Icons.check_circle_outline_rounded, size: 18),
                   label: const Text('Mark as Paid'),
                 ),
               ),
@@ -1384,7 +1422,8 @@ class _PurchaseDetailBodyState extends ConsumerState<_PurchaseDetailBody> {
     );
   }
 
-  Future<void> _markPaidSheet(BuildContext context, WidgetRef ref, TradePurchase p) async {
+  Future<void> _markPaidSheet(
+      BuildContext context, WidgetRef ref, TradePurchase p) async {
     final ctrl = TextEditingController(text: p.remaining.toStringAsFixed(2));
     final ok = await showModalBottomSheet<bool>(
       context: context,

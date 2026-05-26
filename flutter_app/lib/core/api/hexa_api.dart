@@ -14,24 +14,13 @@ import '../config/app_config.dart';
 import '../models/session.dart';
 import '../strict_decimal.dart';
 
-/// Transient failures only — do not retry after a full response (avoids duplicate assistant turns).
-bool _retryableAssistantRequest(DioException e) {
-  final sc = e.response?.statusCode;
-  if (sc != null && (sc == 502 || sc == 503 || sc == 504)) return true;
-  final t = e.type;
-  return t == DioExceptionType.connectionError ||
-      t == DioExceptionType.connectionTimeout ||
-      t == DioExceptionType.sendTimeout;
-}
-
 bool _reports404HintLogged = false;
 
 /// Correlates app failures with Render/API logs (echoed as `X-Request-Id`).
 String _newRequestCorrelationId() {
   const hex = '0123456789abcdef';
   final r = Random();
-  String seg(int n) =>
-      List.generate(n, (_) => hex[r.nextInt(16)]).join();
+  String seg(int n) => List.generate(n, (_) => hex[r.nextInt(16)]).join();
   return '${seg(8)}-${seg(4)}-${seg(4)}-${seg(4)}-${seg(12)}';
 }
 
@@ -77,8 +66,7 @@ class _BusinessConnectivityBannerInterceptor extends Interceptor {
 
   final void Function(bool degraded, String? hint)? _fn;
 
-  static bool _biz(String p) =>
-      p.startsWith('/v1/') && !_isAuthEndpoint(p);
+  static bool _biz(String p) => p.startsWith('/v1/') && !_isAuthEndpoint(p);
 
   @override
   void onResponse(Response response, ResponseInterceptorHandler handler) {
@@ -89,8 +77,7 @@ class _BusinessConnectivityBannerInterceptor extends Interceptor {
         response.statusCode != null &&
         response.statusCode! >= 200 &&
         response.statusCode! < 300) {
-      final dbDown =
-          response.headers.value('x-database-unavailable') == '1';
+      final dbDown = response.headers.value('x-database-unavailable') == '1';
       if (dbDown) {
         fn(true, 'Database temporarily unavailable');
       } else {
@@ -329,7 +316,8 @@ class HexaApi {
   }
 
   /// Request a password reset (no auth). In development the response may include `dev_reset_token`.
-  Future<Map<String, dynamic>> requestPasswordReset({required String email}) async {
+  Future<Map<String, dynamic>> requestPasswordReset(
+      {required String email}) async {
     final res = await _plain.post<Map<String, dynamic>>(
       '/v1/auth/forgot-password',
       data: {'email': email.trim().toLowerCase()},
@@ -381,6 +369,7 @@ class HexaApi {
     int page = 1,
     int perPage = 50,
     bool fetchAllPages = true,
+    String? kind,
   }) async {
     final out = <Map<String, dynamic>>[];
     var p = page;
@@ -388,7 +377,11 @@ class HexaApi {
     while (p <= maxPages) {
       final res = await _dio.get<dynamic>(
         '/v1/businesses/$businessId/notifications',
-        queryParameters: {'page': p, 'per_page': perPage},
+        queryParameters: {
+          'page': p,
+          'per_page': perPage,
+          if (kind != null && kind.trim().isNotEmpty) 'kind': kind.trim(),
+        },
       );
       final chunk = _parseNotificationListPayload(res.data);
       if (chunk.isEmpty) break;
@@ -399,7 +392,8 @@ class HexaApi {
     return out;
   }
 
-  static List<Map<String, dynamic>> _parseNotificationListPayload(dynamic data) {
+  static List<Map<String, dynamic>> _parseNotificationListPayload(
+      dynamic data) {
     if (data is List) {
       return [
         for (final e in data)
@@ -440,6 +434,34 @@ class HexaApi {
       data: {'read': read},
     );
     return Map<String, dynamic>.from(res.data ?? const {});
+  }
+
+  Future<int> markAllAppNotificationsRead({
+    required String businessId,
+    String? kind,
+  }) async {
+    final res = await _dio.post<Map<String, dynamic>>(
+      '/v1/businesses/$businessId/notifications/mark-all-read',
+      queryParameters: {
+        if (kind != null && kind.trim().isNotEmpty) 'kind': kind.trim(),
+      },
+    );
+    final v = res.data?['updated'];
+    return v is num ? v.toInt() : 0;
+  }
+
+  Future<int> clearAllAppNotifications({
+    required String businessId,
+    String? kind,
+  }) async {
+    final res = await _dio.delete<Map<String, dynamic>>(
+      '/v1/businesses/$businessId/notifications/clear-all',
+      queryParameters: {
+        if (kind != null && kind.trim().isNotEmpty) 'kind': kind.trim(),
+      },
+    );
+    final v = res.data?['updated'];
+    return v is num ? v.toInt() : 0;
   }
 
   Future<List<Map<String, dynamic>>> listActivityLog({
@@ -516,7 +538,8 @@ class HexaApi {
         'phone': phone.trim(),
         'role': role,
         'is_active': isActive,
-        if (password != null && password.trim().isNotEmpty) 'password': password.trim(),
+        if (password != null && password.trim().isNotEmpty)
+          'password': password.trim(),
         if (notes != null && notes.trim().isNotEmpty) 'notes': notes.trim(),
       },
     );
@@ -712,7 +735,8 @@ class HexaApi {
     return Map<String, dynamic>.from(res.data ?? const {});
   }
 
-  Future<Map<String, dynamic>> superAdminBusinessesOverview({int limit = 100}) async {
+  Future<Map<String, dynamic>> superAdminBusinessesOverview(
+      {int limit = 100}) async {
     final res = await _dio.get<Map<String, dynamic>>(
       '/v1/admin/businesses-overview',
       queryParameters: {'limit': limit},
@@ -725,7 +749,8 @@ class HexaApi {
   /// Returns null when the server has no route (older API: 404/501) so session boot can continue.
   Future<Map<String, dynamic>?> bootstrapWorkspace() async {
     try {
-      final res = await _dio.post<Map<String, dynamic>>('/v1/me/bootstrap-workspace');
+      final res =
+          await _dio.post<Map<String, dynamic>>('/v1/me/bootstrap-workspace');
       final d = res.data;
       if (d is Map) return Map<String, dynamic>.from(d as Map);
       return null;
@@ -749,6 +774,7 @@ class HexaApi {
     String? gstNumber,
     String? address,
     String? phone,
+
     /// When true, always sends [contactEmail] (use empty string to clear).
     bool includeContactEmail = false,
     String? contactEmail,
@@ -1039,6 +1065,7 @@ class HexaApi {
   Future<Map<String, dynamic>> unifiedSearch({
     required String businessId,
     required String q,
+
     /// Boosts catalog rows bought from this supplier (trade history + last_supplier_id).
     String? supplierId,
   }) async {
@@ -1082,7 +1109,8 @@ class HexaApi {
         'catalog_item_id': catalogItemId.trim(),
       if (purchaseFrom != null && purchaseFrom.isNotEmpty)
         'purchase_from': purchaseFrom,
-      if (purchaseTo != null && purchaseTo.isNotEmpty) 'purchase_to': purchaseTo,
+      if (purchaseTo != null && purchaseTo.isNotEmpty)
+        'purchase_to': purchaseTo,
     };
 
     if (kDebugMode) {
@@ -1090,7 +1118,8 @@ class HexaApi {
     }
 
     try {
-      final res = await _dio.get<dynamic>(path, queryParameters: queryParameters);
+      final res =
+          await _dio.get<dynamic>(path, queryParameters: queryParameters);
       if (kDebugMode) {
         debugPrint('HexaApi.listTradePurchases status=${res.statusCode}');
       }
@@ -1350,7 +1379,8 @@ class HexaApi {
       '/v1/businesses/$businessId/trade-purchases/last-defaults',
       queryParameters: {
         'catalog_item_id': catalogItemId,
-        if (supplierId != null && supplierId.isNotEmpty) 'supplier_id': supplierId,
+        if (supplierId != null && supplierId.isNotEmpty)
+          'supplier_id': supplierId,
         if (brokerId != null && brokerId.isNotEmpty) 'broker_id': brokerId,
       },
     );
@@ -1387,7 +1417,8 @@ class HexaApi {
       queryParameters: {
         if (from != null && from.isNotEmpty) 'from': from,
         if (to != null && to.isNotEmpty) 'to': to,
-        if (supplierId != null && supplierId.isNotEmpty) 'supplier_id': supplierId,
+        if (supplierId != null && supplierId.isNotEmpty)
+          'supplier_id': supplierId,
       },
     );
     return res.data ?? {};
@@ -1575,8 +1606,10 @@ class HexaApi {
 
   Future<List<Map<String, dynamic>>> listSuppliers({
     required String businessId,
+
     /// Smaller JSON (no address/notes); server skips loading those columns.
     bool compact = true,
+
     /// Only honored when [compact] is true (server cap 5000).
     int? limit,
   }) async {
@@ -1622,7 +1655,8 @@ class HexaApi {
       if (gstNumber != null && gstNumber.isNotEmpty) 'gst_number': gstNumber,
       if (address != null && address.isNotEmpty) 'address': address,
       if (notes != null && notes.isNotEmpty) 'notes': notes,
-      if (defaultPaymentDays != null) 'default_payment_days': defaultPaymentDays,
+      if (defaultPaymentDays != null)
+        'default_payment_days': defaultPaymentDays,
       if (defaultDiscount != null) 'default_discount': defaultDiscount,
       if (defaultDeliveredRate != null)
         'default_delivered_rate': defaultDeliveredRate,
@@ -1954,8 +1988,10 @@ class HexaApi {
       '/v1/businesses/$businessId/catalog/fuzzy-check',
       queryParameters: {
         'name': q,
-        if (supplierId != null && supplierId.isNotEmpty) 'supplier_id': supplierId,
-        if (categoryId != null && categoryId.isNotEmpty) 'category_id': categoryId,
+        if (supplierId != null && supplierId.isNotEmpty)
+          'supplier_id': supplierId,
+        if (categoryId != null && categoryId.isNotEmpty)
+          'category_id': categoryId,
         if (typeId != null && typeId.isNotEmpty) 'type_id': typeId,
       },
     );
@@ -2006,8 +2042,10 @@ class HexaApi {
         'default_unit': defaultUnit,
         'default_supplier_ids': defaultSupplierIds,
         if (defaultBrokerIds.isNotEmpty) 'default_broker_ids': defaultBrokerIds,
-        if (hsnCode != null && hsnCode.trim().isNotEmpty) 'hsn_code': hsnCode.trim(),
-        if (itemCode != null && itemCode.trim().isNotEmpty) 'item_code': itemCode.trim(),
+        if (hsnCode != null && hsnCode.trim().isNotEmpty)
+          'hsn_code': hsnCode.trim(),
+        if (itemCode != null && itemCode.trim().isNotEmpty)
+          'item_code': itemCode.trim(),
         if (typeId != null && typeId.isNotEmpty) 'type_id': typeId,
         if (defaultKgPerBag != null && defaultKgPerBag > 0)
           'default_kg_per_bag': defaultKgPerBag,
@@ -2020,8 +2058,10 @@ class HexaApi {
         if (defaultSaleUnit != null && defaultSaleUnit.isNotEmpty)
           'default_sale_unit': defaultSaleUnit,
         if (taxPercent != null) 'tax_percent': taxPercent,
-        if (defaultLandingCost != null) 'default_landing_cost': defaultLandingCost,
-        if (defaultSellingCost != null) 'default_selling_cost': defaultSellingCost,
+        if (defaultLandingCost != null)
+          'default_landing_cost': defaultLandingCost,
+        if (defaultSellingCost != null)
+          'default_selling_cost': defaultSellingCost,
       },
     );
     return res.data ?? {};
@@ -2255,11 +2295,11 @@ class HexaApi {
   Future<List<Map<String, dynamic>>> listStockAuditRecent({
     required String businessId,
     int limit = 12,
+
     /// Calendar day filter (YYYY-MM-DD). Omit for latest across all days.
     String? on,
   }) async {
-    final capped =
-        limit.clamp(1, HexaApi.stockAuditRecentMaxLimit);
+    final capped = limit.clamp(1, HexaApi.stockAuditRecentMaxLimit);
     final res = await _dio.get<dynamic>(
       '/v1/businesses/$businessId/stock/audit/recent',
       queryParameters: {
@@ -2271,8 +2311,10 @@ class HexaApi {
     if (data is! List) return [];
     return [
       for (final e in data)
-        if (e is Map<String, dynamic>) e
-        else if (e is Map) Map<String, dynamic>.from(e),
+        if (e is Map<String, dynamic>)
+          e
+        else if (e is Map)
+          Map<String, dynamic>.from(e),
     ];
   }
 
@@ -2287,8 +2329,10 @@ class HexaApi {
     if (data is! List) return [];
     return [
       for (final e in data)
-        if (e is Map<String, dynamic>) e
-        else if (e is Map) Map<String, dynamic>.from(e),
+        if (e is Map<String, dynamic>)
+          e
+        else if (e is Map)
+          Map<String, dynamic>.from(e),
     ];
   }
 
@@ -2302,8 +2346,10 @@ class HexaApi {
     if (data is! List) return [];
     return [
       for (final e in data)
-        if (e is Map<String, dynamic>) e
-        else if (e is Map) Map<String, dynamic>.from(e),
+        if (e is Map<String, dynamic>)
+          e
+        else if (e is Map)
+          Map<String, dynamic>.from(e),
     ];
   }
 
@@ -2361,7 +2407,10 @@ class HexaApi {
     final data = res.data;
     final items = data?['items'];
     if (items is! List) return [];
-    return [for (final e in items) if (e is Map) Map<String, dynamic>.from(e)];
+    return [
+      for (final e in items)
+        if (e is Map) Map<String, dynamic>.from(e)
+    ];
   }
 
   Future<Map<String, dynamic>> patchReorderEntry({
@@ -2431,6 +2480,104 @@ class HexaApi {
         'reason': reason.trim(),
         if (notes != null && notes.trim().isNotEmpty) 'notes': notes.trim(),
       },
+    );
+    return res.data ?? {};
+  }
+
+  Future<Map<String, dynamic>> recordPhysicalStockCount({
+    required String businessId,
+    required String itemId,
+    required num countedQty,
+    String? periodStart,
+    String? periodEnd,
+    String? notes,
+  }) async {
+    final res = await _dio.post<Map<String, dynamic>>(
+      '/v1/businesses/$businessId/stock/$itemId/physical-count',
+      data: {
+        'counted_qty': countedQty,
+        if (periodStart != null && periodStart.isNotEmpty)
+          'period_start': periodStart,
+        if (periodEnd != null && periodEnd.isNotEmpty) 'period_end': periodEnd,
+        if (notes != null && notes.trim().isNotEmpty) 'notes': notes.trim(),
+      },
+    );
+    return res.data ?? {};
+  }
+
+  Future<Map<String, dynamic>> getMissingOpeningStock({
+    required String businessId,
+    int limit = 100,
+  }) async {
+    final res = await _dio.get<Map<String, dynamic>>(
+      '/v1/businesses/$businessId/stock/opening/missing',
+      queryParameters: {'limit': limit},
+    );
+    return res.data ?? {'items': <Map<String, dynamic>>[], 'missing_count': 0};
+  }
+
+  Future<Map<String, dynamic>> setOpeningStock({
+    required String businessId,
+    required String itemId,
+    required num qty,
+    bool override = false,
+    String? reason,
+  }) async {
+    final res = await _dio.post<Map<String, dynamic>>(
+      '/v1/businesses/$businessId/stock/$itemId/opening-stock',
+      data: {
+        'qty': qty,
+        'override': override,
+        if (reason != null && reason.trim().isNotEmpty) 'reason': reason.trim(),
+      },
+    );
+    return res.data ?? {};
+  }
+
+  Future<List<Map<String, dynamic>>> listStaffPurchaseLogs({
+    required String businessId,
+    String? itemId,
+    int limit = 100,
+  }) async {
+    final res = await _dio.get<dynamic>(
+      '/v1/businesses/$businessId/stock/staff-purchases',
+      queryParameters: {
+        if (itemId != null && itemId.isNotEmpty) 'item_id': itemId,
+        'limit': limit,
+      },
+    );
+    return _parseJsonMapList(res.data);
+  }
+
+  Future<Map<String, dynamic>> createStaffPurchaseLog({
+    required String businessId,
+    required String itemId,
+    required num qty,
+    num? amount,
+    String? supplierName,
+    String? notes,
+  }) async {
+    final res = await _dio.post<Map<String, dynamic>>(
+      '/v1/businesses/$businessId/stock/staff-purchases',
+      data: {
+        'item_id': itemId,
+        'qty': qty,
+        if (amount != null) 'amount': amount,
+        if (supplierName != null && supplierName.trim().isNotEmpty)
+          'supplier_name': supplierName.trim(),
+        if (notes != null && notes.trim().isNotEmpty) 'notes': notes.trim(),
+      },
+    );
+    return res.data ?? {};
+  }
+
+  Future<Map<String, dynamic>> compareSalesLines({
+    required String businessId,
+    required List<Map<String, dynamic>> lines,
+  }) async {
+    final res = await _dio.post<Map<String, dynamic>>(
+      '/v1/businesses/$businessId/reports/sales-comparison',
+      data: {'lines': lines},
     );
     return res.data ?? {};
   }
@@ -2918,172 +3065,11 @@ class HexaApi {
       '/v1/businesses/$businessId/media/ocr',
       data: {
         'image_base64': imageBase64,
-        if (pasteText != null && pasteText.trim().isNotEmpty) 'paste_text': pasteText.trim(),
+        if (pasteText != null && pasteText.trim().isNotEmpty)
+          'paste_text': pasteText.trim(),
       },
     );
     return res.data ?? {};
-  }
-
-  /// Voice/STT preview stub — requires `ENABLE_VOICE` on server; never auto-saves.
-  Future<Map<String, dynamic>> mediaVoicePreview(
-      {required String businessId, String audioBase64 = 'QQ=='}) async {
-    final res = await _dio.post<Map<String, dynamic>>(
-      '/v1/businesses/$businessId/media/voice',
-      data: {'audio_base64': audioBase64},
-    );
-    return res.data ?? {};
-  }
-
-  /// In-app assistant — preview → confirm; optional [previewToken] + [entryDraft] for YES/NO.
-  ///
-  /// Uses a longer receive timeout (LLM cold start) and retries transient network / gateway errors.
-  Future<Map<String, dynamic>> aiChat({
-    required String businessId,
-    required List<Map<String, dynamic>> messages,
-    String? previewToken,
-    Map<String, dynamic>? entryDraft,
-  }) async {
-    final path = '/v1/businesses/$businessId/ai/chat';
-    final data = <String, dynamic>{
-      'messages': messages,
-      if (previewToken != null) 'preview_token': previewToken,
-      if (entryDraft != null) 'entry_draft': entryDraft,
-    };
-    const receive = Duration(seconds: 120);
-    const maxAttempts = 3;
-    Object? lastError;
-    for (var attempt = 0; attempt < maxAttempts; attempt++) {
-      try {
-        final res = await _dio.post<Map<String, dynamic>>(
-          path,
-          data: data,
-          options: Options(receiveTimeout: receive),
-        );
-        return res.data ?? {};
-      } on DioException catch (e) {
-        lastError = e;
-        final canRetry = attempt < maxAttempts - 1 && _retryableAssistantRequest(e);
-        if (!canRetry) rethrow;
-        await Future<void>.delayed(Duration(milliseconds: 320 * (attempt + 1)));
-      }
-    }
-    throw lastError ?? StateError('aiChat: no attempt');
-  }
-
-  /// Structured intent JSON (server-side; increments usage counter when AI enabled).
-  Future<Map<String, dynamic>> aiIntent({
-    required String businessId,
-    required String text,
-  }) async {
-    final res = await _dio.post<Map<String, dynamic>>(
-      '/v1/businesses/$businessId/ai/intent',
-      data: {'text': text},
-    );
-    return res.data ?? {};
-  }
-
-  Future<Map<String, dynamic>> billingStatus(
-      {required String businessId}) async {
-    final res = await _dio
-        .get<Map<String, dynamic>>('/v1/businesses/$businessId/billing/status');
-    return res.data ?? {};
-  }
-
-  Future<Map<String, dynamic>> billingQuote({
-    required String businessId,
-    String planCode = 'basic',
-    bool whatsappAddon = false,
-    bool aiAddon = false,
-  }) async {
-    final res = await _dio.get<Map<String, dynamic>>(
-      '/v1/businesses/$businessId/billing/quote',
-      queryParameters: {
-        'plan_code': planCode,
-        'whatsapp_addon': whatsappAddon,
-        'ai_addon': aiAddon,
-      },
-    );
-    return res.data ?? {};
-  }
-
-  Future<Map<String, dynamic>> billingCreateOrder({
-    required String businessId,
-    String planCode = 'basic',
-    bool whatsappAddon = false,
-    bool aiAddon = false,
-  }) async {
-    final res = await _dio.post<Map<String, dynamic>>(
-      '/v1/businesses/$businessId/billing/create-order',
-      data: {
-        'plan_code': planCode,
-        'whatsapp_addon': whatsappAddon,
-        'ai_addon': aiAddon,
-      },
-    );
-    return res.data ?? {};
-  }
-
-  Future<Map<String, dynamic>> billingVerify({
-    required String businessId,
-    required String razorpayOrderId,
-    required String razorpayPaymentId,
-    required String razorpaySignature,
-  }) async {
-    final res = await _dio.post<Map<String, dynamic>>(
-      '/v1/businesses/$businessId/billing/verify',
-      data: {
-        'razorpay_order_id': razorpayOrderId,
-        'razorpay_payment_id': razorpayPaymentId,
-        'razorpay_signature': razorpaySignature,
-      },
-    );
-    return res.data ?? {};
-  }
-
-  /// Monthly cloud / infra line (Settings + Home card).
-  Future<Map<String, dynamic>> getCloudCost({required String businessId}) async {
-    final res = await _dio.get<dynamic>('/v1/businesses/$businessId/cloud-cost');
-    final d = res.data;
-    if (d is! Map) return {};
-    return Map<String, dynamic>.from(d);
-  }
-
-  Future<Map<String, dynamic>> patchCloudCost({
-    required String businessId,
-    String? name,
-    double? amountInr,
-    int? dueDay,
-  }) async {
-    final res = await _dio.patch<dynamic>(
-      '/v1/businesses/$businessId/cloud-cost',
-      data: {
-        if (name != null) 'name': name,
-        if (amountInr != null) 'amount_inr': amountInr,
-        if (dueDay != null) 'due_day': dueDay,
-      },
-    );
-    final d = res.data;
-    if (d is! Map) return {};
-    return Map<String, dynamic>.from(d);
-  }
-
-  Future<Map<String, dynamic>> postCloudCostPay({
-    required String businessId,
-    double? amountInr,
-    String? paymentId,
-    String? provider,
-  }) async {
-    final res = await _dio.post<dynamic>(
-      '/v1/businesses/$businessId/cloud-cost/pay',
-      data: {
-        if (amountInr != null) 'amount_inr': amountInr,
-        if (paymentId != null && paymentId.isNotEmpty) 'payment_id': paymentId,
-        if (provider != null && provider.isNotEmpty) 'provider': provider,
-      },
-    );
-    final d = res.data;
-    if (d is! Map) return {};
-    return Map<String, dynamic>.from(d);
   }
 
   Future<Map<String, dynamic>> getChecklistToday({

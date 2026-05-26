@@ -10,6 +10,7 @@ class StockListColumnHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final desktop = MediaQuery.sizeOf(context).width >= 1024;
     final hdr = HexaDsType.label(10).copyWith(
       fontWeight: FontWeight.w800,
       color: const Color(0xFF475569),
@@ -44,6 +45,11 @@ class StockListColumnHeader extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(vertical: 6),
                 child: Text('STOCK', style: hdr),
               ),
+              if (desktop) ...[
+                _metricHeader('PHYSICAL', hdr),
+                _metricHeader('PURCHASED', hdr),
+                _metricHeader('DIFF', hdr),
+              ],
               SizedBox(
                 width: StockTableLayout.statusColWidth,
                 child: Center(
@@ -57,6 +63,16 @@ class StockListColumnHeader extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+
+  Widget _metricHeader(String label, TextStyle style) {
+    return Container(
+      width: StockTableLayout.desktopMetricColWidth,
+      decoration: StockTableLayout.cellDecoration(),
+      alignment: Alignment.center,
+      padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+      child: Text(label, style: style, textAlign: TextAlign.center),
     );
   }
 }

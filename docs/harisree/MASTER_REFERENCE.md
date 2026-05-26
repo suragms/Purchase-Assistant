@@ -20,9 +20,18 @@
 | Wrong domain | `purchase-assistant.vercel.app` is a **different** app — do not use for Harisree |
 | Mobile app | Flutter — iOS 16+ / Android ✅ |
 | Database | Supabase PostgreSQL (free tier) |
-| Migrations | Alembic head `030_catalog_barcode` (029 StockEase ops + 030 barcode on Supabase) |
-| Active blockers | 5 (see ALL_REMAINING_BLOCKERS.md) |
+| Migrations | Local + Supabase Alembic head `036_staff_purchase_logs`; Supabase migrations 033-036 applied on 2026-05-26 |
+| Active blockers | Production QA/deploy validation remains; see `TASKS.md` |
 | Doc hub | `docs/harisree/` (this file) |
+
+### Completion execution plan (2026-05-26)
+
+- Ordered implementation phases are tracked in `docs/harisree/IMPLEMENTATION_PHASES.md`.
+- `TASKS.md` remains the single living board for phase status.
+- Do not deploy `admin_web/` to the Harisree client app.
+- Critical business invariant: purchase creation does not update stock; delivery confirmation updates stock; delivery revoke reverts stock.
+- Feature caveat: Help/manual backup is present, but auto backup schedule/history is deferred.
+- Feature caveat: sales comparison currently supports pasted rows; PDF/XLSX upload extraction remains future work.
 
 ### Owner visibility (shipped 2026-05-19)
 
@@ -53,7 +62,7 @@ powershell -File scripts/verify-deploy.ps1
 **Vercel build:** `bash scripts/vercel-flutter-build.sh` (set `API_BASE_URL` + `GOOGLE_OAUTH_CLIENT_ID` in Vercel Production env).  
 **CORS:** Production API allows `https://purchase-assiastant.vercel.app` and `https://purchase-assastant.vercel.app` (code + set `CORS_ORIGINS` on Render).
 
-**Schema parity:** Alembic head `024_harisree_sql_parity` runs `backend/sql/021–026` + `supabase_019/020`. If pages 500 with “column does not exist”, run `python backend/scripts/schema_audit.py` with production `DATABASE_URL`, then apply missing SQL via Supabase SQL editor or `AUTO_MIGRATE=1` on Render deploy.
+**Schema parity:** Local and Supabase are aligned at Alembic head `036_staff_purchase_logs`. If pages 500 with “column does not exist”, run the schema audit scripts under `backend/scripts/`, then apply the missing migration SQL deliberately through Supabase MCP or the SQL editor.
 
 ---
 

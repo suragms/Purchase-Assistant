@@ -44,7 +44,7 @@ class _StaffReceiveShipmentPageState
     ref.read(tradePurchaseDeliveryOptimisticProvider(p.id).notifier).state =
         true;
     try {
-      await ref.read(hexaApiProvider).markPurchaseDelivered(
+      final updated = await ref.read(hexaApiProvider).markPurchaseDelivered(
             businessId: session.primaryBusiness.id,
             purchaseId: p.id,
             isDelivered: true,
@@ -52,12 +52,20 @@ class _StaffReceiveShipmentPageState
                 ? null
                 : _notesCtrl.text.trim(),
           );
+      final received = TradePurchase.fromJson(updated);
       invalidateWarehouseSurfaces(ref);
       ref.invalidate(tradePurchasesListProvider);
       ref.invalidate(staffPendingDeliveriesProvider);
       ref.invalidate(tradePurchaseDetailProvider(p.id));
       if (!mounted) return;
-      showTopSnack(context, 'Shipment marked as received');
+      final itemCount =
+          received.stockUpdatesCount > 0 ? received.stockUpdatesCount : p.lines.length;
+      showTopSnack(
+        context,
+        itemCount == 1
+            ? 'Shipment received · 1 item added to stock'
+            : 'Shipment received · $itemCount items added to stock',
+      );
       context.pop();
     } catch (_) {
       ref.read(tradePurchaseDeliveryOptimisticProvider(p.id).notifier).state =

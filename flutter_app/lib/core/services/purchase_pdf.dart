@@ -1,10 +1,8 @@
-import 'package:dio/dio.dart';
-import 'package:flutter/foundation.dart';
+import 'dart:typed_data';
+
 import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
-import 'package:printing/printing.dart';
-import 'package:share_plus/share_plus.dart';
 
 import '../calc_engine.dart' show lineMoney;
 import '../models/business_profile.dart';
@@ -12,6 +10,7 @@ import '../models/trade_purchase_models.dart';
 import '../utils/trade_purchase_rate_display.dart';
 import '../units/dynamic_unit_label_engine.dart' as unit_lbl;
 import '../config/app_config.dart';
+import 'pdf_actions.dart';
 import 'pdf_purchase_fonts.dart';
 import 'purchase_invoice_amount_words.dart';
 import 'purchase_invoice_pdf_layout.dart';
@@ -42,25 +41,6 @@ String buildPurchaseSharePdfFileName(
 
 const _muted = PdfColor.fromInt(0xFF475569);
 const _border = PdfColor.fromInt(0xFFD1D5DB);
-
-Future<pw.ImageProvider?> _tryLogo(String? url) async {
-  final u = url?.trim();
-  if (u == null || u.isEmpty) return null;
-  try {
-    final r = await Dio().get<List<int>>(
-      u,
-      options: Options(
-        responseType: ResponseType.bytes,
-        receiveTimeout: const Duration(seconds: 8),
-      ),
-    );
-    final data = r.data;
-    if (data == null || data.isEmpty) return null;
-    return pw.MemoryImage(Uint8List.fromList(data));
-  } catch (_) {
-    return null;
-  }
-}
 
 String _partyName(String? s) =>
     (s == null || s.trim().isEmpty) ? '—' : safePdfText(s.trim());
@@ -180,7 +160,7 @@ Future<pw.Document> buildPurchaseReceiptDoc(
 /// Professional A4 purchase order; footer uses server [TradePurchase.totalAmount].
 Future<pw.Document> buildPurchaseDoc(
     TradePurchase p, BusinessProfile biz) async {
-  final logo = await _tryLogo(biz.logoUrl);
+  final logo = await tryFetchPdfLogo(biz.logoUrl);
   final pdfTheme = await loadPurchasePdfTheme();
   final doc = await buildProfessionalPurchaseInvoiceDoc(
     purchase: p,
@@ -191,113 +171,48 @@ Future<pw.Document> buildPurchaseDoc(
   return doc;
 }
 
-void _logPdfFailure(String op, Object e, StackTrace st) {
-  debugPrint('PDF $op FAILED: $e\n$st');
-  FlutterError.reportError(
-    FlutterErrorDetails(
-      exception: e,
-      stack: st,
-      library: 'purchase_pdf',
-      context: ErrorDescription('PDF $op failed'),
-      silent: true,
-    ),
+Future<Uint8List> buildPurchasePdfBytes(
+    TradePurchase p, BusinessProfile biz) async {
+  final doc = await buildPurchaseDoc(p, biz);
+  return doc.save();
+}
+
+/// Returns a user-facing result; failures never reach [FlutterError.onError].
+Future<PdfActionResult> sharePurchasePdf(TradePurchase p, BusinessProfile biz) {
+  return sharePdfBytes(
+    buildBytes: () => buildPurchasePdfBytes(p, biz),
+    filename: buildPurchaseSharePdfFileName(p),
+    subject: '${p.supplierName ?? 'Purchase'} - ${p.humanId}',
+    source: 'purchase_pdf',
   );
 }
 
-/// Returns `true` if the share sheet completed without throwing.
-/// Failures are swallowed so they never reach [FlutterError.onError].
-Future<bool> sharePurchasePdf(TradePurchase p, BusinessProfile biz) async {
-  try {
-    final doc = await buildPurchaseDoc(p, biz);
-    debugPrint('PDF: Document built successfully');
-    final bytes = await doc.save();
-    debugPrint('PDF: Saved bytes size: ${bytes.length}');
-    final filename = buildPurchaseSharePdfFileName(p);
-    try {
-      debugPrint('PDF: Attempting Printing.sharePdf...');
-      await Printing.sharePdf(bytes: bytes, filename: filename);
-      return true;
-    } catch (printingError) {
-      debugPrint(
-          'PDF: Printing.sharePdf failed ($printingError), trying share_plus');
-      await Share.shareXFiles(
-        [
-          XFile.fromData(
-            bytes,
-            mimeType: 'application/pdf',
-            name: filename,
-          ),
-        ],
-        subject: '${p.supplierName ?? 'Purchase'} — ${p.humanId}',
-      );
-      debugPrint('PDF: share_plus completed');
-      return true;
-    }
-  } catch (e, st) {
-    debugPrint('PDF: sharePurchasePdf exception: $e');
-    _logPdfFailure('share', e, st);
-    return false;
-  }
+Future<PdfActionResult> printPurchasePdf(TradePurchase p, BusinessProfile biz) {
+  return printPdfBytes(
+    buildBytes: () => buildPurchasePdfBytes(p, biz),
+    filename: buildPurchaseSharePdfFileName(p),
+    source: 'purchase_pdf',
+  );
 }
 
-Future<bool> printPurchasePdf(TradePurchase p, BusinessProfile biz) async {
-  try {
-    final doc = await buildPurchaseDoc(p, biz);
-    await Printing.layoutPdf(
-      name: buildPurchaseSharePdfFileName(p),
-      onLayout: (_) async => doc.save(),
-    );
-    return true;
-  } catch (e, st) {
-    debugPrint('PDF Print error: $e');
-    _logPdfFailure('print', e, st);
-    return false;
-  }
+Future<PdfActionResult> downloadPurchasePdf(
+    TradePurchase p, BusinessProfile biz) {
+  return savePdfBytes(
+    buildBytes: () => buildPurchasePdfBytes(p, biz),
+    filename: buildPurchaseSharePdfFileName(p),
+    subject: '${p.supplierName ?? 'Purchase'} - ${p.humanId}',
+    source: 'purchase_pdf',
+  );
 }
 
-Future<bool> downloadPurchasePdf(TradePurchase p, BusinessProfile biz) async {
-  try {
-    final doc = await buildPurchaseDoc(p, biz);
-    await Printing.layoutPdf(
-      name: buildPurchaseSharePdfFileName(p),
-      onLayout: (_) async => doc.save(),
-    );
-    return true;
-  } catch (e, st) {
-    _logPdfFailure('download', e, st);
-    return false;
-  }
-}
-
-Future<bool> sharePurchaseFullInvoicePdf(
+Future<PdfActionResult> sharePurchaseFullInvoicePdf(
   TradePurchase p,
   BusinessProfile biz,
-) async {
-  try {
-    final doc = await buildPurchaseDoc(p, biz);
-    final bytes = await doc.save();
-    final filename = buildPurchaseSharePdfFileName(p, fullInvoice: true);
-    try {
-      await Printing.sharePdf(bytes: bytes, filename: filename);
-      return true;
-    } catch (printingError) {
-      debugPrint(
-          'Printing.sharePdf failed ($printingError), trying share_plus');
-      await Share.shareXFiles(
-        [
-          XFile.fromData(
-            bytes,
-            mimeType: 'application/pdf',
-            name: filename,
-          ),
-        ],
-        subject: '${p.supplierName ?? 'Purchase'} — ${p.humanId}',
-      );
-      return true;
-    }
-  } catch (e, st) {
-    debugPrint('PDF Share error: $e');
-    _logPdfFailure('shareFull', e, st);
-    return false;
-  }
+) {
+  return sharePdfBytes(
+    buildBytes: () => buildPurchasePdfBytes(p, biz),
+    filename: buildPurchaseSharePdfFileName(p, fullInvoice: true),
+    subject: '${p.supplierName ?? 'Purchase'} - ${p.humanId}',
+    source: 'purchase_pdf',
+  );
 }

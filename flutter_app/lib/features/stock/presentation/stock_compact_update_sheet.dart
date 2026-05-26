@@ -47,8 +47,10 @@ class _StockCompactUpdateBody extends ConsumerStatefulWidget {
       _StockCompactUpdateBodyState();
 }
 
-class _StockCompactUpdateBodyState extends ConsumerState<_StockCompactUpdateBody> {
+class _StockCompactUpdateBodyState
+    extends ConsumerState<_StockCompactUpdateBody> {
   bool _saving = false;
+  bool _recordOnly = true;
   late final TextEditingController _qtyCtrl;
   late final TextEditingController _notesCtrl;
   late double _current;
@@ -81,8 +83,18 @@ class _StockCompactUpdateBodyState extends ConsumerState<_StockCompactUpdateBody
 
   String get _unitLabel => _unit.isNotEmpty ? _unit.toUpperCase() : '';
 
+  String? get _lastPhysicalLabel {
+    if (widget.item['physical_stock_qty'] == null) return null;
+    final qty = coerceToDouble(widget.item['physical_stock_qty']);
+    if (!qty.isFinite) return null;
+    final diff = coerceToDouble(widget.item['physical_stock_difference_qty']);
+    final sign = diff >= 0 ? '+' : '';
+    return 'Last physical: ${formatStockQtyNumber(qty)} $_unitLabel'
+        '${diff.abs() > 0.001 ? ' ($sign${formatStockQtyNumber(diff)} diff)' : ''}';
+  }
+
   Future<void> _save() async {
-    if (_reasonType == null) {
+    if (!_recordOnly && _reasonType == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Select a reason')),
       );
@@ -100,17 +112,28 @@ class _StockCompactUpdateBodyState extends ConsumerState<_StockCompactUpdateBody
     try {
       final session = ref.read(sessionProvider);
       if (session == null) return;
-      final reasonLabel = _kReasonChips
-          .firstWhere((e) => e.$2 == _reasonType)
-          .$1;
       final note = _notesCtrl.text.trim();
-      await ref.read(hexaApiProvider).patchStockItem(
-            businessId: session.primaryBusiness.id,
-            itemId: _itemId,
-            newQty: parsed,
-            adjustmentType: _reasonType!,
-            reason: note.isEmpty ? reasonLabel : note,
-          );
+      if (_recordOnly) {
+        final q = ref.read(stockListQueryProvider);
+        await ref.read(hexaApiProvider).recordPhysicalStockCount(
+              businessId: session.primaryBusiness.id,
+              itemId: _itemId,
+              countedQty: parsed,
+              periodStart: q.periodStart,
+              periodEnd: q.periodEnd,
+              notes: note,
+            );
+      } else {
+        final reasonLabel =
+            _kReasonChips.firstWhere((e) => e.$2 == _reasonType).$1;
+        await ref.read(hexaApiProvider).patchStockItem(
+              businessId: session.primaryBusiness.id,
+              itemId: _itemId,
+              newQty: parsed,
+              adjustmentType: _reasonType!,
+              reason: note.isEmpty ? reasonLabel : note,
+            );
+      }
       invalidateWarehouseSurfaces(ref);
       ref.invalidate(stockListProvider);
       ref.invalidate(stockAuditPeriodProvider);
@@ -119,7 +142,7 @@ class _StockCompactUpdateBodyState extends ConsumerState<_StockCompactUpdateBody
         ref.invalidate(stockItemIntelligenceProvider(_itemId));
       }
       final reorder = coerceToDouble(widget.item['reorder_level']);
-      if (reorder > 0 && parsed <= reorder) {
+      if (!_recordOnly && reorder > 0 && parsed <= reorder) {
         final unitLabel = _unit.isNotEmpty ? _unit.toUpperCase() : '';
         await LocalNotificationsService.instance.showLowStockItem(
           itemName: _name,
@@ -141,8 +164,9 @@ class _StockCompactUpdateBodyState extends ConsumerState<_StockCompactUpdateBody
 
   @override
   Widget build(BuildContext context) {
-    final canSave = !_saving && _reasonType != null;
+    final canSave = !_saving && (_recordOnly || _reasonType != null);
     final stockLabel = stockDisplayPrimary(_current, _unit);
+    final lastPhysical = _lastPhysicalLabel;
 
     return Padding(
       padding: EdgeInsets.only(
@@ -182,7 +206,36 @@ class _StockCompactUpdateBodyState extends ConsumerState<_StockCompactUpdateBody
               color: Color(0xFF64748B),
             ),
           ),
+          if (lastPhysical != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 3),
+              child: Text(
+                lastPhysical,
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFF0D6B5E),
+                ),
+              ),
+            ),
           const Divider(height: 20),
+          SegmentedButton<bool>(
+            segments: const [
+              ButtonSegment(
+                value: true,
+                icon: Icon(Icons.inventory_2_outlined, size: 18),
+                label: Text('Count only'),
+              ),
+              ButtonSegment(
+                value: false,
+                icon: Icon(Icons.edit_rounded, size: 18),
+                label: Text('Update stock'),
+              ),
+            ],
+            selected: {_recordOnly},
+            onSelectionChanged: (v) => setState(() => _recordOnly = v.first),
+          ),
+          const SizedBox(height: 14),
           const Text(
             'Physical stock',
             style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
@@ -200,25 +253,27 @@ class _StockCompactUpdateBodyState extends ConsumerState<_StockCompactUpdateBody
               border: const OutlineInputBorder(),
             ),
           ),
-          const SizedBox(height: 14),
-          const Text(
-            'Reason',
-            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
-          ),
-          const SizedBox(height: 6),
-          Wrap(
-            spacing: 6,
-            runSpacing: 6,
-            children: [
-              for (final chip in _kReasonChips)
-                FilterChip(
-                  label: Text(chip.$1, style: const TextStyle(fontSize: 11)),
-                  selected: _reasonType == chip.$2,
-                  onSelected: (_) => setState(() => _reasonType = chip.$2),
-                  visualDensity: VisualDensity.compact,
-                ),
-            ],
-          ),
+          if (!_recordOnly) ...[
+            const SizedBox(height: 14),
+            const Text(
+              'Reason',
+              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 6),
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: [
+                for (final chip in _kReasonChips)
+                  FilterChip(
+                    label: Text(chip.$1, style: const TextStyle(fontSize: 11)),
+                    selected: _reasonType == chip.$2,
+                    onSelected: (_) => setState(() => _reasonType = chip.$2),
+                    visualDensity: VisualDensity.compact,
+                  ),
+              ],
+            ),
+          ],
           const SizedBox(height: 14),
           const Text(
             'Notes (optional)',
@@ -244,7 +299,7 @@ class _StockCompactUpdateBodyState extends ConsumerState<_StockCompactUpdateBody
                       height: 22,
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
-                  : const Text('UPDATE'),
+                  : Text(_recordOnly ? 'RECORD COUNT' : 'UPDATE STOCK'),
             ),
           ),
         ],

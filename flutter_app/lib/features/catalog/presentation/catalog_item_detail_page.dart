@@ -126,7 +126,8 @@ class _CatalogItemDetailPageState extends ConsumerState<CatalogItemDetailPage> {
             const SizedBox(height: 12),
             TextField(
               controller: ctrl,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
               decoration: InputDecoration(
                 labelText: 'Reorder at',
                 hintText: 'e.g. 20',
@@ -170,7 +171,8 @@ class _CatalogItemDetailPageState extends ConsumerState<CatalogItemDetailPage> {
       ref.invalidate(stockOnHandTotalsProvider);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Reorder level set to $v ${unit.toUpperCase()}')),
+        SnackBar(
+            content: Text('Reorder level set to $v ${unit.toUpperCase()}')),
       );
     } on DioException catch (e) {
       if (!mounted) return;
@@ -206,7 +208,8 @@ class _CatalogItemDetailPageState extends ConsumerState<CatalogItemDetailPage> {
     final hsnCtrl =
         TextEditingController(text: item['hsn_code']?.toString() ?? '');
     final taxCtrl = TextEditingController(
-        text: item['tax_percent'] != null ? item['tax_percent'].toString() : '');
+        text:
+            item['tax_percent'] != null ? item['tax_percent'].toString() : '');
     final kgCtrl = TextEditingController(
       text: item['default_kg_per_bag'] != null
           ? item['default_kg_per_bag'].toString()
@@ -273,9 +276,7 @@ class _CatalogItemDetailPageState extends ConsumerState<CatalogItemDetailPage> {
       await ref.read(hexaApiProvider).updateCatalogItem(
             businessId: session.primaryBusiness.id,
             itemId: widget.itemId,
-            name: nameCtrl.text.trim().isEmpty
-                ? null
-                : nameCtrl.text.trim(),
+            name: nameCtrl.text.trim().isEmpty ? null : nameCtrl.text.trim(),
             hsnCode: hsnCtrl.text.trim().isEmpty ? null : hsnCtrl.text.trim(),
             taxPercent: tax,
             defaultLandingCost: land,
@@ -342,8 +343,7 @@ class _CatalogItemDetailPageState extends ConsumerState<CatalogItemDetailPage> {
     if (last == null) return hero;
     final ln = last;
     if (lastAt != null) {
-      hero['last_purchase_date'] =
-          '${lastAt.year.toString().padLeft(4, '0')}-'
+      hero['last_purchase_date'] = '${lastAt.year.toString().padLeft(4, '0')}-'
           '${lastAt.month.toString().padLeft(2, '0')}-'
           '${lastAt.day.toString().padLeft(2, '0')}';
     }
@@ -492,10 +492,10 @@ class _CatalogItemDetailPageState extends ConsumerState<CatalogItemDetailPage> {
 
     final itemAsync = ref.watch(catalogItemDetailProvider(widget.itemId));
     final catsAsync = ref.watch(itemCategoriesListProvider);
-    final purchasesAsync =
-        ref.watch(tradePurchasesCatalogIntelParsedProvider);
+    final purchasesAsync = ref.watch(tradePurchasesCatalogIntelParsedProvider);
 
-    final itemCodeTitle = itemAsync.valueOrNull?['item_code']?.toString().trim();
+    final itemCodeTitle =
+        itemAsync.valueOrNull?['item_code']?.toString().trim();
 
     return Scaffold(
       appBar: AppBar(
@@ -588,8 +588,7 @@ class _CatalogItemDetailPageState extends ConsumerState<CatalogItemDetailPage> {
         ),
         data: (item) {
           final fromScan =
-              GoRouterState.of(context).uri.queryParameters['source'] ==
-                  'scan';
+              GoRouterState.of(context).uri.queryParameters['source'] == 'scan';
           final session = ref.watch(sessionProvider);
           final isStaff = session != null && sessionIsStaff(session);
           String? catName;
@@ -655,14 +654,20 @@ class _CatalogItemDetailPageState extends ConsumerState<CatalogItemDetailPage> {
                         categoryLabel: [
                           if (catName != null && catName.isNotEmpty) catName,
                           item['type_name']?.toString(),
-                        ].whereType<String>().where((s) => s.isNotEmpty).join(' · '),
+                        ]
+                            .whereType<String>()
+                            .where((s) => s.isNotEmpty)
+                            .join(' · '),
                       ),
                       error: (_, __) => _ItemWarehouseHeroHeader(
                         item: item,
                         categoryLabel: [
                           if (catName != null && catName.isNotEmpty) catName,
                           item['type_name']?.toString(),
-                        ].whereType<String>().where((s) => s.isNotEmpty).join(' · '),
+                        ]
+                            .whereType<String>()
+                            .where((s) => s.isNotEmpty)
+                            .join(' · '),
                       ),
                       data: (st) => _ItemWarehouseHeroHeader(
                         item: item,
@@ -670,7 +675,10 @@ class _CatalogItemDetailPageState extends ConsumerState<CatalogItemDetailPage> {
                         categoryLabel: [
                           if (catName != null && catName.isNotEmpty) catName,
                           item['type_name']?.toString(),
-                        ].whereType<String>().where((s) => s.isNotEmpty).join(' · '),
+                        ]
+                            .whereType<String>()
+                            .where((s) => s.isNotEmpty)
+                            .join(' · '),
                         onReorderTap: () => _editReorderLevel(
                           item,
                           st.isEmpty ? null : st,
@@ -694,9 +702,10 @@ class _CatalogItemDetailPageState extends ConsumerState<CatalogItemDetailPage> {
                 const SizedBox(height: 12),
                 Builder(
                   builder: (context) {
-                    final st =
-                        ref.watch(stockItemDetailProvider(widget.itemId)).valueOrNull ??
-                            const <String, dynamic>{};
+                    final st = ref
+                            .watch(stockItemDetailProvider(widget.itemId))
+                            .valueOrNull ??
+                        const <String, dynamic>{};
                     final stockStatus =
                         st['stock_status']?.toString() ?? 'healthy';
                     final showNotifyOwner = isStaff &&
@@ -735,7 +744,8 @@ class _CatalogItemDetailPageState extends ConsumerState<CatalogItemDetailPage> {
                               widget.itemId,
                               item['name']?.toString() ?? 'Item',
                             ),
-                            icon: const Icon(Icons.notifications_active_outlined),
+                            icon:
+                                const Icon(Icons.notifications_active_outlined),
                             label: const Text('Notify owner'),
                           ),
                         ],
@@ -757,8 +767,8 @@ class _CatalogItemDetailPageState extends ConsumerState<CatalogItemDetailPage> {
                   icon: Icons.receipt_long_outlined,
                   child: Builder(
                     builder: (ctx) {
-                      final enriched = _CatalogItemDetailPageState
-                          ._itemWithLastTradeLine(
+                      final enriched =
+                          _CatalogItemDetailPageState._itemWithLastTradeLine(
                         item,
                         purchasesAsync.valueOrNull,
                         widget.itemId,
@@ -775,150 +785,191 @@ class _CatalogItemDetailPageState extends ConsumerState<CatalogItemDetailPage> {
                   title: 'Purchase history',
                   icon: Icons.shopping_cart_outlined,
                   child: purchasesAsync.when(
-                  skipLoadingOnReload: true,
-                  skipLoadingOnRefresh: true,
-                  loading: () => const LinearProgressIndicator(),
-                  error: (_, __) => FriendlyLoadError(
-                    message: 'Could not load purchase history',
-                    onRetry: () =>
-                        ref.invalidate(tradePurchasesCatalogIntelProvider),
-                  ),
-                  data: (purchases) {
-                    final itemName = item['name']?.toString() ?? 'Item';
-                    final hist = itemTradeHistoryRows(
-                      purchases,
-                      widget.itemId,
-                      catalogItemName: itemName,
-                    );
-                    final rangeHist =
-                        itemTradeHistoryRowsInRange(hist, _historyRangeDays);
-                    final baseRecent =
-                        rangeHist.take(_kMaxHistoryRows).toList();
-                    final q = _histSearchCtrl.text.trim().toLowerCase();
-                    final recent = q.isEmpty
-                        ? baseRecent
-                        : baseRecent.where((r) {
-                            if (r.humanId.toLowerCase().contains(q)) {
-                              return true;
-                            }
-                            if (r.supplierName.toLowerCase().contains(q)) {
-                              return true;
-                            }
-                            if (r.line.itemName.toLowerCase().contains(q)) {
-                              return true;
-                            }
-                            return DateFormat('dd MMM yyyy')
-                                .format(r.purchaseDate)
-                                .toLowerCase()
-                                .contains(q);
-                          }).toList();
+                    skipLoadingOnReload: true,
+                    skipLoadingOnRefresh: true,
+                    loading: () => const LinearProgressIndicator(),
+                    error: (_, __) => FriendlyLoadError(
+                      message: 'Could not load purchase history',
+                      onRetry: () =>
+                          ref.invalidate(tradePurchasesCatalogIntelProvider),
+                    ),
+                    data: (purchases) {
+                      final itemName = item['name']?.toString() ?? 'Item';
+                      final hist = itemTradeHistoryRows(
+                        purchases,
+                        widget.itemId,
+                        catalogItemName: itemName,
+                      );
+                      final rangeHist =
+                          itemTradeHistoryRowsInRange(hist, _historyRangeDays);
+                      final baseRecent =
+                          rangeHist.take(_kMaxHistoryRows).toList();
+                      final q = _histSearchCtrl.text.trim().toLowerCase();
+                      final recent = q.isEmpty
+                          ? baseRecent
+                          : baseRecent.where((r) {
+                              if (r.humanId.toLowerCase().contains(q)) {
+                                return true;
+                              }
+                              if (r.supplierName.toLowerCase().contains(q)) {
+                                return true;
+                              }
+                              if (r.line.itemName.toLowerCase().contains(q)) {
+                                return true;
+                              }
+                              return DateFormat('dd MMM yyyy')
+                                  .format(r.purchaseDate)
+                                  .toLowerCase()
+                                  .contains(q);
+                            }).toList();
 
-                    return Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        if (hist.isEmpty) ...[
-                          const SizedBox(height: 8),
-                          Text(
-                            'No purchases recorded for this item yet',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Theme.of(context)
-                                  .colorScheme
-                                  .onSurfaceVariant,
-                            ),
-                          ),
-                        ],
-                        const SizedBox(height: 8),
-                        _ItemSectionLabel(
-                          label:
-                              'Recent history · last $_historyRangeDays days (trade)',
-                        ),
-                        const SizedBox(height: 6),
-                        TextField(
-                          controller: _histSearchCtrl,
-                          decoration: InputDecoration(
-                            hintText: 'Search invoice, supplier, item…',
-                            filled: true,
-                            isDense: true,
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(10),
-                              borderSide: BorderSide.none,
-                            ),
-                            fillColor: Theme.of(context)
-                                .colorScheme
-                                .surfaceContainerHighest
-                                .withValues(alpha: 0.5),
-                            prefixIcon: const Icon(Icons.search, size: 20),
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Wrap(
-                          spacing: 6,
-                          runSpacing: 6,
-                          children: [
-                            ChoiceChip(
-                              label: const Text('30d'),
-                              selected: _historyRangeDays == 30,
-                              onSelected: (_) => setState(
-                                () => _historyRangeDays = 30,
-                              ),
-                            ),
-                            ChoiceChip(
-                              label: const Text('90d'),
-                              selected: _historyRangeDays == 90,
-                              onSelected: (_) => setState(
-                                () => _historyRangeDays = 90,
-                              ),
-                            ),
-                            ChoiceChip(
-                              label: const Text('365d'),
-                              selected: _historyRangeDays == 365,
-                              onSelected: (_) => setState(
-                                () => _historyRangeDays = 365,
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          if (hist.isEmpty) ...[
+                            const SizedBox(height: 8),
+                            Text(
+                              'No purchases recorded for this item yet',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .onSurfaceVariant,
                               ),
                             ),
                           ],
-                        ),
-                        const SizedBox(height: 8),
-                        if (recent.isEmpty)
-                          Text(
-                            hist.isEmpty
-                                ? 'No lines in latest 200 purchases.'
-                                : 'No purchases in this date range.',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Theme.of(context)
-                                  .colorScheme
-                                  .onSurfaceVariant,
-                            ),
-                          )
-                        else
-                          _TradeHistoryLedgerTable(
-                            rows: recent,
-                            cs: Theme.of(context).colorScheme,
-                            fmtDate: _fmtDate,
-                            fmtNum: _fmtNum,
-                            inr: _inr,
-                            hideFinancials: isStaff,
+                          const SizedBox(height: 8),
+                          _ItemSectionLabel(
+                            label:
+                                'Recent history · last $_historyRangeDays days (trade)',
                           ),
-                        const SizedBox(height: 12),
-                        OutlinedButton.icon(
-                          onPressed: () =>
-                              context.push('/catalog/item/${widget.itemId}/ledger'),
-                          icon: const Icon(Icons.receipt_long_outlined),
-                          label: const Text('View full statement & ledger'),
-                        ),
-                        const SizedBox(height: 8),
-                        OutlinedButton.icon(
-                          onPressed: () =>
-                              _exportItemPdf(itemName, rangeHist),
-                          icon: const Icon(Icons.picture_as_pdf_outlined),
-                          label: const Text('Download PDF statement'),
-                        ),
-                      ],
-                    );
-                  },
+                          const SizedBox(height: 6),
+                          TextField(
+                            controller: _histSearchCtrl,
+                            decoration: InputDecoration(
+                              hintText: 'Search invoice, supplier, item…',
+                              filled: true,
+                              isDense: true,
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(10),
+                                borderSide: BorderSide.none,
+                              ),
+                              fillColor: Theme.of(context)
+                                  .colorScheme
+                                  .surfaceContainerHighest
+                                  .withValues(alpha: 0.5),
+                              prefixIcon: const Icon(Icons.search, size: 20),
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Wrap(
+                            spacing: 6,
+                            runSpacing: 6,
+                            children: [
+                              ChoiceChip(
+                                label: const Text('30d'),
+                                selected: _historyRangeDays == 30,
+                                onSelected: (_) => setState(
+                                  () => _historyRangeDays = 30,
+                                ),
+                              ),
+                              ChoiceChip(
+                                label: const Text('90d'),
+                                selected: _historyRangeDays == 90,
+                                onSelected: (_) => setState(
+                                  () => _historyRangeDays = 90,
+                                ),
+                              ),
+                              ChoiceChip(
+                                label: const Text('365d'),
+                                selected: _historyRangeDays == 365,
+                                onSelected: (_) => setState(
+                                  () => _historyRangeDays = 365,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          if (recent.isEmpty)
+                            Text(
+                              hist.isEmpty
+                                  ? 'No lines in latest 200 purchases.'
+                                  : 'No purchases in this date range.',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .onSurfaceVariant,
+                              ),
+                            )
+                          else
+                            _TradeHistoryLedgerTable(
+                              rows: recent,
+                              cs: Theme.of(context).colorScheme,
+                              fmtDate: _fmtDate,
+                              fmtNum: _fmtNum,
+                              inr: _inr,
+                              hideFinancials: isStaff,
+                            ),
+                          const SizedBox(height: 12),
+                          OutlinedButton.icon(
+                            onPressed: () => context
+                                .push('/catalog/item/${widget.itemId}/ledger'),
+                            icon: const Icon(Icons.receipt_long_outlined),
+                            label: const Text('View full statement & ledger'),
+                          ),
+                          const SizedBox(height: 8),
+                          OutlinedButton.icon(
+                            onPressed: () =>
+                                _exportItemPdf(itemName, rangeHist),
+                            icon: const Icon(Icons.picture_as_pdf_outlined),
+                            label: const Text('Download PDF statement'),
+                          ),
+                        ],
+                      );
+                    },
+                  ),
                 ),
+                _CollapsibleDetailSection(
+                  title: 'Staff cash buys',
+                  icon: Icons.point_of_sale_outlined,
+                  child: FutureBuilder<List<Map<String, dynamic>>>(
+                    future: ref.read(sessionProvider) == null
+                        ? Future.value(const <Map<String, dynamic>>[])
+                        : ref.read(hexaApiProvider).listStaffPurchaseLogs(
+                              businessId:
+                                  ref.read(sessionProvider)!.primaryBusiness.id,
+                              itemId: widget.itemId,
+                              limit: 20,
+                            ),
+                    builder: (context, snap) {
+                      final rows = snap.data ?? const <Map<String, dynamic>>[];
+                      if (snap.connectionState == ConnectionState.waiting) {
+                        return const LinearProgressIndicator();
+                      }
+                      if (rows.isEmpty) {
+                        return const Text('No staff cash buys for this item.');
+                      }
+                      final df = DateFormat('d MMM, h:mm a');
+                      return Column(
+                        children: [
+                          for (final r in rows.take(6))
+                            ListTile(
+                              dense: true,
+                              contentPadding: EdgeInsets.zero,
+                              title: Text(
+                                '${_fmtNum(coerceToDouble(r['qty']))} ${(r['unit'] ?? '').toString().toUpperCase()}'
+                                '${r['amount'] != null ? ' · ${_inr(coerceToDouble(r['amount']))}' : ''}',
+                              ),
+                              subtitle: Text(
+                                '${r['supplier_name'] ?? 'No supplier'} · ${r['created_by_name'] ?? 'Staff'}'
+                                '${DateTime.tryParse(r['created_at']?.toString() ?? '') != null ? ' · ${df.format(DateTime.parse(r['created_at'].toString()))}' : ''}',
+                              ),
+                            ),
+                        ],
+                      );
+                    },
+                  ),
                 ),
                 _CollapsibleDetailSection(
                   title: 'Stock history',
@@ -1017,7 +1068,6 @@ class _CatalogItemDetailPageState extends ConsumerState<CatalogItemDetailPage> {
           : null,
     );
   }
-
 }
 
 class _CollapsibleDetailSection extends StatefulWidget {
@@ -1114,16 +1164,18 @@ class _CatalogItemStockSection extends ConsumerWidget {
         }
 
         final intel = intelAsync.valueOrNull ?? const <String, dynamic>{};
-        final purchased = intel['period_purchased_qty'] ?? st['period_purchased_qty'];
+        final purchased =
+            intel['period_purchased_qty'] ?? st['period_purchased_qty'];
         final usage = intel['period_usage_qty'];
-        final moved =
-            intel['ledger_variance_qty'] ?? intel['period_variance_qty'] ?? st['period_variance_qty'];
-        final stockUnit = (intel['stock_unit'] ?? st['stock_unit'] ?? st['unit'] ?? 'piece')
-            .toString();
+        final moved = intel['ledger_variance_qty'] ??
+            intel['period_variance_qty'] ??
+            st['period_variance_qty'];
+        final stockUnit =
+            (intel['stock_unit'] ?? st['stock_unit'] ?? st['unit'] ?? 'piece')
+                .toString();
         final purchasedN = coerceToDouble(purchased);
-        final purchasedLabel = purchasedN > 0
-            ? stockDisplayPrimary(purchasedN, stockUnit)
-            : '—';
+        final purchasedLabel =
+            purchasedN > 0 ? stockDisplayPrimary(purchasedN, stockUnit) : '—';
         final movedN = coerceToDouble(moved);
         final movedLabel =
             movedN.abs() > 0.0001 ? formatStockQtyNumber(movedN) : '—';
@@ -1259,9 +1311,7 @@ class _CatalogItemSuppliersSection extends ConsumerWidget {
             const SizedBox(height: 8),
             for (final id in orderedIds.take(8))
               _SupplierAvatarRow(
-                name: nameBySupplier[id] ??
-                    byId[id]?['name']?.toString() ??
-                    id,
+                name: nameBySupplier[id] ?? byId[id]?['name']?.toString() ?? id,
                 lastPurchase: lastBySupplier[id],
               ),
           ],
@@ -1419,8 +1469,13 @@ class _CatalogItemStockHistorySection extends ConsumerWidget {
                 const Spacer(),
                 TextButton(
                   onPressed: () {
-                    final name = ref.read(catalogItemDetailProvider(itemId)).valueOrNull?['name']?.toString();
-                    final q = name != null && name.isNotEmpty ? '?name=${Uri.encodeComponent(name)}' : '';
+                    final name = ref
+                        .read(catalogItemDetailProvider(itemId))
+                        .valueOrNull?['name']
+                        ?.toString();
+                    final q = name != null && name.isNotEmpty
+                        ? '?name=${Uri.encodeComponent(name)}'
+                        : '';
                     context.push('/stock/$itemId/history$q');
                   },
                   child: const Text('View all'),
@@ -1442,8 +1497,7 @@ class _CatalogItemStockHistorySection extends ConsumerWidget {
               final reason = r['reason']?.toString().trim();
               String? varianceLine;
               if (expected != null && found != null) {
-                varianceLine =
-                    'Variance: expected $expected · found $found';
+                varianceLine = 'Variance: expected $expected · found $found';
               } else if (reason != null &&
                   reason.isNotEmpty &&
                   reason.toLowerCase().contains('variance')) {
@@ -1458,7 +1512,8 @@ class _CatalogItemStockHistorySection extends ConsumerWidget {
                       width: 8,
                       height: 8,
                       margin: const EdgeInsets.only(top: 5),
-                      decoration: BoxDecoration(color: dot, shape: BoxShape.circle),
+                      decoration:
+                          BoxDecoration(color: dot, shape: BoxShape.circle),
                     ),
                     const SizedBox(width: 10),
                     Expanded(
@@ -1477,7 +1532,8 @@ class _CatalogItemStockHistorySection extends ConsumerWidget {
                                 ),
                               ),
                               StockAdjustmentSourceBadge(
-                                adjustmentType: r['adjustment_type']?.toString(),
+                                adjustmentType:
+                                    r['adjustment_type']?.toString(),
                               ),
                             ],
                           ),
@@ -1523,7 +1579,13 @@ class _CatalogItemChangeTimelineSection extends ConsumerWidget {
       itemId,
       catalogItemName: itemName,
     );
-    final events = <({DateTime at, IconData icon, Color color, String title, String subtitle})>[];
+    final events = <({
+      DateTime at,
+      IconData icon,
+      Color color,
+      String title,
+      String subtitle
+    })>[];
     for (final r in purchaseRows.take(4)) {
       events.add((
         at: r.purchaseDate,
@@ -1537,7 +1599,8 @@ class _CatalogItemChangeTimelineSection extends ConsumerWidget {
       final rawAt = row['created_at']?.toString() ??
           row['updated_at']?.toString() ??
           row['audited_at']?.toString();
-      final at = DateTime.tryParse(rawAt ?? '') ?? DateTime.fromMillisecondsSinceEpoch(0);
+      final at = DateTime.tryParse(rawAt ?? '') ??
+          DateTime.fromMillisecondsSinceEpoch(0);
       final oldQ = coerceToDouble(row['old_qty']);
       final newQ = coerceToDouble(row['new_qty']);
       final diff = newQ - oldQ;
@@ -1572,7 +1635,8 @@ class _CatalogItemChangeTimelineSection extends ConsumerWidget {
                 e.title,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800),
+                style:
+                    const TextStyle(fontSize: 13, fontWeight: FontWeight.w800),
               ),
               subtitle: Text(
                 '${df.format(e.at)} · ${e.subtitle}',
@@ -1583,8 +1647,7 @@ class _CatalogItemChangeTimelineSection extends ConsumerWidget {
           Align(
             alignment: Alignment.centerLeft,
             child: TextButton.icon(
-              onPressed: () =>
-                  context.push('/catalog/item/$itemId/timeline'),
+              onPressed: () => context.push('/catalog/item/$itemId/timeline'),
               icon: const Icon(Icons.timeline_rounded, size: 18),
               label: const Text('View full timeline'),
             ),
@@ -1899,9 +1962,10 @@ class _ItemWarehouseHeroHeader extends StatelessWidget {
       'low' => const Color(0xFFE65100),
       _ => const Color(0xFF2E7D32),
     };
-    final unit = (stock?['stock_unit'] ?? stock?['unit'] ?? item['default_unit'] ?? '')
-        .toString()
-        .trim();
+    final unit =
+        (stock?['stock_unit'] ?? stock?['unit'] ?? item['default_unit'] ?? '')
+            .toString()
+            .trim();
     final curN = coerceToDouble(stock?['current_stock']);
     final kgBag = coerceToDoubleNullable(
       stock?['default_kg_per_bag'] ?? item['default_kg_per_bag'],
@@ -2021,7 +2085,8 @@ class _ItemWarehouseHeroHeader extends StatelessWidget {
                 child: _ItemStatBox(
                   label: 'On hand',
                   value: onHandPrimary,
-                  sub: onHandSecondary ?? (unit.isNotEmpty ? unit.toUpperCase() : null),
+                  sub: onHandSecondary ??
+                      (unit.isNotEmpty ? unit.toUpperCase() : null),
                 ),
               ),
               const SizedBox(width: 8),
@@ -2037,10 +2102,11 @@ class _ItemWarehouseHeroHeader extends StatelessWidget {
               Expanded(
                 child: _ItemStatBox(
                   label: 'Rack',
-                  value: (stock!['rack_location']?.toString().trim().isNotEmpty ==
-                          true)
-                      ? stock!['rack_location'].toString()
-                      : '—',
+                  value:
+                      (stock!['rack_location']?.toString().trim().isNotEmpty ==
+                              true)
+                          ? stock!['rack_location'].toString()
+                          : '—',
                 ),
               ),
             ],
@@ -2139,7 +2205,8 @@ class _RecentStockPurchasesSection extends ConsumerWidget {
         if (rows.isEmpty) return const SizedBox.shrink();
 
         return Material(
-          color: theme.colorScheme.surfaceContainerLowest.withValues(alpha: 0.35),
+          color:
+              theme.colorScheme.surfaceContainerLowest.withValues(alpha: 0.35),
           borderRadius: BorderRadius.circular(12),
           child: Padding(
             padding: const EdgeInsets.all(12),
@@ -2179,11 +2246,11 @@ class _RecentStockPurchasesSection extends ConsumerWidget {
 
   static String _fmtPurchaseLine(Map<String, dynamic> r) {
     final at = DateTime.tryParse(r['purchase_date']?.toString() ?? '');
-    final date = at != null
-        ? DateFormat('d MMM yyyy').format(at.toLocal())
-        : '—';
+    final date =
+        at != null ? DateFormat('d MMM yyyy').format(at.toLocal()) : '—';
     final enteredQty = coerceToDouble(r['entered_qty'] ?? r['qty']);
-    final enteredUnit = r['entered_unit']?.toString() ?? r['unit']?.toString() ?? '';
+    final enteredUnit =
+        r['entered_unit']?.toString() ?? r['unit']?.toString() ?? '';
     final qtySu = coerceToDoubleNullable(r['qty_in_stock_unit']);
     final stockU = r['stock_unit']?.toString();
     final dual = dualPurchaseQtyDisplay(
@@ -2200,7 +2267,6 @@ class _RecentStockPurchasesSection extends ConsumerWidget {
     return '$date · $qtyLabel · ₹$rate · $sup';
   }
 }
-
 
 String _fmtDate(String raw) {
   final d = DateTime.tryParse(raw);
@@ -2282,15 +2348,18 @@ class _TradeHistoryLedgerTable extends StatelessWidget {
                     children: [
                       TableRow(
                         decoration: BoxDecoration(
-                          color: cs.surfaceContainerHighest.withValues(alpha: 0.5),
+                          color:
+                              cs.surfaceContainerHighest.withValues(alpha: 0.5),
                         ),
                         children: [
                           _thCell('Date', h(), padEnd: 4),
                           _thCell('Supplier', h()),
                           _thCell('Qty', h()),
                           if (!hideFinancials) ...[
-                            _thCell('Rate', h(), align: TextAlign.end, padStart: 4),
-                            _thCell('Total', h(), align: TextAlign.end, padStart: 4),
+                            _thCell('Rate', h(),
+                                align: TextAlign.end, padStart: 4),
+                            _thCell('Total', h(),
+                                align: TextAlign.end, padStart: 4),
                           ],
                         ],
                       ),
@@ -2494,7 +2563,9 @@ class _EditCatalogItemDefaultsSheetState
                 children: [
                   Text(
                     'Edit item',
-                    style: Theme.of(context).textTheme.titleLarge
+                    style: Theme.of(context)
+                        .textTheme
+                        .titleLarge
                         ?.copyWith(fontWeight: FontWeight.w700),
                   ),
                   const Spacer(),
@@ -2551,7 +2622,8 @@ class _EditCatalogItemDefaultsSheetState
                         context: widget.pickerContext,
                         title: 'Default unit',
                         rows: const [
-                          SearchPickerRow(value: none, title: '— (unspecified)'),
+                          SearchPickerRow(
+                              value: none, title: '— (unspecified)'),
                           SearchPickerRow(value: 'kg', title: 'kg'),
                           SearchPickerRow(value: 'bag', title: 'bag'),
                           SearchPickerRow(value: 'box', title: 'box'),
@@ -2577,8 +2649,8 @@ class _EditCatalogItemDefaultsSheetState
                       controller: widget.kgCtrl,
                       focusNode: _kgFocus,
                       scrollPadding: sp,
-                      keyboardType: const TextInputType.numberWithOptions(
-                          decimal: true),
+                      keyboardType:
+                          const TextInputType.numberWithOptions(decimal: true),
                       decoration: const InputDecoration(
                         labelText: 'Default kg per bag (optional)',
                         hintText: 'e.g. 50',
@@ -2599,8 +2671,8 @@ class _EditCatalogItemDefaultsSheetState
                       controller: widget.ipbCtrl,
                       focusNode: _ipbFocus,
                       scrollPadding: sp,
-                      keyboardType: const TextInputType.numberWithOptions(
-                          decimal: true),
+                      keyboardType:
+                          const TextInputType.numberWithOptions(decimal: true),
                       decoration: const InputDecoration(
                         labelText: 'Items per box',
                         hintText: 'How many pieces per box',
@@ -2613,8 +2685,8 @@ class _EditCatalogItemDefaultsSheetState
                       controller: widget.wptCtrl,
                       focusNode: _wptFocus,
                       scrollPadding: sp,
-                      keyboardType: const TextInputType.numberWithOptions(
-                          decimal: true),
+                      keyboardType:
+                          const TextInputType.numberWithOptions(decimal: true),
                       decoration: const InputDecoration(
                         labelText: 'Liters / weight per tin',
                       ),
@@ -2625,8 +2697,8 @@ class _EditCatalogItemDefaultsSheetState
                     controller: widget.landCtrl,
                     focusNode: _landFocus,
                     scrollPadding: sp,
-                    keyboardType: const TextInputType.numberWithOptions(
-                        decimal: true),
+                    keyboardType:
+                        const TextInputType.numberWithOptions(decimal: true),
                     decoration: const InputDecoration(
                       labelText: 'Default landing (₹)',
                     ),
@@ -2636,8 +2708,8 @@ class _EditCatalogItemDefaultsSheetState
                     controller: widget.sellCtrl,
                     focusNode: _sellFocus,
                     scrollPadding: sp,
-                    keyboardType: const TextInputType.numberWithOptions(
-                        decimal: true),
+                    keyboardType:
+                        const TextInputType.numberWithOptions(decimal: true),
                     decoration: const InputDecoration(
                       labelText: 'Default selling (₹)',
                     ),
@@ -2682,4 +2754,3 @@ class _EditCatalogItemDefaultsSheetState
     );
   }
 }
-

@@ -87,7 +87,8 @@ class _OperationalFilterBody extends ConsumerStatefulWidget {
       _OperationalFilterBodyState();
 }
 
-class _OperationalFilterBodyState extends ConsumerState<_OperationalFilterBody> {
+class _OperationalFilterBodyState
+    extends ConsumerState<_OperationalFilterBody> {
   late String _sort;
   late String _category;
   late String _supplier;
@@ -134,12 +135,12 @@ class _OperationalFilterBodyState extends ConsumerState<_OperationalFilterBody> 
             );
     ref.read(stockOperationalFiltersProvider.notifier).state =
         StockOperationalFilters(
-          missingBarcodeOnly: _missingBarcode,
-          missingItemCodeOnly: _missingItemCode,
-          reorderOnly: _reorderOnly,
-          purchasedInPeriodOnly: _purchasedInPeriodOnly,
-          unit: _unit,
-        );
+      missingBarcodeOnly: _missingBarcode,
+      missingItemCodeOnly: _missingItemCode,
+      reorderOnly: _reorderOnly,
+      purchasedInPeriodOnly: _purchasedInPeriodOnly,
+      unit: _unit,
+    );
     ref.read(stockSelectedItemIdProvider.notifier).state = null;
     widget.subcategoryCtrl?.text = _subcatField.text.trim();
     Navigator.pop(context);
@@ -155,7 +156,8 @@ class _OperationalFilterBodyState extends ConsumerState<_OperationalFilterBody> 
               page: 1,
             );
     ref.read(stockOperationalFiltersProvider.notifier).state =
-        StockOperationalFilters(unit: ref.read(stockOperationalFiltersProvider).unit);
+        StockOperationalFilters(
+            unit: ref.read(stockOperationalFiltersProvider).unit);
     widget.subcategoryCtrl?.clear();
     _subcatField.clear();
     setState(() {
@@ -228,7 +230,8 @@ class _OperationalFilterBodyState extends ConsumerState<_OperationalFilterBody> 
               ),
         ),
         const SizedBox(height: 12),
-        const Text('Stock status', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
+        const Text('Stock status',
+            style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
         const SizedBox(height: 6),
         Wrap(
           spacing: 6,
@@ -283,7 +286,8 @@ class _OperationalFilterBodyState extends ConsumerState<_OperationalFilterBody> 
         ),
         SwitchListTile(
           contentPadding: EdgeInsets.zero,
-          title: const Text('Missing item code', style: TextStyle(fontSize: 14)),
+          title:
+              const Text('Missing item code', style: TextStyle(fontSize: 14)),
           value: _missingItemCode,
           onChanged: (v) => setState(() => _missingItemCode = v),
         ),
@@ -304,13 +308,14 @@ class _OperationalFilterBodyState extends ConsumerState<_OperationalFilterBody> 
                 Text('Category', style: Theme.of(context).textTheme.labelLarge),
                 const SizedBox(height: 8),
                 DropdownButtonFormField<String>(
-                  value: _category.isEmpty ? '' : _category,
+                  initialValue: _category.isEmpty ? '' : _category,
                   decoration: const InputDecoration(
                     border: OutlineInputBorder(),
                     isDense: true,
                   ),
                   items: [
-                    const DropdownMenuItem(value: '', child: Text('All categories')),
+                    const DropdownMenuItem(
+                        value: '', child: Text('All categories')),
                     for (final n in names)
                       DropdownMenuItem(value: n, child: Text(n)),
                   ],
@@ -471,8 +476,9 @@ class _OperationalFilterBodyState extends ConsumerState<_OperationalFilterBody> 
         Text('Sort', style: Theme.of(context).textTheme.labelLarge),
         const SizedBox(height: 8),
         DropdownButtonFormField<String>(
-          value: _sort,
-          decoration: const InputDecoration(border: OutlineInputBorder(), isDense: true),
+          initialValue: _sort,
+          decoration: const InputDecoration(
+              border: OutlineInputBorder(), isDense: true),
           items: const [
             DropdownMenuItem(value: 'name', child: Text('Name A–Z')),
             DropdownMenuItem(value: 'stock_asc', child: Text('Stock ↑')),

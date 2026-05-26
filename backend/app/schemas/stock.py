@@ -56,6 +56,14 @@ class StockListItemOut(BaseModel):
     last_purchase_delivered: bool | None = None
     has_pending_order: bool = False
     pending_order_days: int | None = None
+    physical_stock_qty: Decimal | None = None
+    physical_stock_difference_qty: Decimal | None = None
+    physical_stock_counted_at: datetime | None = None
+    physical_stock_counted_by: str | None = None
+    opening_stock_qty: Decimal | None = None
+    opening_stock_set_at: datetime | None = None
+    opening_stock_set_by: str | None = None
+    opening_stock_locked: bool = False
 
 
 class StockListOut(BaseModel):
@@ -132,6 +140,61 @@ class StockAdjustmentOut(BaseModel):
     variance_delta: Decimal | None = None
 
     model_config = {"from_attributes": True}
+
+
+class PhysicalStockCountIn(BaseModel):
+    counted_qty: Decimal = Field(ge=0, max_digits=12, decimal_places=3)
+    period_start: str | None = None
+    period_end: str | None = None
+    notes: str | None = Field(default=None, max_length=500)
+
+
+class PhysicalStockCountOut(BaseModel):
+    id: uuid.UUID
+    item_id: uuid.UUID
+    item_name: str | None = None
+    system_qty: Decimal
+    counted_qty: Decimal
+    difference_qty: Decimal
+    purchased_qty: Decimal | None = None
+    stock_unit: str | None = None
+    period_start: str | None = None
+    period_end: str | None = None
+    notes: str | None = None
+    counted_by_name: str | None = None
+    counted_at: datetime
+
+
+class OpeningStockIn(BaseModel):
+    qty: Decimal = Field(ge=0, max_digits=12, decimal_places=3)
+    override: bool = False
+    reason: str | None = Field(default=None, max_length=500)
+
+
+class OpeningStockMissingOut(BaseModel):
+    items: list[StockListItemOut]
+    missing_count: int
+
+
+class StaffPurchaseLogIn(BaseModel):
+    item_id: uuid.UUID
+    qty: Decimal = Field(gt=0, max_digits=12, decimal_places=3)
+    amount: Decimal | None = Field(default=None, ge=0, max_digits=12, decimal_places=2)
+    supplier_name: str | None = Field(default=None, max_length=255)
+    notes: str | None = Field(default=None, max_length=500)
+
+
+class StaffPurchaseLogOut(BaseModel):
+    id: uuid.UUID
+    item_id: uuid.UUID
+    item_name: str
+    qty: Decimal
+    unit: str | None = None
+    amount: Decimal | None = None
+    supplier_name: str | None = None
+    notes: str | None = None
+    created_by_name: str | None = None
+    created_at: datetime
 
 
 class StockIntelligenceOut(BaseModel):

@@ -18,6 +18,7 @@ import '../../../core/providers/catalog_providers.dart';
 import '../../../core/router/navigation_ext.dart';
 import '../../../core/services/broker_statement_pdf.dart';
 import '../../../core/services/item_statement_pdf.dart';
+import '../../../core/services/pdf_actions.dart';
 import '../../../core/services/supplier_statement_pdf.dart';
 import '../../../core/theme/hexa_colors.dart';
 import '../../../core/utils/line_display.dart';
@@ -305,9 +306,10 @@ class _TradeLedgerPageState extends ConsumerState<TradeLedgerPage> {
     if (session == null || data.isEmpty) return;
     final biz = ref.read(invoiceBusinessProfileProvider);
     try {
+      PdfActionResult? result;
       if (widget.kind == TradeLedgerKind.supplier) {
         final first = data.first;
-        await shareSupplierStatementPdf(
+        result = await shareSupplierStatementPdf(
           business: biz,
           supplierName: first.supplierName ?? 'Supplier',
           supplierAddress: first.supplierAddress,
@@ -319,7 +321,7 @@ class _TradeLedgerPageState extends ConsumerState<TradeLedgerPage> {
         );
       } else if (widget.kind == TradeLedgerKind.broker) {
         final first = data.first;
-        await shareBrokerStatementPdf(
+        result = await shareBrokerStatementPdf(
           business: biz,
           brokerName: first.brokerName ?? 'Broker',
           brokerPhone: first.brokerPhone,
@@ -333,7 +335,7 @@ class _TradeLedgerPageState extends ConsumerState<TradeLedgerPage> {
           data: (m) => m['name']?.toString() ?? 'Item',
           orElse: () => 'Item',
         );
-        await shareItemStatementPdf(
+        result = await shareItemStatementPdf(
           business: biz,
           itemName: name,
           purchases: data,
@@ -341,11 +343,17 @@ class _TradeLedgerPageState extends ConsumerState<TradeLedgerPage> {
           toDate: _to,
         );
       }
+      if (mounted && result != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(result.message)),
+        );
+      }
     } catch (e, st) {
       logSilencedApiError(e, st);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not create PDF. ${userFacingError(e)}')),
+          SnackBar(
+              content: Text('Could not create PDF. ${userFacingError(e)}')),
         );
       }
     }
@@ -440,16 +448,14 @@ class _TradeLedgerPageState extends ConsumerState<TradeLedgerPage> {
             ? data.first
             : null;
     final entityTitle = switch (widget.kind) {
-      TradeLedgerKind.supplier => (firstInAll?.supplierName
-                  ?.trim()
-                  .isNotEmpty ==
-              true)
-          ? firstInAll!.supplierName!
-          : 'Supplier',
-      TradeLedgerKind.broker => (firstInAll?.brokerName?.trim().isNotEmpty ==
-              true)
-          ? firstInAll!.brokerName!
-          : 'Broker',
+      TradeLedgerKind.supplier =>
+        (firstInAll?.supplierName?.trim().isNotEmpty == true)
+            ? firstInAll!.supplierName!
+            : 'Supplier',
+      TradeLedgerKind.broker =>
+        (firstInAll?.brokerName?.trim().isNotEmpty == true)
+            ? firstInAll!.brokerName!
+            : 'Broker',
       TradeLedgerKind.catalogItem => itemAsync?.maybeWhen(
             data: (m) => m['name']?.toString() ?? 'Item',
             orElse: () => 'Item',
@@ -460,9 +466,8 @@ class _TradeLedgerPageState extends ConsumerState<TradeLedgerPage> {
     final supplierPhoneStrip = widget.kind == TradeLedgerKind.supplier
         ? (firstInAll?.supplierPhone ?? firstInAll?.supplierWhatsapp)
         : null;
-    final brokerPhoneStrip = widget.kind == TradeLedgerKind.broker
-        ? firstInAll?.brokerPhone
-        : null;
+    final brokerPhoneStrip =
+        widget.kind == TradeLedgerKind.broker ? firstInAll?.brokerPhone : null;
     final addr = widget.kind == TradeLedgerKind.supplier
         ? firstInAll?.supplierAddress
         : null;
@@ -487,8 +492,7 @@ class _TradeLedgerPageState extends ConsumerState<TradeLedgerPage> {
           if (widget.kind == TradeLedgerKind.catalogItem)
             IconButton(
               tooltip: 'Item details',
-              onPressed: () =>
-                  context.push('/catalog/item/${widget.entityId}'),
+              onPressed: () => context.push('/catalog/item/${widget.entityId}'),
               icon: const Icon(Icons.edit_outlined),
             ),
           if (widget.kind == TradeLedgerKind.supplier ||
@@ -573,230 +577,242 @@ class _TradeLedgerPageState extends ConsumerState<TradeLedgerPage> {
                                         fontWeight: FontWeight.w900,
                                       ),
                                     ),
-                              if (widget.kind == TradeLedgerKind.catalogItem &&
-                                  itemAsync != null)
-                                itemAsync.when(
-                                  data: (m) {
-                                    final h = m['hsn_code']?.toString();
-                                    if (h == null || h.isEmpty) {
-                                      return const SizedBox.shrink();
-                                    }
-                                    return Padding(
-                                      padding: const EdgeInsets.only(top: 4),
-                                      child: Text(
-                                        'HSN: $h',
+                                    if (widget.kind ==
+                                            TradeLedgerKind.catalogItem &&
+                                        itemAsync != null)
+                                      itemAsync.when(
+                                        data: (m) {
+                                          final h = m['hsn_code']?.toString();
+                                          if (h == null || h.isEmpty) {
+                                            return const SizedBox.shrink();
+                                          }
+                                          return Padding(
+                                            padding:
+                                                const EdgeInsets.only(top: 4),
+                                            child: Text(
+                                              'HSN: $h',
+                                              style: tt.bodySmall?.copyWith(
+                                                color: cs.onSurfaceVariant,
+                                              ),
+                                            ),
+                                          );
+                                        },
+                                        loading: () => const SizedBox.shrink(),
+                                        error: (_, __) =>
+                                            const SizedBox.shrink(),
+                                      ),
+                                    if (widget.kind ==
+                                            TradeLedgerKind.supplier &&
+                                        supplierPhoneStrip != null &&
+                                        supplierPhoneStrip
+                                            .trim()
+                                            .isNotEmpty) ...[
+                                      const SizedBox(height: 4),
+                                      InkWell(
+                                        onTap: () =>
+                                            dialPhone(supplierPhoneStrip),
+                                        child: Row(
+                                          children: [
+                                            Icon(Icons.call_outlined,
+                                                size: 16, color: cs.primary),
+                                            const SizedBox(width: 6),
+                                            Expanded(
+                                              child: Text(
+                                                supplierPhoneStrip,
+                                                overflow: TextOverflow.ellipsis,
+                                                maxLines: 1,
+                                                style: tt.bodySmall?.copyWith(
+                                                  fontWeight: FontWeight.w600,
+                                                  color: cs.onSurfaceVariant,
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                    if (widget.kind == TradeLedgerKind.broker &&
+                                        brokerPhoneStrip != null &&
+                                        brokerPhoneStrip.trim().isNotEmpty) ...[
+                                      const SizedBox(height: 4),
+                                      InkWell(
+                                        onTap: () =>
+                                            dialPhone(brokerPhoneStrip),
+                                        child: Row(
+                                          children: [
+                                            Icon(Icons.call_outlined,
+                                                size: 16, color: cs.primary),
+                                            const SizedBox(width: 6),
+                                            Expanded(
+                                              child: Text(
+                                                brokerPhoneStrip,
+                                                overflow: TextOverflow.ellipsis,
+                                                maxLines: 1,
+                                                style: tt.bodySmall?.copyWith(
+                                                  fontWeight: FontWeight.w600,
+                                                  color: cs.onSurfaceVariant,
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                    if (widget.kind ==
+                                            TradeLedgerKind.catalogItem &&
+                                        catalogLead != null) ...[
+                                      _ledgerCatalogPartyBlock(
+                                        context: context,
+                                        label: 'Supplier',
+                                        name: catalogLead.supplierName,
+                                        phoneRaw: catalogLead.supplierPhone ??
+                                            catalogLead.supplierWhatsapp,
+                                      ),
+                                      _ledgerCatalogPartyBlock(
+                                        context: context,
+                                        label: 'Broker',
+                                        name: catalogLead.brokerName,
+                                        phoneRaw: catalogLead.brokerPhone,
+                                      ),
+                                    ],
+                                    if (addr != null &&
+                                        addr.trim().isNotEmpty) ...[
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        addr,
+                                        overflow: TextOverflow.ellipsis,
+                                        maxLines: 2,
                                         style: tt.bodySmall?.copyWith(
                                           color: cs.onSurfaceVariant,
                                         ),
                                       ),
-                                    );
-                                  },
-                                  loading: () => const SizedBox.shrink(),
-                                  error: (_, __) => const SizedBox.shrink(),
-                                ),
-                              if (widget.kind == TradeLedgerKind.supplier &&
-                                  supplierPhoneStrip != null &&
-                                  supplierPhoneStrip.trim().isNotEmpty) ...[
-                                const SizedBox(height: 4),
-                                InkWell(
-                                  onTap: () => dialPhone(supplierPhoneStrip),
-                                  child: Row(
-                                    children: [
-                                      Icon(Icons.call_outlined,
-                                          size: 16, color: cs.primary),
-                                      const SizedBox(width: 6),
-                                      Expanded(
-                                        child: Text(
-                                          supplierPhoneStrip,
-                                          overflow: TextOverflow.ellipsis,
-                                          maxLines: 1,
-                                          style: tt.bodySmall?.copyWith(
-                                            fontWeight: FontWeight.w600,
-                                            color: cs.onSurfaceVariant,
-                                          ),
+                                    ],
+                                    if (gst != null &&
+                                        gst.trim().isNotEmpty) ...[
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        'GSTIN: $gst',
+                                        style: tt.labelSmall?.copyWith(
+                                          color: cs.onSurfaceVariant,
+                                          fontFamily: 'monospace',
                                         ),
                                       ),
                                     ],
-                                  ),
-                                ),
-                              ],
-                              if (widget.kind == TradeLedgerKind.broker &&
-                                  brokerPhoneStrip != null &&
-                                  brokerPhoneStrip.trim().isNotEmpty) ...[
-                                const SizedBox(height: 4),
-                                InkWell(
-                                  onTap: () => dialPhone(brokerPhoneStrip),
-                                  child: Row(
-                                    children: [
-                                      Icon(Icons.call_outlined,
-                                          size: 16, color: cs.primary),
-                                      const SizedBox(width: 6),
-                                      Expanded(
-                                        child: Text(
-                                          brokerPhoneStrip,
-                                          overflow: TextOverflow.ellipsis,
-                                          maxLines: 1,
-                                          style: tt.bodySmall?.copyWith(
-                                            fontWeight: FontWeight.w600,
-                                            color: cs.onSurfaceVariant,
-                                          ),
+                                    const SizedBox(height: 8),
+                                    Text(
+                                      'Period: ${fmt.format(_from)} – ${fmt.format(_to)}',
+                                      style: tt.labelMedium?.copyWith(
+                                        fontWeight: FontWeight.w700,
+                                        color: chipTeal,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 10),
+                                    Text(
+                                      'Summary',
+                                      style: tt.titleSmall?.copyWith(
+                                        fontWeight: FontWeight.w900,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Text(
+                                      '${data.length} purchase(s) in view · Bill total ${_inr(sumTotal.round())}',
+                                      style: tt.bodyMedium?.copyWith(
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                    if (units.isNotEmpty) ...[
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        'Units: '
+                                        '${[
+                                          if ((units['bag'] ?? 0) > 0)
+                                            'Bags ${units['bag']!.toStringAsFixed(0)}',
+                                          if ((units['box'] ?? 0) > 0)
+                                            'Box ${units['box']!.toStringAsFixed(0)}',
+                                          if ((units['tin'] ?? 0) > 0)
+                                            'Tin ${units['tin']!.toStringAsFixed(0)}',
+                                        ].join(' · ')}',
+                                        style: tt.bodySmall?.copyWith(
+                                          fontWeight: FontWeight.w600,
+                                          color: cs.onSurfaceVariant,
                                         ),
                                       ),
                                     ],
-                                  ),
-                                ),
-                              ],
-                              if (widget.kind == TradeLedgerKind.catalogItem &&
-                                  catalogLead != null) ...[
-                                _ledgerCatalogPartyBlock(
-                                  context: context,
-                                  label: 'Supplier',
-                                  name: catalogLead.supplierName,
-                                  phoneRaw: catalogLead.supplierPhone ??
-                                      catalogLead.supplierWhatsapp,
-                                ),
-                                _ledgerCatalogPartyBlock(
-                                  context: context,
-                                  label: 'Broker',
-                                  name: catalogLead.brokerName,
-                                  phoneRaw: catalogLead.brokerPhone,
-                                ),
-                              ],
-                              if (addr != null && addr.trim().isNotEmpty) ...[
-                                const SizedBox(height: 4),
-                                Text(
-                                  addr,
-                                  overflow: TextOverflow.ellipsis,
-                                  maxLines: 2,
-                                  style: tt.bodySmall?.copyWith(
-                                    color: cs.onSurfaceVariant,
-                                  ),
-                                ),
-                              ],
-                              if (gst != null && gst.trim().isNotEmpty) ...[
-                                const SizedBox(height: 4),
-                                Text(
-                                  'GSTIN: $gst',
-                                  style: tt.labelSmall?.copyWith(
-                                    color: cs.onSurfaceVariant,
-                                    fontFamily: 'monospace',
-                                  ),
-                                ),
-                              ],
-                              const SizedBox(height: 8),
-                              Text(
-                                'Period: ${fmt.format(_from)} – ${fmt.format(_to)}',
-                                style: tt.labelMedium?.copyWith(
-                                  fontWeight: FontWeight.w700,
-                                  color: chipTeal,
+                                    if (sumProfit.abs() > 0.0001) ...[
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        'Line profit (est.) ${_inr(sumProfit.round())}',
+                                        style: tt.bodySmall?.copyWith(
+                                          fontWeight: FontWeight.w800,
+                                          color: const Color(0xFF0F766E),
+                                        ),
+                                      ),
+                                    ],
+                                    if (widget.kind ==
+                                        TradeLedgerKind.broker) ...[
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        'Commission (stored %) ${_inr(commSum.round())}',
+                                        style: tt.bodySmall?.copyWith(
+                                          fontWeight: FontWeight.w800,
+                                          color: HexaColors.brandPrimary,
+                                        ),
+                                      ),
+                                    ],
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      'Outstanding (unpaid balance) ${_inr(sumDue.round())}',
+                                      style: tt.bodyMedium?.copyWith(
+                                        fontWeight: FontWeight.w800,
+                                        color: sumDue > 1
+                                            ? HexaColors.warning
+                                            : cs.onSurfaceVariant,
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
-                              const SizedBox(height: 10),
-                              Text(
-                                'Summary',
-                                style: tt.titleSmall?.copyWith(
-                                  fontWeight: FontWeight.w900,
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              Text(
-                                '${data.length} purchase(s) in view · Bill total ${_inr(sumTotal.round())}',
-                                style: tt.bodyMedium?.copyWith(
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                              if (units.isNotEmpty) ...[
-                                const SizedBox(height: 4),
-                                Text(
-                                  'Units: '
-                                  '${[
-                                    if ((units['bag'] ?? 0) > 0)
-                                      'Bags ${units['bag']!.toStringAsFixed(0)}',
-                                    if ((units['box'] ?? 0) > 0)
-                                      'Box ${units['box']!.toStringAsFixed(0)}',
-                                    if ((units['tin'] ?? 0) > 0)
-                                      'Tin ${units['tin']!.toStringAsFixed(0)}',
-                                  ].join(' · ')}',
-                                  style: tt.bodySmall?.copyWith(
-                                    fontWeight: FontWeight.w600,
-                                    color: cs.onSurfaceVariant,
-                                  ),
-                                ),
-                              ],
-                              if (sumProfit.abs() > 0.0001) ...[
-                                const SizedBox(height: 4),
-                                Text(
-                                  'Line profit (est.) ${_inr(sumProfit.round())}',
-                                  style: tt.bodySmall?.copyWith(
-                                    fontWeight: FontWeight.w800,
-                                    color: const Color(0xFF0F766E),
-                                  ),
-                                ),
-                              ],
-                              if (widget.kind == TradeLedgerKind.broker) ...[
-                                const SizedBox(height: 4),
-                                Text(
-                                  'Commission (stored %) ${_inr(commSum.round())}',
-                                  style: tt.bodySmall?.copyWith(
-                                    fontWeight: FontWeight.w800,
-                                    color: HexaColors.brandPrimary,
-                                  ),
-                                ),
-                              ],
-                              const SizedBox(height: 4),
-                              Text(
-                                'Outstanding (unpaid balance) ${_inr(sumDue.round())}',
-                                style: tt.bodyMedium?.copyWith(
-                                  fontWeight: FontWeight.w800,
-                                  color: sumDue > 1
-                                      ? HexaColors.warning
-                                      : cs.onSurfaceVariant,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: [
-                          for (final label in <String>[
-                            'This Month',
-                            '3 Months',
-                            '6 Months',
-                            'All',
-                            'Custom',
-                          ])
-                            ChoiceChip(
-                              label: Text(
-                                label,
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: _dateChip == label
-                                      ? FontWeight.w800
-                                      : FontWeight.w600,
-                                  color: _dateChip == label
-                                      ? Colors.white
-                                      : chipText,
-                                ),
-                              ),
-                              selected: _dateChip == label,
-                              onSelected: (_) {
-                                if (label == 'Custom') {
-                                  unawaited(_pickCustomRange());
-                                } else {
-                                  _applyDateChip(label);
-                                }
-                              },
-                              selectedColor: chipTeal,
-                              backgroundColor: cs.surfaceContainerHighest
-                                  .withValues(alpha: 0.6),
-                              side: BorderSide.none,
                             ),
-                        ],
-                      ),
+                            const SizedBox(height: 8),
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 8,
+                              children: [
+                                for (final label in <String>[
+                                  'This Month',
+                                  '3 Months',
+                                  '6 Months',
+                                  'All',
+                                  'Custom',
+                                ])
+                                  ChoiceChip(
+                                    label: Text(
+                                      label,
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: _dateChip == label
+                                            ? FontWeight.w800
+                                            : FontWeight.w600,
+                                        color: _dateChip == label
+                                            ? Colors.white
+                                            : chipText,
+                                      ),
+                                    ),
+                                    selected: _dateChip == label,
+                                    onSelected: (_) {
+                                      if (label == 'Custom') {
+                                        unawaited(_pickCustomRange());
+                                      } else {
+                                        _applyDateChip(label);
+                                      }
+                                    },
+                                    selectedColor: chipTeal,
+                                    backgroundColor: cs.surfaceContainerHighest
+                                        .withValues(alpha: 0.6),
+                                    side: BorderSide.none,
+                                  ),
+                              ],
+                            ),
                           ],
                         ),
                       ),
@@ -826,11 +842,10 @@ class _TradeLedgerPageState extends ConsumerState<TradeLedgerPage> {
                               cs: cs,
                               tt: tt,
                               kind: widget.kind,
-                              onOpen: () =>
-                                  context.push(
-                                    '/purchase/detail/${p.id}',
-                                    extra: p,
-                                  ),
+                              onOpen: () => context.push(
+                                '/purchase/detail/${p.id}',
+                                extra: p,
+                              ),
                               onDelete: () => _confirmDelete(p),
                             )),
                     ],
@@ -906,7 +921,8 @@ class _LedgerPurchaseCard extends StatelessWidget {
                     child: Text(
                       _inr(p.totalAmount.round()),
                       textAlign: TextAlign.end,
-                      style: tt.titleSmall?.copyWith(fontWeight: FontWeight.w900),
+                      style:
+                          tt.titleSmall?.copyWith(fontWeight: FontWeight.w900),
                     ),
                   ),
                 ],

@@ -2,10 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../core/auth/session_notifier.dart';
 import '../../../core/json_coerce.dart';
 import '../../../core/providers/stock_providers.dart';
-import '../../../core/router/navigation_ext.dart';
 
 /// Client-side reorder urgency from stock + recent purchase velocity.
 class ReorderSuggestionsPage extends ConsumerWidget {
@@ -40,8 +38,8 @@ class ReorderSuggestionsPage extends ConsumerWidget {
           final suggestions = <({Map<String, dynamic> item, double days})>[];
           for (final item in items) {
             final stock = coerceToDouble(item['current_stock']);
-            final purchased30 =
-                coerceToDouble(item['period_purchased_qty'] ?? item['purchased_qty_period']);
+            final purchased30 = coerceToDouble(
+                item['period_purchased_qty'] ?? item['purchased_qty_period']);
             final daily = purchased30 > 0 ? purchased30 / 30 : 0.0;
             if (daily <= 0 || stock <= 0) continue;
             final days = stock / daily;
@@ -108,7 +106,8 @@ class ReorderSuggestionsPage extends ConsumerWidget {
 
   static String stockDisplay(double qty, String unit) {
     final r = qty.roundToDouble();
-    final q = (qty - r).abs() < 0.001 ? r.round().toString() : qty.toStringAsFixed(1);
+    final q =
+        (qty - r).abs() < 0.001 ? r.round().toString() : qty.toStringAsFixed(1);
     return '$q $unit'.trim();
   }
 }

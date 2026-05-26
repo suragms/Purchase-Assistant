@@ -1,7 +1,7 @@
 """SSOT: ensure schema exists, backfill supplier_id / catalog_item_id, NOT NULL (Postgres).
 
 Revision ID: 007_ssot_tp_fks
-Revises: 006_cloud_pay_meta
+Revises: 005_item_code_tpline
 """
 
 from __future__ import annotations
@@ -14,7 +14,7 @@ from sqlalchemy import inspect, text
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 
 revision: str = "007_ssot_tp_fks"
-down_revision: Union[str, None] = "006_cloud_pay_meta"
+down_revision: Union[str, None] = "005_item_code_tpline"
 branch_labels = None
 depends_on = None
 

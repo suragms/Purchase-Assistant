@@ -17,6 +17,7 @@ import '../../../core/widgets/friendly_load_error.dart';
 import '../../../core/design_system/hexa_ds_tokens.dart';
 import '../../../core/theme/hexa_colors.dart';
 import '../../../core/widgets/list_skeleton.dart';
+import '../../../core/services/pdf_actions.dart';
 import '../../stock/presentation/widgets/edit_item_code_sheet.dart';
 import '../services/barcode_pdf_service.dart';
 
@@ -125,23 +126,27 @@ class _BarcodePrintPageState extends ConsumerState<BarcodePrintPage> {
         await _openLabelPdfPreview(bytes, label);
         return;
       }
-      await guardWebPrint(() => Printing.layoutPdf(
-            name: _singleBarcodeFilename(label),
-            onLayout: (_) async => bytes,
-          ));
+      final result = await printPdfBytes(
+        buildBytes: () async => bytes,
+        filename: _singleBarcodeFilename(label),
+        source: 'barcode_print_page',
+      );
+      if (!result.ok && mounted) _showSnack(result.message);
     } on BarcodeOperationException catch (e) {
       if (!mounted) return;
       _showSnack(e.message);
     } catch (e, st) {
       logBarcodeOperationError(e, st);
       if (!mounted) return;
-      _showSnack(barcodeMessageForUser(e, ctx: BarcodeOperationContext.singlePrint));
+      _showSnack(
+          barcodeMessageForUser(e, ctx: BarcodeOperationContext.singlePrint));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
   }
 
-  Future<void> _openLabelPdfPreview(Uint8List bytes, BarcodeLabelData label) async {
+  Future<void> _openLabelPdfPreview(
+      Uint8List bytes, BarcodeLabelData label) async {
     if (!mounted) return;
     final name = _singleBarcodeFilename(label);
     await Navigator.of(context).push<void>(
@@ -152,20 +157,19 @@ class _BarcodePrintPageState extends ConsumerState<BarcodePrintPage> {
             actions: [
               TextButton.icon(
                 onPressed: () async {
-                  try {
-                    await Printing.sharePdf(bytes: bytes, filename: name);
-                  } catch (e, st) {
-                    logBarcodeOperationError(e, st);
-                    if (!ctx.mounted) return;
-                    ScaffoldMessenger.of(ctx).showSnackBar(
-                      SnackBar(
-                        content: const Text(
-                          'Download blocked. Allow pop-ups/downloads, or use the browser print menu.',
-                        ),
-                        duration: Duration(seconds: 6),
-                      ),
-                    );
-                  }
+                  final result = await savePdfBytes(
+                    buildBytes: () async => bytes,
+                    filename: name,
+                    subject: 'Barcode label - ${label.itemName}',
+                    source: 'barcode_print_page',
+                  );
+                  if (!ctx.mounted) return;
+                  ScaffoldMessenger.of(ctx).showSnackBar(
+                    SnackBar(
+                      content: Text(result.message),
+                      duration: const Duration(seconds: 5),
+                    ),
+                  );
                 },
                 icon: const Icon(Icons.download_rounded),
                 label: const Text('Download PDF'),
@@ -203,17 +207,21 @@ class _BarcodePrintPageState extends ConsumerState<BarcodePrintPage> {
         await _openLabelPdfPreview(bytes, label);
         return;
       }
-      await Printing.sharePdf(
-        bytes: bytes,
+      final result = await savePdfBytes(
+        buildBytes: () async => bytes,
         filename: _singleBarcodeFilename(label),
+        subject: 'Barcode label - ${label.itemName}',
+        source: 'barcode_print_page',
       );
+      if (!result.ok && mounted) _showSnack(result.message);
     } on BarcodeOperationException catch (e) {
       if (!mounted) return;
       _showSnack(e.message);
     } catch (e, st) {
       logBarcodeOperationError(e, st);
       if (!mounted) return;
-      _showSnack(barcodeMessageForUser(e, ctx: BarcodeOperationContext.singlePrint));
+      _showSnack(
+          barcodeMessageForUser(e, ctx: BarcodeOperationContext.singlePrint));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -351,7 +359,8 @@ class _BarcodePrintPageState extends ConsumerState<BarcodePrintPage> {
                   style: const TextStyle(fontSize: 10, color: Colors.black54),
                 ),
               if (label.unit != null && label.unit!.isNotEmpty)
-                Text('Unit: ${label.unit}', style: const TextStyle(fontSize: 10)),
+                Text('Unit: ${label.unit}',
+                    style: const TextStyle(fontSize: 10)),
               if (_size != LabelSize.small &&
                   _showLastPurchase &&
                   label.lastPurchaseDate != null) ...[

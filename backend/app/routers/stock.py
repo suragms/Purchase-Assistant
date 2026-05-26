@@ -26,6 +26,8 @@ from app.models import (
 from app.models.notification import AppNotification
 from app.models.reorder_list import ReorderListEntry
 from app.models.stock_adjustment import StockAdjustmentLog
+from app.models.stock_physical_count import StockPhysicalCount
+from app.models.staff_purchase_log import StaffPurchaseLog
 from app.schemas.stock_audit import StockVerifyCountIn
 from app.schemas.stock import (
     BarcodeBatchIn,
@@ -44,8 +46,14 @@ from app.schemas.stock import (
     ReorderListOut,
     ReorderListPatchIn,
     InventorySummaryOut,
+    OpeningStockIn,
+    OpeningStockMissingOut,
+    PhysicalStockCountIn,
+    PhysicalStockCountOut,
     StockTotalsOut,
     StockAlertsSummaryOut,
+    StaffPurchaseLogIn,
+    StaffPurchaseLogOut,
 )
 from app.services import trade_query as tq
 from app.services.staff_view import should_redact_financials
@@ -158,6 +166,10 @@ def _item_to_list_row(
     last_purchase_delivered: bool | None = None,
     has_pending_order: bool = False,
     pending_order_days: int | None = None,
+    physical_stock_qty: Decimal | None = None,
+    physical_stock_difference_qty: Decimal | None = None,
+    physical_stock_counted_at: datetime | None = None,
+    physical_stock_counted_by: str | None = None,
 ) -> StockListItemOut:
     cur = catalog_stock_qty(item)
     ro = catalog_reorder(item)
@@ -201,6 +213,14 @@ def _item_to_list_row(
         last_purchase_delivered=last_purchase_delivered,
         has_pending_order=has_pending_order,
         pending_order_days=pending_order_days,
+        physical_stock_qty=physical_stock_qty,
+        physical_stock_difference_qty=physical_stock_difference_qty,
+        physical_stock_counted_at=physical_stock_counted_at,
+        physical_stock_counted_by=physical_stock_counted_by,
+        opening_stock_qty=getattr(item, "opening_stock_qty", None),
+        opening_stock_set_at=getattr(item, "opening_stock_set_at", None),
+        opening_stock_set_by=getattr(item, "opening_stock_set_by", None),
+        opening_stock_locked=bool(getattr(item, "opening_stock_locked", False)),
     )
 
 
@@ -236,6 +256,27 @@ async def _pending_order_meta_map(
             pd = oldest.date() if isinstance(oldest, datetime) else oldest
             days = max(0, (today - pd).days)
         out[cid] = (True, days)
+    return out
+
+
+async def _latest_physical_count_map(
+    db: AsyncSession,
+    business_id: uuid.UUID,
+    item_ids: list[uuid.UUID],
+) -> dict[uuid.UUID, StockPhysicalCount]:
+    if not item_ids:
+        return {}
+    r = await db.execute(
+        select(StockPhysicalCount)
+        .where(
+            StockPhysicalCount.business_id == business_id,
+            StockPhysicalCount.item_id.in_(item_ids),
+        )
+        .order_by(StockPhysicalCount.item_id, desc(StockPhysicalCount.counted_at))
+    )
+    out: dict[uuid.UUID, StockPhysicalCount] = {}
+    for row in r.scalars().all():
+        out.setdefault(row.item_id, row)
     return out
 
 
@@ -694,11 +735,13 @@ async def list_stock(
     trade_meta = await _last_trade_meta_map(db, catalog_items)
     ledger_map = await _ledger_variance_map(db, business_id, catalog_items)
     pending_meta = await _pending_order_meta_map(db, business_id, item_ids)
+    physical_meta = await _latest_physical_count_map(db, business_id, item_ids)
     items: list[StockListItemOut] = []
     for item, cat_name, type_name in rows:
         sup = await _supplier_name(db, item)
         meta = trade_meta.get(item.id, (None, None))
         pend = pending_meta.get(item.id, (False, None))
+        phys = physical_meta.get(item.id)
         purchased = period_map.get(item.id) if include_period else None
         usage = period_usage_map.get(item.id) if include_period else None
         cur = catalog_stock_qty(item)
@@ -728,6 +771,10 @@ async def list_stock(
                 last_purchase_delivered=meta[1],
                 has_pending_order=pend[0],
                 pending_order_days=pend[1],
+                physical_stock_qty=phys.counted_qty if phys else None,
+                physical_stock_difference_qty=phys.difference_qty if phys else None,
+                physical_stock_counted_at=phys.counted_at if phys else None,
+                physical_stock_counted_by=phys.counted_by_name if phys else None,
             )
         )
     return StockListOut(items=items, total=total, page=page, per_page=per_page)
@@ -1409,6 +1456,139 @@ async def delete_reorder_entry(
     await db.commit()
 
 
+@router.get("/opening/missing", response_model=OpeningStockMissingOut)
+async def missing_opening_stock(
+    business_id: uuid.UUID,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    _m: Annotated[Membership, Depends(require_membership)],
+    limit: int = Query(100, ge=1, le=500),
+):
+    r = await db.execute(
+        select(CatalogItem, ItemCategory.name, CategoryType.name)
+        .join(ItemCategory, CatalogItem.category_id == ItemCategory.id)
+        .outerjoin(CategoryType, CatalogItem.type_id == CategoryType.id)
+        .where(
+            CatalogItem.business_id == business_id,
+            CatalogItem.deleted_at.is_(None),
+            CatalogItem.opening_stock_set_at.is_(None),
+        )
+        .order_by(CatalogItem.name.asc())
+        .limit(limit)
+    )
+    rows = r.all()
+    count_r = await db.execute(
+        select(func.count(CatalogItem.id)).where(
+            CatalogItem.business_id == business_id,
+            CatalogItem.deleted_at.is_(None),
+            CatalogItem.opening_stock_set_at.is_(None),
+        )
+    )
+    items = [
+        _item_to_list_row(item, cat_name, type_name, await _supplier_name(db, item))
+        for item, cat_name, type_name in rows
+    ]
+    return OpeningStockMissingOut(
+        items=items,
+        missing_count=int(count_r.scalar_one() or 0),
+    )
+
+
+def _staff_purchase_out(log: StaffPurchaseLog) -> StaffPurchaseLogOut:
+    return StaffPurchaseLogOut(
+        id=log.id,
+        item_id=log.item_id,
+        item_name=log.item_name,
+        qty=log.qty,
+        unit=log.unit,
+        amount=log.amount,
+        supplier_name=log.supplier_name,
+        notes=log.notes,
+        created_by_name=log.created_by_name,
+        created_at=log.created_at,
+    )
+
+
+@router.get("/staff-purchases", response_model=list[StaffPurchaseLogOut])
+async def list_staff_purchase_logs(
+    business_id: uuid.UUID,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    _m: Annotated[Membership, Depends(require_membership)],
+    item_id: uuid.UUID | None = Query(None),
+    limit: int = Query(100, ge=1, le=500),
+):
+    stmt = select(StaffPurchaseLog).where(StaffPurchaseLog.business_id == business_id)
+    if item_id:
+        stmt = stmt.where(StaffPurchaseLog.item_id == item_id)
+    r = await db.execute(stmt.order_by(desc(StaffPurchaseLog.created_at)).limit(limit))
+    return [_staff_purchase_out(log) for log in r.scalars().all()]
+
+
+@router.post("/staff-purchases", response_model=StaffPurchaseLogOut)
+async def create_staff_purchase_log(
+    business_id: uuid.UUID,
+    body: StaffPurchaseLogIn,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
+    _membership: Annotated[Membership, Depends(require_permission("stock_edit"))],
+):
+    r = await db.execute(
+        select(CatalogItem).where(
+            CatalogItem.id == body.item_id,
+            CatalogItem.business_id == business_id,
+            CatalogItem.deleted_at.is_(None),
+        )
+    )
+    item = r.scalar_one_or_none()
+    if not item:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Item not found")
+    old_qty = catalog_stock_qty(item)
+    qty = Decimal(body.qty)
+    new_qty = old_qty + qty
+    display = _user_display(user)
+    item.current_stock = new_qty
+    item.last_stock_updated_at = datetime.now(timezone.utc)
+    item.last_stock_updated_by = display
+    unit = catalog_stock_unit(item)
+    log = StaffPurchaseLog(
+        business_id=business_id,
+        item_id=item.id,
+        item_name=item.name,
+        qty=qty,
+        unit=unit,
+        amount=body.amount,
+        supplier_name=body.supplier_name.strip() if body.supplier_name else None,
+        notes=body.notes.strip() if body.notes else None,
+        created_by=user.id,
+        created_by_name=display,
+    )
+    db.add(log)
+    db.add(
+        StockAdjustmentLog(
+            business_id=business_id,
+            item_id=item.id,
+            old_qty=old_qty,
+            new_qty=new_qty,
+            adjustment_type="purchase",
+            reason="Staff cash purchase",
+            updated_by=user.id,
+            updated_by_name=display,
+        )
+    )
+    await log_staff_activity(
+        db,
+        business_id=business_id,
+        user=user,
+        action_type="STAFF_CASH_PURCHASE",
+        item_id=item.id,
+        item_name=item.name,
+        before_data={"qty": float(old_qty)},
+        after_data={"qty": float(new_qty), "cash_qty": float(qty)},
+    )
+    await db.commit()
+    await db.refresh(log)
+    return _staff_purchase_out(log)
+
+
 @router.get("/{item_id}/intelligence", response_model=StockIntelligenceOut)
 async def get_stock_intelligence(
     business_id: uuid.UUID,
@@ -1520,7 +1700,17 @@ async def get_stock_item(
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Item not found")
     item, cat_name, type_name = row
     sup = await _supplier_name(db, item)
-    base = _item_to_list_row(item, cat_name, type_name, sup)
+    phys = (await _latest_physical_count_map(db, business_id, [item_id])).get(item_id)
+    base = _item_to_list_row(
+        item,
+        cat_name,
+        type_name,
+        sup,
+        physical_stock_qty=phys.counted_qty if phys else None,
+        physical_stock_difference_qty=phys.difference_qty if phys else None,
+        physical_stock_counted_at=phys.counted_at if phys else None,
+        physical_stock_counted_by=phys.counted_by_name if phys else None,
+    )
     purchases = await _recent_purchases(db, item)
     if should_redact_financials(_m.role):
         purchases = [
@@ -1528,6 +1718,148 @@ async def get_stock_item(
             for p in purchases
         ]
     return StockDetailOut(**base.model_dump(), recent_purchases=purchases)
+
+
+def _physical_count_out(
+    item: CatalogItem,
+    entry: StockPhysicalCount,
+) -> PhysicalStockCountOut:
+    return PhysicalStockCountOut(
+        id=entry.id,
+        item_id=entry.item_id,
+        item_name=item.name,
+        system_qty=entry.system_qty,
+        counted_qty=entry.counted_qty,
+        difference_qty=entry.difference_qty,
+        purchased_qty=entry.purchased_qty,
+        stock_unit=entry.stock_unit,
+        period_start=entry.period_start.isoformat() if entry.period_start else None,
+        period_end=entry.period_end.isoformat() if entry.period_end else None,
+        notes=entry.notes,
+        counted_by_name=entry.counted_by_name,
+        counted_at=entry.counted_at,
+    )
+
+
+@router.post("/{item_id}/opening-stock", response_model=StockDetailOut)
+async def set_opening_stock(
+    business_id: uuid.UUID,
+    item_id: uuid.UUID,
+    body: OpeningStockIn,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
+    membership: Annotated[Membership, Depends(require_permission("stock_edit"))],
+):
+    role = (membership.role or "").lower()
+    if role not in {"owner", "admin"} and not user.is_super_admin:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Only owners can set opening stock")
+    r = await db.execute(
+        select(CatalogItem).where(
+            CatalogItem.id == item_id,
+            CatalogItem.business_id == business_id,
+            CatalogItem.deleted_at.is_(None),
+        )
+    )
+    item = r.scalar_one_or_none()
+    if not item:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Item not found")
+    already_locked = bool(getattr(item, "opening_stock_locked", False))
+    if already_locked and not body.override:
+        raise HTTPException(status.HTTP_409_CONFLICT, detail="Opening stock is locked")
+    qty = Decimal(body.qty)
+    old_qty = catalog_stock_qty(item)
+    display = _user_display(user)
+    now = datetime.now(timezone.utc)
+    item.current_stock = qty
+    item.opening_stock_qty = qty
+    item.opening_stock_set_at = now
+    item.opening_stock_set_by = display
+    item.opening_stock_locked = True
+    item.last_stock_updated_at = now
+    item.last_stock_updated_by = display
+    db.add(
+        StockAdjustmentLog(
+            business_id=business_id,
+            item_id=item_id,
+            old_qty=old_qty,
+            new_qty=qty,
+            adjustment_type="opening_stock",
+            reason=body.reason.strip() if body.reason else "Opening stock setup",
+            updated_by=user.id,
+            updated_by_name=display,
+        )
+    )
+    await log_staff_activity(
+        db,
+        business_id=business_id,
+        user=user,
+        action_type="OPENING_STOCK_SET",
+        item_id=item_id,
+        item_name=item.name,
+        before_data={"qty": float(old_qty), "locked": already_locked},
+        after_data={"qty": float(qty), "override": body.override},
+    )
+    await db.commit()
+    return await get_stock_item(business_id, item_id, db, membership)
+
+
+@router.post("/{item_id}/physical-count", response_model=PhysicalStockCountOut)
+async def record_physical_stock_count(
+    business_id: uuid.UUID,
+    item_id: uuid.UUID,
+    body: PhysicalStockCountIn,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
+    _membership: Annotated[Membership, Depends(require_permission("stock_edit"))],
+):
+    """Record a physical count without mutating authoritative stock."""
+    r = await db.execute(
+        select(CatalogItem).where(
+            CatalogItem.id == item_id,
+            CatalogItem.business_id == business_id,
+            CatalogItem.deleted_at.is_(None),
+        )
+    )
+    item = r.scalar_one_or_none()
+    if not item:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Item not found")
+    counted = Decimal(body.counted_qty)
+    system_qty = catalog_stock_qty(item)
+    ps, pe = _parse_period_dates(body.period_start, body.period_end)
+    purchased_qty: Decimal | None = None
+    if ps and pe:
+        purchased_qty = (await _period_purchased_map(db, business_id, [item_id], ps, pe)).get(
+            item_id, Decimal("0")
+        )
+    display = _user_display(user)
+    entry = StockPhysicalCount(
+        business_id=business_id,
+        item_id=item_id,
+        system_qty=system_qty,
+        counted_qty=counted,
+        difference_qty=counted - system_qty,
+        purchased_qty=purchased_qty,
+        stock_unit=catalog_stock_unit(item),
+        period_start=ps,
+        period_end=pe,
+        notes=body.notes.strip() if body.notes else None,
+        counted_by=user.id,
+        counted_by_name=display,
+    )
+    db.add(entry)
+    await log_staff_activity(
+        db,
+        business_id=business_id,
+        user=user,
+        action_type="PHYSICAL_STOCK_COUNT",
+        item_id=item_id,
+        item_name=item.name,
+        before_data={"system_qty": float(system_qty)},
+        after_data={"counted_qty": float(counted), "difference_qty": float(counted - system_qty)},
+    )
+    await db.commit()
+    await db.refresh(entry)
+    return _physical_count_out(item, entry)
 
 
 @router.post("/{item_id}/verify-count", response_model=StockDetailOut)

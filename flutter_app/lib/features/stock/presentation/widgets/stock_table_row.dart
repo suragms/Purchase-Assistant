@@ -35,6 +35,7 @@ class StockTableRow extends StatelessWidget {
         item['stock_unit']?.toString() ?? item['unit']?.toString() ?? 'piece';
     final status =
         (item['stock_status']?.toString() ?? 'healthy').toLowerCase();
+    final desktop = MediaQuery.sizeOf(context).width >= 1024;
     final missingBarcode = item['missing_barcode'] == true;
     final updatedAt = item['last_stock_updated_at']?.toString();
     final updatedBy = item['last_stock_updated_by']?.toString();
@@ -59,13 +60,22 @@ class StockTableRow extends StatelessWidget {
 
     String? ownerFooter;
     if (!isStaffMode) {
+      final physical = coerceToDouble(item['physical_stock_qty']);
+      final physicalDiff =
+          coerceToDouble(item['physical_stock_difference_qty']);
       final purchased = coerceToDouble(item['period_purchased_qty']);
-      if (purchased > 0) {
+      if (item['physical_stock_qty'] != null && physical.isFinite) {
+        final sign = physicalDiff >= 0 ? '+' : '';
+        ownerFooter =
+            'Physical ${formatStockQtyNumber(physical)} ${stockUnit.toUpperCase()}'
+            ' • Diff $sign${formatStockQtyNumber(physicalDiff)}';
+      } else if (purchased > 0) {
         final diff = cur - purchased;
         if (diff.abs() > 0.001) {
           final sign = diff >= 0 ? '+' : '';
           ownerFooter =
-              'Diff: $sign${formatStockQtyNumber(diff)} ${stockUnit.toUpperCase()}';
+              'Purchased ${formatStockQtyNumber(purchased)} ${stockUnit.toUpperCase()}'
+              ' • Diff $sign${formatStockQtyNumber(diff)}';
         }
       }
     }
@@ -81,7 +91,8 @@ class StockTableRow extends StatelessWidget {
             constraints: const BoxConstraints(
               minHeight: StockTableLayout.rowMinHeight,
             ),
-            decoration: StockTableLayout.rowDecoration(isFirst: isFirstRow).copyWith(
+            decoration:
+                StockTableLayout.rowDecoration(isFirst: isFirstRow).copyWith(
               border: isLowOrOut
                   ? const Border(
                       left: BorderSide(color: Color(0xFFDC2626), width: 3),
@@ -163,6 +174,31 @@ class StockTableRow extends StatelessWidget {
                       fontSize: 14,
                     ),
                   ),
+                  if (desktop) ...[
+                    _metricCell(
+                      item['physical_stock_qty'] == null
+                          ? '-'
+                          : formatStockQtyNumber(
+                              coerceToDouble(item['physical_stock_qty']),
+                            ),
+                    ),
+                    _metricCell(
+                      item['period_purchased_qty'] == null
+                          ? '-'
+                          : formatStockQtyNumber(
+                              coerceToDouble(item['period_purchased_qty']),
+                            ),
+                    ),
+                    _metricCell(
+                      item['physical_stock_difference_qty'] == null
+                          ? '-'
+                          : _signedQty(
+                              coerceToDouble(
+                                item['physical_stock_difference_qty'],
+                              ),
+                            ),
+                    ),
+                  ],
                   SizedBox(
                     width: StockTableLayout.statusColWidth,
                     child: Center(
@@ -176,5 +212,26 @@ class StockTableRow extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  Widget _metricCell(String value) {
+    return Container(
+      width: StockTableLayout.desktopMetricColWidth,
+      decoration: StockTableLayout.cellDecoration(),
+      alignment: Alignment.center,
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+      child: Text(
+        value,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: HexaDsType.label(10).copyWith(fontWeight: FontWeight.w800),
+      ),
+    );
+  }
+
+  String _signedQty(double value) {
+    if (!value.isFinite) return '-';
+    final sign = value >= 0 ? '+' : '';
+    return '$sign${formatStockQtyNumber(value)}';
   }
 }

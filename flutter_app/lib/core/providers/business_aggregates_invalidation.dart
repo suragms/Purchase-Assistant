@@ -5,7 +5,6 @@ import '../services/offline_store.dart';
 import 'home_breakdown_tab_providers.dart';
 import 'home_dashboard_provider.dart';
 import 'home_owner_dashboard_providers.dart';
-import 'cloud_expense_provider.dart';
 import 'analytics_breakdown_providers.dart';
 import 'business_write_revision.dart';
 import 'analytics_kpi_provider.dart';
@@ -87,7 +86,6 @@ void _doInvalidateBusinessAggregates(dynamic ref) {
   ref.invalidate(homeDashboardDataProvider);
   ref.invalidate(homeShellReportsProvider);
   ref.invalidate(homeInventorySummaryProvider);
-  ref.invalidate(cloudCostProvider);
   ref.invalidate(homeInsightsProvider);
   ref.invalidate(contactsSuppliersEnrichedProvider);
   ref.invalidate(contactsBrokersEnrichedProvider);
