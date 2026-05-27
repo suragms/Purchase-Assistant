@@ -147,6 +147,10 @@ def _empty_snapshot_for_dates(ds_from: str, ds_to: str) -> dict[str, Any]:
             "profit_percent": None,
             "total_qty": 0.0,
             "pending_delivery_count": 0,
+            "supplier_count": 0,
+            "broker_count": 0,
+            "received_delivery_count": 0,
+            "negative_stock_count": 0,
         },
         "unit_totals": {
             "total_kg": 0.0,
@@ -650,6 +654,42 @@ async def _compute_trade_dashboard_snapshot_payload(
         (await execute_with_retry(lambda: db.execute(pend_q))).scalar() or 0
     )
 
+    sup_q = (
+        select(func.count(func.distinct(TradePurchase.supplier_id)))
+        .select_from(TradePurchase)
+        .where(bf, TradePurchase.supplier_id.isnot(None))
+    )
+    bro_q = (
+        select(func.count(func.distinct(TradePurchase.broker_id)))
+        .select_from(TradePurchase)
+        .where(bf, TradePurchase.broker_id.isnot(None))
+    )
+    recv_q = (
+        select(func.count())
+        .select_from(TradePurchase)
+        .where(
+            bf,
+            TradePurchase.is_delivered.is_(True),
+        )
+    )
+    neg_q = (
+        select(func.count())
+        .select_from(CatalogItem)
+        .where(
+            CatalogItem.business_id == business_id,
+            CatalogItem.deleted_at.is_(None),
+            CatalogItem.current_stock < 0,
+        )
+    )
+    supplier_count = int((await execute_with_retry(lambda: db.execute(sup_q))).scalar() or 0)
+    broker_count = int((await execute_with_retry(lambda: db.execute(bro_q))).scalar() or 0)
+    received_delivery_count = int(
+        (await execute_with_retry(lambda: db.execute(recv_q))).scalar() or 0
+    )
+    negative_stock_count = int(
+        (await execute_with_retry(lambda: db.execute(neg_q))).scalar() or 0
+    )
+
     return {
         "from": date_from.isoformat(),
         "to": date_to.isoformat(),
@@ -662,6 +702,10 @@ async def _compute_trade_dashboard_snapshot_payload(
             "profit_percent": round(profit_percent, 2) if profit_percent is not None else None,
             "total_qty": total_qty,
             "pending_delivery_count": pending_delivery_count,
+            "supplier_count": supplier_count,
+            "broker_count": broker_count,
+            "received_delivery_count": received_delivery_count,
+            "negative_stock_count": negative_stock_count,
         },
         "unit_totals": {
             "total_kg": float(roll_row["total_kg"] or 0),

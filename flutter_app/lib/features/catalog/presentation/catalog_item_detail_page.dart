@@ -2283,6 +2283,21 @@ class _ItemWarehouseHeroHeader extends StatelessWidget {
     final onHandSecondary = onHandDual.secondary ??
         stockDisplaySecondary(curN, unitForDisplay, kgBag, kgTin);
 
+    final openingQty = coerceToDoubleNullable(item['opening_stock_qty']);
+    final openingLocked = item['opening_stock_locked'] == true;
+    final diffQty =
+        openingQty == null ? null : (curN - openingQty);
+
+    final lastUpdatedAtIso = item['last_stock_updated_at']?.toString();
+    final lastUpdatedBy =
+        item['last_stock_updated_by']?.toString().trim().isNotEmpty == true
+            ? item['last_stock_updated_by']?.toString().trim()
+            : null;
+    final lastUpdatedAt = DateTime.tryParse(lastUpdatedAtIso ?? '');
+    final lastUpdatedDisplay = lastUpdatedAt == null
+        ? '—'
+        : DateFormat('d MMM yyyy · HH:mm').format(lastUpdatedAt.toLocal());
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -2407,6 +2422,58 @@ class _ItemWarehouseHeroHeader extends StatelessWidget {
                               true)
                           ? stock!['rack_location'].toString()
                           : '—',
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: _ItemStatBox(
+                  label: 'Opening',
+                  value: openingQty == null
+                      ? '—'
+                      : stockDisplayPrimary(openingQty, unitForDisplay),
+                  sub: openingLocked ? 'Locked' : 'Pending',
+                  onTap: () {
+                    final code =
+                        item['item_code']?.toString().trim() ?? '';
+                    if (code.isEmpty) return;
+                    context.push(
+                      '/stock/opening-setup?q=${Uri.encodeComponent(code)}',
+                    );
+                  },
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _ItemStatBox(
+                  label: 'Current',
+                  value: onHandPrimary,
+                  sub: onHandSecondary ?? (unit.isNotEmpty ? unit.toUpperCase() : null),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: _ItemStatBox(
+                  label: 'Diff',
+                  value: diffQty == null
+                      ? '—'
+                      : stockDisplayPrimary(diffQty, unitForDisplay),
+                  sub: openingQty == null ? null : 'Current − Opening',
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _ItemStatBox(
+                  label: 'Last update',
+                  value: lastUpdatedDisplay,
+                  sub: lastUpdatedBy,
                 ),
               ),
             ],

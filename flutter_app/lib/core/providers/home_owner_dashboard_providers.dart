@@ -340,7 +340,7 @@ final homeRecentActivityFeedProvider =
     final results = await Future.wait([
       api.listTradePurchases(
         businessId: bid,
-        limit: 24,
+        limit: 15,
         offset: 0,
         status: 'all',
         purchaseFrom: q.from,
@@ -441,7 +441,7 @@ final homeRecentActivityFeedProvider =
   }
 
   items.sort((a, b) => b.at.compareTo(a.at));
-  return items.take(12).toList();
+  return items.take(15).toList();
 });
 
 /// @deprecated Use [homeRecentActivityFeedProvider] only — kept for invalidation parity.

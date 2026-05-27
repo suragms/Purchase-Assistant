@@ -662,6 +662,10 @@ Verification gates per phase:
 | WH-02 | P0 | Done | Stock list period fields + `GET /stock/{id}/intelligence` |
 | WH-03 | P1 | Done | Dense stock rows, intelligence page, period sync from analytics range |
 | WH-04 | P1 | Done | Purchase detail sticky action bar (owner); staff delivery in body |
+| PO-DETAIL-REBUILD | P0 | Done | PO detail: pdf locale + export service, action bar, compact layout, desktop split, `PO_SUPPLIER_DD_MMM_YYYY` filenames — see `docs/harisree/PURCHASE_ORDER_DETAIL_REBUILD.md` |
+| NOTIF-REBUILD | P0 | Done | Notifications: unified badge/feed, emitter + v2 schema, alert cards, filters, realtime invalidation — see `docs/harisree/NOTIFICATION_ALERT_SYSTEM.md` |
+| OWNER-DASH-REBUILD | P0 | Done | Owner/admin home: purchase-first layout, critical alerts grid, purchase center, warehouse health, activity feed, staff panel, sticky period, role gate — see `docs/harisree/OWNER_DASHBOARD_REBUILD.md` |
+| ITEM-DETAIL-REBUILD | P0 | Done | Item detail: enterprise control screen (snapshot, ledger, purchase cards, supplier intel, verification, export) + desktop split + router swap — see `docs/harisree/ITEM_DETAIL_REBUILD.md` |
 | WH-05 | P2 | Done | Bulk print thermal-only (50×25 mm), collapsible filter chips |
 | WH-06 | P2 | Done | `warehouseAlertsProvider` consolidation |
 
@@ -976,6 +980,15 @@ Verification gates per phase:
 - [ ] Section 7 device tests (below)
 
 ---
+
+## Opening Stock Setup Page — Operational Rebuild (2026-05-27)
+
+- [x] Backend: `GET /stock/opening/setup` paginated summary + filters
+- [x] Backend: `POST /{item_id}/opening-stock` uses `apply_stock_movement(opening_stock)`, enforces `reason` on locked qty changes, publishes `stock.changed`
+- [x] Flutter: rebuilt opening-stock page (top bar, summary bar, search, filter chips, bordered table, set sheet, row actions, progress + filter sheets)
+- [x] Catalog item detail: `_ItemWarehouseHeroHeader` now shows opening/current/diff/last stock update and deep-links to `/stock/opening-setup`
+- [x] Bulk (P1): multi-select opening rows + bulk “Set opening qty” sequential apply; missing barcode warning navigates to `/stock/missing-barcodes`
+- [x] Tests/docs: backend test suite passes + responsive widget overflow guard updated + docs created in `docs/harisree/OPENING_STOCK_SETUP_REBUILD.md`
 
 ## Section 7 — Device testing (manual)
 

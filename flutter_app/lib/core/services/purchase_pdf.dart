@@ -11,6 +11,7 @@ import '../utils/trade_purchase_rate_display.dart';
 import '../units/dynamic_unit_label_engine.dart' as unit_lbl;
 import '../config/app_config.dart';
 import 'pdf_actions.dart';
+import 'pdf_locale.dart';
 import 'pdf_purchase_fonts.dart';
 import 'purchase_invoice_amount_words.dart';
 import 'purchase_invoice_pdf_layout.dart';
@@ -20,23 +21,47 @@ final _money = NumberFormat('#,##,##0.00', 'en_IN');
 String _inrPdf(num n) => 'Rs. ${_money.format(n)}';
 final _dateTimePdf = DateFormat('dd MMM yyyy · hh:mm a');
 
-/// Share-friendly filename, e.g. `SUMATHI_SPICES_12May2026_1430_PUR20260034.pdf`.
+String _supplierSlug(String? name) {
+  final raw = (name ?? '').trim().toUpperCase();
+  if (raw.isEmpty) return 'PURCHASE';
+  final cleaned = raw
+      .replaceAll(RegExp(r'[^A-Z0-9]+'), '_')
+      .replaceAll(RegExp(r'_+'), '_')
+      .replaceAll(RegExp(r'^_|_$'), '');
+  if (cleaned.isEmpty) return 'PURCHASE';
+  return cleaned.length > 40 ? cleaned.substring(0, 40) : cleaned;
+}
+
+/// Share-friendly filename, e.g. `PO_AMBAL_MODERN_RICE_MILL_25_MAY_2026.pdf`.
 String buildPurchaseSharePdfFileName(
   TradePurchase p, {
   bool fullInvoice = false,
 }) {
-  final raw = (p.supplierName ?? 'Purchase').trim().toUpperCase();
-  final cleaned = raw.isEmpty
-      ? 'PURCHASE'
-      : raw
-          .replaceAll(RegExp(r'[^A-Z0-9]+'), '_')
-          .replaceAll(RegExp(r'_+'), '_')
-          .trim();
-  final short = cleaned.length > 40 ? cleaned.substring(0, 40) : cleaned;
-  final datePart = DateFormat('dMMMyyyy', 'en_IN').format(p.purchaseDate);
-  final timePart = DateFormat('HHmm').format(p.purchaseDate);
-  final hid = p.humanId.replaceAll(RegExp(r'[^\w\-]+'), '_');
-  return '${short}_${datePart}_${timePart}_$hid${fullInvoice ? '_full' : ''}.pdf';
+  final d = p.purchaseDate.toLocal();
+  final months = const [
+    'JAN',
+    'FEB',
+    'MAR',
+    'APR',
+    'MAY',
+    'JUN',
+    'JUL',
+    'AUG',
+    'SEP',
+    'OCT',
+    'NOV',
+    'DEC',
+  ];
+  final slug = _supplierSlug(p.supplierName);
+  if (slug == 'PURCHASE') {
+    final hid = p.humanId.replaceAll(RegExp(r'[^\w\-]+'), '_');
+    final ymd =
+        '${d.year}_${d.month.toString().padLeft(2, '0')}_${d.day.toString().padLeft(2, '0')}';
+    return 'PO_${hid}_$ymd${fullInvoice ? '_full' : ''}.pdf';
+  }
+  final datePart =
+      '${d.day.toString().padLeft(2, '0')}_${months[d.month - 1]}_${d.year}';
+  return 'PO_${slug}_$datePart${fullInvoice ? '_full' : ''}.pdf';
 }
 
 const _muted = PdfColor.fromInt(0xFF475569);
@@ -173,6 +198,7 @@ Future<pw.Document> buildPurchaseDoc(
 
 Future<Uint8List> buildPurchasePdfBytes(
     TradePurchase p, BusinessProfile biz) async {
+  await ensurePdfLocalesInitialized();
   final doc = await buildPurchaseDoc(p, biz);
   return doc.save();
 }

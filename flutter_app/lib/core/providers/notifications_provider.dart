@@ -20,6 +20,100 @@ enum NotificationType {
   serverInApp,
 }
 
+/// UI filter tabs for the notifications center.
+enum NotificationCategoryFilter {
+  all,
+  critical,
+  warehouse,
+  purchases,
+  staff,
+  system,
+}
+
+extension NotificationCategoryFilterX on NotificationCategoryFilter {
+  String get wireValue => switch (this) {
+        NotificationCategoryFilter.all => 'all',
+        NotificationCategoryFilter.critical => 'critical',
+        NotificationCategoryFilter.warehouse => 'warehouse',
+        NotificationCategoryFilter.purchases => 'purchases',
+        NotificationCategoryFilter.staff => 'staff',
+        NotificationCategoryFilter.system => 'system',
+      };
+
+  static NotificationCategoryFilter? fromWire(String? v) {
+    switch (v) {
+      case 'all':
+        return NotificationCategoryFilter.all;
+      case 'critical':
+        return NotificationCategoryFilter.critical;
+      case 'warehouse':
+        return NotificationCategoryFilter.warehouse;
+      case 'purchases':
+      case 'purchase':
+        return NotificationCategoryFilter.purchases;
+      case 'staff':
+        return NotificationCategoryFilter.staff;
+      case 'system':
+        return NotificationCategoryFilter.system;
+      default:
+        return null;
+    }
+  }
+}
+
+bool notificationMatchesCategoryFilter(
+  NotificationItem n,
+  NotificationCategoryFilter filter,
+) {
+  if (filter == NotificationCategoryFilter.all) return true;
+  final cat = notificationCategoryForItem(n);
+  return cat == filter;
+}
+
+NotificationCategoryFilter notificationCategoryForItem(NotificationItem n) {
+  final kind = n.serverKind ?? '';
+  if (kind == 'stock_variance' ||
+      kind == 'export_failed' ||
+      kind == 'sync_failed' ||
+      kind == 'approval_required' ||
+      n.type == NotificationType.purchaseOverdue) {
+    return NotificationCategoryFilter.critical;
+  }
+  if (n.type == NotificationType.purchaseDue ||
+      n.type == NotificationType.purchaseOverdue ||
+      (n.actionRoute?.startsWith('/purchase') ?? false)) {
+    return NotificationCategoryFilter.purchases;
+  }
+  if (n.id.startsWith('wh_pending_delivery') ||
+      kind == 'staff_action' ||
+      kind == 'stock_correction') {
+    return NotificationCategoryFilter.staff;
+  }
+  if (n.type == NotificationType.priceAlert ||
+      n.type == NotificationType.profitLow ||
+      kind == 'low_stock' ||
+      kind == 'missing_barcode' ||
+      kind == 'missing_code' ||
+      kind == 'opening_stock_pending' ||
+      n.id.startsWith('wh_')) {
+    return NotificationCategoryFilter.warehouse;
+  }
+  if (n.type == NotificationType.system ||
+      n.type == NotificationType.reminder ||
+      n.type == NotificationType.whatsapp ||
+      kind == 'delivery_received' ||
+      kind == 'duplicate_item') {
+    return NotificationCategoryFilter.system;
+  }
+  if (n.type == NotificationType.serverInApp) {
+    if (kind == 'delivery_pending' || kind == 'payment_due') {
+      return NotificationCategoryFilter.purchases;
+    }
+    return NotificationCategoryFilter.system;
+  }
+  return NotificationCategoryFilter.system;
+}
+
 class NotificationItem {
   const NotificationItem({
     required this.id,
@@ -31,6 +125,8 @@ class NotificationItem {
     this.actionRoute,
     this.serverNotificationId,
     this.serverKind,
+    this.priority,
+    this.category,
   });
 
   final String id;
@@ -44,6 +140,8 @@ class NotificationItem {
   final String? serverNotificationId;
   /// API `kind` when [type] is [NotificationType.serverInApp].
   final String? serverKind;
+  final String? priority;
+  final String? category;
 }
 
 class NotificationsNotifier extends StateNotifier<List<NotificationItem>> {
@@ -77,6 +175,8 @@ class NotificationsNotifier extends StateNotifier<List<NotificationItem>> {
             actionRoute: n.actionRoute,
             serverNotificationId: n.serverNotificationId,
             serverKind: n.serverKind,
+            priority: n.priority,
+            category: n.category,
           )
         else
           n,
@@ -124,10 +224,24 @@ final mergedNotificationFeedProvider =
       .where((n) => !dismissed.contains(n.id))
       .toList();
   final warehouse = ref.watch(warehouseAlertNotificationItemsProvider);
+  final serverKinds =
+      serverRows.map((e) => e.serverKind).whereType<String>().toSet();
   final byId = <String, NotificationItem>{};
   for (final n in [
     ...serverRows,
-    ...warehouse,
+    ...warehouse.where((w) {
+      if (w.id == 'wh_low_stock' && serverKinds.contains('low_stock')) {
+        return false;
+      }
+      if (w.id == 'wh_missing_barcode' &&
+          serverKinds.contains('missing_barcode')) {
+        return false;
+      }
+      if (w.id == 'wh_missing_code' && serverKinds.contains('missing_code')) {
+        return false;
+      }
+      return true;
+    }),
     ...tradeAlerts,
     ...manual,
   ]) {
@@ -138,11 +252,10 @@ final mergedNotificationFeedProvider =
   return list;
 });
 
+/// Badge count — always derived from the merged feed (same source as the list).
 final notificationsUnreadCountProvider = Provider<int>((ref) {
-  final serverUnread = ref.watch(appNotificationUnreadCountProvider).valueOrNull;
-  if (serverUnread != null && serverUnread > 0) return serverUnread;
   return ref
-      .watch(warehouseAlertNotificationItemsProvider)
+      .watch(mergedNotificationFeedProvider)
       .where((e) => !e.isRead)
       .length;
 });
@@ -353,25 +466,38 @@ NotificationItem notificationItemFromServerRow(Map<String, dynamic> row) {
   }
   final title = row['title']?.toString() ?? 'Notice';
   final body = row['body']?.toString() ?? '';
-  String? route;
-  if (kind == 'low_stock') {
-    final payload = row['payload'];
-    if (payload is Map) {
-      final iid = payload['item_id']?.toString();
-      if (iid != null && iid.isNotEmpty) {
-        route = '/catalog/item/$iid';
+  var route = row['action_route']?.toString();
+  if (route == null || route.isEmpty) {
+    if (kind == 'low_stock' || kind == 'stock_variance') {
+      final payload = row['payload'];
+      if (payload is Map) {
+        final iid = payload['item_id']?.toString();
+        if (iid != null && iid.isNotEmpty) {
+          route = '/catalog/item/$iid';
+        }
+      }
+    } else if (kind == 'delivery_pending' ||
+        kind == 'delivery_received' ||
+        kind == 'payment_due') {
+      final pid = row['related_purchase_id']?.toString();
+      if (pid != null && pid.isNotEmpty) {
+        route = '/purchase/detail/$pid';
       }
     }
   }
+  final actor = row['triggered_by_name']?.toString();
+  final subtitle = actor != null && actor.isNotEmpty ? '$body\nBy: $actor' : body;
   return NotificationItem(
     id: 'srv_$sid',
     type: NotificationType.serverInApp,
     title: title,
-    subtitle: body,
+    subtitle: subtitle.trim(),
     createdAt: created,
     isRead: isRead,
     actionRoute: route,
     serverNotificationId: sid.isEmpty ? null : sid,
     serverKind: kind.isEmpty ? null : kind,
+    priority: row['priority']?.toString(),
+    category: row['category']?.toString(),
   );
 }

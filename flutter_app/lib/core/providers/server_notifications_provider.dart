@@ -20,3 +20,12 @@ final appNotificationUnreadCountProvider =
         businessId: session.primaryBusiness.id,
       );
 });
+
+final appNotificationsSummaryProvider =
+    FutureProvider.autoDispose<Map<String, dynamic>>((ref) async {
+  final session = ref.watch(sessionProvider);
+  if (session == null) return const {};
+  return ref.read(hexaApiProvider).appNotificationsSummary(
+        businessId: session.primaryBusiness.id,
+      );
+});

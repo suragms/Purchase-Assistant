@@ -9,9 +9,13 @@ from decimal import Decimal
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import CatalogItem, Membership
-from app.models.notification import AppNotification
+from app.models import CatalogItem
 from app.models.stock_adjustment import StockAdjustmentLog
+from app.services.notification_emitter import (
+    CATEGORY_WAREHOUSE,
+    PRIORITY_CRITICAL,
+    emit_notification,
+)
 
 _VARIANCE_MIN_UNITS = Decimal("2")
 _VARIANCE_MIN_RATIO = Decimal("0.02")
@@ -50,8 +54,9 @@ async def maybe_notify_stock_variance(
     item_id: uuid.UUID,
     adjustment_type: str,
     new_qty: Decimal,
+    triggered_by_user_id: uuid.UUID | None = None,
 ) -> tuple[Decimal | None, Decimal | None]:
-    """If verification/correction diverges from last purchase qty, queue owner notifications."""
+    """If verification/correction diverges from last purchase qty, queue notifications."""
     if adjustment_type not in ("verification", "correction", "manual"):
         return None, None
     expected = await _last_purchase_expected_qty(db, business_id, item_id)
@@ -73,41 +78,31 @@ async def maybe_notify_stock_variance(
 
     unit = item.stock_unit or item.default_unit or ""
     day = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    mems = await db.execute(
-        select(Membership.user_id).where(Membership.business_id == business_id)
+    await emit_notification(
+        db,
+        business_id=business_id,
+        kind="stock_variance",
+        title="Stock mismatch detected",
+        body=(
+            f"{item.name}: expected {_fmt(expected)} {unit}, "
+            f"found {_fmt(new_qty)} {unit} ({_fmt(delta)} diff)"
+        ),
+        priority=PRIORITY_CRITICAL,
+        category=CATEGORY_WAREHOUSE,
+        dedupe_key=f"stock_variance:{item_id}:{day}",
+        action_route=f"/catalog/item/{item_id}",
+        triggered_by_user_id=triggered_by_user_id,
+        related_item_id=item_id,
+        payload={
+            "item_id": str(item_id),
+            "item_name": item.name,
+            "expected_qty": float(expected),
+            "found_qty": float(new_qty),
+            "variance_delta": float(delta),
+            "unit": unit,
+        },
+        owner_only=False,
     )
-    for (uid,) in mems.all():
-        dedupe = f"stock_variance:{item_id}:{day}:{uid}"
-        ex = await db.execute(
-            select(AppNotification.id).where(
-                AppNotification.business_id == business_id,
-                AppNotification.dedupe_key == dedupe,
-            ).limit(1)
-        )
-        if ex.scalar_one_or_none() is not None:
-            continue
-        db.add(
-            AppNotification(
-                id=uuid.uuid4(),
-                business_id=business_id,
-                user_id=uid,
-                kind="stock_variance",
-                title="Stock variance",
-                body=(
-                    f"{item.name}: expected {_fmt(expected)} {unit}, "
-                    f"found {_fmt(new_qty)} {unit} ({_fmt(delta)} diff)"
-                ),
-                payload={
-                    "item_id": str(item_id),
-                    "item_name": item.name,
-                    "expected_qty": float(expected),
-                    "found_qty": float(new_qty),
-                    "variance_delta": float(delta),
-                    "unit": unit,
-                },
-                dedupe_key=dedupe,
-            )
-        )
     return expected, delta
 
 

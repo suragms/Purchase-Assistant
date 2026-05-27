@@ -22,6 +22,7 @@ import 'core/providers/prefs_provider.dart'
 import 'core/providers/api_degraded_provider.dart';
 import 'core/services/offline_store.dart';
 import 'core/services/offline_sync_service.dart';
+import 'core/services/pdf_locale.dart';
 
 /// Async errors that escape zones are not [FlutterErrorDetails]; treat common
 /// network failures as handled so they do not destabilize the engine. This does
@@ -148,6 +149,8 @@ class _HexaBootstrapState extends State<_HexaBootstrap> {
     final cap = kIsWeb ? const Duration(seconds: 15) : const Duration(minutes: 2);
 
     try {
+      await ensurePdfLocalesInitialized().timeout(const Duration(seconds: 8));
+      _bootstrapLog('pdf locales OK');
       await OfflineStore.init().timeout(cap);
       _bootstrapLog('OfflineStore.init OK');
       final prefs = await SharedPreferences.getInstance().timeout(cap);

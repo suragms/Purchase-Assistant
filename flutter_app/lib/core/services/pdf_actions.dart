@@ -6,6 +6,7 @@ import 'package:share_plus/share_plus.dart';
 
 import 'pdf_download_io.dart' if (dart.library.html) 'pdf_download_web.dart'
     as platform_pdf;
+import 'pdf_locale.dart';
 
 class PdfActionResult {
   const PdfActionResult({
@@ -61,6 +62,7 @@ Future<PdfActionResult> sharePdfBytes({
   String source = 'pdf_actions',
 }) async {
   try {
+    await ensurePdfLocalesInitialized();
     final bytes = await buildBytes();
     try {
       await Printing.sharePdf(bytes: bytes, filename: filename);
@@ -92,6 +94,7 @@ Future<PdfActionResult> printPdfBytes({
   String source = 'pdf_actions',
 }) async {
   try {
+    await ensurePdfLocalesInitialized();
     await Printing.layoutPdf(
       name: filename,
       onLayout: (_) => buildBytes(),
@@ -113,6 +116,7 @@ Future<PdfActionResult> savePdfBytes({
   String source = 'pdf_actions',
 }) async {
   try {
+    await ensurePdfLocalesInitialized();
     final bytes = await buildBytes();
     final downloaded = await platform_pdf.downloadPdfBytes(bytes, filename);
     if (downloaded) {

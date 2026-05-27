@@ -475,6 +475,45 @@ class HexaApi {
     return v is num ? v.toInt() : 0;
   }
 
+  Future<Map<String, dynamic>> appNotificationsSummary({
+    required String businessId,
+  }) async {
+    final res = await _dio.get<Map<String, dynamic>>(
+      '/v1/businesses/$businessId/notifications/summary',
+    );
+    return Map<String, dynamic>.from(res.data ?? const {});
+  }
+
+  Future<int> postClientNotificationEvent({
+    required String businessId,
+    required String kind,
+    required String title,
+    String? body,
+    String? priority,
+    String? category,
+    String? actionRoute,
+    String? dedupeKey,
+    String? relatedPurchaseId,
+    String? relatedItemId,
+  }) async {
+    final res = await _dio.post<Map<String, dynamic>>(
+      '/v1/businesses/$businessId/notifications/client-event',
+      data: {
+        'kind': kind,
+        'title': title,
+        if (body != null) 'body': body,
+        if (priority != null) 'priority': priority,
+        if (category != null) 'category': category,
+        if (actionRoute != null) 'action_route': actionRoute,
+        if (dedupeKey != null) 'dedupe_key': dedupeKey,
+        if (relatedPurchaseId != null) 'related_purchase_id': relatedPurchaseId,
+        if (relatedItemId != null) 'related_item_id': relatedItemId,
+      },
+    );
+    final v = res.data?['updated'];
+    return v is num ? v.toInt() : 0;
+  }
+
   Future<List<Map<String, dynamic>>> listActivityLog({
     required String businessId,
     String period = 'today',
@@ -2558,12 +2597,52 @@ class HexaApi {
     return res.data ?? {'items': <Map<String, dynamic>>[], 'missing_count': 0};
   }
 
+  Future<Map<String, dynamic>> listOpeningStockSetup({
+    required String businessId,
+    int page = 1,
+    int perPage = 50,
+    String q = '',
+    String status = 'all',
+    String stockStatus = 'all',
+    bool missingBarcode = false,
+    bool missingItemCode = false,
+    String category = '',
+    String subcategory = '',
+    String? supplierId,
+    String unit = '',
+    bool updatedToday = false,
+    String updatedBy = '',
+  }) async {
+    final res = await _dio.get<Map<String, dynamic>>(
+      '/v1/businesses/$businessId/stock/opening/setup',
+      queryParameters: {
+        'page': page,
+        'per_page': perPage,
+        if (q.trim().isNotEmpty) 'q': q.trim(),
+        if (status.isNotEmpty && status != 'all') 'status': status,
+        if (stockStatus.isNotEmpty && stockStatus != 'all')
+          'stock_status': stockStatus,
+        if (missingBarcode) 'missing_barcode': true,
+        if (missingItemCode) 'missing_item_code': true,
+        if (category.trim().isNotEmpty) 'category': category.trim(),
+        if (subcategory.trim().isNotEmpty) 'subcategory': subcategory.trim(),
+        if (supplierId != null && supplierId.isNotEmpty) 'supplier_id': supplierId,
+        if (unit.trim().isNotEmpty) 'unit': unit.trim(),
+        if (updatedToday) 'updated_today': true,
+        if (updatedBy.trim().isNotEmpty) 'updated_by': updatedBy.trim(),
+      },
+    );
+    return res.data ?? {};
+  }
+
   Future<Map<String, dynamic>> setOpeningStock({
     required String businessId,
     required String itemId,
     required num qty,
     bool override = false,
     String? reason,
+    String? notes,
+    String? idempotencyKey,
   }) async {
     final res = await _dio.post<Map<String, dynamic>>(
       '/v1/businesses/$businessId/stock/$itemId/opening-stock',
@@ -2571,6 +2650,9 @@ class HexaApi {
         'qty': qty,
         'override': override,
         if (reason != null && reason.trim().isNotEmpty) 'reason': reason.trim(),
+        if (notes != null && notes.trim().isNotEmpty) 'notes': notes.trim(),
+        if (idempotencyKey != null && idempotencyKey.trim().isNotEmpty)
+          'idempotency_key': idempotencyKey.trim(),
       },
     );
     return res.data ?? {};
@@ -2640,10 +2722,16 @@ class HexaApi {
     required String businessId,
     required String itemId,
     int limit = 50,
+    int offset = 0,
+    String? kind,
   }) async {
     final res = await _dio.get<Map<String, dynamic>>(
       '/v1/businesses/$businessId/stock/$itemId/activity',
-      queryParameters: {'limit': limit},
+      queryParameters: {
+        'limit': limit,
+        if (offset > 0) 'offset': offset,
+        if (kind != null && kind.trim().isNotEmpty) 'kind': kind.trim(),
+      },
     );
     return res.data ?? {};
   }

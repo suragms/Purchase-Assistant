@@ -33,6 +33,7 @@ Future<PdfActionResult> shareItemStatementPdf({
   required List<TradePurchase> purchases,
   required DateTime fromDate,
   required DateTime toDate,
+  String? filename,
 }) async {
   final doc = pw.Document();
   final total = purchases.fold<double>(0, (s, p) => s + p.totalAmount);
@@ -134,8 +135,9 @@ Future<PdfActionResult> shareItemStatementPdf({
 
   return sharePdfBytes(
     buildBytes: () => doc.save(),
-    filename:
-        'harisree_item_${_filenameSlug(itemName)}_${_fileDf.format(fromDate)}_${_fileDf.format(toDate)}.pdf',
+    filename: (filename != null && filename.trim().isNotEmpty)
+        ? filename.trim()
+        : 'harisree_item_${_filenameSlug(itemName)}_${_fileDf.format(fromDate)}_${_fileDf.format(toDate)}.pdf',
     subject: 'Item purchase statement - $itemName',
     source: 'item_statement_pdf',
   );

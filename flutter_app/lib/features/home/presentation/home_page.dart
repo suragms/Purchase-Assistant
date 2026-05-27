@@ -4,9 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/auth/dashboard_role.dart';
 import '../../../core/auth/session_notifier.dart'
     show hexaApiProvider, sessionProvider;
-import '../../../core/models/session.dart';
 import '../../../core/models/trade_purchase_models.dart';
 import '../../../core/providers/app_period_provider.dart'
     show homePeriodSyncListenerProvider;
@@ -27,39 +27,34 @@ import '../../../core/providers/connectivity_provider.dart';
 import '../../../core/providers/notifications_provider.dart'
     show notificationsUnreadCountProvider;
 import '../../../core/providers/prefs_provider.dart';
+import '../../../core/providers/realtime_events_provider.dart';
+import '../../../core/providers/realtime_notifications_provider.dart';
 import '../../../core/providers/server_notifications_provider.dart';
 import '../../../core/providers/stock_providers.dart'
-    show lowStockByCategoryProvider, stockStatusCountsProvider;
+    show
+        lowStockByCategoryProvider,
+        openingStockMissingProvider,
+        stockStatusCountsProvider;
 import '../../../core/providers/warehouse_alerts_provider.dart'
     show warehouseAlertsProvider;
-import '../../../core/design_system/hexa_operational_tokens.dart';
 import '../../../core/design_system/hexa_responsive.dart';
 import '../../../core/theme/hexa_colors.dart';
 import '../../purchase/presentation/widgets/purchase_saved_sheet.dart';
 import '../../purchase/presentation/widgets/resume_purchase_draft_banner.dart';
-import '../../stock/presentation/opening_stock_setup_page.dart'
-    show openingStockMissingProvider;
 import 'widgets/home_compact_header.dart';
 import 'widgets/home_low_stock_section.dart';
-import 'widgets/home_multi_alert_strip.dart';
-import 'widgets/home_stock_audit_strip.dart';
-import 'widgets/home_contacts_quick_row.dart';
-import 'widgets/home_period_filter_row.dart';
-import 'widgets/home_purchase_stats_card.dart';
+import 'widgets/home_critical_alerts_grid.dart';
+import 'widgets/home_purchase_control_center.dart';
 import 'widgets/home_session_data_banner.dart';
 import 'widgets/home_quick_actions_grid.dart';
-import 'widgets/home_stock_totals_card.dart';
-import 'widgets/home_analytics_comparison_strip.dart';
 import 'widgets/home_live_status_bar.dart';
-import 'widgets/home_recent_changes_section.dart';
-import 'widgets/home_stock_movement_section.dart';
+import 'widgets/home_warehouse_health_card.dart';
+import 'widgets/home_warehouse_activity_feed.dart';
+import 'widgets/home_staff_operations_panel.dart';
+import 'widgets/home_owner_quick_actions.dart';
+import 'widgets/home_sticky_period_header.dart';
 
-bool _sessionIsOwner(Session s) {
-  final r = s.primaryBusiness.role.toLowerCase();
-  return r == 'owner' || r == 'super_admin' || s.isSuperAdmin;
-}
-
-/// Harisree owner home — dense industrial warehouse operations dashboard.
+/// Harisree owner/admin home — purchase-first warehouse control center.
 class HomePage extends ConsumerStatefulWidget {
   const HomePage({super.key});
 
@@ -79,6 +74,7 @@ class _HomePageState extends ConsumerState<HomePage>
   AppLifecycleState _lifecycle = AppLifecycleState.resumed;
   DateTime? _lastThrottledInvalidate;
   DateTime? _homeLastRefreshedAt;
+  int _lastRealtimeTick = 0;
 
   bool _throttleHomeInvalidate({bool force = false}) {
     if (force) {
@@ -104,6 +100,10 @@ class _HomePageState extends ConsumerState<HomePage>
     ref.invalidate(stockAuditPeriodProvider);
     ref.invalidate(stockVariancesTodayProvider);
     ref.invalidate(homeRecentActivityFeedProvider);
+    ref.invalidate(warehouseAlertsProvider);
+    ref.invalidate(appNotificationUnreadCountProvider);
+    ref.invalidate(lowStockByCategoryProvider);
+    ref.invalidate(stockStatusCountsProvider);
   }
 
   void _setHomePollingActive(bool active) {
@@ -115,14 +115,10 @@ class _HomePageState extends ConsumerState<HomePage>
       return;
     }
     _rtPoll?.cancel();
-    _rtPoll = Timer.periodic(const Duration(minutes: 5), (_) {
+    _rtPoll = Timer.periodic(const Duration(seconds: 30), (_) {
       if (!mounted) return;
       if (ref.read(shellCurrentBranchProvider) != ShellBranch.home) return;
-      ref.invalidate(homeRecentActivityFeedProvider);
-      ref.invalidate(appNotificationUnreadCountProvider);
-      ref.invalidate(lowStockByCategoryProvider);
-      ref.invalidate(stockStatusCountsProvider);
-      ref.invalidate(warehouseAlertsProvider);
+      _invalidateHomeDataProviders();
       _maybePushBackgroundAlert();
       _maybeNotifyStaffPurchases();
     });
@@ -143,7 +139,7 @@ class _HomePageState extends ConsumerState<HomePage>
 
   void _maybeNotifyStaffPurchases() {
     final session = ref.read(sessionProvider);
-    if (session == null || !_sessionIsOwner(session)) return;
+    if (session == null || !sessionHasOwnerDashboard(session)) return;
     if (!ref.read(localNotificationsOptInProvider)) return;
     final bg = _lifecycle == AppLifecycleState.paused ||
         _lifecycle == AppLifecycleState.hidden ||
@@ -284,6 +280,16 @@ class _HomePageState extends ConsumerState<HomePage>
       return const SizedBox.shrink();
     }
 
+    ref.watch(realtimeNotificationsBoostProvider);
+    ref.listen(realtimeInvalidationProvider, (prev, next) {
+      final tick = next.valueOrNull;
+      if (tick == null || tick == _lastRealtimeTick) return;
+      _lastRealtimeTick = tick;
+      if (!_throttleHomeInvalidate()) {
+        _invalidateHomeDataProviders();
+      }
+    });
+
     ref.listen<PurchasePostSavePayload?>(purchasePostSaveProvider,
         (prev, next) {
       if (next == null || _handlingPurchasePostSave) return;
@@ -327,86 +333,100 @@ class _HomePageState extends ConsumerState<HomePage>
     ref.watch(homePeriodSyncListenerProvider);
 
     final session = ref.watch(sessionProvider);
-    final isOwner = session != null && _sessionIsOwner(session);
+    final hasDashboard = session != null && sessionHasOwnerDashboard(session);
     final conn = ref.watch(connectivityResultsProvider);
     final offline =
         conn.valueOrNull != null && isOfflineResult(conn.valueOrNull!);
+    final gutter = HexaResponsive.pageGutter(context, operational: true);
 
     return Scaffold(
       backgroundColor: HexaColors.brandBackground,
       body: SafeArea(
         child: RefreshIndicator(
           onRefresh: _refresh,
-          child: ListView(
-            padding: EdgeInsets.fromLTRB(
-              HexaResponsive.pageGutter(context, operational: true),
-              8,
-              HexaResponsive.pageGutter(context, operational: true),
-              120,
-            ),
-            children: [
-              HexaResponsiveCenter(
-                maxWidth: HexaResponsive.maxContentWidth,
-                padding: EdgeInsets.zero,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    HomeCompactHeader(
-                      offline: offline,
-                      onSettingsLongPress: _showAccountMenu,
+          child: CustomScrollView(
+            slivers: [
+              SliverPadding(
+                padding: EdgeInsets.fromLTRB(gutter, 8, gutter, 0),
+                sliver: SliverToBoxAdapter(
+                  child: HexaResponsiveCenter(
+                    maxWidth: HexaResponsive.maxContentWidth,
+                    padding: EdgeInsets.zero,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        HomeCompactHeader(
+                          offline: offline,
+                          onSettingsLongPress: _showAccountMenu,
+                        ),
+                        if (hasDashboard) ...[
+                          const SizedBox(height: 8),
+                          HomeLiveStatusBar(
+                            offline: offline,
+                            lastRefreshedAt: _homeLastRefreshedAt,
+                            isOwner: true,
+                          ),
+                        ],
+                        const SizedBox(height: 8),
+                        const ResumePurchaseDraftBanner(),
+                        if (hasDashboard) ...[
+                          const HomeSessionDataBanner(),
+                          const _OpeningStockSetupBanner(),
+                          const SizedBox(height: 8),
+                          const HomeCriticalAlertsGrid(),
+                        ],
+                      ],
                     ),
-                    if (isOwner) ...[
-                      const SizedBox(height: 8),
-                      HomeLiveStatusBar(
-                        offline: offline,
-                        lastRefreshedAt: _homeLastRefreshedAt,
-                        isOwner: true,
-                      ),
-                    ],
-                    const SizedBox(height: 12),
-                    const ResumePurchaseDraftBanner(),
-                    if (isOwner) ...[
-                      const SizedBox(height: 8),
-                      const HomeSessionDataBanner(),
-                      const _OpeningStockSetupBanner(),
-                      const SizedBox(height: 8),
-                      const HomePeriodFilterRow(),
-                      const SizedBox(height: 8),
-                      const HomePurchaseStatsCard(),
-                      const SizedBox(height: 8),
-                      const HomeContactsQuickRow(),
-                      const SizedBox(height: 8),
-                    ],
-                    HomeQuickActionsGrid(
-                      isOwner: isOwner,
-                      onScan: () => context.push('/barcode/scan'),
-                      onStock: () => context.go('/stock'),
-                      onPurchase: () => context.push('/purchase/new'),
-                      onReports: () => context.go('/reports'),
-                      onBarcode: () => context.push('/barcode/bulk-print'),
-                      onUsers: () => context.push('/settings/users'),
-                      onAddItem: isOwner
-                          ? () => context.push('/catalog/quick-add')
-                          : null,
+                  ),
+                ),
+              ),
+              if (hasDashboard)
+                SliverPersistentHeader(
+                  pinned: true,
+                  delegate: HomeStickyPeriodHeader(),
+                ),
+              SliverPadding(
+                padding: EdgeInsets.fromLTRB(gutter, 8, gutter, 100),
+                sliver: SliverToBoxAdapter(
+                  child: HexaResponsiveCenter(
+                    maxWidth: HexaResponsive.maxContentWidth,
+                    padding: EdgeInsets.zero,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        if (hasDashboard) ...[
+                          const HomePurchaseControlCenter(),
+                          const SizedBox(height: 8),
+                          const HomeWarehouseHealthCard(),
+                          const SizedBox(height: 8),
+                          const HomeWarehouseActivityFeed(),
+                          const SizedBox(height: 8),
+                          const HomeStaffOperationsPanel(),
+                          const SizedBox(height: 8),
+                          HomeOwnerQuickActions(
+                            onPurchase: () => context.push('/purchase/new'),
+                            onStock: () => context.go('/stock'),
+                            onLowStock: () => context.push('/stock/low-stock'),
+                            onPendingDeliveries: () => context.go('/purchase'),
+                            onReports: () => context.go('/reports'),
+                            onUsers: () => context.push('/settings/users'),
+                            onBarcode: () => context.push('/barcode/bulk-print'),
+                          ),
+                        ] else
+                          HomeQuickActionsGrid(
+                            isOwner: false,
+                            onScan: () => context.push('/barcode/scan'),
+                            onStock: () => context.go('/stock'),
+                            onPurchase: () => context.push('/purchase/new'),
+                            onReports: () => context.go('/reports'),
+                            onBarcode: () => context.push('/barcode/bulk-print'),
+                            onUsers: () => context.push('/settings/users'),
+                          ),
+                        const SizedBox(height: 12),
+                        const HomeLowStockSection(),
+                      ],
                     ),
-                    const SizedBox(height: HexaOp.cardGap),
-                    if (isOwner) ...[
-                      const HomeMultiAlertStrip(),
-                      const HomeStockAuditStrip(),
-                      const SizedBox(height: HexaOp.cardGap),
-                      HomeStockTotalsCard(lastUpdatedAt: _homeLastRefreshedAt),
-                      const SizedBox(height: 8),
-                      const HomeAnalyticsComparisonStrip(),
-                      const SizedBox(height: 12),
-                      const HomeRecentChangesSection(),
-                      const SizedBox(height: 12),
-                    ],
-                    const HomeLowStockSection(),
-                    if (isOwner) ...[
-                      const SizedBox(height: 12),
-                      const HomeStockMovementSection(),
-                    ],
-                  ],
+                  ),
                 ),
               ),
             ],
@@ -460,6 +480,7 @@ class _HomePageState extends ConsumerState<HomePage>
     c.invalidate(stockVariancesTodayProvider);
     c.invalidate(homeRecentActivityFeedProvider);
     c.invalidate(homeDashboardDataProvider);
+    c.invalidate(warehouseAlertsProvider);
   }
 }
 

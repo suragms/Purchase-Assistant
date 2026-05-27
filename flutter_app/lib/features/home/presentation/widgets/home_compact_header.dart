@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../core/auth/dashboard_role.dart';
 import '../../../../core/auth/session_notifier.dart';
 import '../../../../core/design_system/hexa_ds_tokens.dart';
 import '../../../../core/providers/notifications_provider.dart';
@@ -27,12 +28,14 @@ class HomeCompactHeader extends ConsumerWidget {
     );
     final code = _warehouseCode(session?.primaryBusiness.id);
     final initial = title.trim().isNotEmpty ? title.trim()[0].toUpperCase() : 'H';
-    final role = (session?.primaryBusiness.role ?? 'owner').toUpperCase();
+    final role = session != null
+        ? dashboardRoleLabel(session).toUpperCase()
+        : 'OWNER';
     final syncColor = offline ? const Color(0xFFC62828) : const Color(0xFF2E7D32);
     final syncLabel = offline ? 'Offline' : 'Synced';
 
     return SizedBox(
-      height: 56,
+      height: 48,
       child: Row(
         children: [
           GestureDetector(

@@ -1198,6 +1198,44 @@ async def patch_trade_purchase_delivery(
         raise
     await db.commit()
     bump_trade_read_caches_for_business(business_id)
+    try:
+        from app.services.notification_emitter import (
+            CATEGORY_PURCHASE,
+            PRIORITY_HIGH,
+            PRIORITY_INFO,
+            emit_notification,
+        )
+
+        sup = (tp.supplier_name or "Supplier").strip()
+        if body.is_delivered:
+            await emit_notification(
+                db,
+                business_id=business_id,
+                kind="delivery_received",
+                title=f"Delivery received: {tp.human_id}",
+                body=f"{sup} — stock updated at warehouse",
+                priority=PRIORITY_INFO,
+                category=CATEGORY_PURCHASE,
+                dedupe_key=f"delivery_received:{purchase_id}",
+                action_route=f"/purchase/detail/{purchase_id}",
+                related_purchase_id=purchase_id,
+            )
+        else:
+            await emit_notification(
+                db,
+                business_id=business_id,
+                kind="delivery_pending",
+                title=f"Pending delivery: {tp.human_id}",
+                body=f"{sup} — awaiting warehouse receipt",
+                priority=PRIORITY_HIGH,
+                category=CATEGORY_PURCHASE,
+                dedupe_key=f"delivery_pending:{purchase_id}",
+                action_route=f"/purchase/detail/{purchase_id}",
+                related_purchase_id=purchase_id,
+            )
+        await db.commit()
+    except Exception:
+        await db.rollback()
     res2 = await db.execute(
         select(TradePurchase)
         .where(TradePurchase.id == purchase_id)

@@ -168,6 +168,28 @@ async def upsert_audit_line(
         audit.items.append(line)
         db.add(line)
 
+    if line_status == "pending_approval":
+        from app.services.notification_emitter import (
+            CATEGORY_STAFF,
+            PRIORITY_CRITICAL,
+            emit_notification,
+        )
+
+        await emit_notification(
+            db,
+            business_id=business_id,
+            kind="approval_required",
+            title="Stock correction needs approval",
+            body=f"{item.name}: difference {_fmt_qty(difference_qty)} requires owner sign-off",
+            priority=PRIORITY_CRITICAL,
+            category=CATEGORY_STAFF,
+            dedupe_key=f"audit_approval:{audit.id}:{item_id}",
+            action_route="/stock/audits",
+            triggered_by_user_id=user.id,
+            related_item_id=item_id,
+            owner_only=True,
+        )
+
     if apply_immediately and line_status != "pending_approval" and difference_qty != 0:
         await apply_audit_line_to_stock(
             db,
@@ -276,3 +298,9 @@ async def approve_audit_line(
         if not any(ln.line_status == "pending_approval" for ln in audit.items):
             audit.status = "completed"
     return line
+
+
+def _fmt_qty(v: Decimal) -> str:
+    if v == v.to_integral_value():
+        return str(int(v))
+    return f"{v:.2f}"

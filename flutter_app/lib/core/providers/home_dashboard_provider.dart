@@ -187,6 +187,10 @@ class HomeDashboardData {
     this.totalProfit = 0,
     this.profitPercent,
     this.pendingDeliveryCount = 0,
+    this.supplierCount = 0,
+    this.brokerCount = 0,
+    this.receivedDeliveryCount = 0,
+    this.negativeStockCount = 0,
   });
 
   final HomePeriod period;
@@ -208,6 +212,10 @@ class HomeDashboardData {
   final List<ItemSliceStat> itemSlices;
   /// Purchases not marked delivered (excludes deleted/cancelled); from API summary.
   final int pendingDeliveryCount;
+  final int supplierCount;
+  final int brokerCount;
+  final int receivedDeliveryCount;
+  final int negativeStockCount;
 
   bool get isEmpty => purchaseCount == 0;
 
@@ -228,6 +236,10 @@ class HomeDashboardData {
     subcategories: [],
     itemSlices: [],
     pendingDeliveryCount: 0,
+    supplierCount: 0,
+    brokerCount: 0,
+    receivedDeliveryCount: 0,
+    negativeStockCount: 0,
   );
 }
 
@@ -259,6 +271,12 @@ HomeDashboardData homeDashboardDataFromApiSnapshot(
   final profitPercent = (summary['profit_percent'] as num?)?.toDouble();
   final pendingDeliveryCount =
       (summary['pending_delivery_count'] as num?)?.toInt() ?? 0;
+  final supplierCount = (summary['supplier_count'] as num?)?.toInt() ?? 0;
+  final brokerCount = (summary['broker_count'] as num?)?.toInt() ?? 0;
+  final receivedDeliveryCount =
+      (summary['received_delivery_count'] as num?)?.toInt() ?? 0;
+  final negativeStockCount =
+      (summary['negative_stock_count'] as num?)?.toInt() ?? 0;
   final totalQtyAllLines = (summary['total_qty'] as num?)?.toDouble() ?? 0.0;
   final totalKg = (unitTotals['total_kg'] as num?)?.toDouble() ?? 0.0;
   final totalBags = (unitTotals['total_bags'] as num?)?.toDouble() ?? 0.0;
@@ -370,6 +388,10 @@ HomeDashboardData homeDashboardDataFromApiSnapshot(
     subcategories: subcategories,
     itemSlices: itemSlices,
     pendingDeliveryCount: pendingDeliveryCount,
+    supplierCount: supplierCount,
+    brokerCount: brokerCount,
+    receivedDeliveryCount: receivedDeliveryCount,
+    negativeStockCount: negativeStockCount,
   );
 }
 

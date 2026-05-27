@@ -22,10 +22,11 @@ final realtimeInvalidationProvider = StreamProvider.autoDispose<int>((ref) async
           '${row['type']}:${row['created_at']}:${row['payload']?.toString() ?? ''}';
       if (!seen.add(key) || initial) continue;
       final type = row['type']?.toString() ?? '';
-      if (type == 'stock.changed' ||
+      if (type == 'notification.changed') {
+        invalidateNotificationSurfaces(ref);
+      } else if (type == 'stock.changed' ||
           type == 'stock.activity_changed' ||
-          type == 'purchase.changed' ||
-          type == 'notification.changed') {
+          type == 'purchase.changed') {
         invalidateWarehouseSurfaces(ref);
       }
     }

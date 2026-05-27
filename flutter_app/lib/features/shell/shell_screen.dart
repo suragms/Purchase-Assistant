@@ -13,8 +13,9 @@ import '../../core/providers/home_owner_dashboard_providers.dart'
         homeInventorySummaryProvider,
         homeRecentActivityFeedProvider,
         stockAlertCountsProvider,
-        stockAuditPeriodProvider,
-        stockLowCountProvider;
+        stockAuditPeriodProvider;
+import '../../core/providers/notifications_provider.dart'
+    show notificationsUnreadCountProvider;
 import '../../core/providers/stock_providers.dart';
 import '../../core/providers/home_breakdown_tab_providers.dart';
 import '../../core/providers/home_dashboard_provider.dart';
@@ -96,7 +97,7 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
     final offline =
         conn.valueOrNull != null && isOfflineResult(conn.valueOrNull!);
     final pendingSync = OfflineStore.getPendingEntries().length;
-    final stockAlertN = ref.watch(stockLowCountProvider).valueOrNull ?? 0;
+    final stockAlertN = ref.watch(notificationsUnreadCountProvider);
     ref.watch(realtimeInvalidationProvider);
     final isDesktop = MediaQuery.sizeOf(context).width >= 900;
 

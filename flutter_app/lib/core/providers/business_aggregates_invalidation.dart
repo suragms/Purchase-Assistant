@@ -22,6 +22,7 @@ import 'trade_purchases_provider.dart';
 import 'business_users_provider.dart';
 import 'staff_home_providers.dart';
 import 'stock_providers.dart';
+import 'server_notifications_provider.dart';
 import 'warehouse_alerts_provider.dart';
 
 // Debounce guard: prevent stampede when called from multiple sources within 400ms.
@@ -140,6 +141,7 @@ void invalidateWarehouseSurfaces(dynamic ref) {
   ref.invalidate(stockItemIntelligenceProvider);
   ref.invalidate(stockItemActivityProvider);
   ref.invalidate(warehouseAlertsProvider);
+  invalidateNotificationSurfaces(ref);
   ref.invalidate(homeRecentActivityFeedProvider);
   ref.invalidate(stockAuditPeriodProvider);
   ref.invalidate(stockChangesFeedProvider);
@@ -150,4 +152,10 @@ void invalidateWarehouseSurfaces(dynamic ref) {
   ref.invalidate(stockLowTopHomeProvider);
   ref.invalidate(stockVariancesTodayProvider);
   bumpBusinessDataWriteRevision(ref);
+}
+
+/// In-app notification list, unread badge, and server notification APIs.
+void invalidateNotificationSurfaces(dynamic ref) {
+  ref.invalidate(appNotificationsListProvider);
+  ref.invalidate(appNotificationUnreadCountProvider);
 }

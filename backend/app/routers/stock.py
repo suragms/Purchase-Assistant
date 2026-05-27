@@ -5,7 +5,7 @@ from decimal import Decimal
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import case, desc, func, or_, select
+from sqlalchemy import case, desc, func, literal, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -50,6 +50,9 @@ from app.schemas.stock import (
     InventorySummaryOut,
     OpeningStockIn,
     OpeningStockMissingOut,
+    OpeningStockSetupOut,
+    OpeningStockSetupItemOut,
+    OpeningStockSetupSummaryOut,
     PhysicalStockCountIn,
     PhysicalStockCountOut,
     StockTotalsOut,
@@ -92,6 +95,7 @@ from app.services.unit_normalization import (
 router = APIRouter(prefix="/v1/businesses/{business_id}/stock", tags=["stock"])
 
 StatusFilter = Literal["all", "low", "critical", "out"]
+OpeningSetupStatus = Literal["pending", "completed", "all"]
 SortBy = Literal["name", "stock_asc", "stock_desc", "recent"]
 
 
@@ -573,6 +577,195 @@ async def _query_items(
     start = (page - 1) * per_page
     page_rows = out[start : start + per_page]
     return total, page_rows
+
+
+async def _opening_setup_summary(
+    db: AsyncSession,
+    business_id: uuid.UUID,
+) -> OpeningStockSetupSummaryOut:
+    base = (
+        CatalogItem.business_id == business_id,
+        CatalogItem.deleted_at.is_(None),
+    )
+    total_r = await db.execute(select(func.count(CatalogItem.id)).where(*base))
+    pending_r = await db.execute(
+        select(func.count(CatalogItem.id)).where(
+            *base,
+            CatalogItem.opening_stock_set_at.is_(None),
+        )
+    )
+    total = int(total_r.scalar_one() or 0)
+    pending = int(pending_r.scalar_one() or 0)
+    completed = max(0, total - pending)
+    last_r = await db.execute(
+        select(CatalogItem.opening_stock_set_at, CatalogItem.opening_stock_set_by)
+        .where(*base, CatalogItem.opening_stock_set_at.isnot(None))
+        .order_by(desc(CatalogItem.opening_stock_set_at))
+        .limit(1)
+    )
+    last_row = last_r.one_or_none()
+    last_at = last_row[0] if last_row else None
+    last_by = last_row[1] if last_row else None
+    return OpeningStockSetupSummaryOut(
+        pending_count=pending,
+        completed_count=completed,
+        total_count=total,
+        last_updated_at=last_at,
+        last_updated_by=last_by,
+    )
+
+
+async def _query_opening_setup_items(
+    db: AsyncSession,
+    business_id: uuid.UUID,
+    *,
+    q: str,
+    setup_status: OpeningSetupStatus,
+    stock_status_val: StatusFilter,
+    category: str,
+    subcategory: str,
+    missing_barcode: bool,
+    missing_item_code: bool,
+    supplier_id: uuid.UUID | None,
+    unit: str,
+    updated_today: bool,
+    updated_by: str,
+    page: int,
+    per_page: int,
+) -> tuple[int, list[tuple[CatalogItem, str | None, str | None]]]:
+    stmt = (
+        select(CatalogItem, ItemCategory.name, CategoryType.name)
+        .join(ItemCategory, CatalogItem.category_id == ItemCategory.id)
+        .outerjoin(CategoryType, CatalogItem.type_id == CategoryType.id)
+        .where(
+            CatalogItem.business_id == business_id,
+            CatalogItem.deleted_at.is_(None),
+        )
+    )
+    if q.strip():
+        like = f"%{q.strip().lower()}%"
+        stmt = stmt.where(
+            or_(
+                func.lower(CatalogItem.name).like(like),
+                func.lower(func.coalesce(CatalogItem.item_code, "")).like(like),
+                func.lower(func.coalesce(CatalogItem.barcode, "")).like(like),
+                func.lower(func.coalesce(CategoryType.name, "")).like(like),
+                func.lower(func.coalesce(ItemCategory.name, "")).like(like),
+            )
+        )
+    if category.strip():
+        stmt = stmt.where(func.lower(ItemCategory.name) == category.strip().lower())
+    if subcategory.strip():
+        stmt = stmt.where(func.lower(CategoryType.name) == subcategory.strip().lower())
+    if supplier_id is not None:
+        stmt = stmt.where(CatalogItem.last_supplier_id == supplier_id)
+    if unit.strip():
+        u = unit.strip().lower()
+        stmt = stmt.where(
+            or_(
+                func.lower(func.coalesce(CatalogItem.stock_unit, "")) == u,
+                func.lower(func.coalesce(CatalogItem.default_unit, "")) == u,
+            )
+        )
+    if updated_today:
+        today = date.today()
+        stmt = stmt.where(
+            func.date(CatalogItem.opening_stock_set_at) == today,
+        )
+    if updated_by.strip():
+        like = f"%{updated_by.strip().lower()}%"
+        stmt = stmt.where(
+            func.lower(func.coalesce(CatalogItem.opening_stock_set_by, "")).like(like)
+        )
+
+    rows = (await db.execute(stmt)).all()
+    out: list[tuple[CatalogItem, str | None, str | None]] = []
+    for item, cat_name, type_name in rows:
+        is_pending = item.opening_stock_set_at is None
+        if setup_status == "pending" and not is_pending:
+            continue
+        if setup_status == "completed" and is_pending:
+            continue
+        if missing_barcode and (item.barcode and str(item.barcode).strip()):
+            continue
+        if missing_item_code and (item.item_code and str(item.item_code).strip()):
+            continue
+        cur = catalog_stock_qty(item)
+        ro = catalog_reorder(item)
+        st = stock_status(cur, ro)
+        if stock_status_val != "all" and st != stock_status_val:
+            continue
+        out.append((item, cat_name, type_name))
+
+    out.sort(key=lambda t: ((0 if t[0].opening_stock_set_at is None else 1), (t[0].name or "").lower()))
+    total = len(out)
+    start = (page - 1) * per_page
+    return total, out[start : start + per_page]
+
+
+def _opening_setup_item_row(
+    item: CatalogItem,
+    cat_name: str | None,
+    type_name: str | None,
+    supplier_name: str | None,
+) -> OpeningStockSetupItemOut:
+    base = _item_to_list_row(item, cat_name, type_name, supplier_name)
+    is_pending = item.opening_stock_set_at is None
+    missing_bc = not (getattr(item, "barcode", None) and str(item.barcode).strip())
+    data = base.model_dump()
+    data["setup_status"] = "pending" if is_pending else "completed"
+    data["barcode_state"] = "missing" if missing_bc else "ok"
+    return OpeningStockSetupItemOut(**data)
+
+
+@router.get("/opening/setup", response_model=OpeningStockSetupOut)
+async def list_opening_stock_setup(
+    business_id: uuid.UUID,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    _m: Annotated[Membership, Depends(require_membership)],
+    page: int = Query(1, ge=1),
+    per_page: int = Query(50, ge=1, le=200),
+    q: str = Query(""),
+    status: OpeningSetupStatus = Query("all"),
+    stock_status: StatusFilter = Query("all"),
+    category: str = Query(""),
+    subcategory: str = Query(""),
+    missing_barcode: bool = Query(False),
+    missing_item_code: bool = Query(False),
+    supplier_id: uuid.UUID | None = Query(None),
+    unit: str = Query(""),
+    updated_today: bool = Query(False),
+    updated_by: str = Query(""),
+):
+    summary = await _opening_setup_summary(db, business_id)
+    total, rows = await _query_opening_setup_items(
+        db,
+        business_id,
+        q=q,
+        setup_status=status,
+        stock_status_val=stock_status,
+        category=category,
+        subcategory=subcategory,
+        missing_barcode=missing_barcode,
+        missing_item_code=missing_item_code,
+        supplier_id=supplier_id,
+        unit=unit,
+        updated_today=updated_today,
+        updated_by=updated_by,
+        page=page,
+        per_page=per_page,
+    )
+    items: list[OpeningStockSetupItemOut] = []
+    for item, cat_name, type_name in rows:
+        sup = await _supplier_name(db, item)
+        items.append(_opening_setup_item_row(item, cat_name, type_name, sup))
+    return OpeningStockSetupOut(
+        summary=summary,
+        items=items,
+        total=total,
+        page=page,
+        per_page=per_page,
+    )
 
 
 @router.get("/inventory-summary", response_model=InventorySummaryOut)
@@ -1184,37 +1377,55 @@ async def stock_item_activity(
     db: Annotated[AsyncSession, Depends(get_db)],
     membership: Annotated[Membership, Depends(require_membership)],
     limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0, le=5000),
+    kind: str | None = Query(None, description="Comma-separated movement kinds filter (purchase,physical_count,damage,correction,sale,transfer,staff_purchase_log,staff_activity_log)."),
 ):
     item = await get_stock_item(business_id, item_id, db, membership)
-    movement_r = await db.execute(
+    kinds = [k.strip() for k in (kind or "").split(",") if k.strip()]
+    movement_q = (
         select(StockMovement)
         .where(
             StockMovement.business_id == business_id,
             StockMovement.item_id == item_id,
         )
         .order_by(desc(StockMovement.created_at))
+        .offset(offset)
         .limit(limit)
     )
+    if kinds:
+        movement_q = movement_q.where(StockMovement.movement_kind.in_(kinds))
+    movement_r = await db.execute(movement_q)
     movements = list(movement_r.scalars().all())
-    purchase_r = await db.execute(
+    purchase_q = (
         select(StaffPurchaseLog)
         .where(
             StaffPurchaseLog.business_id == business_id,
             StaffPurchaseLog.item_id == item_id,
         )
         .order_by(desc(StaffPurchaseLog.created_at))
+        .offset(offset)
         .limit(limit)
     )
+    if kinds and "staff_purchase_log" not in kinds:
+        purchase_q = purchase_q.where(literal(False))
+    purchase_r = await db.execute(purchase_q)
     purchases = list(purchase_r.scalars().all())
-    staff_r = await db.execute(
+    staff_q = (
         select(StaffActivityLog)
         .where(
             StaffActivityLog.business_id == business_id,
             StaffActivityLog.item_id == item_id,
         )
         .order_by(desc(StaffActivityLog.created_at))
+        .offset(offset)
         .limit(limit)
     )
+    if kinds:
+        # staff log uses action_type as kind, but keep it behind explicit allow.
+        allow_staff = "staff_activity_log" in kinds
+        if not allow_staff:
+            staff_q = staff_q.where(literal(False))
+    staff_r = await db.execute(staff_q)
     staff_events = list(staff_r.scalars().all())
     events: list[StockActivityEventOut] = []
     for m in movements:
@@ -2045,9 +2256,6 @@ async def set_opening_stock(
     user: Annotated[User, Depends(get_current_user)],
     membership: Annotated[Membership, Depends(require_permission("stock_edit"))],
 ):
-    role = (membership.role or "").lower()
-    if role not in {"owner", "admin"} and not user.is_super_admin:
-        raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Only owners can set opening stock")
     r = await db.execute(
         select(CatalogItem).where(
             CatalogItem.id == item_id,
@@ -2058,43 +2266,54 @@ async def set_opening_stock(
     item = r.scalar_one_or_none()
     if not item:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Item not found")
-    already_locked = bool(getattr(item, "opening_stock_locked", False))
-    if already_locked and not body.override:
-        raise HTTPException(status.HTTP_409_CONFLICT, detail="Opening stock is locked")
     qty = Decimal(body.qty)
-    old_qty = catalog_stock_qty(item)
+    prev_opening = getattr(item, "opening_stock_qty", None)
+    already_set = item.opening_stock_set_at is not None
+    if already_set and prev_opening is not None and qty != prev_opening:
+        if not (body.reason and body.reason.strip()):
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                detail="Reason required when changing opening stock",
+            )
+    reason = (body.reason or "").strip() or "Opening stock setup"
+    notes = body.notes.strip() if body.notes else None
+    idem = body.idempotency_key
+    if not idem and already_set:
+        idem = f"opening_stock:{item_id}:{uuid.uuid4().hex[:12]}"
+    try:
+        result = await apply_stock_movement(
+            db,
+            business_id=business_id,
+            item_id=item_id,
+            user=user,
+            movement_kind="opening_stock",
+            mode="absolute",
+            qty=qty,
+            reason=reason,
+            notes=notes,
+            source_type="opening_stock_setup",
+            idempotency_key=idem,
+        )
+    except ValueError as e:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
+    item = result.item
     display = _user_display(user)
     now = datetime.now(timezone.utc)
-    item.current_stock = qty
     item.opening_stock_qty = qty
     item.opening_stock_set_at = now
     item.opening_stock_set_by = display
     item.opening_stock_locked = True
-    item.last_stock_updated_at = now
-    item.last_stock_updated_by = display
-    db.add(
-        StockAdjustmentLog(
-            business_id=business_id,
-            item_id=item_id,
-            old_qty=old_qty,
-            new_qty=qty,
-            adjustment_type="opening_stock",
-            reason=body.reason.strip() if body.reason else "Opening stock setup",
-            updated_by=user.id,
-            updated_by_name=display,
-        )
-    )
-    await log_staff_activity(
-        db,
-        business_id=business_id,
-        user=user,
-        action_type="OPENING_STOCK_SET",
-        item_id=item_id,
-        item_name=item.name,
-        before_data={"qty": float(old_qty), "locked": already_locked},
-        after_data={"qty": float(qty), "override": body.override},
-    )
     await db.commit()
+    await db.refresh(result.movement)
+    publish_business_event(
+        business_id,
+        "stock.changed",
+        {
+            "item_id": str(item_id),
+            "movement_id": str(result.movement.id),
+            "kind": "opening_stock",
+        },
+    )
     return await get_stock_item(business_id, item_id, db, membership)
 
 

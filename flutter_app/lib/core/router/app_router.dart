@@ -14,7 +14,7 @@ import '../../features/catalog/presentation/catalog_add_category_page.dart';
 import '../../features/catalog/presentation/catalog_add_item_page.dart';
 import '../../features/catalog/presentation/catalog_add_subcategory_page.dart';
 import '../../features/catalog/presentation/catalog_category_detail_page.dart';
-import '../../features/catalog/presentation/catalog_item_detail_page.dart';
+import '../../features/catalog/presentation/item_detail_page.dart';
 import '../../features/catalog/presentation/catalog_item_timeline_page.dart';
 import '../../features/catalog/presentation/catalog_page.dart';
 import '../../features/catalog/presentation/catalog_type_items_page.dart';
@@ -72,7 +72,6 @@ import '../../features/stock/presentation/low_stock_owner_page.dart';
 import '../../features/stock/presentation/stock_changes_page.dart';
 import '../../features/stock/presentation/reorder_list_page.dart';
 import '../../features/stock/presentation/stock_history_page.dart';
-import '../../features/stock/presentation/stock_item_intelligence_page.dart';
 import '../../features/stock/presentation/stock_today_feed_page.dart';
 import '../../features/stock/presentation/stock_movement_page.dart';
 import '../../features/stock/presentation/reorder_suggestions_page.dart';
@@ -427,7 +426,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           final id = state.pathParameters['itemId']!;
           return iosPushPage(
             key: state.pageKey,
-            child: CatalogItemDetailPage(itemId: id),
+            child: ItemDetailPage(itemId: id),
           );
         },
       ),
@@ -503,7 +502,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           final id = state.pathParameters['itemId']!;
           return iosPushPage(
             key: state.pageKey,
-            child: StockItemIntelligencePage(itemId: id),
+            child: ItemDetailPage(itemId: id),
           );
         },
       ),

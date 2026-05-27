@@ -6,16 +6,22 @@ import 'package:intl/intl.dart';
 import '../../../core/auth/session_notifier.dart';
 import '../../../core/providers/notifications_provider.dart'
     show
+        NotificationCategoryFilter,
+        NotificationCategoryFilterX,
         NotificationItem,
         NotificationType,
         dismissedPurchaseAlertIdsProvider,
         mergedNotificationFeedProvider,
+        notificationMatchesCategoryFilter,
         notificationsProvider;
+import '../../../core/providers/realtime_notifications_provider.dart';
 import '../../../core/providers/server_notifications_provider.dart';
+import '../../../core/providers/business_aggregates_invalidation.dart';
 import '../../../core/router/navigation_ext.dart';
 import '../../../core/errors/load_state_error.dart';
 import '../../../core/theme/hexa_colors.dart';
 import '../../../core/theme/theme_context_ext.dart';
+import 'widgets/notification_alert_card.dart';
 
 class NotificationsPage extends ConsumerStatefulWidget {
   const NotificationsPage({super.key});
@@ -25,8 +31,9 @@ class NotificationsPage extends ConsumerStatefulWidget {
 }
 
 class _NotificationsPageState extends ConsumerState<NotificationsPage> {
-  String _filter = 'stock'; // stock | purchase | system
+  NotificationCategoryFilter _filter = NotificationCategoryFilter.all;
   final _textSearch = TextEditingController();
+  var _primedFetch = false;
 
   @override
   void dispose() {
@@ -34,34 +41,17 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
     super.dispose();
   }
 
-  bool _matchesFilter(NotificationItem n) {
-    switch (_filter) {
-      case 'stock':
-        return n.type == NotificationType.priceAlert ||
-            n.type == NotificationType.profitLow ||
-            (n.type == NotificationType.serverInApp &&
-                (n.serverKind == 'low_stock' ||
-                    n.serverKind == 'missing_barcode' ||
-                    n.serverKind == 'missing_code')) ||
-            n.id.startsWith('wh_');
-      case 'purchase':
-        return n.type == NotificationType.purchaseDue ||
-            n.type == NotificationType.purchaseOverdue ||
-            (n.actionRoute?.startsWith('/purchase') ?? false);
-      case 'system':
-        return n.type == NotificationType.system ||
-            n.type == NotificationType.reminder ||
-            n.type == NotificationType.whatsapp ||
-            (n.type == NotificationType.serverInApp &&
-                n.serverKind != null &&
-                n.serverKind != 'low_stock');
-      default:
-        return false;
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
+    if (!_primedFetch) {
+      _primedFetch = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        ref.invalidate(appNotificationsListProvider);
+        ref.invalidate(appNotificationUnreadCountProvider);
+      });
+    }
+    ref.watch(realtimeNotificationsBoostProvider);
     final tt = Theme.of(context).textTheme;
     final serverAsync = ref.watch(appNotificationsListProvider);
     final items = ref.watch(mergedNotificationFeedProvider);
@@ -69,7 +59,8 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
         ref.watch(appNotificationUnreadCountProvider).valueOrNull ?? 0;
     final listEmptyButServerUnread =
         items.isEmpty && serverUnread > 0 && !serverAsync.isLoading;
-    final filtered = items.where(_matchesFilter).toList();
+    final filtered =
+        items.where((n) => notificationMatchesCategoryFilter(n, _filter)).toList();
     final q = _textSearch.text.trim().toLowerCase();
     final visible = (q.isEmpty
             ? filtered
@@ -212,23 +203,28 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
           const SizedBox(height: 6),
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-            child: Wrap(
-              spacing: 8,
-              runSpacing: 8,
-                  children: [
-                _FilterChip(
-                    label: 'Stock Alerts',
-                    selected: _filter == 'stock',
-                    onTap: () => setState(() => _filter = 'stock')),
-                _FilterChip(
-                    label: 'Purchases',
-                    selected: _filter == 'purchase',
-                    onTap: () => setState(() => _filter = 'purchase')),
-                _FilterChip(
-                    label: 'System',
-                    selected: _filter == 'system',
-                    onTap: () => setState(() => _filter = 'system')),
-              ],
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  for (final f in NotificationCategoryFilter.values)
+                    Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: _FilterChip(
+                        label: switch (f) {
+                          NotificationCategoryFilter.all => 'All',
+                          NotificationCategoryFilter.critical => 'Critical',
+                          NotificationCategoryFilter.warehouse => 'Warehouse',
+                          NotificationCategoryFilter.purchases => 'Purchases',
+                          NotificationCategoryFilter.staff => 'Staff',
+                          NotificationCategoryFilter.system => 'System',
+                        },
+                        selected: _filter == f,
+                        onTap: () => setState(() => _filter = f),
+                      ),
+                    ),
+                ],
+              ),
             ),
           ),
           Expanded(
@@ -261,8 +257,8 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
                             q.isNotEmpty
                                 ? 'No matches'
                                 : filterEmptyButHasItems
-                                    ? 'Nothing in this tab'
-                                    : 'No alerts yet',
+                                    ? _emptyTitleForFilter(_filter)
+                                    : _emptyTitleForFilter(_filter),
                             textAlign: TextAlign.center,
                             style: tt.titleMedium?.copyWith(
                               fontWeight: FontWeight.w800,
@@ -275,8 +271,8 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
                             q.isNotEmpty
                                 ? 'Try a different search or clear the search box.'
                                 : filterEmptyButHasItems
-                                    ? 'Switch to another tab — your notifications are hidden by the current filter.'
-                                    : 'Payment due alerts and reminders will appear here.',
+                                    ? 'Switch to All or another tab — alerts are hidden by the current filter.'
+                                    : _emptySubtitleForFilter(_filter),
                             textAlign: TextAlign.center,
                             style: tt.bodySmall?.copyWith(
                               color: Theme.of(context)
@@ -288,9 +284,10 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
                           if (filterEmptyButHasItems) ...[
                             const SizedBox(height: 20),
                             FilledButton(
-                              onPressed: () =>
-                                  setState(() => _filter = 'stock'),
-                              child: const Text('Show stock alerts'),
+                              onPressed: () => setState(
+                                () => _filter = NotificationCategoryFilter.all,
+                              ),
+                              child: const Text('Show all alerts'),
                             ),
                           ],
                           if (items.isEmpty) ...[
@@ -464,176 +461,39 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
     required DateFormat rel,
     required TextTheme tt,
   }) {
-    final onSurf = Theme.of(context).colorScheme.onSurface;
-    final color = switch (n.type) {
-                        NotificationType.priceAlert => HexaColors.warning,
-                        NotificationType.profitLow => HexaColors.loss,
-                        NotificationType.reminder => HexaColors.primaryMid,
-                        NotificationType.whatsapp => const Color(0xFF25D366),
-                        NotificationType.purchaseDue => const Color(0xFFF59E0B),
-                        NotificationType.purchaseOverdue => HexaColors.loss,
-                        NotificationType.serverInApp => n.serverKind == 'low_stock'
-                            ? HexaColors.warning
-                            : Theme.of(context).colorScheme.onSurfaceVariant,
-                        NotificationType.system => Theme.of(context)
-                            .colorScheme
-                            .onSurfaceVariant,
-    };
-    final icon = switch (n.type) {
-                        NotificationType.priceAlert =>
-                          Icons.warning_amber_rounded,
-                        NotificationType.profitLow =>
-                          Icons.trending_down_rounded,
-                        NotificationType.reminder => Icons.schedule_rounded,
-                        NotificationType.whatsapp => Icons.chat_rounded,
-                        NotificationType.purchaseDue => Icons.event_rounded,
-                        NotificationType.purchaseOverdue =>
-                            Icons.gavel_rounded,
-                        NotificationType.serverInApp => n.serverKind == 'low_stock'
-                            ? Icons.inventory_2_outlined
-                            : Icons.notifications_active_outlined,
-                        NotificationType.system => Icons.info_outline_rounded,
-    };
-    return Padding(
-                        padding: const EdgeInsets.only(bottom: 10),
-                        child: Material(
-                          color: context.adaptiveCard,
-                          borderRadius: BorderRadius.circular(14),
-                          child: InkWell(
-                            borderRadius: BorderRadius.circular(14),
-                            onTap: () async {
-                              final sid = n.serverNotificationId;
-                              if (sid != null && sid.isNotEmpty) {
-                                final session = ref.read(sessionProvider);
-                                if (session != null) {
-                                  try {
-                                    await ref.read(hexaApiProvider).patchAppNotificationRead(
-                                          businessId: session.primaryBusiness.id,
-                                          notificationId: sid,
-                                        );
-                                    ref.invalidate(appNotificationsListProvider);
-                                    ref.invalidate(appNotificationUnreadCountProvider);
-                                  } catch (_) {}
-                                }
-                              } else if (!n.id.startsWith('pur_')) {
-                                ref
-                                    .read(notificationsProvider.notifier)
-                                    .markRead(n.id);
-                              }
-                              final route = n.actionRoute;
-                              if (route != null && route.isNotEmpty) {
-                                if (context.mounted) context.push(route);
-                              }
-                            },
-                            child: ClipRRect(
-                              borderRadius: BorderRadius.circular(14),
-                              child: Row(
-                                crossAxisAlignment: CrossAxisAlignment.stretch,
-                                children: [
-                                  Container(
-                                    width: n.isRead ? 1 : 4,
-                                    color: n.isRead
-                                        ? Theme.of(context)
-                                            .colorScheme
-                                            .outlineVariant
-                                        : HexaColors.brandPrimary,
-                                  ),
-                                  Expanded(
-                                    child: Padding(
-                                      padding: const EdgeInsets.all(14),
-                                      child: Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  CircleAvatar(
-                                    backgroundColor:
-                                        color.withValues(alpha: 0.2),
-                                    child: Icon(icon, color: color, size: 20),
-                                  ),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text(n.title,
-                                            style: tt.titleSmall?.copyWith(
-                                                fontWeight: FontWeight.w800,
-                                                color: onSurf)),
-                                        const SizedBox(height: 4),
-                                        Text(n.subtitle,
-                                            style: tt.bodySmall?.copyWith(
-                                                color: Theme.of(context)
-                                                    .colorScheme
-                                                    .onSurfaceVariant,
-                                                height: 1.35)),
-                                      ],
-                                    ),
-                                  ),
-                                  Column(
-                                    crossAxisAlignment: CrossAxisAlignment.end,
-                                    children: [
-                                      Text(rel.format(n.createdAt),
-                                          style: tt.labelSmall?.copyWith(
-                                              color: Theme.of(context)
-                                                  .colorScheme
-                                                  .onSurfaceVariant)),
-                                      IconButton(
-                                        icon: const Icon(Icons.close_rounded,
-                                            size: 18),
-                                        color: Theme.of(context)
-                                            .colorScheme
-                                            .onSurfaceVariant,
-                                        onPressed: () async {
-                                          final sid = n.serverNotificationId;
-                                          if (sid != null && sid.isNotEmpty) {
-                                            final session = ref.read(sessionProvider);
-                                            if (session != null) {
-                                              try {
-                                                await ref
-                                                    .read(hexaApiProvider)
-                                                    .patchAppNotificationRead(
-                                                      businessId:
-                                                          session.primaryBusiness.id,
-                                                      notificationId: sid,
-                                                    );
-                                                ref.invalidate(
-                                                    appNotificationsListProvider);
-                                                ref.invalidate(
-                                                    appNotificationUnreadCountProvider);
-                                              } catch (_) {}
-                                            }
-                                            return;
-                                          }
-                                          if (n.id.startsWith('pur_')) {
-                                            final cur = ref.read(
-                                                dismissedPurchaseAlertIdsProvider);
-                                            ref
-                                                    .read(
-                                                        dismissedPurchaseAlertIdsProvider
-                                                            .notifier)
-                                                    .state =
-                                                {...cur, n.id};
-                                          } else {
-                                            ref
-                                                .read(
-                                                    notificationsProvider
-                                                        .notifier)
-                                                .dismiss(n.id);
-                                          }
-                                        },
-                                      ),
-                                    ],
-                                  ),
-                                ],
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
-                      );
+    Future<void> handleTap() async {
+      final sid = n.serverNotificationId;
+      if (sid != null && sid.isNotEmpty) {
+        final session = ref.read(sessionProvider);
+        if (session != null) {
+          try {
+            await ref.read(hexaApiProvider).patchAppNotificationRead(
+                  businessId: session.primaryBusiness.id,
+                  notificationId: sid,
+                );
+            invalidateNotificationSurfaces(ref);
+          } catch (_) {}
+        }
+      } else if (!n.id.startsWith('pur_')) {
+        ref.read(notificationsProvider.notifier).markRead(n.id);
+      }
+      final route = n.actionRoute;
+      if (route != null && route.isNotEmpty && context.mounted) {
+        context.push(route);
+      }
+    }
+
+    return NotificationAlertCard(
+      item: n,
+      timeLabel: NotificationAlertCard.relativeTime(n.createdAt, rel),
+      onTap: handleTap,
+      onApprove: n.serverKind == 'approval_required'
+          ? () => context.push('/stock/audits')
+          : null,
+      onReject: n.serverKind == 'approval_required'
+          ? () => context.push('/stock/audits')
+          : null,
+    );
   }
 }
 
@@ -658,6 +518,34 @@ class _NotificationDateHeader extends StatelessWidget {
       ),
     );
   }
+}
+
+String _emptyTitleForFilter(NotificationCategoryFilter filter) {
+  return switch (filter) {
+    NotificationCategoryFilter.all => 'No alerts yet',
+    NotificationCategoryFilter.critical => 'No critical alerts',
+    NotificationCategoryFilter.warehouse => 'No warehouse alerts',
+    NotificationCategoryFilter.purchases => 'No purchase alerts',
+    NotificationCategoryFilter.staff => 'No staff alerts',
+    NotificationCategoryFilter.system => 'No system notifications',
+  };
+}
+
+String _emptySubtitleForFilter(NotificationCategoryFilter filter) {
+  return switch (filter) {
+    NotificationCategoryFilter.all =>
+      'Stock, purchase, and system activity will appear here.',
+    NotificationCategoryFilter.critical =>
+      'Mismatch, sync, and approval issues will show here when they occur.',
+    NotificationCategoryFilter.warehouse =>
+      'Low stock, barcodes, and opening stock alerts appear here.',
+    NotificationCategoryFilter.purchases =>
+      'Payment due, delivery pending, and invoice updates appear here.',
+    NotificationCategoryFilter.staff =>
+      'Staff corrections and warehouse requests appear here.',
+    NotificationCategoryFilter.system =>
+      'Exports, sync status, and general notices appear here.',
+  };
 }
 
 class _FilterChip extends StatelessWidget {

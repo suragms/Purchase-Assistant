@@ -250,11 +250,34 @@ class OpeningStockIn(BaseModel):
     qty: Decimal = Field(ge=0, max_digits=12, decimal_places=3)
     override: bool = False
     reason: str | None = Field(default=None, max_length=500)
+    notes: str | None = Field(default=None, max_length=500)
+    idempotency_key: str | None = Field(default=None, max_length=120)
 
 
 class OpeningStockMissingOut(BaseModel):
     items: list[StockListItemOut]
     missing_count: int
+
+
+class OpeningStockSetupSummaryOut(BaseModel):
+    pending_count: int = 0
+    completed_count: int = 0
+    total_count: int = 0
+    last_updated_at: datetime | None = None
+    last_updated_by: str | None = None
+
+
+class OpeningStockSetupItemOut(StockListItemOut):
+    setup_status: Literal["pending", "completed"] = "pending"
+    barcode_state: Literal["ok", "missing"] = "ok"
+
+
+class OpeningStockSetupOut(BaseModel):
+    summary: OpeningStockSetupSummaryOut
+    items: list[OpeningStockSetupItemOut]
+    total: int
+    page: int
+    per_page: int
 
 
 class StaffPurchaseLogIn(BaseModel):
