@@ -13,10 +13,11 @@ import '../../../core/utils/unit_utils.dart';
 import '../../../core/design_system/hexa_responsive.dart';
 
 const _kReasonChips = <(String label, String type)>[
-  ('Physical', 'verification'),
+  ('Physical count', 'verification'),
   ('Sale', 'sale'),
   ('Damage', 'damaged'),
   ('Correction', 'correction'),
+  ('Wastage', 'damaged'),
 ];
 
 Future<bool> showStockCompactUpdateSheet({
@@ -55,6 +56,7 @@ class _StockCompactUpdateBodyState
   late final TextEditingController _notesCtrl;
   late double _current;
   String? _reasonType = 'verification';
+  String _reasonLabel = 'Physical count';
   late final String _idempotencyKey;
 
   @override
@@ -116,10 +118,10 @@ class _StockCompactUpdateBodyState
       final session = ref.read(sessionProvider);
       if (session == null) return;
       final note = _notesCtrl.text.trim();
-      final reasonLabel =
-          _kReasonChips.firstWhere((e) => e.$2 == _reasonType).$1;
+      final reasonLabel = _reasonLabel;
       final version =
           int.tryParse(widget.item['stock_version']?.toString() ?? '');
+      final listQ = ref.read(stockListQueryProvider);
       await ref.read(hexaApiProvider).updatePhysicalStock(
             businessId: session.primaryBusiness.id,
             itemId: _itemId,
@@ -129,6 +131,8 @@ class _StockCompactUpdateBodyState
             notes: note,
             lastSeenStockVersion: version,
             idempotencyKey: _idempotencyKey,
+            periodStart: listQ.periodStart,
+            periodEnd: listQ.periodEnd,
           );
       invalidateWarehouseSurfaces(ref);
       ref.invalidate(stockListProvider);
@@ -240,8 +244,11 @@ class _StockCompactUpdateBodyState
               for (final chip in _kReasonChips)
                 HexaAccessibleFilterChip(
                   label: chip.$1,
-                  selected: _reasonType == chip.$2,
-                  onSelected: (_) => setState(() => _reasonType = chip.$2),
+                  selected: _reasonLabel == chip.$1,
+                  onSelected: (_) => setState(() {
+                    _reasonType = chip.$2;
+                    _reasonLabel = chip.$1;
+                  }),
                   compact: true,
                 ),
             ],

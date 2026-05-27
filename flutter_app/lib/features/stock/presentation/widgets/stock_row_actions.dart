@@ -55,12 +55,11 @@ Future<void> showStockRowActions({
             },
           ),
           _StockActionTile(
-            icon: Icons.history_rounded,
-            label: 'View Item Activity',
+            icon: Icons.info_outline_rounded,
+            label: 'View Item Detail',
             onTap: () {
               Navigator.pop(ctx);
-              context
-                  .push('/stock/$id/history?name=${Uri.encodeComponent(name)}');
+              context.push('/catalog/item/$id');
             },
           ),
         ],

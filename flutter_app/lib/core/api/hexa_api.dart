@@ -2483,6 +2483,8 @@ class HexaApi {
     String? notes,
     int? lastSeenStockVersion,
     String? idempotencyKey,
+    String? periodStart,
+    String? periodEnd,
   }) async {
     final res = await _dio.post<Map<String, dynamic>>(
       '/v1/businesses/$businessId/stock/$itemId/physical-update',
@@ -2495,6 +2497,9 @@ class HexaApi {
           'last_seen_stock_version': lastSeenStockVersion,
         if (idempotencyKey != null && idempotencyKey.trim().isNotEmpty)
           'idempotency_key': idempotencyKey.trim(),
+        if (periodStart != null && periodStart.isNotEmpty)
+          'period_start': periodStart,
+        if (periodEnd != null && periodEnd.isNotEmpty) 'period_end': periodEnd,
       },
     );
     return res.data ?? {};

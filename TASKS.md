@@ -170,7 +170,17 @@ Verification gates per phase:
 
 ---
 
-## Stock warehouse rebuild (2026-05-24)
+## Stock warehouse rebuild (2026-05-27)
+
+- [x] Operational top bar: Back, Stock, History, Filter, Search, More (period in filter sheet only)
+- [x] Hidden search until icon; compact horizontal chips (All/Low/Out/Missing Code/Missing Barcode)
+- [x] Table **ITEM | PURCHASE | STOCK | DIFF** — inline status under stock; row quick-action icons
+- [x] Backend `warehouse_diff_qty` = period purchased − physical; staff quick purchases in period map
+- [x] `physical-update` upserts `stock_physical_counts` for list physical/diff columns
+- [x] Desktop ≥1100px: list + `StockDesktopDetailPane` with activity preview
+- [x] Tests: `test_stock_list_columns.py`, `responsive_layout_smoke_test` (`StockWarehouseRow`)
+
+## Stock warehouse rebuild (2026-05-24) — superseded by 2026-05-27 table above
 
 - [x] Compact top nav: period dropdown + filter + search toggle (no TabBar)
 - [x] Sticky collapsible search row; warehouse filter sheet (subcategory, status, unit, missing flags)

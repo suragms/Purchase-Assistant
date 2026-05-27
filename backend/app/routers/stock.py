@@ -187,6 +187,10 @@ def _item_to_list_row(
     physical_stock_counted_by: str | None = None,
 ) -> StockListItemOut:
     cur = catalog_stock_qty(item)
+    warehouse_diff: Decimal | None = None
+    if period_purchased_qty is not None:
+        physical_base = physical_stock_qty if physical_stock_qty is not None else cur
+        warehouse_diff = period_purchased_qty - physical_base
     ro = catalog_reorder(item)
     unit = stock_unit or item.stock_unit or item.default_unit or item.selling_unit
     kg_equiv = (
@@ -232,6 +236,7 @@ def _item_to_list_row(
         physical_stock_difference_qty=physical_stock_difference_qty,
         physical_stock_counted_at=physical_stock_counted_at,
         physical_stock_counted_by=physical_stock_counted_by,
+        warehouse_diff_qty=warehouse_diff,
         opening_stock_qty=getattr(item, "opening_stock_qty", None),
         opening_stock_set_at=getattr(item, "opening_stock_set_at", None),
         opening_stock_set_by=getattr(item, "opening_stock_set_by", None),
@@ -369,7 +374,40 @@ async def _period_purchased_map(
     totals: dict[uuid.UUID, Decimal] = defaultdict(lambda: Decimal(0))
     for line, item in r.all():
         totals[item.id] += line_qty_in_stock_unit(line, item)
+    staff = await _staff_quick_purchased_map(
+        db, business_id, item_ids, period_start, period_end
+    )
+    for iid, qty in staff.items():
+        totals[iid] += qty
     return dict(totals)
+
+
+async def _staff_quick_purchased_map(
+    db: AsyncSession,
+    business_id: uuid.UUID,
+    item_ids: list[uuid.UUID],
+    period_start: date,
+    period_end: date,
+) -> dict[uuid.UUID, Decimal]:
+    """Staff quick purchases in period (stock list PURCHASE column)."""
+    if not item_ids:
+        return {}
+    start_dt = datetime.combine(period_start, time.min, tzinfo=timezone.utc)
+    end_dt = datetime.combine(period_end, time.max, tzinfo=timezone.utc)
+    r = await db.execute(
+        select(
+            StaffPurchaseLog.item_id,
+            func.coalesce(func.sum(StaffPurchaseLog.qty), 0),
+        )
+        .where(
+            StaffPurchaseLog.business_id == business_id,
+            StaffPurchaseLog.item_id.in_(item_ids),
+            StaffPurchaseLog.created_at >= start_dt,
+            StaffPurchaseLog.created_at <= end_dt,
+        )
+        .group_by(StaffPurchaseLog.item_id)
+    )
+    return {row[0]: Decimal(row[1] or 0) for row in r.all()}
 
 
 async def _period_usage_map(
@@ -2170,6 +2208,40 @@ async def update_physical_stock(
         adjustment_type=body.adjustment_type,
         new_qty=result.movement.qty_after,
     )
+    counted = Decimal(body.counted_qty)
+    system_before = result.movement.qty_before
+    ps, pe = _parse_period_dates(body.period_start, body.period_end)
+    purchased_qty: Decimal | None = None
+    if ps and pe:
+        purchased_qty = (
+            await _period_purchased_map(db, business_id, [item_id], ps, pe)
+        ).get(item_id, Decimal("0"))
+    item_r = await db.execute(
+        select(CatalogItem).where(
+            CatalogItem.id == item_id,
+            CatalogItem.business_id == business_id,
+            CatalogItem.deleted_at.is_(None),
+        )
+    )
+    count_item = item_r.scalar_one_or_none()
+    if count_item is not None:
+        display = _user_display(user)
+        db.add(
+            StockPhysicalCount(
+                business_id=business_id,
+                item_id=item_id,
+                system_qty=system_before,
+                counted_qty=counted,
+                difference_qty=counted - system_before,
+                purchased_qty=purchased_qty,
+                stock_unit=catalog_stock_unit(count_item),
+                period_start=ps,
+                period_end=pe,
+                notes=body.notes.strip() if body.notes else None,
+                counted_by=user.id,
+                counted_by_name=display,
+            )
+        )
     await db.commit()
     await db.refresh(result.movement)
     publish_business_event(

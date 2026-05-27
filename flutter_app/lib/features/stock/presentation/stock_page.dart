@@ -8,22 +8,27 @@ import '../../../core/services/stock_list_pdf.dart';
 import '../../../core/json_coerce.dart';
 import '../../../core/providers/home_dashboard_provider.dart';
 import '../../../core/providers/stock_providers.dart';
-import '../../../core/design_system/hexa_responsive.dart';
 import '../../../core/router/post_auth_route.dart';
 import '../../../core/widgets/friendly_load_error.dart';
 import '../../../core/widgets/list_skeleton.dart';
 import '../stock_list_merge.dart';
 import '../stock_period_utils.dart';
-import '../../catalog/presentation/widgets/item_quick_view_sheet.dart';
-import 'widgets/stock_list_column_header.dart';
+import 'package:go_router/go_router.dart';
 import 'widgets/stock_pagination_bar.dart';
-import 'widgets/stock_search_sliver.dart';
-import 'widgets/stock_compact_top_bar.dart';
+import 'widgets/stock_operational_top_bar.dart';
 import 'widgets/stock_row_actions.dart';
-import 'widgets/stock_table_row.dart';
+import 'widgets/stock_warehouse_row.dart';
+import 'widgets/stock_warehouse_table_header.dart';
+import 'widgets/stock_status_chip_row.dart';
+import 'widgets/stock_inline_search_bar.dart';
+import 'widgets/stock_desktop_detail_pane.dart';
 import 'widgets/operational_stock_filter_sheet.dart'
-    show stockActiveFilterSummary;
-import 'widgets/stock_warehouse_filter_sheet.dart';
+    show
+        showOperationalStockFilter,
+        stockActiveFilterSummary,
+        kOperationalDesktopBreakpoint;
+import 'widgets/stock_warehouse_filter_sheet.dart'
+    show countWarehouseActiveFilters;
 
 enum StockPageMode { auto, staff, owner }
 
@@ -224,18 +229,32 @@ class _StockPageState extends ConsumerState<StockPage> {
     }
   }
 
-  void _openFilters() {
-    unawaited(
-      showStockWarehouseFilterSheet(
-        context: context,
-        ref: ref,
-        subcategoryCtrl: _subcatCtrl,
-        onApplied: () {
-          _resetMerged();
-          ref.invalidate(stockListProvider);
-        },
-      ),
+  Future<void> _openFilters() async {
+    await showOperationalStockFilter(
+      context: context,
+      ref: ref,
+      subcategoryCtrl: _subcatCtrl,
+      isStaffMode: _isStaffMode,
     );
+    _resetMerged();
+    ref.invalidate(stockListProvider);
+  }
+
+  void _openHistory() {
+    final route =
+        _isStaffMode ? '/staff/stock/changes' : '/stock/changes';
+    context.push(route);
+  }
+
+  Map<String, dynamic>? _selectedItem(List<Map<String, dynamic>> items) {
+    final id = ref.read(stockSelectedItemIdProvider);
+    if (id == null || id.isEmpty) {
+      return items.isNotEmpty ? items.first : null;
+    }
+    for (final row in items) {
+      if (row['id']?.toString() == id) return row;
+    }
+    return items.isNotEmpty ? items.first : null;
   }
 
   Widget _buildListBody({
@@ -254,7 +273,86 @@ class _StockPageState extends ConsumerState<StockPage> {
     final op = ref.watch(stockOperationalFiltersProvider);
     final filterCount = countWarehouseActiveFilters(listQ, op);
 
-    return RefreshIndicator(
+    final desktop =
+        MediaQuery.sizeOf(context).width >= kOperationalDesktopBreakpoint;
+    final selected = desktop ? _selectedItem(items) : null;
+    if (desktop && items.isNotEmpty) {
+      final sid = selected?['id']?.toString();
+      if (sid != null &&
+          ref.read(stockSelectedItemIdProvider) != sid) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            ref.read(stockSelectedItemIdProvider.notifier).state = sid;
+          }
+        });
+      }
+    }
+
+    final listSlivers = <Widget>[
+      if (_searchExpanded)
+        SliverToBoxAdapter(
+          child: StockInlineSearchBar(
+            controller: _searchCtrl,
+            onClear: _clearSearch,
+          ),
+        ),
+      const SliverToBoxAdapter(child: StockStatusChipRow()),
+      if (items.isNotEmpty) ...[
+        const SliverToBoxAdapter(child: StockWarehouseTableHeader()),
+        SliverList(
+          delegate: SliverChildBuilderDelegate(
+            (ctx, i) {
+              final row = items[i];
+              final id = row['id']?.toString() ?? '';
+              final isSelected =
+                  desktop && id.isNotEmpty && id == selected?['id']?.toString();
+              return RepaintBoundary(
+                child: StockWarehouseRow(
+                  item: row,
+                  ref: ref,
+                  isStaffMode: _isStaffMode,
+                  isFirstRow: i == 0,
+                  isSelected: isSelected,
+                  onTap: () => unawaited(_openRowActions(row)),
+                  onSelect: desktop && id.isNotEmpty
+                      ? () => ref
+                          .read(stockSelectedItemIdProvider.notifier)
+                          .state = id
+                      : null,
+                ),
+              );
+            },
+            childCount: items.length,
+          ),
+        ),
+        SliverToBoxAdapter(
+          child: StockPaginationBar(
+            showingCount: raw.length,
+            totalCount: total,
+            currentPage: listQ.page,
+            maxPage: maxPage,
+            loading: _loadingMore,
+            onPrev: listQ.page > 1 ? _goPrevPage : null,
+            onNext: listQ.page < maxPage ? _goNextPage : null,
+          ),
+        ),
+      ],
+      if (items.isEmpty)
+        SliverFillRemaining(
+          hasScrollBody: false,
+          child: Center(
+            child: Text(
+              filterCount > 0 || listQ.q.isNotEmpty
+                  ? 'No items match filters'
+                  : 'No stock items yet',
+              style: const TextStyle(fontSize: 13, color: Colors.black54),
+            ),
+          ),
+        ),
+      SliverToBoxAdapter(child: SizedBox(height: bottomPad)),
+    ];
+
+    final scroll = RefreshIndicator(
       onRefresh: () async {
         _resetMerged();
         ref.invalidate(stockListProvider);
@@ -262,74 +360,22 @@ class _StockPageState extends ConsumerState<StockPage> {
       },
       child: CustomScrollView(
         controller: _scroll,
-        slivers: [
-          SliverPersistentHeader(
-            pinned: true,
-            delegate: StockSearchSliverDelegate(
-              expanded: _searchExpanded,
-              searchController: _searchCtrl,
-              onClearSearch: _clearSearch,
-              onOpenFilters: _openFilters,
-              filterCount: filterCount,
-            ),
-          ),
-          SliverToBoxAdapter(
-              child: _StockStatusFilterChips(isStaffMode: _isStaffMode)),
-          if (items.isNotEmpty) ...[
-            const SliverToBoxAdapter(child: StockListColumnHeader()),
-            SliverList(
-              delegate: SliverChildBuilderDelegate(
-                (ctx, i) => RepaintBoundary(
-                  child: StockTableRow(
-                    item: items[i],
-                    isStaffMode: _isStaffMode,
-                    isFirstRow: i == 0,
-                    onTap: () => unawaited(_openRowActions(items[i])),
-                    onLongPress: () {
-                      final id = items[i]['id']?.toString() ?? '';
-                      final name = items[i]['name']?.toString() ?? 'Item';
-                      if (id.isEmpty) return;
-                      unawaited(
-                        showItemQuickView(
-                          context: context,
-                          ref: ref,
-                          itemId: id,
-                          itemName: name,
-                        ),
-                      );
-                    },
-                  ),
-                ),
-                childCount: items.length,
-              ),
-            ),
-            SliverToBoxAdapter(
-              child: StockPaginationBar(
-                showingCount: raw.length,
-                totalCount: total,
-                currentPage: listQ.page,
-                maxPage: maxPage,
-                loading: _loadingMore,
-                onPrev: listQ.page > 1 ? _goPrevPage : null,
-                onNext: listQ.page < maxPage ? _goNextPage : null,
-              ),
-            ),
-          ],
-          if (items.isEmpty)
-            SliverFillRemaining(
-              hasScrollBody: false,
-              child: Center(
-                child: Text(
-                  filterCount > 0 || listQ.q.isNotEmpty
-                      ? 'No items match filters'
-                      : 'No stock items yet',
-                  style: const TextStyle(fontSize: 13, color: Colors.black54),
-                ),
-              ),
-            ),
-          SliverToBoxAdapter(child: SizedBox(height: bottomPad)),
-        ],
+        slivers: listSlivers,
       ),
+    );
+
+    if (!desktop) return scroll;
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Expanded(flex: 5, child: scroll),
+        const VerticalDivider(width: 1, thickness: 1),
+        Expanded(
+          flex: 4,
+          child: StockDesktopDetailPane(item: selected),
+        ),
+      ],
     );
   }
 
@@ -389,7 +435,7 @@ class _StockPageState extends ConsumerState<StockPage> {
 
     return Scaffold(
       backgroundColor: const Color(0xFFF5F3EE),
-      appBar: StockCompactTopBar(
+      appBar: StockOperationalTopBar(
         isStaffMode: _isStaffMode,
         filterCount: filterCount,
         searchExpanded: _searchExpanded,
@@ -397,106 +443,10 @@ class _StockPageState extends ConsumerState<StockPage> {
         onToggleSearch: () =>
             setState(() => _searchExpanded = !_searchExpanded),
         onOpenFilters: _openFilters,
-        onExportPdf: _exportStockPdf,
+        onOpenHistory: _openHistory,
+        onExportPdf: _isStaffMode ? null : _exportStockPdf,
       ),
       body: body,
-    );
-  }
-}
-
-class _StockStatusFilterChips extends ConsumerWidget {
-  const _StockStatusFilterChips({required this.isStaffMode});
-
-  final bool isStaffMode;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final countsAsync = ref.watch(stockStatusCountsProvider);
-    final q = ref.watch(stockListQueryProvider);
-    final op = ref.watch(stockOperationalFiltersProvider);
-
-    return countsAsync.when(
-      loading: () => const SizedBox(height: 40),
-      error: (_, __) => const SizedBox.shrink(),
-      data: (counts) {
-        void applyStatus(String status) {
-          ref.read(stockListQueryProvider.notifier).state = q.copyWith(
-            status: status,
-            page: 1,
-          );
-          ref.read(stockOperationalFiltersProvider.notifier).state =
-              const StockOperationalFilters();
-          ref.invalidate(stockListProvider);
-        }
-
-        void applyMissingCode() {
-          ref.read(stockListQueryProvider.notifier).state =
-              q.copyWith(status: 'all', page: 1);
-          ref.read(stockOperationalFiltersProvider.notifier).state = op
-              .copyWith(missingItemCodeOnly: true, clearMissingItemCode: false);
-          ref.invalidate(stockListProvider);
-        }
-
-        void applyMissingBarcode() {
-          ref.read(stockListQueryProvider.notifier).state =
-              q.copyWith(status: 'all', page: 1);
-          ref.read(stockOperationalFiltersProvider.notifier).state =
-              op.copyWith(missingBarcodeOnly: true);
-          ref.invalidate(stockListProvider);
-        }
-
-        final chips = <({String label, bool selected, VoidCallback onTap})>[
-          (
-            label: 'All (${counts['all'] ?? 0})',
-            selected: q.status == 'all' &&
-                !op.missingBarcodeOnly &&
-                !op.missingItemCodeOnly,
-            onTap: () => applyStatus('all'),
-          ),
-          (
-            label: 'Low (${counts['low'] ?? 0})',
-            selected: q.status == 'low',
-            onTap: () => applyStatus('low'),
-          ),
-          (
-            label: 'Out (${counts['out'] ?? 0})',
-            selected: q.status == 'out',
-            onTap: () => applyStatus('out'),
-          ),
-          (
-            label: 'Missing code (${counts['missing_code'] ?? 0})',
-            selected: op.missingItemCodeOnly,
-            onTap: applyMissingCode,
-          ),
-          (
-            label: 'Missing barcode (${counts['missing_barcode'] ?? 0})',
-            selected: op.missingBarcodeOnly,
-            onTap: applyMissingBarcode,
-          ),
-        ];
-
-        return Padding(
-          padding: EdgeInsets.fromLTRB(
-            HexaResponsive.pageGutter(context, operational: true),
-            4,
-            HexaResponsive.pageGutter(context, operational: true),
-            8,
-          ),
-          child: Wrap(
-            spacing: 6,
-            runSpacing: 6,
-            children: [
-              for (final c in chips)
-                HexaAccessibleFilterChip(
-                  label: c.label,
-                  selected: c.selected,
-                  onSelected: (_) => c.onTap(),
-                  compact: true,
-                ),
-            ],
-          ),
-        );
-      },
     );
   }
 }

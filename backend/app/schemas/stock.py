@@ -25,6 +25,8 @@ class StockPhysicalUpdateIn(BaseModel):
     notes: str | None = Field(default=None, max_length=500)
     last_seen_stock_version: int | None = Field(default=None, ge=0)
     idempotency_key: str | None = Field(default=None, max_length=120)
+    period_start: str | None = None
+    period_end: str | None = None
 
 
 class StockMovementOut(BaseModel):
@@ -137,6 +139,7 @@ class StockListItemOut(BaseModel):
     physical_stock_difference_qty: Decimal | None = None
     physical_stock_counted_at: datetime | None = None
     physical_stock_counted_by: str | None = None
+    warehouse_diff_qty: Decimal | None = None
     opening_stock_qty: Decimal | None = None
     opening_stock_set_at: datetime | None = None
     opening_stock_set_by: str | None = None
