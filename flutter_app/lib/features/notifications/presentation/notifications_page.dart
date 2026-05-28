@@ -257,16 +257,34 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
                       ),
                     ],
                   )
-                : ListView(
-                    physics: const AlwaysScrollableScrollPhysics(),
-                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-                    children: _buildGroupedNotificationTiles(
-                      context: context,
-                      ref: ref,
-                      visible: visible,
-                      rel: rel,
-                      tt: tt,
-                    ),
+                : Builder(
+                    builder: (_) {
+                      final grouped = _buildGroupedNotificationTiles(
+                        context: context,
+                        ref: ref,
+                        visible: visible,
+                        rel: rel,
+                        tt: tt,
+                      );
+                      final hasCard =
+                          grouped.any((w) => w is NotificationAlertCard);
+                      final fallback = <Widget>[
+                        const _NotificationDateHeader(label: 'Alerts'),
+                        for (final n in visible)
+                          _notificationTile(
+                            context: context,
+                            ref: ref,
+                            n: n,
+                            rel: rel,
+                            tt: tt,
+                          ),
+                      ];
+                      return ListView(
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+                        children: hasCard ? grouped : fallback,
+                      );
+                    },
                   ),
             ),
           ),

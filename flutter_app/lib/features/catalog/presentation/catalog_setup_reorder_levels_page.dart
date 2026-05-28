@@ -22,10 +22,13 @@ class CatalogSetupReorderLevelsPage extends ConsumerStatefulWidget {
 class _CatalogSetupReorderLevelsPageState
     extends ConsumerState<CatalogSetupReorderLevelsPage> {
   final _values = <String, TextEditingController>{};
+  final _searchCtrl = TextEditingController();
+  String _search = '';
   bool _saving = false;
 
   @override
   void dispose() {
+    _searchCtrl.dispose();
     for (final c in _values.values) {
       c.dispose();
     }
@@ -37,6 +40,17 @@ class _CatalogSetupReorderLevelsPageState
       for (final it in items)
         if (((it['reorder_level'] as num?)?.toDouble() ?? 0) <= 0) it,
     ];
+  }
+
+  List<Map<String, dynamic>> _applySearch(List<Map<String, dynamic>> rows) {
+    final q = _search.trim().toLowerCase();
+    if (q.isEmpty) return rows;
+    return rows.where((it) {
+      final name = (it['name']?.toString() ?? '').toLowerCase();
+      final cat = (it['category_name']?.toString() ?? '').toLowerCase();
+      final sub = (it['subcategory_name']?.toString() ?? '').toLowerCase();
+      return name.contains(q) || cat.contains(q) || sub.contains(q);
+    }).toList();
   }
 
   Future<void> _saveAll(List<Map<String, dynamic>> rows) async {
@@ -113,6 +127,7 @@ class _CatalogSetupReorderLevelsPageState
               if (e is Map) Map<String, dynamic>.from(e),
           ];
           final rows = _needsSetup(items);
+          final visibleRows = _applySearch(rows);
           for (final it in rows) {
             final id = it['id']?.toString() ?? '';
             if (id.isEmpty || _values.containsKey(id)) continue;
@@ -121,18 +136,53 @@ class _CatalogSetupReorderLevelsPageState
           return Column(
             children: [
               Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 6),
+                child: TextField(
+                  controller: _searchCtrl,
+                  onChanged: (v) => setState(() => _search = v),
+                  textInputAction: TextInputAction.search,
+                  decoration: InputDecoration(
+                    hintText: 'Search item/category/subcategory',
+                    prefixIcon: const Icon(Icons.search_rounded, size: 20),
+                    suffixIcon: _search.trim().isEmpty
+                        ? null
+                        : IconButton(
+                            icon: const Icon(Icons.close_rounded, size: 18),
+                            onPressed: () {
+                              _searchCtrl.clear();
+                              setState(() => _search = '');
+                            },
+                          ),
+                    isDense: true,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+              ),
+              Padding(
                 padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
                 child: Text(
-                  '${rows.length} items have no reorder threshold',
+                  '${visibleRows.length} of ${rows.length} items have no reorder threshold',
                   style: HexaDsType.body(14, color: HexaDsColors.textMuted),
                 ),
               ),
               Expanded(
-                child: ListView.builder(
+                child: visibleRows.isEmpty
+                    ? const Center(
+                        child: Padding(
+                          padding: EdgeInsets.all(20),
+                          child: Text(
+                            'No items match your search',
+                            style: TextStyle(fontWeight: FontWeight.w700),
+                          ),
+                        ),
+                      )
+                    : ListView.builder(
                   padding: const EdgeInsets.fromLTRB(16, 0, 16, 96),
-                  itemCount: rows.length,
+                  itemCount: visibleRows.length,
                   itemBuilder: (ctx, i) {
-                    final it = rows[i];
+                    final it = visibleRows[i];
                     final id = it['id']?.toString() ?? '';
                     final name = it['name']?.toString() ?? '';
                     final unit =

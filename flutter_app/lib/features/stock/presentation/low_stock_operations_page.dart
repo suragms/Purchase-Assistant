@@ -37,6 +37,7 @@ class _LowStockOperationsPageState extends ConsumerState<LowStockOperationsPage>
   bool _bulkMode = false;
   final _selectedIds = <String>{};
   Map<String, dynamic>? _selectedItem;
+  bool _didShowReminderDialog = false;
 
   @override
   void initState() {
@@ -118,6 +119,59 @@ class _LowStockOperationsPageState extends ConsumerState<LowStockOperationsPage>
         LowStockOpsFilter.highSalesImpact => 'high_impact',
       };
 
+  void _showSmartReminderIfNeeded({
+    required int outCount,
+    required int delayedCount,
+    required int pendingVerificationCount,
+  }) {
+    if (_didShowReminderDialog) return;
+    final reminders = <String>[
+      if (outCount > 0) '$outCount items are out of stock.',
+      if (delayedCount > 0) '$delayedCount supplier orders are delayed.',
+      if (pendingVerificationCount > 0)
+        '$pendingVerificationCount items need physical verification.',
+    ];
+    if (reminders.isEmpty) return;
+    _didShowReminderDialog = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      showDialog<void>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: Text(widget.staffMode ? 'Staff reminder' : 'Owner reminder'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              for (final r in reminders)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 6),
+                  child: Text('• $r'),
+                ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('Later'),
+            ),
+            FilledButton(
+              onPressed: () {
+                Navigator.of(ctx).pop();
+                if (widget.staffMode) {
+                  context.push('/staff/low-stock?filter=verification');
+                } else {
+                  context.push('/stock/reorder');
+                }
+              },
+              child: Text(widget.staffMode ? 'Open verification' : 'Open reorder'),
+            ),
+          ],
+        ),
+      );
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     ref.watch(realtimeInvalidationProvider);
@@ -166,6 +220,11 @@ class _LowStockOperationsPageState extends ConsumerState<LowStockOperationsPage>
                     0.0;
             final estimatedImpactLabel =
                 'Impact: ${impactUnitsPerDay.toStringAsFixed(0)} / day';
+            _showSmartReminderIfNeeded(
+              outCount: outCount,
+              delayedCount: delayedCount,
+              pendingVerificationCount: pendingVerificationCount,
+            );
 
             final headerDelegate = _LowStockHeaderDelegate(
               totalAttention: totalAttention,
@@ -220,10 +279,18 @@ class _LowStockOperationsPageState extends ConsumerState<LowStockOperationsPage>
                 ),
                 data: (ops) {
                   final rawItems = ops['items'] as List? ?? const [];
-                  final items = [
-                    for (final e in rawItems)
-                      if (e is Map) Map<String, dynamic>.from(e),
-                  ];
+                  final seenIds = <String>{};
+                  final items = <Map<String, dynamic>>[];
+                  for (final e in rawItems) {
+                    if (e is! Map) continue;
+                    final row = Map<String, dynamic>.from(e);
+                    final id = row['id']?.toString().trim() ?? '';
+                    if (id.isNotEmpty) {
+                      if (seenIds.contains(id)) continue;
+                      seenIds.add(id);
+                    }
+                    items.add(row);
+                  }
 
                   final grouped = <String, Map<String, List<Map<String, dynamic>>>>{};
                   for (final item in items) {
@@ -267,6 +334,18 @@ class _LowStockOperationsPageState extends ConsumerState<LowStockOperationsPage>
                                     ),
                                   ),
                                 ),
+                        ),
+                      ),
+                      SliverToBoxAdapter(
+                        child: Padding(
+                          padding: EdgeInsets.fromLTRB(gutter, 0, gutter, 8),
+                          child: _LowStockSmartActionCard(
+                            staffMode: widget.staffMode,
+                            outCount: outCount,
+                            pendingCount: pendingCount,
+                            delayedCount: delayedCount,
+                            pendingVerificationCount: pendingVerificationCount,
+                          ),
                         ),
                       ),
                       if (desktop)
@@ -387,6 +466,94 @@ class _LowStockOperationsPageState extends ConsumerState<LowStockOperationsPage>
               ),
             );
           },
+        ),
+      ),
+    );
+  }
+}
+
+class _LowStockSmartActionCard extends StatelessWidget {
+  const _LowStockSmartActionCard({
+    required this.staffMode,
+    required this.outCount,
+    required this.pendingCount,
+    required this.delayedCount,
+    required this.pendingVerificationCount,
+  });
+
+  final bool staffMode;
+  final int outCount;
+  final int pendingCount;
+  final int delayedCount;
+  final int pendingVerificationCount;
+
+  @override
+  Widget build(BuildContext context) {
+    final todos = <String>[
+      if (outCount > 0) 'Place reorder for out-of-stock items',
+      if (pendingVerificationCount > 0) 'Verify physical counts from warehouse',
+      if (delayedCount > 0) 'Follow up with delayed suppliers',
+      if (outCount == 0 && pendingVerificationCount == 0 && delayedCount == 0)
+        'No critical blockers. Monitor pending items.',
+    ];
+    return Card(
+      margin: EdgeInsets.zero,
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+        side: BorderSide(color: Colors.black.withValues(alpha: 0.08)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              staffMode ? 'Staff action focus' : 'Owner action focus',
+              style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 13),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Pending: $pendingCount · Out: $outCount · Verification: $pendingVerificationCount · Delayed: $delayedCount',
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: Color(0xFF64748B),
+              ),
+            ),
+            const SizedBox(height: 8),
+            for (final t in todos)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: Text(
+                  '• $t',
+                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+                ),
+              ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                FilledButton.tonal(
+                  onPressed: () {
+                    if (staffMode) {
+                      context.push('/staff/low-stock?filter=verification');
+                    } else {
+                      context.push('/stock/reorder');
+                    }
+                  },
+                  child: Text(staffMode ? 'Open verification' : 'Open reorder list'),
+                ),
+                OutlinedButton(
+                  onPressed: () {
+                    context.push(staffMode ? '/staff/stock' : '/stock');
+                  },
+                  child: const Text('Open stock table'),
+                ),
+              ],
+            ),
+          ],
         ),
       ),
     );

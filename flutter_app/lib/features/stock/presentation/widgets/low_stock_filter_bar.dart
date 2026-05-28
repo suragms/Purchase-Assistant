@@ -58,35 +58,29 @@ class LowStockFilterBar extends StatelessWidget {
       LowStockOpsFilter.highSalesImpact,
     ];
 
-    return SizedBox(
-      height: 48,
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Row(
-          children: [
-            const SizedBox(width: 8),
-            if (onBulkModeChanged != null) ...[
-              FilterChip(
-                label: Text(bulkMode ? 'Bulk ($selectedCount)' : 'Bulk'),
-                selected: bulkMode,
-                onSelected: onBulkModeChanged,
-              ),
-              const SizedBox(width: 8),
-            ],
-            for (final c in chips) ...[
-              HexaAccessibleFilterChip(
-                label: c.label,
-                selected: c == active,
-                compact: true,
-                onSelected: (v) {
-                  if (!v) return;
-                  onActiveChanged(c);
-                },
-              ),
-              const SizedBox(width: 8),
-            ],
-          ],
-        ),
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      child: Wrap(
+        spacing: 8,
+        runSpacing: 6,
+        children: [
+          if (onBulkModeChanged != null)
+            FilterChip(
+              label: Text(bulkMode ? 'Bulk ($selectedCount)' : 'Bulk'),
+              selected: bulkMode,
+              onSelected: onBulkModeChanged,
+            ),
+          for (final c in chips)
+            HexaAccessibleFilterChip(
+              label: c.label,
+              selected: c == active,
+              compact: true,
+              onSelected: (v) {
+                if (!v) return;
+                onActiveChanged(c);
+              },
+            ),
+        ],
       ),
     );
   }

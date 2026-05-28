@@ -17,6 +17,8 @@ class ReorderListPage extends ConsumerStatefulWidget {
 class _ReorderListPageState extends ConsumerState<ReorderListPage>
     with SingleTickerProviderStateMixin {
   late final TabController _tabs;
+  final _searchCtrl = TextEditingController();
+  String _search = '';
 
   static const _statuses = ['pending', 'ordered', 'done'];
 
@@ -24,11 +26,17 @@ class _ReorderListPageState extends ConsumerState<ReorderListPage>
   void initState() {
     super.initState();
     _tabs = TabController(length: 3, vsync: this);
+    _searchCtrl.addListener(() {
+      final q = _searchCtrl.text.trim();
+      if (_search == q) return;
+      setState(() => _search = q);
+    });
   }
 
   @override
   void dispose() {
     _tabs.dispose();
+    _searchCtrl.dispose();
     super.dispose();
   }
 
@@ -81,6 +89,7 @@ class _ReorderListPageState extends ConsumerState<ReorderListPage>
         ),
         bottom: TabBar(
           controller: _tabs,
+          isScrollable: true,
           tabs: const [
             Tab(text: 'Pending'),
             Tab(text: 'Ordered'),
@@ -91,8 +100,40 @@ class _ReorderListPageState extends ConsumerState<ReorderListPage>
       body: TabBarView(
         controller: _tabs,
         children: [
-          for (final st in _statuses) _ReorderTab(status: st, onSetStatus: _setStatus, onRemove: _remove),
+          for (final st in _statuses)
+            _ReorderTab(
+              status: st,
+              query: _search,
+              onSetStatus: _setStatus,
+              onRemove: _remove,
+            ),
         ],
+      ),
+      bottomNavigationBar: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
+          child: TextField(
+            controller: _searchCtrl,
+            textInputAction: TextInputAction.search,
+            decoration: InputDecoration(
+              hintText: 'Search reorder items...',
+              prefixIcon: const Icon(Icons.search_rounded, size: 20),
+              suffixIcon: _search.isEmpty
+                  ? null
+                  : IconButton(
+                      icon: const Icon(Icons.close_rounded, size: 18),
+                      onPressed: () => _searchCtrl.clear(),
+                    ),
+              isDense: true,
+              filled: true,
+              fillColor: Colors.white,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -101,11 +142,13 @@ class _ReorderListPageState extends ConsumerState<ReorderListPage>
 class _ReorderTab extends ConsumerWidget {
   const _ReorderTab({
     required this.status,
+    required this.query,
     required this.onSetStatus,
     required this.onRemove,
   });
 
   final String status;
+  final String query;
   final Future<void> Function(Map<String, dynamic> row, String status) onSetStatus;
   final Future<void> Function(Map<String, dynamic> row) onRemove;
 
@@ -121,7 +164,20 @@ class _ReorderTab extends ConsumerWidget {
         onRetry: () => ref.invalidate(reorderListProvider(status)),
       ),
       data: (rows) {
-        if (rows.isEmpty) {
+        final normalizedQuery = query.toLowerCase();
+        final visible = normalizedQuery.isEmpty
+            ? rows
+            : rows.where((r) {
+                final name = (r['item_name']?.toString() ?? '').toLowerCase();
+                final supplier =
+                    (r['supplier_name']?.toString() ?? '').toLowerCase();
+                final by = (r['added_by_name']?.toString() ?? '').toLowerCase();
+                return name.contains(normalizedQuery) ||
+                    supplier.contains(normalizedQuery) ||
+                    by.contains(normalizedQuery);
+              }).toList();
+
+        if (visible.isEmpty) {
           return Center(
             child: Padding(
               padding: const EdgeInsets.all(24),
@@ -131,14 +187,18 @@ class _ReorderTab extends ConsumerWidget {
                   Icon(Icons.check_circle_outline, size: 48, color: Colors.grey.shade400),
                   const SizedBox(height: 12),
                   Text(
-                    status == 'pending'
-                        ? 'No pending reorders'
-                        : 'No $status items',
+                    rows.isEmpty
+                        ? (status == 'pending'
+                            ? 'No pending reorders'
+                            : 'No $status items')
+                        : 'No items match search',
                     style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Add items from stock or item detail',
+                    rows.isEmpty
+                        ? 'Add items from stock or item detail'
+                        : 'Try a different search term',
                     textAlign: TextAlign.center,
                     style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
                   ),
@@ -159,10 +219,10 @@ class _ReorderTab extends ConsumerWidget {
               0,
               96 + MediaQuery.viewPaddingOf(context).bottom,
             ),
-            itemCount: rows.length,
+            itemCount: visible.length,
             separatorBuilder: (_, __) => const Divider(height: 1),
             itemBuilder: (ctx, i) {
-              final r = rows[i];
+              final r = visible[i];
               final itemId = r['item_id']?.toString() ?? '';
               final name = r['item_name']?.toString() ?? '—';
               final cur = r['current_stock']?.toString() ?? '—';

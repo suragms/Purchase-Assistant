@@ -10,17 +10,16 @@ abstract final class StockRowMetrics {
       coerceToDoubleNullable(item['period_purchased_qty']);
 
   static double stockQty(Map<String, dynamic> item) {
-    final physical = item['physical_stock_qty'];
-    if (physical != null) return coerceToDouble(physical);
+    // Stock column must show backend system/on-hand stock truth.
+    // Physical count is displayed separately in item snapshot/workflows.
     return coerceToDouble(item['current_stock']);
   }
 
   static double diffQty(Map<String, dynamic> item) {
-    final api = item['warehouse_diff_qty'];
-    if (api != null) return coerceToDouble(api);
     final purchased = purchasedQty(item);
     if (purchased == null) return double.nan;
-    return purchased - stockQty(item);
+    // Negative => deficit (system lower than purchased), Positive => excess.
+    return stockQty(item) - purchased;
   }
 
   static String unit(Map<String, dynamic> item) =>

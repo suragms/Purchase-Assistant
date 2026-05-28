@@ -14,7 +14,7 @@ import '../../features/catalog/presentation/catalog_add_category_page.dart';
 import '../../features/catalog/presentation/catalog_add_item_page.dart';
 import '../../features/catalog/presentation/catalog_add_subcategory_page.dart';
 import '../../features/catalog/presentation/catalog_category_detail_page.dart';
-import '../../features/catalog/presentation/item_detail_page.dart';
+import '../../features/catalog/presentation/catalog_item_detail_page.dart';
 import '../../features/catalog/presentation/item_edit_page.dart';
 import '../../features/catalog/presentation/catalog_item_timeline_page.dart';
 import '../../features/catalog/presentation/catalog_page.dart';
@@ -428,7 +428,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           final id = state.pathParameters['itemId']!;
           return iosPushPage(
             key: state.pageKey,
-            child: ItemDetailPage(itemId: id),
+            child: CatalogItemDetailPage(itemId: id),
           );
         },
       ),
@@ -515,7 +515,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           final id = state.pathParameters['itemId']!;
           return iosPushPage(
             key: state.pageKey,
-            child: ItemDetailPage(itemId: id),
+            child: CatalogItemDetailPage(itemId: id),
           );
         },
       ),
