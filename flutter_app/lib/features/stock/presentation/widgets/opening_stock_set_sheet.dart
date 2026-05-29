@@ -113,12 +113,8 @@ class _OpeningStockSetBodyState extends ConsumerState<_OpeningStockSetBody> {
             idempotencyKey: _idempotencyKey,
           );
 
-      invalidateWarehouseSurfaces(ref);
+      invalidateWarehouseSurfaces(ref, itemId: _itemId);
       ref.invalidate(openingStockSetupProvider);
-      ref.invalidate(stockListProvider);
-      ref.invalidate(stockStatusCountsProvider);
-      ref.invalidate(stockItemIntelligenceProvider(_itemId));
-      ref.invalidate(stockItemActivityProvider(_itemId));
       ref.invalidate(stockChangesFeedProvider);
 
       if (context.mounted) Navigator.of(context).pop(true);

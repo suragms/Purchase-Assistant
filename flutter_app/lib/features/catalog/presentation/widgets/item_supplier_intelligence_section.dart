@@ -24,7 +24,8 @@ class ItemSupplierIntelligenceSection extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final session = ref.watch(sessionProvider);
     final hideFinancials = session != null && !sessionCanSeeFinancials(session);
-    final purchasesAsync = ref.watch(tradePurchasesCatalogIntelParsedProvider);
+    final purchasesAsync =
+        ref.watch(tradePurchasesForItemParsedProvider(itemId));
 
     return Card(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -42,7 +43,7 @@ class ItemSupplierIntelligenceSection extends ConsumerWidget {
               ),
               error: (_, __) => FriendlyLoadError(
                 message: 'Could not load supplier intelligence',
-                onRetry: () => ref.invalidate(tradePurchasesCatalogIntelProvider),
+                onRetry: () => ref.invalidate(tradePurchasesForItemProvider(itemId)),
               ),
               data: (purchases) {
                 final rows = itemTradeHistoryRows(

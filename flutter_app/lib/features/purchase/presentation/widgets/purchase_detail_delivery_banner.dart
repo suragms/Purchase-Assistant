@@ -2,24 +2,64 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../../../../core/models/trade_purchase_models.dart';
+import '../../../../core/theme/hexa_colors.dart';
+import 'purchase_delivery_badge.dart';
 
-/// Compact pending / received delivery banner.
+/// Delivery pipeline status + role-specific primary action.
 class PurchaseDetailDeliveryBanner extends StatelessWidget {
   const PurchaseDetailDeliveryBanner({
     super.key,
     required this.purchase,
-    required this.onToggleDelivery,
+    this.onDispatch,
+    this.onArrive,
+    this.onVerify,
+    this.onCommit,
+    this.onRevert,
+    this.isOwnerOrManager = false,
+    this.isStaff = false,
   });
 
   final TradePurchase purchase;
-  final VoidCallback onToggleDelivery;
+  final VoidCallback? onDispatch;
+  final VoidCallback? onArrive;
+  final VoidCallback? onVerify;
+  final VoidCallback? onCommit;
+  final VoidCallback? onRevert;
+  final bool isOwnerOrManager;
+  final bool isStaff;
 
   @override
   Widget build(BuildContext context) {
-    final delivered = purchase.isDelivered;
-    final borderColor =
-        delivered ? const Color(0xFF16A34A) : const Color(0xFFE65100);
-    final bg = delivered ? const Color(0xFFF0FDF4) : const Color(0xFFFFF7ED);
+    final ds = purchase.deliveryStatusEnum;
+    final borderColor = ds.color;
+    final bg = borderColor.withValues(alpha: 0.08);
+
+    String subtitle = switch (ds) {
+      DeliveryStatus.stockCommitted =>
+        purchase.stockCommittedAt != null
+            ? 'Committed on ${DateFormat('d MMM yyyy').format(purchase.stockCommittedAt!)}'
+            : purchase.deliveredAt != null
+                ? 'Committed on ${DateFormat('d MMM yyyy').format(purchase.deliveredAt!)}'
+                : 'Stock updated in warehouse',
+      DeliveryStatus.staffVerified || DeliveryStatus.partial =>
+        'Staff verified — owner must commit to stock',
+      DeliveryStatus.arrived || DeliveryStatus.staffVerifying =>
+        'Count items and submit verification',
+      DeliveryStatus.dispatched || DeliveryStatus.inTransit =>
+        'Shipment en route to warehouse',
+      _ => 'Awaiting supplier dispatch or warehouse receipt',
+    };
+
+    final meta = <String>[];
+    if ((purchase.truckNumber ?? '').trim().isNotEmpty) {
+      meta.add('Truck ${purchase.truckNumber!.trim()}');
+    }
+    if ((purchase.driverContact ?? '').trim().isNotEmpty) {
+      meta.add(purchase.driverContact!.trim());
+    }
+    if ((purchase.dispatchNote ?? '').trim().isNotEmpty) {
+      meta.add(purchase.dispatchNote!.trim());
+    }
 
     return Container(
       padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
@@ -33,56 +73,108 @@ class PurchaseDetailDeliveryBanner extends StatelessWidget {
         children: [
           Row(
             children: [
-              Icon(
-                delivered
-                    ? Icons.check_circle_outline_rounded
-                    : Icons.local_shipping_outlined,
-                size: 20,
-                color: borderColor,
-              ),
+              Icon(ds.icon, size: 20, color: borderColor),
               const SizedBox(width: 10),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      delivered ? 'Received at warehouse' : 'Pending delivery',
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w800,
-                        fontSize: 14,
-                      ),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 4,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        Text(
+                          'Delivery',
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w800,
+                            fontSize: 14,
+                          ),
+                        ),
+                        PurchaseDeliveryBadge(status: ds),
+                      ],
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      delivered
-                          ? (purchase.deliveredAt != null
-                              ? 'Received on ${DateFormat('d MMM yyyy').format(purchase.deliveredAt!)}'
-                              : 'Warehouse confirmed')
-                          : 'Waiting for warehouse confirmation',
+                      subtitle,
                       style: const TextStyle(
                         fontSize: 12,
                         color: Color(0xFF64748B),
                       ),
                     ),
+                    if (meta.isNotEmpty) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        meta.join(' · '),
+                        style: const TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFF475569),
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),
             ],
           ),
           const SizedBox(height: 10),
-          SizedBox(
-            height: 40,
-            child: OutlinedButton(
-              onPressed: onToggleDelivery,
-              style: OutlinedButton.styleFrom(
-                foregroundColor: borderColor,
-                side: BorderSide(color: borderColor),
-              ),
-              child: Text(delivered ? 'Mark Pending' : 'Mark Received'),
-            ),
-          ),
+          ..._actions(ds),
         ],
       ),
+    );
+  }
+
+  List<Widget> _actions(DeliveryStatus ds) {
+    final out = <Widget>[];
+    if (isOwnerOrManager &&
+        ds == DeliveryStatus.pending &&
+        onDispatch != null) {
+      out.add(_btn('Mark dispatched', onDispatch!, outlined: false));
+    }
+    if (isStaff &&
+        (ds == DeliveryStatus.pending ||
+            ds == DeliveryStatus.dispatched ||
+            ds == DeliveryStatus.inTransit) &&
+        onArrive != null) {
+      out.add(_btn('Mark arrived at warehouse', onArrive!, outlined: false));
+    }
+    if ((isStaff || isOwnerOrManager) && ds.needsStaffAction && onVerify != null) {
+      out.add(_btn('Verify warehouse receipt', onVerify!));
+    }
+    if (isOwnerOrManager && ds.readyForOwnerCommit && onCommit != null) {
+      out.add(_btn('Commit to stock', onCommit!, outlined: false));
+    }
+    if (isOwnerOrManager &&
+        ds == DeliveryStatus.stockCommitted &&
+        onRevert != null) {
+      out.add(_btn('Revert delivery & stock', onRevert!, destructive: true));
+    }
+    if (out.isEmpty) return const [];
+    return out
+        .expand((w) => [w, const SizedBox(height: 8)])
+        .toList()
+      ..removeLast();
+  }
+
+  Widget _btn(
+    String label,
+    VoidCallback onPressed, {
+    bool outlined = true,
+    bool destructive = false,
+  }) {
+    return SizedBox(
+      height: 40,
+      width: double.infinity,
+      child: outlined
+          ? OutlinedButton(
+              onPressed: onPressed,
+              style: destructive
+                  ? OutlinedButton.styleFrom(foregroundColor: HexaColors.loss)
+                  : null,
+              child: Text(label),
+            )
+          : FilledButton(onPressed: onPressed, child: Text(label)),
     );
   }
 }

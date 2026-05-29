@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../auth/session_notifier.dart';
+import 'stock_providers.dart' show providerKeepAlive;
 
 /// Consolidated warehouse alert counts for home / stock LIVE chips.
 class WarehouseAlerts {
@@ -48,6 +49,7 @@ class WarehouseAlerts {
 
 final warehouseAlertsProvider =
     FutureProvider.autoDispose<WarehouseAlerts>((ref) async {
+  providerKeepAlive(ref, const Duration(seconds: 60));
   final session = ref.watch(sessionProvider);
   if (session == null) return const WarehouseAlerts();
   final api = ref.read(hexaApiProvider);

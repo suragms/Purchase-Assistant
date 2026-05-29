@@ -10,7 +10,7 @@ import '../../../../core/theme/hexa_colors.dart';
 import '../../../../core/widgets/friendly_load_error.dart';
 import '../../../../core/widgets/list_skeleton.dart';
 import '../../../../core/utils/unit_utils.dart';
-import '../../../../shared/widgets/stock_number_display.dart';
+import '../../../../shared/widgets/stock_summary_widget.dart';
 
 /// Full-height draggable preview before opening catalog item detail.
 Future<void> showItemQuickView({
@@ -120,9 +120,6 @@ class _ItemQuickViewBodyState extends ConsumerState<_ItemQuickViewBody> {
                   .toString();
               final cur = coerceToDouble(stock['current_stock']);
               final reorder = coerceToDouble(stock['reorder_level']);
-              final status = stockDisplayStatusFromApi(
-                stock['stock_status']?.toString(),
-              );
               final code = item['item_code']?.toString().trim() ?? '';
               final category = [
                 item['category_name'],
@@ -175,10 +172,10 @@ class _ItemQuickViewBodyState extends ConsumerState<_ItemQuickViewBody> {
                           style: HexaDsType.label(11, color: HexaDsColors.textMuted),
                         ),
                         const SizedBox(height: 8),
-                        StockNumberDisplay(
+                        StockSummaryWidget(
                           qty: cur,
                           unit: unit,
-                          status: status,
+                          status: stock['stock_status']?.toString(),
                           hasPendingOrder: stock['has_pending_order'] == true,
                           pendingDays:
                               (stock['pending_order_days'] as num?)?.toInt(),

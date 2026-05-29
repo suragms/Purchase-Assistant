@@ -9,12 +9,12 @@ from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import delete, exists, not_, select
+from sqlalchemy import delete, exists, func, not_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.db_resilience import execute_with_retry
-from app.models import CatalogItem, SupplierItemDefault, TradePurchase, TradePurchaseDraft, TradePurchaseLine
+from app.models import CatalogItem, SupplierItemDefault, TradePurchase, TradePurchaseDraft, TradePurchaseLine, User
 from app.services.trade_unit_type import derive_trade_unit_type
 from app.schemas.trade_purchases import (
     TradeDuplicateCheckRequest,
@@ -27,6 +27,9 @@ from app.schemas.trade_purchases import (
     StockUpdateOut,
     TradePurchaseOut,
     TradePurchaseDeliveryPatch,
+    TradePurchaseDispatchIn,
+    TradePurchaseArriveIn,
+    TradePurchaseDeliveryPipelineOut,
     TradePurchaseVerifyIn,
     TradePurchasePaymentPatch,
     TradePurchaseUpdateRequest,
@@ -40,6 +43,75 @@ from app.services.stock_inventory import (
 )
 from app.services.purchase_line_unit_validation import validate_purchase_line_unit
 from app.services.unit_normalization import fetch_catalog_items_map, line_qty_in_stock_unit
+from app.services.staff_audit import log_staff_activity
+
+_DELIVERY_TERMINAL = frozenset({"stock_committed", "cancelled"})
+_ARRIVE_FROM = frozenset({"pending", "dispatched", "in_transit"})
+_VERIFY_FROM = frozenset({"arrived", "staff_verifying"})
+_COMMIT_FROM = frozenset({"staff_verified", "partial"})
+
+
+def _delivery_status(tp: TradePurchase) -> str:
+    return (getattr(tp, "delivery_status", None) or "pending").strip().lower()
+
+
+def _assert_delivery_transition(current: str, allowed: frozenset[str]) -> None:
+    if current in _DELIVERY_TERMINAL and current not in allowed:
+        raise ValueError(f"Delivery is already {current.replace('_', ' ')}")
+    if current not in allowed:
+        raise ValueError(
+            f"Cannot perform this action while delivery status is {current.replace('_', ' ')}"
+        )
+
+
+async def _load_trade_purchase(
+    db: AsyncSession,
+    business_id: uuid.UUID,
+    purchase_id: uuid.UUID,
+) -> TradePurchase | None:
+    res = await db.execute(
+        select(TradePurchase)
+        .where(
+            TradePurchase.business_id == business_id,
+            TradePurchase.id == purchase_id,
+        )
+        .options(*_trade_purchase_load_opts())
+    )
+    return res.scalar_one_or_none()
+
+
+async def _emit_delivery_notification(
+    db: AsyncSession,
+    *,
+    business_id: uuid.UUID,
+    tp: TradePurchase,
+    kind: str,
+    title: str,
+    body: str,
+    priority: str,
+    dedupe_key: str,
+) -> None:
+    try:
+        from app.services.notification_emitter import (
+            CATEGORY_PURCHASE,
+            emit_notification,
+        )
+
+        await emit_notification(
+            db,
+            business_id=business_id,
+            kind=kind,
+            title=title,
+            body=body,
+            priority=priority,
+            category=CATEGORY_PURCHASE,
+            dedupe_key=dedupe_key,
+            action_route=f"/purchase/detail/{tp.id}",
+            related_purchase_id=tp.id,
+        )
+        await db.commit()
+    except Exception:
+        await db.rollback()
 
 
 def _line_tax_mode(li: TradePurchaseLineIn) -> str:
@@ -1143,21 +1215,227 @@ async def patch_trade_purchase_payment(
     return await get_trade_purchase(db, business_id, purchase_id)
 
 
+async def dispatch_trade_purchase(
+    db: AsyncSession,
+    business_id: uuid.UUID,
+    purchase_id: uuid.UUID,
+    user: User,
+    body: TradePurchaseDispatchIn,
+) -> TradePurchaseOut | None:
+    tp = await _load_trade_purchase(db, business_id, purchase_id)
+    if not tp:
+        return None
+    st = (tp.status or "").lower()
+    if st in ("deleted", "cancelled"):
+        raise ValueError("Cannot dispatch a cancelled purchase")
+    cur = _delivery_status(tp)
+    _assert_delivery_transition(cur, frozenset({"pending"}))
+    now = utcnow()
+    tp.delivery_status = "in_transit" if body.mark_in_transit else "dispatched"
+    tp.dispatched_at = now
+    if body.truck_number is not None:
+        tp.truck_number = body.truck_number.strip() or None
+    if body.driver_contact is not None:
+        tp.driver_contact = body.driver_contact.strip() or None
+    if body.dispatch_note is not None:
+        tp.dispatch_note = body.dispatch_note.strip() or None
+    tp.updated_at = now
+    await log_staff_activity(
+        db,
+        business_id=business_id,
+        user=user,
+        action_type="PURCHASE_DISPATCHED",
+        details={
+            "purchase_id": str(purchase_id),
+            "human_id": tp.human_id,
+            "delivery_status": tp.delivery_status,
+            "truck_number": tp.truck_number,
+        },
+    )
+    await db.commit()
+    bump_trade_read_caches_for_business(business_id)
+    from app.services.notification_emitter import PRIORITY_INFO
+
+    sup = getattr(tp.supplier_row, "name", None) if getattr(tp, "supplier_row", None) else None
+    await _emit_delivery_notification(
+        db,
+        business_id=business_id,
+        tp=tp,
+        kind="delivery_dispatched",
+        title=f"Dispatched: {tp.human_id}",
+        body=f"{(sup or 'Supplier').strip()} — truck en route",
+        priority=PRIORITY_INFO,
+        dedupe_key=f"delivery_dispatched:{purchase_id}",
+    )
+    return await get_trade_purchase(db, business_id, purchase_id)
+
+
+async def arrive_trade_purchase(
+    db: AsyncSession,
+    business_id: uuid.UUID,
+    purchase_id: uuid.UUID,
+    user: User,
+    body: TradePurchaseArriveIn,
+) -> TradePurchaseOut | None:
+    tp = await _load_trade_purchase(db, business_id, purchase_id)
+    if not tp:
+        return None
+    st = (tp.status or "").lower()
+    if st in ("deleted", "cancelled"):
+        raise ValueError("Cannot mark arrival for a cancelled purchase")
+    cur = _delivery_status(tp)
+    _assert_delivery_transition(cur, _ARRIVE_FROM)
+    now = utcnow()
+    tp.delivery_status = "arrived"
+    tp.arrived_at = now
+    if body.notes and body.notes.strip():
+        existing = (tp.delivery_notes or "").strip()
+        note = body.notes.strip()
+        tp.delivery_notes = f"{existing}\n{note}".strip() if existing else note
+    tp.updated_at = now
+    await log_staff_activity(
+        db,
+        business_id=business_id,
+        user=user,
+        action_type="PURCHASE_ARRIVED",
+        details={"purchase_id": str(purchase_id), "human_id": tp.human_id},
+    )
+    await db.commit()
+    bump_trade_read_caches_for_business(business_id)
+    from app.services.notification_emitter import PRIORITY_HIGH
+
+    await _emit_delivery_notification(
+        db,
+        business_id=business_id,
+        tp=tp,
+        kind="delivery_arrived",
+        title=f"Arrived: {tp.human_id}",
+        body=f"{user.name or user.username or user.email} — verify warehouse receipt",
+        priority=PRIORITY_HIGH,
+        dedupe_key=f"delivery_arrived:{purchase_id}",
+    )
+    return await get_trade_purchase(db, business_id, purchase_id)
+
+
+async def commit_trade_purchase_delivery(
+    db: AsyncSession,
+    business_id: uuid.UUID,
+    purchase_id: uuid.UUID,
+    user: User,
+) -> TradePurchaseOut | None:
+    tp = await _load_trade_purchase(db, business_id, purchase_id)
+    if not tp:
+        return None
+    st = (tp.status or "").lower()
+    if st in ("deleted", "cancelled"):
+        raise ValueError("Cannot commit stock for a cancelled purchase")
+    cur = _delivery_status(tp)
+    if cur == "stock_committed":
+        return trade_purchase_to_out(tp, stock_updates=[])
+    _assert_delivery_transition(cur, _COMMIT_FROM)
+    lines_snapshot = list(tp.lines)
+    stock_updates: list[dict] = []
+    now = utcnow()
+    try:
+        stock_updates = await apply_confirmed_purchase_stock(
+            db,
+            business_id,
+            tp.user_id,
+            lines_snapshot,
+            purchase_human_id=tp.human_id,
+            purchase_id=purchase_id,
+            actor=user,
+        )
+    except ValueError:
+        await db.rollback()
+        raise
+    committed_qty = sum(_dec(u.get("delta", 0)) for u in stock_updates)
+    if committed_qty <= 0 and tp.staff_verified_qty is not None:
+        committed_qty = _dec(tp.staff_verified_qty)
+    tp.delivery_status = "stock_committed"
+    tp.is_delivered = True
+    tp.delivered_at = now
+    tp.stock_committed_at = now
+    tp.delivered_qty_committed = dp.qty(committed_qty) if committed_qty > 0 else None
+    tp.updated_at = now
+    await log_staff_activity(
+        db,
+        business_id=business_id,
+        user=user,
+        action_type="PURCHASE_STOCK_COMMITTED",
+        details={
+            "purchase_id": str(purchase_id),
+            "human_id": tp.human_id,
+            "delivered_qty_committed": str(tp.delivered_qty_committed or 0),
+        },
+    )
+    await db.commit()
+    bump_trade_read_caches_for_business(business_id)
+    from app.services.notification_emitter import PRIORITY_INFO
+
+    await _emit_delivery_notification(
+        db,
+        business_id=business_id,
+        tp=tp,
+        kind="delivery_received",
+        title=f"Stock committed: {tp.human_id}",
+        body="Purchase quantities added to warehouse stock",
+        priority=PRIORITY_INFO,
+        dedupe_key=f"delivery_received:{purchase_id}",
+    )
+    res2 = await db.execute(
+        select(TradePurchase)
+        .where(TradePurchase.id == purchase_id)
+        .options(*_trade_purchase_load_opts())
+    )
+    return trade_purchase_to_out(res2.scalar_one(), stock_updates=stock_updates)
+
+
+async def get_trade_purchase_delivery_pipeline(
+    db: AsyncSession,
+    business_id: uuid.UUID,
+) -> TradePurchaseDeliveryPipelineOut:
+    res = await db.execute(
+        select(TradePurchase.delivery_status, func.count(TradePurchase.id))
+        .where(
+            TradePurchase.business_id == business_id,
+            TradePurchase.status != "deleted",
+        )
+        .group_by(TradePurchase.delivery_status)
+    )
+    counts: dict[str, int] = {}
+    for status, cnt in res.all():
+        key = (status or "pending").strip().lower()
+        counts[key] = int(cnt or 0)
+    amt_res = await db.execute(
+        select(func.coalesce(func.sum(TradePurchase.total_amount), 0)).where(
+            TradePurchase.business_id == business_id,
+            TradePurchase.status.notin_(("deleted", "cancelled")),
+            TradePurchase.delivery_status.notin_(("stock_committed", "cancelled")),
+        )
+    )
+    total_pending = _dec(amt_res.scalar_one())
+    return TradePurchaseDeliveryPipelineOut(
+        pending=counts.get("pending", 0),
+        dispatched=counts.get("dispatched", 0),
+        in_transit=counts.get("in_transit", 0),
+        arrived=counts.get("arrived", 0),
+        staff_verifying=counts.get("staff_verifying", 0),
+        staff_verified=counts.get("staff_verified", 0),
+        partial=counts.get("partial", 0),
+        stock_committed=counts.get("stock_committed", 0),
+        cancelled=counts.get("cancelled", 0),
+        total_pending_amount=dp.money(total_pending),
+    )
+
+
 async def patch_trade_purchase_delivery(
     db: AsyncSession,
     business_id: uuid.UUID,
     purchase_id: uuid.UUID,
     body: TradePurchaseDeliveryPatch,
 ) -> TradePurchaseOut | None:
-    res = await db.execute(
-        select(TradePurchase)
-        .where(
-            TradePurchase.business_id == business_id,
-            TradePurchase.id == purchase_id,
-        )
-        .options(*_trade_purchase_load_opts())
-    )
-    tp = res.scalar_one_or_none()
+    tp = await _load_trade_purchase(db, business_id, purchase_id)
     if not tp:
         return None
     st = (tp.status or "").lower()
@@ -1165,30 +1443,34 @@ async def patch_trade_purchase_delivery(
         return None
     if st == "cancelled":
         raise ValueError("Delivery changes are not allowed for cancelled purchases")
+    cur = _delivery_status(tp)
+    if body.is_delivered:
+        raise ValueError(
+            "Use POST /trade-purchases/{id}/commit-stock after staff verification to add stock"
+        )
     was_delivered = bool(getattr(tp, "is_delivered", False))
-    if was_delivered == bool(body.is_delivered) and body.delivery_notes is None:
+    if not was_delivered and not body.is_delivered and body.delivery_notes is None:
         return trade_purchase_to_out(tp, stock_updates=[])
+    if cur != "stock_committed" and was_delivered:
+        raise ValueError("Only committed deliveries can be reverted to pending")
     lines_snapshot = list(tp.lines)
     stock_updates: list[dict] = []
-    tp.is_delivered = body.is_delivered
-    if body.is_delivered:
-        tp.delivered_at = body.delivered_at or utcnow()
-    else:
-        tp.delivered_at = None
+    tp.is_delivered = False
+    tp.delivered_at = None
+    tp.delivery_status = "pending"
+    tp.stock_committed_at = None
+    tp.delivered_qty_committed = None
+    tp.arrived_at = None
+    tp.staff_verified_at = None
+    tp.staff_verified_by = None
+    tp.staff_verified_by_name = None
+    tp.staff_verified_qty = None
     if body.delivery_notes is not None:
         notes = body.delivery_notes.strip()
         tp.delivery_notes = notes or None
     tp.updated_at = utcnow()
     try:
-        if not was_delivered and body.is_delivered:
-            stock_updates = await apply_confirmed_purchase_stock(
-                db,
-                business_id,
-                tp.user_id,
-                lines_snapshot,
-                purchase_human_id=tp.human_id,
-            )
-        elif was_delivered and not body.is_delivered:
+        if was_delivered:
             stock_updates = await revert_confirmed_purchase_stock(
                 db,
                 business_id,
@@ -1201,44 +1483,19 @@ async def patch_trade_purchase_delivery(
         raise
     await db.commit()
     bump_trade_read_caches_for_business(business_id)
-    try:
-        from app.services.notification_emitter import (
-            CATEGORY_PURCHASE,
-            PRIORITY_HIGH,
-            PRIORITY_INFO,
-            emit_notification,
-        )
+    from app.services.notification_emitter import PRIORITY_HIGH
 
-        sup = (tp.supplier_name or "Supplier").strip()
-        if body.is_delivered:
-            await emit_notification(
-                db,
-                business_id=business_id,
-                kind="delivery_received",
-                title=f"Delivery received: {tp.human_id}",
-                body=f"{sup} — stock updated at warehouse",
-                priority=PRIORITY_INFO,
-                category=CATEGORY_PURCHASE,
-                dedupe_key=f"delivery_received:{purchase_id}",
-                action_route=f"/purchase/detail/{purchase_id}",
-                related_purchase_id=purchase_id,
-            )
-        else:
-            await emit_notification(
-                db,
-                business_id=business_id,
-                kind="delivery_pending",
-                title=f"Pending delivery: {tp.human_id}",
-                body=f"{sup} — awaiting warehouse receipt",
-                priority=PRIORITY_HIGH,
-                category=CATEGORY_PURCHASE,
-                dedupe_key=f"delivery_pending:{purchase_id}",
-                action_route=f"/purchase/detail/{purchase_id}",
-                related_purchase_id=purchase_id,
-            )
-        await db.commit()
-    except Exception:
-        await db.rollback()
+    sup_name = getattr(tp.supplier_row, "name", None) if getattr(tp, "supplier_row", None) else "Supplier"
+    await _emit_delivery_notification(
+        db,
+        business_id=business_id,
+        tp=tp,
+        kind="delivery_pending",
+        title=f"Pending delivery: {tp.human_id}",
+        body=f"{(sup_name or 'Supplier').strip()} — awaiting warehouse receipt",
+        priority=PRIORITY_HIGH,
+        dedupe_key=f"delivery_pending:{purchase_id}",
+    )
     res2 = await db.execute(
         select(TradePurchase)
         .where(TradePurchase.id == purchase_id)
@@ -1254,65 +1511,85 @@ async def verify_trade_purchase_delivery(
     user: User,
     body: TradePurchaseVerifyIn,
 ) -> TradePurchaseOut | None:
-    res = await db.execute(
-        select(TradePurchase)
-        .where(
-            TradePurchase.business_id == business_id,
-            TradePurchase.id == purchase_id,
-        )
-        .options(*_trade_purchase_load_opts())
-    )
-    tp = res.scalar_one_or_none()
+    tp = await _load_trade_purchase(db, business_id, purchase_id)
     if not tp:
         return None
-    if not bool(getattr(tp, "is_delivered", False)):
-        raise ValueError("Delivery must be marked received before verification")
+    st = (tp.status or "").lower()
+    if st in ("deleted", "cancelled"):
+        raise ValueError("Cannot verify a cancelled purchase")
+    cur = _delivery_status(tp)
+    _assert_delivery_transition(cur, _VERIFY_FROM)
 
     by_id = {str(line.id): line for line in tp.lines}
     total_received = Decimal("0")
     total_damaged = Decimal("0")
     total_return = Decimal("0")
+    total_ordered = Decimal("0")
+    short = False
     for line in body.lines:
         row = by_id.get(str(line.line_id))
         if row is None:
             continue
-        total_received += _dec(line.received_qty)
+        ordered = _dec(row.qty)
+        total_ordered += ordered
+        recv = _dec(line.received_qty)
+        total_received += recv
         total_damaged += _dec(line.damaged_qty)
         total_return += _dec(line.return_qty)
+        if recv < ordered:
+            short = True
 
+    now = utcnow()
+    tp.delivery_status = "partial" if short else "staff_verified"
+    tp.staff_verified_at = now
+    tp.staff_verified_by = user.id
+    tp.staff_verified_by_name = user.name or user.username or user.email
+    tp.staff_verified_qty = dp.qty(total_received)
     vnote = (
-        f"Verified by {user.name or user.username or user.email}"
+        f"Verified by {tp.staff_verified_by_name}"
         f" | received={total_received} damaged={total_damaged} return={total_return}"
     )
     if body.notes and body.notes.strip():
         vnote = f"{vnote} | notes={body.notes.strip()}"
     existing = (tp.delivery_notes or "").strip()
     tp.delivery_notes = f"{existing}\n{vnote}".strip() if existing else vnote
-    tp.updated_at = utcnow()
+    tp.updated_at = now
+    await log_staff_activity(
+        db,
+        business_id=business_id,
+        user=user,
+        action_type="PURCHASE_VERIFIED",
+        details={
+            "purchase_id": str(purchase_id),
+            "human_id": tp.human_id,
+            "staff_verified_qty": str(total_received),
+            "delivery_status": tp.delivery_status,
+        },
+    )
     await db.commit()
     bump_trade_read_caches_for_business(business_id)
-    try:
-        from app.services.notification_emitter import (
-            CATEGORY_PURCHASE,
-            PRIORITY_INFO,
-            emit_notification,
-        )
+    from app.services.notification_emitter import PRIORITY_INFO
 
-        await emit_notification(
-            db,
-            business_id=business_id,
-            kind="delivery_verified",
-            title=f"Verified: {tp.human_id}",
-            body=f"{user.name or user.username or user.email} verified warehouse receipt",
-            priority=PRIORITY_INFO,
-            category=CATEGORY_PURCHASE,
-            dedupe_key=f"delivery_verified:{purchase_id}:{int(datetime.now(timezone.utc).timestamp())}",
-            action_route=f"/purchase/detail/{purchase_id}",
-            related_purchase_id=purchase_id,
-        )
-        await db.commit()
-    except Exception:
-        await db.rollback()
+    await _emit_delivery_notification(
+        db,
+        business_id=business_id,
+        tp=tp,
+        kind="delivery_verified",
+        title=f"Verified: {tp.human_id}",
+        body=f"{tp.staff_verified_by_name} verified warehouse receipt — owner can commit to stock",
+        priority=PRIORITY_INFO,
+        dedupe_key=f"delivery_verified:{purchase_id}",
+    )
+    await _emit_delivery_notification(
+        db,
+        business_id=business_id,
+        tp=tp,
+        kind="delivery_ready_to_commit",
+        title=f"Ready to commit: {tp.human_id}",
+        body="Staff verified delivery — commit to stock when ready",
+        priority=PRIORITY_INFO,
+        dedupe_key=f"delivery_ready_to_commit:{purchase_id}",
+    )
     return await get_trade_purchase(db, business_id, purchase_id)
 
 
@@ -1714,6 +1991,21 @@ def trade_purchase_to_out(
         is_delivered=bool(getattr(tp, "is_delivered", False)),
         delivered_at=getattr(tp, "delivered_at", None),
         delivery_notes=getattr(tp, "delivery_notes", None),
+        delivery_status=_delivery_status(tp),
+        dispatched_at=getattr(tp, "dispatched_at", None),
+        arrived_at=getattr(tp, "arrived_at", None),
+        staff_verified_at=getattr(tp, "staff_verified_at", None),
+        staff_verified_by_name=getattr(tp, "staff_verified_by_name", None),
+        stock_committed_at=getattr(tp, "stock_committed_at", None),
+        staff_verified_qty=dp.qty(tp.staff_verified_qty)
+        if getattr(tp, "staff_verified_qty", None) is not None
+        else None,
+        delivered_qty_committed=dp.qty(tp.delivered_qty_committed)
+        if getattr(tp, "delivered_qty_committed", None) is not None
+        else None,
+        truck_number=getattr(tp, "truck_number", None),
+        driver_contact=getattr(tp, "driver_contact", None),
+        dispatch_note=getattr(tp, "dispatch_note", None),
         stock_updates=[
             StockUpdateOut(
                 catalog_item_id=u["catalog_item_id"],

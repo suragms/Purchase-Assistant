@@ -5,10 +5,7 @@ import '../../../../core/providers/stock_providers.dart';
 import 'operational_stock_filter_sheet.dart';
 
 export 'operational_stock_filter_sheet.dart'
-    show
-        showOperationalStockFilter,
-        kOperationalDesktopBreakpoint,
-        stockActiveFilterSummary;
+    show showOperationalStockFilter, stockActiveFilterSummary;
 
 /// Legacy entry — opens unified operational filter sheet/panel.
 Future<void> showStockFilterBottomSheet({

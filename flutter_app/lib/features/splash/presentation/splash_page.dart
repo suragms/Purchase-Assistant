@@ -62,7 +62,7 @@ class _SplashPageState extends ConsumerState<SplashPage>
     try {
       t = await ref.read(tokenStoreProvider).read();
     } catch (_) {
-      if (mounted) context.go('/get-started');
+      if (mounted) context.go('/login');
       return;
     }
     if (t.access != null && t.refresh != null) {
@@ -73,7 +73,7 @@ class _SplashPageState extends ConsumerState<SplashPage>
       });
       return;
     }
-    if (mounted) context.go('/get-started');
+    if (mounted) context.go('/login');
   }
 
   @override

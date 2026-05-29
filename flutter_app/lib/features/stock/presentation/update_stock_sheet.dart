@@ -9,6 +9,7 @@ import '../../../core/providers/business_aggregates_invalidation.dart';
 import '../../../core/providers/catalog_providers.dart';
 import '../../../core/providers/staff_home_providers.dart';
 import '../../../core/providers/stock_providers.dart';
+import '../../../core/design_system/hexa_responsive.dart';
 import '../../../core/utils/unit_utils.dart';
 
 const _kAdjustmentTypes = <String, String>{
@@ -58,11 +59,13 @@ Future<void> showUpdateStockSheet({
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
     ),
-    builder: (ctx) => _UpdateStockSheetBody(
-      itemId: itemId,
-      itemName: itemName,
-      seedStock: stockRow,
-      parentRef: ref,
+    builder: (ctx) => HexaResponsiveSheetViewport(
+      child: _UpdateStockSheetBody(
+        itemId: itemId,
+        itemName: itemName,
+        seedStock: stockRow,
+        parentRef: ref,
+      ),
     ),
   );
 }
@@ -130,12 +133,8 @@ class _UpdateStockSheetBodyState extends ConsumerState<_UpdateStockSheetBody> {
                 ? null
                 : _reasonCtrl.text.trim(),
           );
-      invalidateWarehouseSurfaces(ref);
-      invalidateWarehouseSurfaces(widget.parentRef);
-      ref.invalidate(catalogItemDetailProvider(widget.itemId));
-      ref.invalidate(stockItemDetailProvider(widget.itemId));
+      invalidateWarehouseSurfaces(widget.parentRef, itemId: widget.itemId);
       widget.parentRef.invalidate(catalogItemDetailProvider(widget.itemId));
-      widget.parentRef.invalidate(stockItemDetailProvider(widget.itemId));
       widget.parentRef.invalidate(staffTodayActivityProvider);
       widget.parentRef.invalidate(staffTodaySummaryProvider);
       if (mounted) {
@@ -169,12 +168,8 @@ class _UpdateStockSheetBodyState extends ConsumerState<_UpdateStockSheetBody> {
     final newQty = _parseQty(_qtyCtrl.text);
     final unit = (baseRow['unit'] ?? '').toString().trim();
 
-    return Padding(
-      padding: EdgeInsets.only(
-        bottom: MediaQuery.viewInsetsOf(context).bottom,
-      ),
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+    return SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           mainAxisSize: MainAxisSize.min,
@@ -382,7 +377,6 @@ class _UpdateStockSheetBodyState extends ConsumerState<_UpdateStockSheetBody> {
             ),
           ],
         ),
-      ),
     );
   }
 }

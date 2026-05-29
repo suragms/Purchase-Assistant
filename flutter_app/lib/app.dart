@@ -17,7 +17,8 @@ import 'core/platform/remove_boot_overlay.dart';
 import 'core/providers/api_degraded_provider.dart';
 import 'core/providers/home_breakdown_tab_providers.dart';
 import 'core/providers/home_dashboard_provider.dart';
-import 'core/providers/tenant_branding_provider.dart';
+import 'core/auth/session_notifier.dart';
+import 'core/config/app_config.dart';
 import 'core/providers/trade_purchases_provider.dart'
     show invalidateTradePurchaseCaches, tradePurchasesListProvider;
 import 'core/router/app_router.dart';
@@ -305,7 +306,9 @@ class HexaApp extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final router = ref.watch(appRouterProvider);
-    final title = ref.watch(tenantAppTitleProvider);
+    final session = ref.watch(sessionProvider);
+    final title = session?.primaryBusiness.effectiveDisplayTitle ??
+        AppConfig.appName;
     // Harisree: light iOS-style surfaces only (gray / white / teal) — no dark mode in product UI.
     return MaterialApp.router(
       debugShowCheckedModeBanner: false,

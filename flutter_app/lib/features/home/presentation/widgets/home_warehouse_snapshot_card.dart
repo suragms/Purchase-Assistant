@@ -6,7 +6,8 @@ import '../../../../core/design_system/hexa_operational_tokens.dart';
 import '../../../../core/providers/home_dashboard_provider.dart';
 import '../../../../core/providers/home_owner_dashboard_providers.dart';
 import '../../../../core/providers/stock_providers.dart';
-import '../../../../core/providers/warehouse_alerts_provider.dart';
+import '../../../../core/providers/notification_center_provider.dart'
+    show homeWarehouseAlertsProvider;
 import '../../../../core/utils/unit_utils.dart';
 import 'home_formatters.dart';
 
@@ -20,7 +21,7 @@ class HomeWarehouseSnapshotCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final invAsync = ref.watch(homeInventorySummaryProvider);
-    final warehouse = ref.watch(warehouseAlertsProvider);
+    final warehouse = ref.watch(homeWarehouseAlertsProvider);
     final dashState = ref.watch(homeDashboardDataProvider);
     final status = ref.watch(stockStatusCountsProvider);
 

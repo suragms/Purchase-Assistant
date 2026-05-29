@@ -3,11 +3,12 @@ from collections import defaultdict
 from datetime import datetime, timezone
 from decimal import Decimal
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import CatalogItem, User
 from app.models.stock_adjustment import StockAdjustmentLog
+from app.models.stock_movement import StockMovement
 from app.services.unit_normalization import fetch_catalog_items_map, line_qty_in_stock_unit
 
 
@@ -42,6 +43,14 @@ def catalog_landing_rate(item: CatalogItem) -> Decimal:
     return Decimal(0)
 
 
+def compute_expected_system_qty(
+    opening_stock_qty: Decimal | None,
+    total_delivered_qty: Decimal | None,
+) -> Decimal:
+    """Opening + lifetime verified deliveries (audit stock formula)."""
+    return Decimal(opening_stock_qty or 0) + Decimal(total_delivered_qty or 0)
+
+
 def catalog_unit_key(item: CatalogItem) -> str:
     """Bucket on-hand qty into bags | boxes | tins | kg for dashboard totals."""
     unit = (
@@ -54,6 +63,29 @@ def catalog_unit_key(item: CatalogItem) -> str:
     if "tin" in unit:
         return "tins"
     return "kg"
+
+
+async def movement_delivered_qty_map(
+    db: AsyncSession,
+    business_id: uuid.UUID,
+    item_ids: list[uuid.UUID],
+) -> dict[uuid.UUID, Decimal]:
+    """Lifetime qty added via committed PO deliveries (stock_movements.delivery_receive)."""
+    if not item_ids:
+        return {}
+    r = await db.execute(
+        select(
+            StockMovement.item_id,
+            func.coalesce(func.sum(StockMovement.delta_qty), 0),
+        )
+        .where(
+            StockMovement.business_id == business_id,
+            StockMovement.item_id.in_(item_ids),
+            StockMovement.movement_kind == "delivery_receive",
+        )
+        .group_by(StockMovement.item_id)
+    )
+    return {row[0]: Decimal(row[1] or 0) for row in r.all()}
 
 
 async def compute_inventory_summary(
@@ -195,6 +227,38 @@ async def _apply_catalog_stock_deltas(
     return updates
 
 
+async def purchase_delivery_stock_already_applied(
+    db: AsyncSession,
+    business_id: uuid.UUID,
+    purchase_id: uuid.UUID,
+) -> bool:
+    """True if stock was already incremented for this purchase (idempotent delivery).
+
+    Checks legacy adjustment-log marker and stock_movements idempotency keys.
+    """
+    marker = f"trade_purchase:{purchase_id}"
+    r = await db.execute(
+        select(func.count())
+        .select_from(StockAdjustmentLog)
+        .where(
+            StockAdjustmentLog.business_id == business_id,
+            StockAdjustmentLog.adjustment_type == "purchase",
+            StockAdjustmentLog.reason.contains(marker),
+        )
+    )
+    if int(r.scalar_one() or 0) > 0:
+        return True
+    r2 = await db.execute(
+        select(func.count())
+        .select_from(StockMovement)
+        .where(
+            StockMovement.business_id == business_id,
+            StockMovement.idempotency_key.like(f"{marker}:%"),
+        )
+    )
+    return int(r2.scalar_one() or 0) > 0
+
+
 async def apply_confirmed_purchase_stock(
     db: AsyncSession,
     business_id: uuid.UUID,
@@ -202,15 +266,75 @@ async def apply_confirmed_purchase_stock(
     lines: list,
     *,
     purchase_human_id: str | None = None,
+    purchase_id: uuid.UUID | None = None,
+    actor: User | None = None,
 ) -> list[dict]:
-    """Increment catalog stock when a purchase delivery is confirmed."""
-    reason = f"Purchase received{f' ({purchase_human_id})' if purchase_human_id else ''}"
+    """Increment catalog stock when a purchase delivery is committed.
+
+    When [purchase_id] and [actor] are set, uses stock_movements (delivery_receive)
+    with idempotency_key trade_purchase:{purchase_id}:{catalog_item_id} so quick_purchase
+    cannot double-apply the same PO line.
+    """
+    if purchase_id is not None and await purchase_delivery_stock_already_applied(
+        db, business_id, purchase_id
+    ):
+        return []
+
+    by_item = await _qty_by_catalog_item(db, business_id, lines)
+    if not by_item:
+        return []
+
+    label = purchase_human_id or (str(purchase_id) if purchase_id else "")
+    reason = f"Purchase received ({label})".strip()
+
+    if purchase_id is not None and actor is not None:
+        from app.services.stock_movement_service import apply_stock_movement
+
+        updates: list[dict] = []
+        for cid, delta in by_item.items():
+            if delta <= 0:
+                continue
+            idem = f"trade_purchase:{purchase_id}:{cid}"
+            result = await apply_stock_movement(
+                db,
+                business_id=business_id,
+                item_id=cid,
+                user=actor,
+                movement_kind="delivery_receive",
+                mode="delta",
+                qty=delta,
+                reason=reason,
+                source_type="trade_purchase",
+                source_id=purchase_id,
+                idempotency_key=idem,
+                metadata={"purchase_id": str(purchase_id), "human_id": label},
+            )
+            item = result.item
+            unit = item.stock_unit or item.default_unit or item.selling_unit
+            if result.duplicate:
+                continue
+            if delta > 0:
+                item.last_purchase_at = datetime.now(timezone.utc)
+            updates.append(
+                {
+                    "catalog_item_id": item.id,
+                    "name": item.name,
+                    "unit": unit,
+                    "old_qty": result.movement.qty_before,
+                    "new_qty": result.movement.qty_after,
+                    "delta": delta,
+                }
+            )
+        return updates
+
+    marker = f" trade_purchase:{purchase_id}" if purchase_id else ""
+    reason_legacy = f"{reason}{marker}".strip()
     return await _apply_catalog_stock_deltas(
         db,
         business_id,
         user_id,
-        await _qty_by_catalog_item(db, business_id, lines),
-        reason=reason,
+        by_item,
+        reason=reason_legacy,
         adjustment_type="purchase",
         touch_last_purchase_at=True,
     )

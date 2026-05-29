@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import '../../../../core/json_coerce.dart';
 import '../../../../core/theme/hexa_colors.dart';
 import '../../../../core/utils/unit_utils.dart';
+import '../../../../shared/widgets/stock_summary_widget.dart';
 
 /// Post-scan summary: current stock + last purchase (from barcode lookup).
 class ScanItemStockSummaryCard extends StatelessWidget {
@@ -25,7 +26,6 @@ class ScanItemStockSummaryCard extends StatelessWidget {
         item['stock_unit']?.toString() ??
         item['default_unit']?.toString() ??
         '';
-    final unitLabel = unit.isNotEmpty ? unit.toUpperCase() : '';
     final stock = coerceToDouble(item['current_stock']);
 
     final lpDateRaw = item['last_purchase_date'];
@@ -83,9 +83,19 @@ class ScanItemStockSummaryCard extends StatelessWidget {
             ),
             const SizedBox(height: 10),
           ],
-          Text(
-            'Current stock: ${formatQtyForDisplay(stock)}${unitLabel.isEmpty ? '' : ' $unitLabel'}',
-            style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14),
+          Row(
+            children: [
+              const Text(
+                'Current stock: ',
+                style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+              ),
+              StockSummaryWidget(
+                qty: stock,
+                unit: unit,
+                variant: StockSummaryVariant.scan,
+                compact: true,
+              ),
+            ],
           ),
           const SizedBox(height: 6),
           Text(

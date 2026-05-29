@@ -1,21 +1,20 @@
 import 'dart:async';
-import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:image_picker/image_picker.dart';
 
-import '../../../core/auth/auth_error_messages.dart';
 import '../../../core/auth/session_notifier.dart';
 import '../../../core/config/app_config.dart';
 import '../../../core/models/session.dart';
 import '../../../core/notifications/local_notifications_service.dart';
 import '../../../core/providers/business_aggregates_invalidation.dart';
-import '../../../core/providers/prefs_provider.dart';
+import '../../../core/providers/prefs_provider.dart'
+    show localNotificationsOptInProvider, notificationKindTogglesProvider;
 import '../../../core/router/navigation_ext.dart';
-import '../../../core/router/post_auth_route.dart' show sessionCanManageUsers;
-import '../../../core/theme/hexa_colors.dart';
+import '../../../core/router/post_auth_route.dart'
+    show sessionCanAdminUsers, sessionIsStaff;
+import '../../../core/design_system/hexa_responsive.dart';
 import '../../../core/theme/theme_context_ext.dart';
 
 class SettingsPage extends ConsumerStatefulWidget {
@@ -26,83 +25,8 @@ class SettingsPage extends ConsumerStatefulWidget {
 }
 
 class _SettingsPageState extends ConsumerState<SettingsPage> {
-  late final TextEditingController _brandingTitleCtrl;
-  Uint8List? _pendingLogoBytes;
-  String _pendingLogoFilename = 'logo.jpg';
-  bool _brandingSaving = false;
   int _superAdminGestureCount = 0;
   DateTime? _superAdminGestureAnchor;
-
-  @override
-  void initState() {
-    super.initState();
-    _brandingTitleCtrl = TextEditingController();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final pb = ref.read(sessionProvider)?.primaryBusiness;
-      if (pb != null && mounted) {
-        setState(() => _brandingTitleCtrl.text = pb.brandingTitle ?? '');
-      }
-    });
-  }
-
-  @override
-  void dispose() {
-    _brandingTitleCtrl.dispose();
-    super.dispose();
-  }
-
-  Future<void> _pickLogo() async {
-    final x = await ImagePicker().pickImage(
-      source: ImageSource.gallery,
-      maxWidth: 1024,
-      imageQuality: 85,
-    );
-    if (x == null || !mounted) return;
-    final bytes = await x.readAsBytes();
-    if (!mounted) return;
-    setState(() {
-      _pendingLogoBytes = bytes;
-      _pendingLogoFilename =
-          x.name.trim().isNotEmpty ? x.name.trim() : 'logo.jpg';
-    });
-  }
-
-  Future<void> _saveBranding() async {
-    final session = ref.read(sessionProvider);
-    if (session == null || _brandingSaving) return;
-    setState(() => _brandingSaving = true);
-    final messenger = ScaffoldMessenger.of(context);
-    try {
-      String? uploadedUrl;
-      if (_pendingLogoBytes != null) {
-        final logo = await ref.read(hexaApiProvider).uploadBusinessLogoBytes(
-              businessId: session.primaryBusiness.id,
-              bytes: _pendingLogoBytes!,
-              filename: _pendingLogoFilename,
-            );
-        uploadedUrl = logo['branding_logo_url']?.toString() ??
-            logo['logo_url']?.toString() ??
-            logo['url']?.toString();
-      }
-      await ref.read(hexaApiProvider).patchBusinessBranding(
-            businessId: session.primaryBusiness.id,
-            brandingTitle: _brandingTitleCtrl.text.trim(),
-            brandingLogoUrl: uploadedUrl,
-          );
-      await ref.read(sessionProvider.notifier).refreshBusinesses();
-      if (!mounted) return;
-      setState(() => _pendingLogoBytes = null);
-      messenger.showSnackBar(
-        const SnackBar(content: Text('Workspace branding saved')),
-      );
-    } catch (e) {
-      if (mounted) {
-        messenger.showSnackBar(SnackBar(content: Text(friendlyApiError(e))));
-      }
-    } finally {
-      if (mounted) setState(() => _brandingSaving = false);
-    }
-  }
 
   void _handleVersionLongPress(Session? session) {
     if (session?.isSuperAdmin != true) return;
@@ -127,9 +51,12 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     final cs = Theme.of(context).colorScheme;
     final tt = Theme.of(context).textTheme;
     final role = pb?.role.toLowerCase();
+    final isStaff = session != null && sessionIsStaff(session);
+    final isManager = role == 'manager';
     final isOwner = role == 'owner' || session?.isSuperAdmin == true;
-    final canManageUsers = session != null && sessionCanManageUsers(session);
+    final canManageUsers = session != null && sessionCanAdminUsers(session);
     final notifOptIn = ref.watch(localNotificationsOptInProvider);
+    final notifKinds = ref.watch(notificationKindTogglesProvider);
 
     return Scaffold(
       backgroundColor: context.adaptiveScaffold,
@@ -146,11 +73,15 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           onPressed: () => context.popOrGo('/home'),
         ),
       ),
-      body: ListView(
-        physics: const BouncingScrollPhysics(
-            parent: AlwaysScrollableScrollPhysics()),
+      body: HexaResponsiveCenter(
+        maxWidth: 720,
         padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
-        children: [
+        child: ListView(
+          physics: const BouncingScrollPhysics(
+            parent: AlwaysScrollableScrollPhysics(),
+          ),
+          shrinkWrap: true,
+          children: [
           _SectionTitle('Account'),
           _SettingsCard(
             children: [
@@ -165,26 +96,28 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               ),
             ],
           ),
-          _SectionTitle('Quick Actions'),
-          _SettingsCard(
-            children: [
-              _NavTile(
-                icon: Icons.document_scanner_outlined,
-                title: 'Scan purchase bill',
-                onTap: () => context.pushNamed('purchase_scan'),
-              ),
-              _NavTile(
-                icon: Icons.add_shopping_cart_outlined,
-                title: 'New purchase',
-                onTap: () => context.go('/purchase/new'),
-              ),
-              _NavTile(
-                icon: Icons.history_rounded,
-                title: 'Purchase history',
-                onTap: () => context.go('/purchase'),
-              ),
-            ],
-          ),
+          if (!isStaff) ...[
+            _SectionTitle('Quick Actions'),
+            _SettingsCard(
+              children: [
+                _NavTile(
+                  icon: Icons.document_scanner_outlined,
+                  title: 'Scan purchase bill',
+                  onTap: () => context.pushNamed('purchase_scan'),
+                ),
+                _NavTile(
+                  icon: Icons.add_shopping_cart_outlined,
+                  title: 'New purchase',
+                  onTap: () => context.go('/purchase/new'),
+                ),
+                _NavTile(
+                  icon: Icons.history_rounded,
+                  title: 'Purchase history',
+                  onTap: () => context.go('/purchase'),
+                ),
+              ],
+            ),
+          ],
           _SectionTitle('Notifications'),
           _SettingsCard(
             children: [
@@ -197,20 +130,57 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                 value: notifOptIn,
                 onChanged: (v) => unawaited(_setNotificationsOptIn(v)),
               ),
+              if (notifOptIn) ...[
+                SwitchListTile(
+                  title: const Text('Low stock alerts'),
+                  value: notifKinds.contains('low_stock'),
+                  onChanged: (v) => ref
+                      .read(notificationKindTogglesProvider.notifier)
+                      .setEnabled('low_stock', v),
+                ),
+                SwitchListTile(
+                  title: const Text('Delivery updates'),
+                  value: notifKinds.contains('delivery'),
+                  onChanged: (v) => ref
+                      .read(notificationKindTogglesProvider.notifier)
+                      .setEnabled('delivery', v),
+                ),
+                SwitchListTile(
+                  title: const Text('Stock variance'),
+                  value: notifKinds.contains('stock_variance'),
+                  onChanged: (v) => ref
+                      .read(notificationKindTogglesProvider.notifier)
+                      .setEnabled('stock_variance', v),
+                ),
+                SwitchListTile(
+                  title: const Text('Staff requests & reorder'),
+                  value: notifKinds.contains('staff_alert'),
+                  onChanged: (v) => ref
+                      .read(notificationKindTogglesProvider.notifier)
+                      .setEnabled('staff_alert', v),
+                ),
+                SwitchListTile(
+                  title: const Text('Opening stock reminders'),
+                  value: notifKinds.contains('opening_stock'),
+                  onChanged: (v) => ref
+                      .read(notificationKindTogglesProvider.notifier)
+                      .setEnabled('opening_stock', v),
+                ),
+                SwitchListTile(
+                  title: const Text('Evening physical count'),
+                  value: notifKinds.contains('physical_reminder'),
+                  onChanged: (v) => ref
+                      .read(notificationKindTogglesProvider.notifier)
+                      .setEnabled('physical_reminder', v),
+                ),
+              ],
             ],
           ),
           _SectionTitle('Business'),
           _BusinessCard(
             session: session,
-            isOwner: isOwner,
             canManageUsers: canManageUsers,
-            brandingTitleCtrl: _brandingTitleCtrl,
-            pendingLogoBytes: _pendingLogoBytes,
-            pendingLogoFilename: _pendingLogoFilename,
-            brandingSaving: _brandingSaving,
-            onPickLogo: _pickLogo,
-            onDiscardLogo: () => setState(() => _pendingLogoBytes = null),
-            onSaveBranding: _saveBranding,
+            businessProfileReadOnly: isManager,
           ),
           _SectionTitle('Operations'),
           _SettingsCard(
@@ -286,12 +256,13 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                 subtitle: 'Download purchase records for your files',
                 onTap: () => context.push('/settings/backup'),
               ),
-              _NavTile(
-                icon: Icons.checklist_rtl_outlined,
-                title: 'Owner tasks',
-                subtitle: 'Checklist progress and staff completion',
-                onTap: () => context.push('/operations/owner-tasks'),
-              ),
+              if (isOwner)
+                _NavTile(
+                  icon: Icons.checklist_rtl_outlined,
+                  title: 'Owner tasks',
+                  subtitle: 'Checklist progress and staff completion',
+                  onTap: () => context.push('/operations/owner-tasks'),
+                ),
             ],
           ),
           if (session?.isSuperAdmin == true) ...[
@@ -344,6 +315,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
             label: const Text('Sign out'),
           ),
         ],
+        ),
       ),
     );
   }
@@ -357,27 +329,13 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
 class _BusinessCard extends StatelessWidget {
   const _BusinessCard({
     required this.session,
-    required this.isOwner,
     required this.canManageUsers,
-    required this.brandingTitleCtrl,
-    required this.pendingLogoBytes,
-    required this.pendingLogoFilename,
-    required this.brandingSaving,
-    required this.onPickLogo,
-    required this.onDiscardLogo,
-    required this.onSaveBranding,
+    this.businessProfileReadOnly = false,
   });
 
   final Session? session;
-  final bool isOwner;
   final bool canManageUsers;
-  final TextEditingController brandingTitleCtrl;
-  final Uint8List? pendingLogoBytes;
-  final String pendingLogoFilename;
-  final bool brandingSaving;
-  final VoidCallback onPickLogo;
-  final VoidCallback onDiscardLogo;
-  final VoidCallback onSaveBranding;
+  final bool businessProfileReadOnly;
 
   @override
   Widget build(BuildContext context) {
@@ -386,109 +344,27 @@ class _BusinessCard extends StatelessWidget {
     final tt = Theme.of(context).textTheme;
     return _SettingsCard(
       children: [
-        Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Icon(Icons.business_rounded, color: cs.primary),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      pb?.name ?? 'No business selected',
-                      style:
-                          tt.titleSmall?.copyWith(fontWeight: FontWeight.w800),
-                    ),
-                  ),
-                ],
-              ),
-              if (session != null)
-                Text(
-                  'Role: ${pb!.role} · Shown in app: ${pb.effectiveDisplayTitle}',
+        ListTile(
+          leading: Icon(Icons.business_rounded, color: cs.primary),
+          title: Text(pb?.name ?? 'No business selected'),
+          subtitle: session != null
+              ? Text(
+                  'Role: ${pb!.role} · ${pb.effectiveDisplayTitle}',
                   style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
-                ),
-              if (isOwner && pb != null) ...[
-                const SizedBox(height: 16),
-                Text(
-                  'Workspace branding',
-                  style: tt.labelLarge?.copyWith(fontWeight: FontWeight.w800),
-                ),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: brandingTitleCtrl,
-                  textCapitalization: TextCapitalization.words,
-                  decoration: const InputDecoration(
-                    labelText: 'In-app title',
-                    hintText: 'Leave empty to use business name',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _LogoPreview(
-                      pendingBytes: pendingLogoBytes,
-                      networkUrl: pb.brandingLogoUrl,
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          OutlinedButton.icon(
-                            onPressed: brandingSaving ? null : onPickLogo,
-                            icon: const Icon(Icons.image_outlined),
-                            label: const Text('Choose logo'),
-                          ),
-                          if (pendingLogoBytes != null)
-                            Text(
-                              pendingLogoFilename,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: tt.bodySmall?.copyWith(
-                                color: cs.onSurfaceVariant,
-                              ),
-                            ),
-                          const SizedBox(height: 8),
-                          FilledButton(
-                            onPressed: brandingSaving ? null : onSaveBranding,
-                            child: brandingSaving
-                                ? const SizedBox(
-                                    height: 20,
-                                    width: 20,
-                                    child: CircularProgressIndicator(
-                                        strokeWidth: 2),
-                                  )
-                                : const Text('Save branding'),
-                          ),
-                          if (pendingLogoBytes != null)
-                            TextButton(
-                              onPressed: brandingSaving ? null : onDiscardLogo,
-                              child: const Text('Discard image'),
-                            ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ] else if (session != null) ...[
-                const SizedBox(height: 8),
-                Text(
-                  'Only owners can change the in-app title and logo.',
-                  style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
-                ),
-              ],
-            ],
-          ),
+                )
+              : null,
         ),
         _NavTile(
           icon: Icons.receipt_long_outlined,
           title: 'Purchase order / business profile',
-          subtitle: 'GSTIN, address, phone for PDF purchase orders',
-          onTap: () => context.push('/settings/business'),
+          subtitle: businessProfileReadOnly
+              ? 'View GSTIN, address, phone (read-only)'
+              : 'GSTIN, address, phone for PDF purchase orders',
+          onTap: () => context.push(
+            businessProfileReadOnly
+                ? '/settings/business?readonly=1'
+                : '/settings/business',
+          ),
         ),
         if (canManageUsers)
           _NavTile(
@@ -498,34 +374,6 @@ class _BusinessCard extends StatelessWidget {
             onTap: () => context.push('/settings/users'),
           ),
       ],
-    );
-  }
-}
-
-class _LogoPreview extends StatelessWidget {
-  const _LogoPreview({this.pendingBytes, this.networkUrl});
-
-  final Uint8List? pendingBytes;
-  final String? networkUrl;
-
-  @override
-  Widget build(BuildContext context) {
-    final img = pendingBytes != null
-        ? Image.memory(pendingBytes!, fit: BoxFit.cover)
-        : (networkUrl != null && networkUrl!.trim().isNotEmpty
-            ? Image.network(networkUrl!, fit: BoxFit.cover)
-            : null);
-    return Container(
-      width: 72,
-      height: 72,
-      clipBehavior: Clip.antiAlias,
-      decoration: BoxDecoration(
-        color: HexaColors.primaryLight,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.black12),
-      ),
-      child: img ??
-          const Icon(Icons.storefront_rounded, color: HexaColors.textSecondary),
     );
   }
 }

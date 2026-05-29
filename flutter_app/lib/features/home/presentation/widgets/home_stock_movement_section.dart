@@ -84,7 +84,7 @@ class HomeStockMovementSection extends ConsumerWidget {
         }
         return wrap(
           trailing: TextButton(
-            onPressed: () => context.push('/stock/today-feed'),
+            onPressed: () => context.push('/stock?tab=today'),
             child: const Text('View all', style: TextStyle(fontSize: 12)),
           ),
           child: Column(

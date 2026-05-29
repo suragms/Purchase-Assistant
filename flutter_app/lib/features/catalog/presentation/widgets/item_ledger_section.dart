@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 
 import '../../../../core/design_system/hexa_operational_tokens.dart';
 import '../../../../core/json_coerce.dart';
+import '../../../../core/providers/item_detail_providers.dart';
 import '../../../../core/providers/stock_providers.dart';
 import '../../../../core/theme/hexa_colors.dart';
 import '../../../../core/utils/unit_utils.dart';
@@ -256,7 +257,7 @@ class _LedgerEmptyState extends ConsumerWidget {
       );
     }
 
-    final detail = ref.watch(stockItemDetailProvider(itemId)).valueOrNull;
+    final detail = ref.watch(itemDetailStockProvider(itemId)).valueOrNull;
     final systemStock = coerceToDouble(detail?['current_stock']);
     final itemName = detail?['name']?.toString() ?? 'Item';
 
@@ -292,7 +293,8 @@ class _LedgerEmptyState extends ConsumerWidget {
               FilledButton.tonal(
                 onPressed: () async {
                   final row =
-                      detail ?? await ref.read(stockItemDetailProvider(itemId).future);
+                      detail ??
+                          ref.read(itemDetailStockProvider(itemId)).valueOrNull;
                   if (!context.mounted) return;
                   await showUpdateStockSheet(
                     context: context,

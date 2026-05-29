@@ -4,7 +4,7 @@ import '../../../../core/design_system/hexa_ds_tokens.dart';
 import '../../../../core/design_system/hexa_responsive.dart';
 import '../../../../core/json_coerce.dart';
 import '../../../../core/utils/unit_utils.dart';
-import '../../../../shared/widgets/stock_number_display.dart';
+import 'stock_row_metrics.dart';
 import 'stock_status_badge.dart';
 import 'stock_table_layout.dart';
 
@@ -35,21 +35,17 @@ class StockTableRow extends StatelessWidget {
         item['stock_unit']?.toString() ?? item['unit']?.toString() ?? 'piece';
     final status =
         (item['stock_status']?.toString() ?? 'healthy').toLowerCase();
-    final desktop = MediaQuery.sizeOf(context).width >= 1024;
+    final desktop = context.isDesktopLayout;
     final missingBarcode = item['missing_barcode'] == true;
     final updatedAt = item['last_stock_updated_at']?.toString();
     final updatedBy = item['last_stock_updated_by']?.toString();
     final relative = formatStockRelativeTime(updatedAt);
-    final hasPendingOrder = item['has_pending_order'] == true;
-    final pendingDays = (item['pending_order_days'] as num?)?.toInt();
-
     final statusKind = StockStatusBadge.resolve(
       stockStatus: status,
       missingBarcode: missingBarcode,
       updatedAtIso: updatedAt,
     );
-    final displayStatus = stockDisplayStatusFromApi(status);
-    final isLowOrCritical = displayStatus == StockDisplayStatus.low;
+    final isLowOrCritical = status == 'low' || status == 'critical';
 
     final metaParts = <String>[
       if (codeRaw.isNotEmpty) '#$codeRaw',
@@ -130,7 +126,7 @@ class StockTableRow extends StatelessWidget {
                                 overflow: TextOverflow.ellipsis,
                                 style: const TextStyle(
                                   fontSize: 14,
-                                  fontWeight: FontWeight.w800,
+                                  fontWeight: FontWeight.w600,
                                   color: Color(0xFF1A1A1A),
                                 ),
                               ),
@@ -176,13 +172,9 @@ class StockTableRow extends StatelessWidget {
                         decoration: StockTableLayout.cellDecoration(),
                         alignment: Alignment.center,
                         padding: const EdgeInsets.symmetric(horizontal: 4),
-                        child: StockNumberDisplay(
-                          qty: cur,
-                          unit: stockUnit,
-                          status: displayStatus,
-                          hasPendingOrder: hasPendingOrder,
-                          pendingDays: pendingDays,
-                          fontSize: compact ? 13 : 14,
+                        child: StockRowMetrics.stockSummary(
+                          item,
+                          fontSize: compact ? 14 : 16,
                         ),
                       ),
                       if (showDesktopMetrics) ...[

@@ -16,7 +16,7 @@ import '../../../core/json_coerce.dart';
 import '../../../core/services/pdf_actions.dart';
 import '../../../core/providers/stock_providers.dart';
 import '../../stock/presentation/widgets/stock_table_layout.dart';
-import '../../../shared/widgets/stock_number_display.dart';
+import '../../../shared/widgets/stock_summary_widget.dart';
 import '../../../core/widgets/hexa_error_card.dart';
 import '../../stock/presentation/widgets/operational_stock_filter_sheet.dart';
 import '../../../core/providers/api_degraded_provider.dart';
@@ -914,7 +914,7 @@ class _BulkBarcodePrintPageState extends ConsumerState<BulkBarcodePrintPage> {
       ),
       body: LayoutBuilder(
         builder: (context, constraints) {
-          final desktop = constraints.maxWidth >= kOperationalDesktopBreakpoint;
+          final desktop = constraints.maxWidth >= kDesktopMin;
           final listPane = Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -1314,7 +1314,6 @@ class _BulkPrintRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final displayStatus = stockDisplayStatusFromApi(stockStatus);
     return Padding(
       padding: EdgeInsets.symmetric(
         horizontal: HexaResponsive.pageGutter(context, operational: true),
@@ -1375,10 +1374,10 @@ class _BulkPrintRow extends StatelessWidget {
                     width: StockTableLayout.metricWidth + 8,
                     alignment: Alignment.center,
                     decoration: StockTableLayout.cellDecoration(),
-                    child: StockNumberDisplay(
+                    child: StockSummaryWidget(
                       qty: purchased,
                       unit: unit,
-                      status: StockDisplayStatus.normal,
+                      status: 'healthy',
                       hasPendingOrder: hasPendingOrder,
                       pendingDays: pendingOrderDays,
                       fontSize: 14,
@@ -1388,10 +1387,10 @@ class _BulkPrintRow extends StatelessWidget {
                     width: StockTableLayout.metricWidth + 8,
                     alignment: Alignment.center,
                     decoration: StockTableLayout.cellDecoration(),
-                    child: StockNumberDisplay(
+                    child: StockSummaryWidget(
                       qty: current,
                       unit: unit,
-                      status: displayStatus,
+                      status: stockStatus,
                       fontSize: 14,
                     ),
                   ),

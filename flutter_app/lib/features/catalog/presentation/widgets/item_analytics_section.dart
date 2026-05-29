@@ -3,18 +3,29 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/design_system/hexa_operational_tokens.dart';
 import '../../../../core/json_coerce.dart';
-import '../../../../core/providers/stock_providers.dart';
+import '../../../../core/providers/item_detail_providers.dart';
+import '../../../../core/providers/stock_providers.dart' show stockItemIntelligenceProvider;
 import '../../../../core/utils/unit_utils.dart';
 
 class ItemAnalyticsSection extends ConsumerWidget {
-  const ItemAnalyticsSection({super.key, required this.itemId});
+  const ItemAnalyticsSection({
+    super.key,
+    required this.itemId,
+    this.loadIntelligence = false,
+  });
 
   final String itemId;
+  final bool loadIntelligence;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final stock = ref.watch(stockItemDetailProvider(itemId)).valueOrNull ?? const <String, dynamic>{};
-    final intel = ref.watch(stockItemIntelligenceProvider(itemId)).valueOrNull ?? const <String, dynamic>{};
+    final stock =
+        ref.watch(itemDetailStockProvider(itemId)).valueOrNull ??
+            const <String, dynamic>{};
+    final intel = loadIntelligence
+        ? ref.watch(stockItemIntelligenceProvider(itemId)).valueOrNull ??
+            const <String, dynamic>{}
+        : const <String, dynamic>{};
 
     final unit = (stock['stock_unit'] ?? stock['unit'] ?? '').toString().trim().toUpperCase();
     final unitLabel = unit.isEmpty ? 'UNIT' : unit;

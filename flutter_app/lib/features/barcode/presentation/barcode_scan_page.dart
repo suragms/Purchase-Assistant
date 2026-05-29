@@ -24,7 +24,7 @@ import '../../../core/providers/stock_offline_queue_provider.dart';
 import '../../../core/providers/catalog_providers.dart';
 import '../../../core/router/navigation_ext.dart';
 import '../../../shared/widgets/search_picker_sheet.dart';
-import '../../stock/presentation/quick_stock_patch_sheet.dart';
+import '../../stock/presentation/quick_stock_action_sheet.dart';
 import '../../stock/presentation/stock_undo_snackbar.dart';
 import 'warehouse_scan_action_sheet.dart';
 import 'barcode_scan_web_stub.dart'
@@ -381,7 +381,7 @@ class _BarcodeScanPageState extends ConsumerState<BarcodeScanPage>
       if (!mounted) return;
       final returnTo = GoRouterState.of(context).uri.queryParameters['return'];
       if (returnTo == 'stock') {
-        final saved = await showQuickStockPatchSheet(
+        final saved = await showQuickStockActionSheet(
           context: context,
           ref: ref,
           item: Map<String, dynamic>.from(row),

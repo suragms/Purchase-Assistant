@@ -6,28 +6,31 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../core/providers/connectivity_provider.dart';
-import '../../core/services/offline_store.dart';
 import '../../core/providers/home_owner_dashboard_providers.dart'
     show
         homeInventorySummaryProvider,
         homeRecentActivityFeedProvider,
         stockAuditPeriodProvider;
+import '../../core/providers/notification_center_provider.dart'
+    show notificationCenterCoordinatorProvider;
 import '../../core/providers/notifications_provider.dart'
     show notificationsUnreadCountProvider;
 import '../../core/providers/stock_providers.dart';
 import '../../core/providers/home_breakdown_tab_providers.dart';
 import '../../core/providers/home_dashboard_provider.dart';
 import '../../core/providers/reports_provider.dart';
-import '../../core/providers/realtime_events_provider.dart';
 import '../../core/providers/trade_purchases_provider.dart'
     show invalidateTradePurchaseCaches;
 import '../../core/design_system/hexa_ds_tokens.dart';
 import '../../core/design_system/hexa_operational_tokens.dart';
+import '../../core/auth/session_notifier.dart';
+import '../../core/design_system/hexa_desktop_layout.dart';
 import '../../core/design_system/hexa_responsive.dart';
 import '../../core/theme/hexa_colors.dart';
+import 'app_shell.dart';
 import 'responsive_shell_layout.dart';
 import 'shell_branch_provider.dart';
+import 'shell_realtime_listener.dart';
 
 /// Shell: Home | Stock | Reports | History | Search in one row, then [+] (no overlap).
 class ShellScreen extends ConsumerStatefulWidget {
@@ -89,16 +92,16 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
 
   @override
   Widget build(BuildContext context) {
+    ref.watch(notificationCenterCoordinatorProvider);
     final navigationShell = widget.navigationShell;
     final idx = navigationShell.currentIndex;
     final routePath = GoRouterState.of(context).uri.path;
-    final conn = ref.watch(connectivityResultsProvider);
-    final offline =
-        conn.valueOrNull != null && isOfflineResult(conn.valueOrNull!);
-    final pendingSync = OfflineStore.getPendingEntries().length;
     final stockAlertN = ref.watch(notificationsUnreadCountProvider);
-    ref.watch(realtimeInvalidationProvider);
-    final isDesktop = MediaQuery.sizeOf(context).width >= 900;
+    final width = MediaQuery.sizeOf(context).width;
+    final showsRail = width >= kNavigationRailMin;
+    final railExtended = width >= kDesktopMin;
+    final session = ref.watch(sessionProvider);
+    final biz = session?.primaryBusiness;
 
     void go(int branch) {
       HapticFeedback.selectionClick();
@@ -121,94 +124,42 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
     // body gets ~zero height while the bar still paints — it then looks vertically
     // centered with a blank page. [SizedBox.expand] + [Column] keeps tabs + bar as
     // explicit flex siblings (see also [NoTransitionPage] in app_router).
-    final shellBody = Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        if (offline)
-          Semantics(
-            liveRegion: true,
-            container: true,
-            label: "You're offline — showing cached data",
-            child: Material(
-              color: const Color(0xFFF59E0B),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: HexaDsLayout.pageGutter,
-                  vertical: HexaDsSpace.xs + 2,
-                ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.wifi_off_rounded,
-                        size: 18, color: Color(0xFF1C1917)),
-                    const SizedBox(width: HexaDsLayout.inlineGap),
-                    Expanded(
-                      child: Text(
-                        "You're offline — showing cached data",
-                        style:
-                            Theme.of(context).textTheme.labelMedium?.copyWith(
-                                  color: const Color(0xFF1C1917),
-                                  fontWeight: FontWeight.w600,
-                                  fontSize: 12,
-                                  height: 1.25,
-                                ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+    final shellBody = AppShellBody(
+      navigationShell: navigationShell,
+      bottomBar: hideShellChrome
+          ? null
+          : LayoutBuilder(
+              builder: (context, c) {
+                if (c.maxWidth >= kNavigationRailMin) {
+                  return const SizedBox.shrink();
+                }
+                return _ShellBottomBar(
+                  selectedIndex: idx,
+                  stockBadgeCount: stockAlertN,
+                  onDestinationSelected: go,
+                  showFab: !hideFab,
+                );
+              },
             ),
-          ),
-        if (!offline && pendingSync > 0)
-          Material(
-            color: const Color(0xFFE3F2FD),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: HexaDsLayout.pageGutter,
-                vertical: HexaDsSpace.xs + 2,
-              ),
-              child: Row(
-                children: [
-                  const Icon(Icons.sync, size: 18, color: Color(0xFF1565C0)),
-                  const SizedBox(width: HexaDsLayout.inlineGap),
-                  Expanded(
-                    child: Text(
-                      pendingSync == 1
-                          ? '1 change pending sync'
-                          : '$pendingSync changes pending sync',
-                      style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                            color: const Color(0xFF1565C0),
-                            fontWeight: FontWeight.w600,
-                            fontSize: 12,
-                          ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        Expanded(child: navigationShell),
-        if (!hideShellChrome)
-          LayoutBuilder(
-            builder: (context, c) {
-              if (c.maxWidth >= 900) return const SizedBox.shrink();
-              return _ShellBottomBar(
-                selectedIndex: idx,
-                stockBadgeCount: stockAlertN,
-                onDestinationSelected: go,
-                showFab: !hideFab,
-              );
-            },
-          ),
-      ],
     );
 
     final rail = NavigationRail(
       selectedIndex: idx,
-      extended: MediaQuery.sizeOf(context).width >= 1100,
-      labelType: MediaQuery.sizeOf(context).width < 380
+      extended: railExtended,
+      minExtendedWidth: kDesktopSidebarWidth,
+      labelType: width < 380
           ? NavigationRailLabelType.none
           : NavigationRailLabelType.all,
       onDestinationSelected: go,
+      trailing: railExtended && biz != null
+          ? DesktopSideNavFooter(
+              businessName: biz.effectiveDisplayTitle,
+              roleLabel: biz.role.toUpperCase(),
+              notificationCount: stockAlertN,
+              onNotificationsTap: () => context.push('/notifications'),
+              onSettingsTap: () => context.push('/settings'),
+            )
+          : null,
       destinations: const [
         NavigationRailDestination(
           icon: Icon(Icons.grid_view_outlined),
@@ -238,13 +189,15 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
       ],
     );
 
-    return SizedBox.expand(
-      child: Material(
-        key: const ValueKey<String>('main_shell'),
-        color: Theme.of(context).scaffoldBackgroundColor,
-        child: ResponsiveShellLayout(
-          rail: hideShellChrome && !isDesktop ? const SizedBox.shrink() : rail,
-          body: shellBody,
+    return ShellRealtimeListener(
+      child: SizedBox.expand(
+        child: Material(
+          key: const ValueKey<String>('main_shell'),
+          color: Theme.of(context).scaffoldBackgroundColor,
+          child: ResponsiveShellLayout(
+            rail: hideShellChrome && !showsRail ? const SizedBox.shrink() : rail,
+            body: shellBody,
+          ),
         ),
       ),
     );

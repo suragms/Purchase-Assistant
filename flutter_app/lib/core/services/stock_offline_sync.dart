@@ -37,6 +37,12 @@ Future<void> replayStockOfflineQueue({
           reason: data['reason']?.toString(),
           notes: data['notes']?.toString(),
         );
+      } else if (kind == 'purchase_arrive') {
+        await api.arrivePurchase(
+          businessId: businessId,
+          purchaseId: data['purchase_id'].toString(),
+          notes: data['notes']?.toString(),
+        );
       } else {
         continue;
       }

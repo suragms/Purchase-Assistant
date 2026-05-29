@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../core/providers/business_write_revision.dart';
+import '../../../core/providers/business_write_event.dart';
 import '../../../core/providers/catalog_providers.dart';
 import '../../../core/router/navigation_ext.dart';
 import '../../../core/search/catalog_fuzzy.dart';
@@ -70,12 +70,14 @@ class _CatalogCategoryDetailPageState
 
   @override
   Widget build(BuildContext context) {
-    ref.listen<int>(businessDataWriteRevisionProvider, (prev, next) {
-      if (prev != null && next > prev) {
-        ref.invalidate(categoryTypesListProvider(widget.categoryId));
-        ref.invalidate(catalogItemsListProvider);
-        ref.invalidate(categoryTradeSummaryProvider(widget.categoryId));
+    ref.listen<BusinessWriteEvent>(businessWriteEventProvider, (prev, next) {
+      if (next.revision <= (prev?.revision ?? -1)) return;
+      if (!next.isGlobal && next.kind != 'purchase' && next.kind != 'aggregate') {
+        return;
       }
+      ref.invalidate(categoryTypesListProvider(widget.categoryId));
+      ref.invalidate(catalogItemsListProvider);
+      ref.invalidate(categoryTradeSummaryProvider(widget.categoryId));
     });
 
     final catsAsync = ref.watch(itemCategoriesListProvider);

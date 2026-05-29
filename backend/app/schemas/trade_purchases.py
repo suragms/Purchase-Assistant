@@ -330,6 +330,17 @@ class TradePurchaseOut(DecimalModel):
     is_delivered: bool = False
     delivered_at: datetime | None = None
     delivery_notes: str | None = None
+    delivery_status: str = "pending"
+    dispatched_at: datetime | None = None
+    arrived_at: datetime | None = None
+    staff_verified_at: datetime | None = None
+    staff_verified_by_name: str | None = None
+    stock_committed_at: datetime | None = None
+    staff_verified_qty: Decimal | None = None
+    delivered_qty_committed: Decimal | None = None
+    truck_number: str | None = None
+    driver_contact: str | None = None
+    dispatch_note: str | None = None
     stock_updates: list[StockUpdateOut] = Field(default_factory=list)
 
 
@@ -349,6 +360,30 @@ class TradePurchaseVerificationLineIn(DecimalModel):
 class TradePurchaseVerifyIn(DecimalModel):
     lines: list[TradePurchaseVerificationLineIn] = Field(default_factory=list)
     notes: str | None = Field(None, max_length=2000)
+
+
+class TradePurchaseDispatchIn(DecimalModel):
+    truck_number: str | None = Field(None, max_length=100)
+    driver_contact: str | None = Field(None, max_length=100)
+    dispatch_note: str | None = Field(None, max_length=2000)
+    mark_in_transit: bool = False
+
+
+class TradePurchaseArriveIn(DecimalModel):
+    notes: str | None = Field(None, max_length=2000)
+
+
+class TradePurchaseDeliveryPipelineOut(DecimalModel):
+    pending: int = 0
+    dispatched: int = 0
+    in_transit: int = 0
+    arrived: int = 0
+    staff_verifying: int = 0
+    staff_verified: int = 0
+    partial: int = 0
+    stock_committed: int = 0
+    cancelled: int = 0
+    total_pending_amount: Decimal = Decimal("0")
 
 
 class TradePurchaseUpdateRequest(TradePurchaseCreateRequest):

@@ -6,7 +6,7 @@ abstract final class StockTableLayout {
   static const double stockColWidth = 54;
   static const double desktopMetricColWidth = 72;
   static const double statusColWidth = 56;
-  static const double rowMinHeight = 72;
+  static const double rowMinHeight = 56;
   static const double cellHPadding = 6;
   static const double metricWidth = 44;
   static const double metricGap = 4;

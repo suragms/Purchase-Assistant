@@ -13,7 +13,7 @@ import '../../../core/models/trade_purchase_models.dart';
 import '../../../core/reporting/trade_report_aggregate.dart';
 import '../../../core/providers/business_aggregates_invalidation.dart';
 import '../../../core/providers/business_profile_provider.dart';
-import '../../../core/providers/business_write_revision.dart';
+import '../../../core/providers/business_write_event.dart';
 import '../../../core/providers/catalog_providers.dart';
 import '../../../core/router/navigation_ext.dart';
 import '../../../core/services/broker_statement_pdf.dart';
@@ -411,10 +411,14 @@ class _TradeLedgerPageState extends ConsumerState<TradeLedgerPage> {
 
   @override
   Widget build(BuildContext context) {
-    ref.listen<int>(businessDataWriteRevisionProvider, (prev, next) {
-      if (prev != null && next > prev && mounted) {
-        _load();
+    ref.listen<BusinessWriteEvent>(businessWriteEventProvider, (prev, next) {
+      if (next.revision <= (prev?.revision ?? -1) || !mounted) return;
+      if (widget.kind == TradeLedgerKind.catalogItem) {
+        if (!next.isGlobal && !next.affectsItem(widget.entityId)) return;
+      } else if (!next.isGlobal && next.kind != 'purchase' && next.kind != 'aggregate') {
+        return;
       }
+      _load();
     });
 
     final itemAsync = widget.kind == TradeLedgerKind.catalogItem

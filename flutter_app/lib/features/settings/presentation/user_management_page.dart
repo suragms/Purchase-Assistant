@@ -10,6 +10,9 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/auth/session_notifier.dart';
 import '../../../core/design_system/hexa_ds_tokens.dart';
+import '../../../core/design_system/hexa_operational_tokens.dart';
+import '../../../core/design_system/hexa_responsive.dart';
+import 'widgets/user_management_detail_panel.dart';
 import '../../../core/errors/user_facing_errors.dart';
 import '../../../core/providers/business_users_provider.dart';
 import '../../../core/router/navigation_ext.dart';
@@ -570,95 +573,186 @@ class _UserManagementPageState extends ConsumerState<UserManagementPage> {
         ),
         data: (rows) {
           final filtered = _filtered(rows);
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Padding(
+          final desktop = context.isDesktopLayout && !_selectMode;
+          final selectedId = ref.watch(selectedUserIdProvider);
+          Map<String, dynamic>? selectedUser;
+          if (selectedId != null) {
+            for (final u in filtered) {
+              if (u['id']?.toString() == selectedId) {
+                selectedUser = u;
+                break;
+              }
+            }
+          }
+          if (desktop && filtered.isNotEmpty) {
+            final sid = selectedId ?? filtered.first['id']?.toString();
+            if (selectedId == null || selectedUser == null) {
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (mounted && sid != null) {
+                  ref.read(selectedUserIdProvider.notifier).state = sid;
+                }
+              });
+            }
+          }
+
+          Widget filterChips() => Padding(
                 padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
                 child: Wrap(
                   spacing: 8,
                   runSpacing: 8,
                   children: [
                     for (final f in _UserFilter.values)
-                      FilterChip(
-                        label: Text(_filterLabel(f)),
-                        selected: _filter == f,
-                        onSelected: (_) => setState(() => _filter = f),
+                      ConstrainedBox(
+                        constraints: const BoxConstraints(
+                          minHeight: HexaOp.touchTargetMin,
+                        ),
+                        child: FilterChip(
+                          label: Text(_filterLabel(f)),
+                          selected: _filter == f,
+                          materialTapTargetSize: MaterialTapTargetSize.padded,
+                          onSelected: (_) => setState(() => _filter = f),
+                        ),
                       ),
                   ],
                 ),
+              );
+
+          Widget userList({required bool desktopSelect}) {
+            if (filtered.isEmpty) {
+              return Center(
+                child: Text(
+                  'No users in this filter.',
+                  style: tt.bodyLarge?.copyWith(color: cs.onSurfaceVariant),
+                ),
+              );
+            }
+            return RefreshIndicator(
+              onRefresh: () async {
+                invalidateUserManagementCaches(ref);
+                await ref.read(businessUsersListProvider.future);
+              },
+              child: ListView.separated(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+                itemCount: filtered.length,
+                separatorBuilder: (_, __) => const SizedBox(height: 8),
+                itemBuilder: (ctx, i) {
+                  final u = filtered[i];
+                  final id = u['id']?.toString() ?? '';
+                  return _UserRowCard(
+                    user: u,
+                    selectMode: _selectMode,
+                    selected: _selected.contains(id),
+                    listHighlighted: desktopSelect && selectedId == id,
+                    canAdmin: canAdmin,
+                    roleColor: _roleColor(u['role']?.toString() ?? '', cs),
+                    recentActive:
+                        _recentActive(u['last_active_at']?.toString()),
+                    lastActiveLabel:
+                        _relativeActive(u['last_active_at']?.toString()),
+                    onToggleSelect: () {
+                      setState(() {
+                        if (_selected.contains(id)) {
+                          _selected.remove(id);
+                        } else {
+                          _selected.add(id);
+                        }
+                      });
+                    },
+                    onTap: () {
+                      if (_selectMode) {
+                        setState(() {
+                          if (_selected.contains(id)) {
+                            _selected.remove(id);
+                          } else {
+                            _selected.add(id);
+                          }
+                        });
+                        return;
+                      }
+                      if (desktopSelect && id.isNotEmpty) {
+                        ref.read(selectedUserIdProvider.notifier).state = id;
+                        return;
+                      }
+                      if (id.isNotEmpty) context.push('/settings/users/$id');
+                    },
+                    onViewProfile: () {
+                      if (id.isNotEmpty) context.push('/settings/users/$id');
+                    },
+                    onEdit: () {},
+                    onBlock: () => _patchUser(id, {'is_blocked': true}),
+                    onResetPassword: () => _resetPassword(id),
+                    onDelete: () => _deleteUser(id),
+                    onCopyCredentials: () => _copyCredentials(id),
+                  );
+                },
               ),
-              Expanded(
-                child: filtered.isEmpty
-                    ? Center(
-                        child: Text(
-                          'No users in this filter.',
-                          style: tt.bodyLarge?.copyWith(color: cs.onSurfaceVariant),
+            );
+          }
+
+          if (desktop) {
+            return Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                SizedBox(
+                  width: 120,
+                  child: ListView(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    children: [
+                      for (final f in _UserFilter.values)
+                        ListTile(
+                          dense: true,
+                          selected: _filter == f,
+                          title: Text(
+                            _filterLabel(f),
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          onTap: () => setState(() => _filter = f),
                         ),
-                      )
-                    : RefreshIndicator(
-                        onRefresh: () async {
-                          invalidateUserManagementCaches(ref);
-                          await ref.read(businessUsersListProvider.future);
-                        },
-                        child: ListView.separated(
-                          padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-                          itemCount: filtered.length,
-                          separatorBuilder: (_, __) => const SizedBox(height: 8),
-                          itemBuilder: (ctx, i) {
-                            final u = filtered[i];
-                            return _UserRowCard(
-                              user: u,
-                              selectMode: _selectMode,
-                              selected: _selected.contains(u['id']?.toString()),
-                              canAdmin: canAdmin,
-                              roleColor: _roleColor(u['role']?.toString() ?? '', cs),
-                              recentActive: _recentActive(u['last_active_at']?.toString()),
-                              lastActiveLabel:
-                                  _relativeActive(u['last_active_at']?.toString()),
-                              onToggleSelect: () {
-                                final id = u['id']?.toString() ?? '';
-                                setState(() {
-                                  if (_selected.contains(id)) {
-                                    _selected.remove(id);
-                                  } else {
-                                    _selected.add(id);
-                                  }
-                                });
-                              },
-                              onTap: () {
-                                final id = u['id']?.toString() ?? '';
-                                if (_selectMode) {
-                                  setState(() {
-                                    if (_selected.contains(id)) {
-                                      _selected.remove(id);
-                                    } else {
-                                      _selected.add(id);
-                                    }
-                                  });
-                                  return;
-                                }
-                                if (id.isNotEmpty) context.push('/settings/users/$id');
-                              },
-                              onViewProfile: () {
-                                final id = u['id']?.toString() ?? '';
-                                if (id.isNotEmpty) context.push('/settings/users/$id');
-                              },
-                              onEdit: () {},
-                              onBlock: () => _patchUser(
-                                u['id']?.toString() ?? '',
-                                {'is_blocked': true},
-                              ),
-                              onResetPassword: () =>
-                                  _resetPassword(u['id']?.toString() ?? ''),
-                              onDelete: () => _deleteUser(u['id']?.toString() ?? ''),
-                              onCopyCredentials: () =>
-                                  _copyCredentials(u['id']?.toString() ?? ''),
-                            );
-                          },
-                        ),
-                      ),
-              ),
+                    ],
+                  ),
+                ),
+                const VerticalDivider(width: 1, thickness: 1),
+                Expanded(
+                  flex: 4,
+                  child: userList(desktopSelect: true),
+                ),
+                const VerticalDivider(width: 1, thickness: 1),
+                Expanded(
+                  flex: 5,
+                  child: UserManagementDetailPanel(
+                    user: selectedUser ??
+                        (filtered.isNotEmpty ? filtered.first : null),
+                    canAdmin: canAdmin,
+                    onPatch: (data) => _patchUser(
+                      selectedUser?['id']?.toString() ??
+                          filtered.first['id']?.toString() ??
+                          '',
+                      data,
+                    ),
+                    onResetPassword: () => _resetPassword(
+                      selectedUser?['id']?.toString() ?? '',
+                    ),
+                    onDelete: () => _deleteUser(
+                      selectedUser?['id']?.toString() ?? '',
+                    ),
+                    onBlock: () => _patchUser(
+                      selectedUser?['id']?.toString() ?? '',
+                      {'is_blocked': true},
+                    ),
+                  ),
+                ),
+              ],
+            );
+          }
+
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              filterChips(),
+              Expanded(child: userList(desktopSelect: false)),
             ],
           );
         },
@@ -672,6 +766,7 @@ class _UserRowCard extends StatelessWidget {
     required this.user,
     required this.selectMode,
     required this.selected,
+    this.listHighlighted = false,
     required this.canAdmin,
     required this.roleColor,
     required this.recentActive,
@@ -689,6 +784,7 @@ class _UserRowCard extends StatelessWidget {
   final Map<String, dynamic> user;
   final bool selectMode;
   final bool selected;
+  final bool listHighlighted;
   final bool canAdmin;
   final Color roleColor;
   final bool recentActive;
@@ -727,7 +823,9 @@ class _UserRowCard extends StatelessWidget {
     }
 
     return Card(
-      color: context.adaptiveCard,
+      color: listHighlighted
+          ? const Color(0xFFE8F4F2)
+          : context.adaptiveCard,
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
         onTap: onTap,

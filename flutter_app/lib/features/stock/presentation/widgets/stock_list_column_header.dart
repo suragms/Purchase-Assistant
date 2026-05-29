@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../../core/design_system/hexa_ds_tokens.dart';
 import '../../../../core/design_system/hexa_operational_tokens.dart';
+import '../../../../core/design_system/hexa_responsive.dart';
 import 'stock_table_layout.dart';
 
 /// Warehouse table header: ITEM | STOCK | STATUS.
@@ -10,7 +11,7 @@ class StockListColumnHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final desktop = MediaQuery.sizeOf(context).width >= 1024;
+    final desktop = context.isDesktopLayout;
     final hdr = HexaDsType.label(10).copyWith(
       fontWeight: FontWeight.w800,
       color: const Color(0xFF475569),

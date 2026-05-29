@@ -5,7 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/auth/session_notifier.dart';
 import '../../../../core/design_system/hexa_operational_tokens.dart';
 import '../../../../core/json_coerce.dart';
-import '../../../../core/providers/stock_providers.dart';
+import '../../../../core/providers/item_detail_providers.dart';
 import '../../../../core/router/post_auth_route.dart' show sessionIsStaff;
 import '../../../../core/utils/unit_utils.dart';
 
@@ -17,7 +17,7 @@ class ItemDeliveryStatusCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final stock = ref.watch(stockItemDetailProvider(itemId)).valueOrNull;
+    final stock = ref.watch(itemDetailStockProvider(itemId)).valueOrNull;
     if (stock == null || stock.isEmpty) return const SizedBox.shrink();
 
     final session = ref.watch(sessionProvider);

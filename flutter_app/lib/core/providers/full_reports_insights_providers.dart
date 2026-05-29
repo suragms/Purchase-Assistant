@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
@@ -7,6 +9,9 @@ import 'analytics_kpi_provider.dart';
 /// Insights copy block for the full Reports screen (invalidated with other analytics).
 final fullReportsInsightsProvider =
     FutureProvider.autoDispose<Map<String, dynamic>>((ref) async {
+  final link = ref.keepAlive();
+  final timer = Timer(const Duration(minutes: 5), link.close);
+  ref.onDispose(timer.cancel);
   final session = ref.watch(sessionProvider);
   if (session == null) return {};
   final range = ref.watch(analyticsDateRangeProvider);
@@ -21,6 +26,9 @@ final fullReportsInsightsProvider =
 /// Monthly goals strip on Reports (invalidated with other analytics).
 final fullReportsGoalsProvider =
     FutureProvider.autoDispose<Map<String, dynamic>?>((ref) async {
+  final link = ref.keepAlive();
+  final timer = Timer(const Duration(minutes: 5), link.close);
+  ref.onDispose(timer.cancel);
   final session = ref.watch(sessionProvider);
   if (session == null) return null;
   final n = DateTime.now();

@@ -4,24 +4,26 @@ import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/design_system/hexa_responsive.dart';
-import '../../../core/providers/business_write_revision.dart';
-import '../../../core/providers/catalog_providers.dart';
+import '../../../core/providers/business_write_event.dart';
 import '../../../core/providers/item_detail_providers.dart';
-import '../../../core/providers/stock_providers.dart';
+import '../../../core/providers/trade_purchases_provider.dart';
 import '../../../core/theme/hexa_colors.dart';
 import '../../../core/widgets/friendly_load_error.dart';
 import '../../../core/auth/session_notifier.dart' show sessionProvider;
+import '../../../core/router/post_auth_route.dart' show sessionIsStaff;
 import '../../stock/presentation/stock_quick_purchase_sheet.dart';
 import '../../stock/presentation/update_stock_sheet.dart';
 import 'widgets/item_detail_header.dart';
 import 'widgets/item_quick_actions_bar.dart';
 import 'widgets/item_analytics_section.dart';
+import 'widgets/item_price_intelligence_section.dart';
 import 'widgets/item_ledger_section.dart';
 import 'widgets/item_physical_verification_card.dart';
 import 'widgets/item_purchase_history_section.dart';
 import 'widgets/item_supplier_intelligence_section.dart';
 import 'widgets/item_stock_snapshot_card.dart';
 import 'widgets/item_timeline_section.dart';
+import '../../stock/presentation/widgets/stock_item_history_panel.dart';
 
 class ItemDetailPage extends ConsumerWidget {
   const ItemDetailPage({super.key, required this.itemId});
@@ -30,12 +32,11 @@ class ItemDetailPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    ref.listen<int>(businessDataWriteRevisionProvider, (prev, next) {
-      if (prev != null && next > prev) {
-        ref.invalidate(catalogItemDetailProvider(itemId));
-        ref.invalidate(stockItemDetailProvider(itemId));
-        ref.invalidate(stockItemIntelligenceProvider(itemId));
-        ref.invalidate(stockItemActivityProvider(itemId));
+    ref.listen<BusinessWriteEvent>(businessWriteEventProvider, (prev, next) {
+      if (next.revision <= (prev?.revision ?? -1)) return;
+      if (next.affectsItem(itemId)) {
+        ref.invalidate(itemDetailBundleProvider(itemId));
+        ref.invalidate(tradePurchasesForItemProvider(itemId));
       }
     });
 
@@ -69,10 +70,6 @@ class ItemDetailPage extends ConsumerWidget {
 
             Future<void> doRefresh() async {
               ref.invalidate(itemDetailBundleProvider(itemId));
-              ref.invalidate(catalogItemDetailProvider(itemId));
-              ref.invalidate(stockItemDetailProvider(itemId));
-              ref.invalidate(stockItemIntelligenceProvider(itemId));
-              ref.invalidate(stockItemActivityProvider(itemId));
             }
 
             if (desktop) {
@@ -95,70 +92,14 @@ class ItemDetailPage extends ConsumerWidget {
               );
             }
 
-            return RefreshIndicator(
+            return _ItemDetailMobileScroll(
+              itemId: itemId,
+              name: name.isNotEmpty ? name : (code.isNotEmpty ? code : 'Item'),
+              code: code.isNotEmpty ? code : null,
+              categoryLabel: categoryLabel,
+              gutter: gutter,
               onRefresh: doRefresh,
-              child: CustomScrollView(
-                slivers: [
-                  SliverPadding(
-                    padding: EdgeInsets.fromLTRB(gutter, 8, gutter, 0),
-                    sliver: SliverToBoxAdapter(
-                      child: HexaResponsiveCenter(
-                        maxWidth: HexaResponsive.maxContentWidth,
-                        padding: EdgeInsets.zero,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            ItemDetailHeader(
-                              itemName: name.isNotEmpty ? name : (code.isNotEmpty ? code : 'Item'),
-                              categoryLabel: categoryLabel,
-                              snapshot: null,
-                              onEdit: () => context.push('/catalog/item/$itemId/edit'),
-                              onMore: () => _showMore(context, ref, item),
-                            ),
-                            const SizedBox(height: 8),
-                            ItemStockSnapshotCard(itemId: itemId),
-                            const SizedBox(height: 8),
-                            ItemQuickActionsBar(
-                              itemId: itemId,
-                              itemName: name.isNotEmpty ? name : 'Item',
-                              itemCode: code.isNotEmpty ? code : null,
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                  SliverPadding(
-                    padding: EdgeInsets.fromLTRB(gutter, 8, gutter, 100),
-                    sliver: SliverToBoxAdapter(
-                      child: HexaResponsiveCenter(
-                        maxWidth: HexaResponsive.maxContentWidth,
-                        padding: EdgeInsets.zero,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            ItemLedgerSection(itemId: itemId),
-                            const SizedBox(height: 8),
-                            ItemPurchaseHistorySection(
-                              itemId: itemId,
-                              itemName: name.isNotEmpty ? name : (code.isNotEmpty ? code : 'Item'),
-                            ),
-                            const SizedBox(height: 8),
-                            ItemSupplierIntelligenceSection(
-                              itemId: itemId,
-                              itemName: name.isNotEmpty ? name : (code.isNotEmpty ? code : 'Item'),
-                            ),
-                            const SizedBox(height: 8),
-                            ItemPhysicalVerificationCard(itemId: itemId),
-                            const SizedBox(height: 8),
-                            ItemTimelineSection(itemId: itemId),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
+              onMore: () => _showMore(context, ref, item),
             );
           },
         ),
@@ -239,6 +180,7 @@ class _ItemStickyActions extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final session = ref.watch(sessionProvider);
     if (session == null) return const SizedBox.shrink();
+    final isStaff = sessionIsStaff(session);
     final name = itemName.trim().isNotEmpty ? itemName.trim() : 'Item';
 
     return SafeArea(
@@ -254,37 +196,40 @@ class _ItemStickyActions extends ConsumerWidget {
             Expanded(
               child: FilledButton.icon(
                 onPressed: () async {
-                  final row = await ref.read(stockItemDetailProvider(itemId).future);
+                  final row = ref.read(itemDetailStockProvider(itemId)).valueOrNull;
                   if (!context.mounted) return;
                   await showUpdateStockSheet(
                     context: context,
                     ref: ref,
                     itemId: itemId,
                     itemName: name,
-                    stockRow: row.isEmpty ? null : row,
+                    stockRow: row == null || row.isEmpty ? null : row,
                   );
                 },
                 icon: const Icon(Icons.fact_check_outlined),
                 label: const Text('Update physical'),
               ),
             ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: OutlinedButton.icon(
-                onPressed: () async {
-                  final item = await ref.read(stockItemDetailProvider(itemId).future);
-                  if (!context.mounted) return;
-                  if (item.isEmpty) return;
-                  await showStockQuickPurchaseSheet(
-                    context: context,
-                    ref: ref,
-                    item: item,
-                  );
-                },
-                icon: const Icon(Icons.add_shopping_cart_rounded),
-                label: const Text('Add qty'),
+            if (!isStaff) ...[
+              const SizedBox(width: 10),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () async {
+                    final item =
+                        ref.read(itemDetailStockProvider(itemId)).valueOrNull;
+                    if (!context.mounted) return;
+                    if (item == null || item.isEmpty) return;
+                    await showStockQuickPurchaseSheet(
+                      context: context,
+                      ref: ref,
+                      item: item,
+                    );
+                  },
+                  icon: const Icon(Icons.add_shopping_cart_rounded),
+                  label: const Text('Add qty'),
+                ),
               ),
-            ),
+            ],
           ],
         ),
       ),
@@ -292,7 +237,7 @@ class _ItemStickyActions extends ConsumerWidget {
   }
 }
 
-class _DesktopItemLayout extends StatelessWidget {
+class _DesktopItemLayout extends ConsumerWidget {
   const _DesktopItemLayout({
     required this.itemId,
     required this.name,
@@ -308,78 +253,103 @@ class _DesktopItemLayout extends StatelessWidget {
   final VoidCallback onMore;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final session = ref.watch(sessionProvider);
+    final isStaff = session != null && sessionIsStaff(session);
+    final tab = GoRouterState.of(context).uri.queryParameters['tab']?.toLowerCase();
+    final initialIndex = switch (tab) {
+      'purchases' || 'history' || 'purchase' => 1,
+      'analytics' || 'price' => 2,
+      _ => 0,
+    };
+    if (isStaff) {
+      return SingleChildScrollView(
+        padding: const EdgeInsets.only(bottom: 24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            ItemDetailHeader(
+              itemName: name,
+              categoryLabel: categoryLabel,
+              snapshot: null,
+              onEdit: () => context.push('/catalog/item/$itemId/edit'),
+              onMore: onMore,
+            ),
+            const SizedBox(height: 8),
+            ItemStockSnapshotCard(itemId: itemId),
+            const SizedBox(height: 8),
+            ItemPhysicalVerificationCard(itemId: itemId),
+          ],
+        ),
+      );
+    }
     return DefaultTabController(
       length: 3,
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      initialIndex: initialIndex,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          SizedBox(
-            width: 420,
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.only(bottom: 24),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  ItemDetailHeader(
-                    itemName: name,
-                    categoryLabel: categoryLabel,
-                    snapshot: null,
-                    onEdit: () => context.push('/catalog/item/$itemId/edit'),
-                    onMore: onMore,
-                  ),
-                  const SizedBox(height: 8),
-                  ItemStockSnapshotCard(itemId: itemId),
-                  const SizedBox(height: 8),
-                  ItemQuickActionsBar(
+          ItemDetailHeader(
+            itemName: name,
+            categoryLabel: categoryLabel,
+            snapshot: null,
+            onEdit: () => context.push('/catalog/item/$itemId/edit'),
+            onMore: onMore,
+          ),
+          const SizedBox(height: 8),
+          ItemStockSnapshotCard(itemId: itemId),
+          const SizedBox(height: 8),
+          ItemQuickActionsBar(
+            itemId: itemId,
+            itemName: name,
+            itemCode: code,
+          ),
+          const SizedBox(height: 8),
+          ItemPhysicalVerificationCard(itemId: itemId),
+          const SizedBox(height: 8),
+          ItemSupplierIntelligenceSection(itemId: itemId, itemName: name),
+          const SizedBox(height: 8),
+          const TabBar(
+            isScrollable: true,
+            tabs: [
+              Tab(text: 'Ledger'),
+              Tab(text: 'Purchases'),
+              Tab(text: 'Analytics'),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Expanded(
+            child: TabBarView(
+              children: [
+                SingleChildScrollView(
+                  padding: const EdgeInsets.only(bottom: 24),
+                  child: ItemLedgerSection(itemId: itemId),
+                ),
+                SingleChildScrollView(
+                  padding: const EdgeInsets.only(bottom: 24),
+                  child: ItemPurchaseHistorySection(
                     itemId: itemId,
                     itemName: name,
-                    itemCode: code,
                   ),
-                  const SizedBox(height: 8),
-                  ItemPhysicalVerificationCard(itemId: itemId),
-                  const SizedBox(height: 8),
-                  ItemSupplierIntelligenceSection(itemId: itemId, itemName: name),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              children: [
-                const TabBar(
-                  isScrollable: true,
-                  tabs: [
-                    Tab(text: 'Ledger'),
-                    Tab(text: 'Purchases'),
-                    Tab(text: 'Analytics'),
-                  ],
                 ),
-                const SizedBox(height: 8),
-                Expanded(
-                  child: TabBarView(
+                SingleChildScrollView(
+                  padding: const EdgeInsets.only(bottom: 24),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      SingleChildScrollView(
-                        padding: const EdgeInsets.only(bottom: 24),
-                        child: ItemLedgerSection(itemId: itemId),
-                      ),
-                      SingleChildScrollView(
-                        padding: const EdgeInsets.only(bottom: 24),
-                        child: ItemPurchaseHistorySection(
-                          itemId: itemId,
-                          itemName: name,
-                        ),
-                      ),
-                      SingleChildScrollView(
-                        padding: const EdgeInsets.only(bottom: 24),
-                        child: Card(
-                          child: Padding(
-                            padding: const EdgeInsets.all(16),
-                            child: ItemAnalyticsSection(itemId: itemId),
+                      Card(
+                        child: Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: ItemAnalyticsSection(
+                            itemId: itemId,
+                            loadIntelligence: true,
                           ),
                         ),
                       ),
+                      if (name.isNotEmpty) ...[
+                        const SizedBox(height: 8),
+                        ItemPriceIntelligenceSection(itemName: name),
+                      ],
                     ],
                   ),
                 ),
@@ -390,4 +360,279 @@ class _DesktopItemLayout extends StatelessWidget {
       ),
     );
   }
+}
+
+class _ItemDetailMobileScroll extends ConsumerStatefulWidget {
+  const _ItemDetailMobileScroll({
+    required this.itemId,
+    required this.name,
+    required this.code,
+    required this.categoryLabel,
+    required this.gutter,
+    required this.onRefresh,
+    required this.onMore,
+  });
+
+  final String itemId;
+  final String name;
+  final String? code;
+  final String categoryLabel;
+  final double gutter;
+  final Future<void> Function() onRefresh;
+  final VoidCallback onMore;
+
+  @override
+  ConsumerState<_ItemDetailMobileScroll> createState() =>
+      _ItemDetailMobileScrollState();
+}
+
+class _ItemDetailMobileScrollState extends ConsumerState<_ItemDetailMobileScroll> {
+  bool _heavySectionsLoaded = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final tab =
+          GoRouterState.of(context).uri.queryParameters['tab']?.toLowerCase();
+      if (tab != null && tab.isNotEmpty && tab != 'overview') {
+        if (mounted) setState(() => _heavySectionsLoaded = true);
+      } else {
+        Future.delayed(const Duration(milliseconds: 400), () {
+          if (mounted) setState(() => _heavySectionsLoaded = true);
+        });
+      }
+    });
+  }
+
+  int _initialTabIndex(bool isStaff) {
+    final tab =
+        GoRouterState.of(context).uri.queryParameters['tab']?.toLowerCase();
+    if (isStaff) {
+      if (tab == 'history' ||
+          tab == 'stock-history' ||
+          tab == 'activity' ||
+          tab == 'ledger') {
+        return 1;
+      }
+      return 0;
+    }
+    if (tab == 'purchases' ||
+        tab == 'purchase' ||
+        tab == 'ledger' ||
+        tab == 'analytics' ||
+        tab == 'price') {
+      return 1;
+    }
+    if (tab == 'history' || tab == 'stock-history') return 2;
+    return 0;
+  }
+
+  Widget _paddedSection(Widget child) {
+    return Padding(
+      padding: EdgeInsets.fromLTRB(widget.gutter, 8, widget.gutter, 8),
+      child: HexaResponsiveCenter(
+        maxWidth: HexaResponsive.maxContentWidth,
+        padding: EdgeInsets.zero,
+        child: child,
+      ),
+    );
+  }
+
+  Widget _overviewTab(bool isStaff) {
+    return ListView(
+      padding: const EdgeInsets.only(bottom: 88),
+      children: [
+        _paddedSection(ItemPhysicalVerificationCard(itemId: widget.itemId)),
+        if (!isStaff && _heavySectionsLoaded) ...[
+          _paddedSection(
+            ItemAnalyticsSection(
+              itemId: widget.itemId,
+              loadIntelligence: true,
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _purchasesTab() {
+    if (!_heavySectionsLoaded) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    return ListView(
+      padding: const EdgeInsets.only(bottom: 88),
+      children: [
+        _paddedSection(ItemLedgerSection(itemId: widget.itemId)),
+        _paddedSection(
+          ItemPurchaseHistorySection(
+            itemId: widget.itemId,
+            itemName: widget.name,
+          ),
+        ),
+        _paddedSection(
+          ItemSupplierIntelligenceSection(
+            itemId: widget.itemId,
+            itemName: widget.name,
+          ),
+        ),
+        if (widget.name.isNotEmpty)
+          _paddedSection(
+            ItemPriceIntelligenceSection(itemName: widget.name),
+          ),
+      ],
+    );
+  }
+
+  Widget _activityTab() {
+    if (!_heavySectionsLoaded) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    return ListView(
+      padding: const EdgeInsets.only(bottom: 88),
+      children: [
+        _paddedSection(
+          Card(
+            margin: EdgeInsets.zero,
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    'Stock change history',
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w800,
+                        ),
+                  ),
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    height: 360,
+                    child: StockItemHistoryPanel(
+                      itemId: widget.itemId,
+                      compact: true,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+        _paddedSection(ItemTimelineSection(itemId: widget.itemId)),
+      ],
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final session = ref.watch(sessionProvider);
+    final isStaff = session != null && sessionIsStaff(session);
+    final tabCount = isStaff ? 2 : 3;
+
+    return RefreshIndicator(
+      onRefresh: widget.onRefresh,
+      child: DefaultTabController(
+        length: tabCount,
+        initialIndex: _initialTabIndex(isStaff).clamp(0, tabCount - 1),
+        child: NestedScrollView(
+          headerSliverBuilder: (context, innerBoxIsScrolled) => [
+            SliverPadding(
+              padding: EdgeInsets.fromLTRB(widget.gutter, 8, widget.gutter, 0),
+              sliver: SliverToBoxAdapter(
+                child: HexaResponsiveCenter(
+                  maxWidth: HexaResponsive.maxContentWidth,
+                  padding: EdgeInsets.zero,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      ItemDetailHeader(
+                        itemName: widget.name,
+                        categoryLabel: widget.categoryLabel,
+                        snapshot: null,
+                        onEdit: () =>
+                            context.push('/catalog/item/${widget.itemId}/edit'),
+                        onMore: widget.onMore,
+                      ),
+                      const SizedBox(height: 8),
+                      ItemStockSnapshotCard(itemId: widget.itemId),
+                      const SizedBox(height: 8),
+                      ItemQuickActionsBar(
+                        itemId: widget.itemId,
+                        itemName: widget.name,
+                        itemCode: widget.code,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            SliverPersistentHeader(
+              pinned: true,
+              delegate: _ItemDetailTabBarDelegate(
+                TabBar(
+                  isScrollable: true,
+                  onTap: (_) {
+                    if (!_heavySectionsLoaded && mounted) {
+                      setState(() => _heavySectionsLoaded = true);
+                    }
+                  },
+                  tabs: isStaff
+                      ? const [
+                          Tab(text: 'Overview'),
+                          Tab(text: 'Activity'),
+                        ]
+                      : const [
+                          Tab(text: 'Overview'),
+                          Tab(text: 'Purchases'),
+                          Tab(text: 'Activity'),
+                        ],
+                ),
+              ),
+            ),
+          ],
+          body: TabBarView(
+            children: isStaff
+                ? [
+                    _overviewTab(isStaff),
+                    _activityTab(),
+                  ]
+                : [
+                    _overviewTab(isStaff),
+                    _purchasesTab(),
+                    _activityTab(),
+                  ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ItemDetailTabBarDelegate extends SliverPersistentHeaderDelegate {
+  _ItemDetailTabBarDelegate(this.tabBar);
+
+  final TabBar tabBar;
+
+  @override
+  double get minExtent => tabBar.preferredSize.height;
+
+  @override
+  double get maxExtent => tabBar.preferredSize.height;
+
+  @override
+  Widget build(
+    BuildContext context,
+    double shrinkOffset,
+    bool overlapsContent,
+  ) {
+    return Material(
+      color: HexaColors.brandBackground,
+      elevation: overlapsContent ? 1 : 0,
+      child: tabBar,
+    );
+  }
+
+  @override
+  bool shouldRebuild(covariant _ItemDetailTabBarDelegate old) =>
+      tabBar != old.tabBar;
 }

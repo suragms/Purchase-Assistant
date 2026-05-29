@@ -13,20 +13,23 @@ import '../../../core/models/trade_purchase_models.dart';
 import '../../../core/providers/business_aggregates_invalidation.dart'
     show invalidatePurchaseWorkspace;
 import '../../../core/providers/business_write_revision.dart';
+import '../../../core/providers/delivery_pipeline_provider.dart';
 import '../../../core/providers/business_profile_provider.dart';
 import '../../../core/providers/home_owner_dashboard_providers.dart';
+import '../../../core/providers/stock_offline_queue_provider.dart';
 import '../../../core/providers/stock_providers.dart';
+import '../../../core/utils/delivery_offline_actions.dart';
 import '../../../core/router/navigation_ext.dart';
 import '../../../core/router/post_auth_route.dart';
 import '../../../core/services/pdf_actions.dart';
 import '../../../core/services/purchase_export_service.dart';
-import '../../stock/presentation/widgets/operational_stock_filter_sheet.dart'
-    show kOperationalDesktopBreakpoint;
+import '../../../core/design_system/hexa_responsive.dart';
 import '../../../core/services/purchase_invoice_pdf_layout.dart'
     show tradeCalcRequestFromTradePurchase;
 import '../../../core/utils/line_display.dart';
 import 'widgets/purchase_detail_action_bar.dart';
 import 'widgets/purchase_detail_delivery_banner.dart';
+import 'widgets/purchase_delivery_timeline.dart';
 import 'widgets/purchase_detail_header.dart';
 import 'widgets/purchase_detail_line_row.dart';
 import 'widgets/purchase_detail_summary_strip.dart';
@@ -495,7 +498,7 @@ class _LoadedPurchaseScaffold extends ConsumerWidget {
             ),
           ],
           Expanded(
-            child: _PurchaseDetailBody(
+            child: PurchaseDetailBody(
               p: displayP,
               hideFinancials: hideFinancials,
             ),
@@ -506,99 +509,300 @@ class _LoadedPurchaseScaffold extends ConsumerWidget {
   }
 }
 
-class _PurchaseDetailBody extends ConsumerStatefulWidget {
-  const _PurchaseDetailBody({
+class PurchaseDetailBody extends ConsumerStatefulWidget {
+  const PurchaseDetailBody({
+    super.key,
     required this.p,
     this.hideFinancials = false,
+    this.embedded = false,
   });
 
   final TradePurchase p;
   final bool hideFinancials;
 
+  /// True when shown in desktop master-detail pane (no outer scaffold).
+  final bool embedded;
+
   @override
-  ConsumerState<_PurchaseDetailBody> createState() =>
-      _PurchaseDetailBodyState();
+  ConsumerState<PurchaseDetailBody> createState() => PurchaseDetailBodyState();
 }
 
-class _PurchaseDetailBodyState extends ConsumerState<_PurchaseDetailBody> {
-  Future<void> _toggleDelivery(
+class PurchaseDetailBodyState extends ConsumerState<PurchaseDetailBody> {
+  bool _isOwnerOrManager() {
+    final session = ref.read(sessionProvider);
+    if (session == null) return false;
+    final role = session.primaryBusiness.role;
+    return session.isSuperAdmin ||
+        role == 'owner' ||
+        role == 'manager' ||
+        role == 'admin';
+  }
+
+  bool _isStaff() {
+    final session = ref.read(sessionProvider);
+    if (session == null) return false;
+    return session.primaryBusiness.role == 'staff';
+  }
+
+  Set<String> _purchaseItemIds(TradePurchase purchase) {
+    return purchase.lines
+        .map((l) => l.catalogItemId?.trim())
+        .whereType<String>()
+        .where((id) => id.isNotEmpty)
+        .toSet();
+  }
+
+  Future<void> _afterDeliveryMutation(
     BuildContext context,
-    WidgetRef ref,
-    TradePurchase p,
+    TradePurchase purchase,
+    String message,
   ) async {
+    invalidatePurchaseWorkspace(ref, affectedItemIds: _purchaseItemIds(purchase));
+    ref.invalidate(deliveryPipelineProvider);
+    ref.invalidate(tradePurchaseDetailProvider(purchase.id));
+    ref.invalidate(stockListProvider);
+    ref.invalidate(stockStatusCountsProvider);
+    ref.invalidate(homeInventorySummaryProvider);
+    for (final line in purchase.lines) {
+      final itemId = line.catalogItemId?.trim();
+      if (itemId != null && itemId.isNotEmpty) {
+        ref.invalidate(stockItemDetailProvider(itemId));
+      }
+    }
+    ref.read(businessDataWriteRevisionProvider.notifier).state++;
+    if (context.mounted) showTopSnack(context, message);
+  }
+
+  Future<void> _dispatch(BuildContext context, TradePurchase p) async {
     final session = ref.read(sessionProvider);
     if (session == null) return;
-    final newDelivered = !p.isDelivered;
-    if (!newDelivered) {
-      final ok = await showDialog<bool>(
-            context: context,
-            builder: (dialogContext) => AlertDialog(
-              title: const Text('Mark delivery as pending?'),
-              content: const Text(
-                'This will reverse the stock added when the shipment was received.',
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(dialogContext).pop(false),
-                  child: const Text('Cancel'),
+    final truckCtrl = TextEditingController();
+    final driverCtrl = TextEditingController();
+    final noteCtrl = TextEditingController();
+    var markInTransit = false;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setLocal) => AlertDialog(
+          title: const Text('Mark dispatched'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: truckCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'Truck number (optional)',
+                  ),
                 ),
-                FilledButton(
-                  onPressed: () => Navigator.of(dialogContext).pop(true),
-                  child: const Text('Reverse stock'),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: driverCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'Driver contact (optional)',
+                  ),
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: noteCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'Dispatch note (optional)',
+                  ),
+                  maxLines: 2,
+                ),
+                CheckboxListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Already in transit'),
+                  value: markInTransit,
+                  onChanged: (v) => setLocal(() => markInTransit = v == true),
                 ),
               ],
             ),
-          ) ??
-          false;
-      if (!ok) return;
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Save'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (ok != true || !context.mounted) {
+      truckCtrl.dispose();
+      driverCtrl.dispose();
+      noteCtrl.dispose();
+      return;
     }
-    ref.read(tradePurchaseDeliveryOptimisticProvider(p.id).notifier).state =
-        newDelivered;
     try {
-      final updated = await ref.read(hexaApiProvider).markPurchaseDelivered(
+      final updated = await ref.read(hexaApiProvider).dispatchPurchase(
             businessId: session.primaryBusiness.id,
             purchaseId: p.id,
-            isDelivered: newDelivered,
+            truckNumber: truckCtrl.text,
+            driverContact: driverCtrl.text,
+            dispatchNote: noteCtrl.text,
+            markInTransit: markInTransit,
           );
-      final purchase = TradePurchase.fromJson(updated);
-      invalidatePurchaseWorkspace(ref);
-      ref.invalidate(tradePurchaseDetailProvider(p.id));
-      ref.invalidate(stockListProvider);
-      ref.invalidate(stockStatusCountsProvider);
-      ref.invalidate(homeInventorySummaryProvider);
-      for (final line in purchase.lines) {
-        final itemId = line.catalogItemId?.trim();
-        if (itemId != null && itemId.isNotEmpty) {
-          ref.invalidate(stockItemDetailProvider(itemId));
-        }
-      }
-      ref.read(businessDataWriteRevisionProvider.notifier).state++;
-      ref.read(tradePurchaseDeliveryOptimisticProvider(p.id).notifier).state =
-          null;
-      if (context.mounted) {
-        final itemCount = purchase.stockUpdatesCount > 0
-            ? purchase.stockUpdatesCount
-            : p.lines.length;
-        showTopSnack(
-          context,
-          newDelivered
-              ? (itemCount == 1
-                  ? 'Received · 1 item added to stock'
-                  : 'Received · $itemCount items added to stock')
-              : (itemCount == 1
-                  ? 'Delivery pending · 1 item reversed from stock'
-                  : 'Delivery pending · $itemCount items reversed from stock'),
-        );
-      }
+      await _afterDeliveryMutation(
+        context,
+        TradePurchase.fromJson(updated),
+        'Marked as dispatched',
+      );
     } catch (e) {
-      ref.read(tradePurchaseDeliveryOptimisticProvider(p.id).notifier).state =
-          null;
       if (context.mounted) {
         showTopSnack(
           context,
           e is DioException
               ? friendlyApiError(e)
-              : 'Could not update delivery status. Try again.',
+              : 'Could not update dispatch. Try again.',
+          isError: true,
+        );
+      }
+    } finally {
+      truckCtrl.dispose();
+      driverCtrl.dispose();
+      noteCtrl.dispose();
+    }
+  }
+
+  Future<void> _arrive(BuildContext context, TradePurchase p) async {
+    final session = ref.read(sessionProvider);
+    if (session == null) return;
+    try {
+      final result = await markPurchaseArrivedResilient(
+        ref: ref,
+        businessId: session.primaryBusiness.id,
+        purchaseId: p.id,
+      );
+      if (result.queued) {
+        ref.invalidate(stockOfflinePendingCountProvider);
+        if (context.mounted) {
+          showTopSnack(
+            context,
+            'Saved offline — will sync when online',
+          );
+        }
+        return;
+      }
+      await _afterDeliveryMutation(
+        context,
+        TradePurchase.fromJson(result.body!),
+        'Marked arrived at warehouse',
+      );
+    } catch (e) {
+      if (context.mounted) {
+        showTopSnack(
+          context,
+          e is DioException
+              ? friendlyApiError(e)
+              : 'Could not mark arrival. Try again.',
+          isError: true,
+        );
+      }
+    }
+  }
+
+  Future<void> _verify(BuildContext context, TradePurchase p) async {
+    final lineMaps = [
+      for (final l in p.lines)
+        {
+          'id': l.id,
+          'item_name': l.itemName,
+          'qty': l.qty,
+          'unit': l.unit,
+        }
+    ];
+    final changed = await showStaffVerificationSheet(
+      context: context,
+      ref: ref,
+      purchaseId: p.id,
+      lines: lineMaps,
+    );
+    if (changed && context.mounted) {
+      ref.invalidate(tradePurchaseDetailProvider(p.id));
+      showTopSnack(context, 'Submitted for owner approval');
+    }
+  }
+
+  Future<void> _commitStock(BuildContext context, TradePurchase p) async {
+    final session = ref.read(sessionProvider);
+    if (session == null) return;
+    try {
+      final updated = await ref.read(hexaApiProvider).commitPurchaseDelivery(
+            businessId: session.primaryBusiness.id,
+            purchaseId: p.id,
+          );
+      final purchase = TradePurchase.fromJson(updated);
+      final n = purchase.stockUpdatesCount > 0
+          ? purchase.stockUpdatesCount
+          : p.lines.length;
+      await _afterDeliveryMutation(
+        context,
+        purchase,
+        n == 1
+            ? 'Stock committed · 1 item added'
+            : 'Stock committed · $n items added',
+      );
+    } catch (e) {
+      if (context.mounted) {
+        showTopSnack(
+          context,
+          e is DioException
+              ? friendlyApiError(e)
+              : 'Could not commit to stock. Try again.',
+          isError: true,
+        );
+      }
+    }
+  }
+
+  Future<void> _revertDelivery(BuildContext context, TradePurchase p) async {
+    final session = ref.read(sessionProvider);
+    if (session == null) return;
+    final ok = await showDialog<bool>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            title: const Text('Revert delivery?'),
+            content: const Text(
+              'This will reverse stock added for this purchase and reset delivery to pending.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(false),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(dialogContext).pop(true),
+                child: const Text('Revert stock'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+    if (!ok) return;
+    try {
+      final updated = await ref.read(hexaApiProvider).markPurchaseDelivered(
+            businessId: session.primaryBusiness.id,
+            purchaseId: p.id,
+            isDelivered: false,
+          );
+      final purchase = TradePurchase.fromJson(updated);
+      await _afterDeliveryMutation(
+        context,
+        purchase,
+        'Delivery reverted · stock reversed',
+      );
+    } catch (e) {
+      if (context.mounted) {
+        showTopSnack(
+          context,
+          e is DioException
+              ? friendlyApiError(e)
+              : 'Could not revert delivery. Try again.',
           isError: true,
         );
       }
@@ -693,38 +897,24 @@ class _PurchaseDetailBodyState extends ConsumerState<_PurchaseDetailBody> {
         const SizedBox(height: 8),
         PurchaseDetailDeliveryBanner(
           purchase: p,
-          onToggleDelivery: () => _toggleDelivery(context, ref, p),
+          isOwnerOrManager: _isOwnerOrManager(),
+          isStaff: _isStaff(),
+          onDispatch: _isOwnerOrManager()
+              ? () => _dispatch(context, p)
+              : null,
+          onArrive: _isStaff() ? () => _arrive(context, p) : null,
+          onVerify: (_isStaff() || _isOwnerOrManager())
+              ? () => _verify(context, p)
+              : null,
+          onCommit: _isOwnerOrManager()
+              ? () => _commitStock(context, p)
+              : null,
+          onRevert: _isOwnerOrManager()
+              ? () => _revertDelivery(context, p)
+              : null,
         ),
-        if (p.isDelivered) ...[
-          const SizedBox(height: 8),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: OutlinedButton.icon(
-              onPressed: () async {
-                final lineMaps = [
-                  for (final l in p.lines)
-                    {
-                      'id': l.id,
-                      'item_name': l.itemName,
-                      'qty': l.qty,
-                      'unit': l.unit,
-                    }
-                ];
-                final changed = await showStaffVerificationSheet(
-                  context: context,
-                  ref: ref,
-                  purchaseId: p.id,
-                  lines: lineMaps,
-                );
-                if (changed) {
-                  ref.invalidate(tradePurchaseDetailProvider(p.id));
-                }
-              },
-              icon: const Icon(Icons.fact_check_outlined, size: 18),
-              label: const Text('Verify warehouse receipt'),
-            ),
-          ),
-        ],
+        const SizedBox(height: 12),
+        PurchaseDeliveryTimeline(purchase: p),
         const SizedBox(height: 14),
         Text(
           'Items',
@@ -784,7 +974,7 @@ class _PurchaseDetailBodyState extends ConsumerState<_PurchaseDetailBody> {
     final paidPending = st == PurchaseStatus.paid ||
         (p.remaining <= 0.009 && st != PurchaseStatus.cancelled);
     final desktop =
-        MediaQuery.sizeOf(context).width >= kOperationalDesktopBreakpoint;
+        MediaQuery.sizeOf(context).width >= kDesktopMin;
     final biz = ref.read(invoiceBusinessProfileProvider);
 
     final api = ref.read(hexaApiProvider);

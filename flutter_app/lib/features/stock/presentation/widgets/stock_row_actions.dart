@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../stock_compact_update_sheet.dart';
+import '../../../../core/design_system/hexa_responsive.dart';
+import '../quick_stock_action_sheet.dart';
 import '../stock_quick_purchase_sheet.dart';
 
 Future<void> showStockRowActions({
@@ -15,17 +16,14 @@ Future<void> showStockRowActions({
   final name = item['name']?.toString() ?? 'Item';
   await showModalBottomSheet<void>(
     context: context,
+    isScrollControlled: true,
     useSafeArea: true,
     showDragHandle: true,
-    builder: (ctx) => SafeArea(
-      top: false,
-      child: Padding(
-        padding:
-            EdgeInsets.fromLTRB(16, 8, 16, 16 + MediaQuery.paddingOf(ctx).bottom),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
+    builder: (ctx) => HexaResponsiveSheetViewport(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
           Text(
             name,
             maxLines: 2,
@@ -38,7 +36,7 @@ Future<void> showStockRowActions({
             label: 'Update Physical Stock',
             onTap: () async {
               Navigator.pop(ctx);
-              await showStockCompactUpdateSheet(
+              await showQuickStockActionSheet(
                 context: context,
                 ref: ref,
                 item: item,
@@ -65,8 +63,7 @@ Future<void> showStockRowActions({
               context.push('/catalog/item/$id');
             },
           ),
-          ],
-        ),
+        ],
       ),
     ),
   );

@@ -13,14 +13,7 @@ import '../../../core/providers/business_aggregates_invalidation.dart';
 import '../../../core/design_system/hexa_responsive.dart';
 import 'widgets/stock_pagination_bar.dart';
 
-import 'widgets/opening_stock_filter_chips.dart';
-import 'widgets/opening_stock_filter_sheet.dart';
-import 'widgets/opening_stock_progress_sheet.dart';
-import 'widgets/opening_stock_row_actions.dart';
-import 'widgets/opening_stock_summary_bar.dart';
-import 'widgets/opening_stock_table_header.dart';
-import 'widgets/opening_stock_table_row.dart';
-import 'widgets/opening_stock_top_bar.dart';
+import 'widgets/opening_stock_sheets.dart';
 
 class OpeningStockSetupPage extends ConsumerStatefulWidget {
   const OpeningStockSetupPage({super.key});
@@ -202,12 +195,8 @@ class _OpeningStockSetupPageState
           final int total = (data['total'] as num?)?.toInt() ?? items.length;
           final maxPage = _maxPage(total, perPage).toInt().clamp(1, 9999);
 
-          return RefreshIndicator(
-            onRefresh: () async {
-              ref.invalidate(openingStockSetupProvider);
-              await ref.read(openingStockSetupProvider.future);
-            },
-            child: CustomScrollView(
+          final desktop = context.isDesktopLayout;
+          final scroll = CustomScrollView(
               slivers: [
                 SliverToBoxAdapter(
                   child: OpeningStockSummaryBar(
@@ -235,7 +224,10 @@ class _OpeningStockSetupPageState
                 ),
                 SliverToBoxAdapter(child: const OpeningStockFilterChips()),
                 if (items.isNotEmpty) ...[
-                  const SliverToBoxAdapter(child: OpeningStockTableHeader()),
+                  const SliverPersistentHeader(
+                    pinned: true,
+                    delegate: _OpeningStockTableHeaderDelegate(),
+                  ),
                   SliverList(
                     delegate: SliverChildBuilderDelegate(
                       (ctx, i) => RepaintBoundary(
@@ -309,7 +301,21 @@ class _OpeningStockSetupPageState
                     ),
                   ),
               ],
-            ),
+            );
+
+          return RefreshIndicator(
+            onRefresh: () async {
+              ref.invalidate(openingStockSetupProvider);
+              await ref.read(openingStockSetupProvider.future);
+            },
+            child: desktop
+                ? Center(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 1280),
+                      child: scroll,
+                    ),
+                  )
+                : scroll,
           );
         },
       ),
@@ -399,6 +405,33 @@ class _SearchHeaderDelegate extends SliverPersistentHeaderDelegate {
   bool shouldRebuild(covariant _SearchHeaderDelegate oldDelegate) {
     return expanded != oldDelegate.expanded || child != oldDelegate.child;
   }
+}
+
+class _OpeningStockTableHeaderDelegate extends SliverPersistentHeaderDelegate {
+  const _OpeningStockTableHeaderDelegate();
+
+  static const double _height = 34;
+
+  @override
+  double get minExtent => _height;
+
+  @override
+  double get maxExtent => _height;
+
+  @override
+  Widget build(
+    BuildContext context,
+    double shrinkOffset,
+    bool overlapsContent,
+  ) {
+    return const ColoredBox(
+      color: Color(0xFFF5F3EE),
+      child: OpeningStockTableHeader(),
+    );
+  }
+
+  @override
+  bool shouldRebuild(covariant _OpeningStockTableHeaderDelegate old) => false;
 }
 
 class _BulkSelectionBar extends StatelessWidget {

@@ -13,7 +13,7 @@ import '../../../../core/services/item_export_service.dart';
 import '../../../../core/providers/low_stock_providers.dart';
 import '../../../../core/theme/hexa_colors.dart';
 
-import '../stock_compact_update_sheet.dart';
+import '../quick_stock_action_sheet.dart';
 import 'reorder_level_sheet.dart';
 import '../../../catalog/domain/item_stock_snapshot.dart';
 import 'low_stock_approval_sheet.dart';
@@ -435,7 +435,7 @@ class _ActionsMenu extends ConsumerWidget {
             await _addToReorderList(ref, id, context);
             return;
           case 'update_stock':
-            await showStockCompactUpdateSheet(
+            await showQuickStockActionSheet(
               context: context,
               ref: ref,
               item: item,
@@ -463,7 +463,7 @@ class _ActionsMenu extends ConsumerWidget {
             }
             return;
           case 'verify':
-            await showStockCompactUpdateSheet(
+            await showQuickStockActionSheet(
               context: context,
               ref: ref,
               item: item,

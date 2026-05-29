@@ -135,6 +135,7 @@ async def lifespan(app: FastAPI):
             )
 
     low_stock_task: asyncio.Task | None = None
+    idle_delivery_task: asyncio.Task | None = None
 
     async def _low_stock_notify_hourly() -> None:
         """Best-effort hourly scan: items below reorder → per-user notification rows."""
@@ -153,8 +154,27 @@ async def lifespan(app: FastAPI):
                 logger.warning("low_stock_notification_scan failed: %s", e, exc_info=True)
             await asyncio.sleep(3600)
 
+    async def _idle_delivery_notify_hourly() -> None:
+        await asyncio.sleep(120)
+        from app.services.scheduled_notification_jobs import (
+            run_idle_delivery_notification_scan,
+        )
+
+        while True:
+            try:
+                async with async_session_factory() as db:
+                    n = await run_idle_delivery_notification_scan(db)
+                    if n:
+                        logger.info("idle_delivery_scan: queued %s notifications", n)
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:  # noqa: BLE001
+                logger.warning("idle_delivery_scan failed: %s", e, exc_info=True)
+            await asyncio.sleep(3600)
+
     try:
         low_stock_task = asyncio.create_task(_low_stock_notify_hourly())
+        idle_delivery_task = asyncio.create_task(_idle_delivery_notify_hourly())
         logger.info("Background: low_stock hourly notification task started")
     except Exception as e:  # noqa: BLE001
         logger.warning("Background: low_stock task not started: %s", e)
@@ -171,6 +191,19 @@ async def lifespan(app: FastAPI):
             """Hook: scan due-soon trade purchases; extend with DB + push/WhatsApp if needed."""
             logger.info("due_soon_reminder: tick (use app.services.monthly_payment_reminder)")
 
+        async def _evening_physical_tick() -> None:
+            from app.services.scheduled_notification_jobs import (
+                run_evening_physical_count_reminder,
+            )
+
+            try:
+                async with async_session_factory() as sess:
+                    n = await run_evening_physical_count_reminder(sess)
+                    if n:
+                        logger.info("evening_physical_reminder: %s notifications", n)
+            except Exception as e:  # noqa: BLE001
+                logger.warning("evening_physical_reminder failed: %s", e, exc_info=True)
+
         async def _db_keepalive_tick() -> None:
             """Best-effort Postgres keepalive for hosted free-tier databases."""
             if is_sqlite_runtime():
@@ -186,6 +219,14 @@ async def lifespan(app: FastAPI):
             _due_soon_tick, "cron", hour=8, minute=0, id="due_soon_scan", replace_existing=True
         )
         scheduler.add_job(
+            _evening_physical_tick,
+            "cron",
+            hour=18,
+            minute=0,
+            id="evening_physical_reminder",
+            replace_existing=True,
+        )
+        scheduler.add_job(
             _db_keepalive_tick,
             "interval",
             hours=48,
@@ -198,14 +239,15 @@ async def lifespan(app: FastAPI):
         logger.warning("APScheduler not started: %s", e)
 
     yield
-    if low_stock_task is not None:
-        low_stock_task.cancel()
-        try:
-            await low_stock_task
-        except asyncio.CancelledError:
-            pass
-        except Exception:  # noqa: BLE001
-            pass
+    for task in (low_stock_task, idle_delivery_task):
+        if task is not None:
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+            except Exception:  # noqa: BLE001
+                pass
     if scheduler is not None:
         try:
             scheduler.shutdown(wait=False)

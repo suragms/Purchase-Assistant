@@ -27,8 +27,8 @@ import '../../../core/providers/connectivity_provider.dart';
 import '../../../core/providers/notifications_provider.dart'
     show notificationsUnreadCountProvider;
 import '../../../core/providers/prefs_provider.dart';
-import '../../../core/providers/realtime_events_provider.dart';
-import '../../../core/providers/realtime_notifications_provider.dart';
+import '../../../core/providers/notification_center_provider.dart'
+    show notificationCenterCoordinatorProvider;
 import '../../../core/providers/server_notifications_provider.dart'
     show appNotificationsListProvider;
 import '../../../core/providers/stock_providers.dart'
@@ -43,15 +43,14 @@ import '../../../core/theme/hexa_colors.dart';
 import '../../purchase/presentation/widgets/purchase_saved_sheet.dart';
 import '../../purchase/presentation/widgets/resume_purchase_draft_banner.dart';
 import 'widgets/home_compact_header.dart';
-import 'widgets/home_low_stock_section.dart';
 import 'widgets/home_critical_alerts_grid.dart';
-import 'widgets/home_purchase_control_center.dart';
+import 'widgets/home_delivery_pipeline_card.dart';
 import 'widgets/home_session_data_banner.dart';
 import 'widgets/home_quick_actions_grid.dart';
 import 'widgets/home_live_status_bar.dart';
-import 'widgets/home_warehouse_snapshot_card.dart';
 import 'widgets/home_warehouse_activity_feed.dart';
 import 'widgets/home_owner_quick_actions.dart';
+import 'widgets/home_desktop_dashboard_grid.dart';
 import 'widgets/home_sticky_period_header.dart';
 
 /// Harisree owner/admin home — purchase-first warehouse control center.
@@ -64,8 +63,8 @@ class HomePage extends ConsumerStatefulWidget {
 
 class _HomePageState extends ConsumerState<HomePage>
     with WidgetsBindingObserver {
-  Timer? _rtPollAlerts;
-  Timer? _rtPollFull;
+  Timer? _rtPollHome;
+  Timer? _refreshDebounce;
   Timer? _resumeRefreshDebounce;
   bool _homeTimersActive = false;
   bool _handlingPurchasePostSave = false;
@@ -75,8 +74,6 @@ class _HomePageState extends ConsumerState<HomePage>
   AppLifecycleState _lifecycle = AppLifecycleState.resumed;
   DateTime? _lastThrottledInvalidate;
   DateTime? _homeLastRefreshedAt;
-  int _lastRealtimeTick = 0;
-
   bool _throttleHomeInvalidate({bool force = false}) {
     if (force) {
       _lastThrottledInvalidate = DateTime.now();
@@ -84,7 +81,7 @@ class _HomePageState extends ConsumerState<HomePage>
     }
     final now = DateTime.now();
     if (_lastThrottledInvalidate != null &&
-        now.difference(_lastThrottledInvalidate!).inSeconds < 5) {
+        now.difference(_lastThrottledInvalidate!).inSeconds < 12) {
       return true;
     }
     _lastThrottledInvalidate = now;
@@ -94,51 +91,52 @@ class _HomePageState extends ConsumerState<HomePage>
   void _invalidateAlertProviders() {
     ref.invalidate(warehouseAlertsProvider);
     ref.invalidate(stockStatusCountsProvider);
+    ref.invalidate(appNotificationsListProvider);
+  }
+
+  void _scheduleRefresh({bool alertsOnly = false, bool force = false}) {
+    _refreshDebounce?.cancel();
+    _refreshDebounce = Timer(const Duration(milliseconds: 500), () {
+      _refreshDebounce = null;
+      if (!mounted) return;
+      if (ref.read(shellCurrentBranchProvider) != ShellBranch.home) return;
+      if (!force && _throttleHomeInvalidate()) return;
+      if (alertsOnly) {
+        _invalidateAlertProviders();
+      } else {
+        _invalidateHomeDataProviders();
+        _maybePushBackgroundAlert();
+        _maybeNotifyStaffPurchases();
+      }
+    });
   }
 
   void _invalidateHomeDataProviders() {
     _homeLastRefreshedAt = DateTime.now();
     bustHomeDashboardVolatileCaches();
     ref.invalidate(homeDashboardDataProvider);
+    ref.invalidate(homeInventorySummaryProvider);
+    ref.invalidate(homeRecentActivityFeedProvider);
+    ref.invalidate(stockLowTopHomeProvider);
+    ref.invalidate(lowStockByCategoryProvider);
+    ref.invalidate(stockVariancesTodayProvider);
+    ref.invalidate(stockAuditPeriodProvider);
     _invalidateAlertProviders();
-    Future.delayed(const Duration(milliseconds: 300), () {
-      if (!mounted) return;
-      ref.invalidate(homeInventorySummaryProvider);
-      ref.invalidate(stockLowTopHomeProvider);
-      ref.invalidate(lowStockByCategoryProvider);
-    });
-    Future.delayed(const Duration(milliseconds: 600), () {
-      if (!mounted) return;
-      ref.invalidate(homeRecentActivityFeedProvider);
-      ref.invalidate(stockVariancesTodayProvider);
-      ref.invalidate(stockAuditPeriodProvider);
-      ref.invalidate(appNotificationsListProvider);
-    });
   }
 
   void _setHomePollingActive(bool active) {
     if (active == _homeTimersActive) return;
     _homeTimersActive = active;
     if (!active) {
-      _rtPollAlerts?.cancel();
-      _rtPollFull?.cancel();
-      _rtPollAlerts = null;
-      _rtPollFull = null;
+      _rtPollHome?.cancel();
+      _rtPollHome = null;
       return;
     }
-    _rtPollAlerts?.cancel();
-    _rtPollFull?.cancel();
-    _rtPollAlerts = Timer.periodic(const Duration(seconds: 20), (_) {
+    _rtPollHome?.cancel();
+    _rtPollHome = Timer.periodic(const Duration(seconds: 60), (_) {
       if (!mounted) return;
       if (ref.read(shellCurrentBranchProvider) != ShellBranch.home) return;
-      _invalidateAlertProviders();
-      _maybePushBackgroundAlert();
-      _maybeNotifyStaffPurchases();
-    });
-    _rtPollFull = Timer.periodic(const Duration(seconds: 75), (_) {
-      if (!mounted) return;
-      if (ref.read(shellCurrentBranchProvider) != ShellBranch.home) return;
-      _invalidateHomeDataProviders();
+      _scheduleRefresh();
     });
   }
 
@@ -200,8 +198,8 @@ class _HomePageState extends ConsumerState<HomePage>
 
   @override
   void dispose() {
-    _rtPollAlerts?.cancel();
-    _rtPollFull?.cancel();
+    _rtPollHome?.cancel();
+    _refreshDebounce?.cancel();
     _resumeRefreshDebounce?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
@@ -248,8 +246,7 @@ class _HomePageState extends ConsumerState<HomePage>
 
   Future<void> _refresh() async {
     if (ref.read(shellCurrentBranchProvider) != ShellBranch.home) return;
-    if (_throttleHomeInvalidate()) return;
-    _invalidateHomeDataProviders();
+    _scheduleRefresh(force: true);
   }
 
   Future<void> _showAccountMenu() async {
@@ -290,8 +287,8 @@ class _HomePageState extends ConsumerState<HomePage>
     ref.listen<int>(shellCurrentBranchProvider, (prev, next) {
       final onHome = next == ShellBranch.home;
       _setHomePollingActive(onHome);
-      if (onHome && prev != ShellBranch.home && !_throttleHomeInvalidate()) {
-        _invalidateHomeDataProviders();
+      if (onHome && prev != ShellBranch.home) {
+        _scheduleRefresh(force: true);
       }
     });
 
@@ -299,15 +296,7 @@ class _HomePageState extends ConsumerState<HomePage>
       return const SizedBox.shrink();
     }
 
-    ref.watch(realtimeNotificationsBoostProvider);
-    ref.listen(realtimeInvalidationProvider, (prev, next) {
-      final tick = next.valueOrNull;
-      if (tick == null || tick == _lastRealtimeTick) return;
-      _lastRealtimeTick = tick;
-      if (!_throttleHomeInvalidate()) {
-        _invalidateHomeDataProviders();
-      }
-    });
+    ref.watch(notificationCenterCoordinatorProvider);
 
     ref.listen<PurchasePostSavePayload?>(purchasePostSaveProvider,
         (prev, next) {
@@ -391,6 +380,8 @@ class _HomePageState extends ConsumerState<HomePage>
                         if (hasDashboard) ...[
                           const HomeSessionDataBanner(),
                           const HomeCriticalAlertsGrid(),
+                          const SizedBox(height: HexaOp.cardGap),
+                          const HomeDeliveryPipelineCard(),
                         ],
                       ],
                     ),
@@ -412,10 +403,8 @@ class _HomePageState extends ConsumerState<HomePage>
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
                         if (hasDashboard) ...[
-                          const HomePurchaseControlCenter(),
-                          const SizedBox(height: HexaOp.cardGap),
-                          const HomeWarehouseSnapshotCard(),
-                          const SizedBox(height: HexaOp.cardGap),
+                          const HomeDesktopDashboardGrid(),
+                          SizedBox(height: HexaResponsive.sectionGap(context)),
                           HomeOwnerQuickActions(
                             onPurchase: () => context.push('/purchase/new'),
                             onStock: () => context.go('/stock'),
@@ -425,11 +414,9 @@ class _HomePageState extends ConsumerState<HomePage>
                             onUsers: () => context.push('/settings/users'),
                             onBarcode: () => context.push('/barcode/bulk-print'),
                             onReorder: () =>
-                                context.push('/stock/reorder-suggestions'),
+                                context.push('/stock/reorder'),
                           ),
-                          const SizedBox(height: HexaOp.cardGap),
-                          const HomeLowStockSection(),
-                          const SizedBox(height: HexaOp.cardGap),
+                          SizedBox(height: HexaResponsive.sectionGap(context)),
                           const HomeWarehouseActivityFeed(),
                         ] else
                           HomeQuickActionsGrid(

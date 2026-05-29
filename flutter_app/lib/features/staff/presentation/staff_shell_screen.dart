@@ -7,13 +7,19 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/design_system/hexa_ds_tokens.dart';
+import '../../../core/auth/session_notifier.dart';
+import '../../../core/design_system/hexa_desktop_layout.dart';
 import '../../../core/design_system/hexa_responsive.dart';
+import '../../../core/providers/notification_center_provider.dart'
+    show notificationCenterCoordinatorProvider;
+import '../../../core/providers/notifications_provider.dart';
 import '../../../core/providers/api_degraded_provider.dart';
-import '../../../core/providers/connectivity_provider.dart';
 import '../../../core/providers/home_dashboard_provider.dart';
 import '../../../core/providers/home_owner_dashboard_providers.dart';
 import '../../../core/providers/stock_providers.dart';
 import '../../../core/theme/hexa_colors.dart';
+import '../../shell/app_shell.dart';
+import '../../shell/shell_realtime_listener.dart';
 import '../staff_shell_branch_provider.dart';
 
 /// Staff shell: Home | Stock | Scan | Search — same offline banner pattern as [ShellScreen].
@@ -66,15 +72,18 @@ class _StaffShellScreenState extends ConsumerState<StaffShellScreen> {
 
   @override
   Widget build(BuildContext context) {
+    ref.watch(notificationCenterCoordinatorProvider);
     final navigationShell = widget.navigationShell;
     final idx = navigationShell.currentIndex;
     final routePath = GoRouterState.of(context).uri.path;
 
-    final conn = ref.watch(connectivityResultsProvider);
-    final offline =
-        conn.valueOrNull != null && isOfflineResult(conn.valueOrNull!);
     final sessionHint = ref.watch(apiDegradedProvider);
-    final isDesktop = MediaQuery.sizeOf(context).width >= 900;
+    final width = MediaQuery.sizeOf(context).width;
+    final showsRail = width >= kNavigationRailMin;
+    final railExtended = width >= kDesktopMin;
+    final session = ref.watch(sessionProvider);
+    final biz = session?.primaryBusiness;
+    final notifN = ref.watch(notificationsUnreadCountProvider);
 
     void go(int branch) {
       HapticFeedback.selectionClick();
@@ -82,21 +91,32 @@ class _StaffShellScreenState extends ConsumerState<StaffShellScreen> {
       navigationShell.goBranch(branch);
     }
 
-    return SizedBox.expand(
-      child: Material(
-        key: const ValueKey<String>('staff_shell'),
-        color: Theme.of(context).scaffoldBackgroundColor,
-        child: Stack(
+    return ShellRealtimeListener(
+      child: SizedBox.expand(
+        child: Material(
+          key: const ValueKey<String>('staff_shell'),
+          color: Theme.of(context).scaffoldBackgroundColor,
+          child: Stack(
           fit: StackFit.expand,
           children: [
             Row(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                if (isDesktop)
+                if (showsRail)
                   NavigationRail(
                     selectedIndex: idx,
-                    extended: MediaQuery.sizeOf(context).width >= 1100,
+                    extended: railExtended,
+                    minExtendedWidth: kDesktopSidebarWidth,
                     onDestinationSelected: go,
+                    trailing: railExtended && biz != null
+                        ? DesktopSideNavFooter(
+                            businessName: biz.effectiveDisplayTitle,
+                            roleLabel: biz.role.toUpperCase(),
+                            notificationCount: notifN,
+                            onNotificationsTap: () =>
+                                context.push('/notifications'),
+                          )
+                        : null,
                     destinations: const [
                       NavigationRailDestination(
                         icon: Icon(Icons.home_outlined),
@@ -126,9 +146,9 @@ class _StaffShellScreenState extends ConsumerState<StaffShellScreen> {
                     ],
                   ),
                 Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
+                  child: AppShellBody(
+                    navigationShell: navigationShell,
+                    topBanners: [
                       if (sessionHint != null)
                         Material(
                           color: const Color(0xFFFFEBEE),
@@ -160,49 +180,13 @@ class _StaffShellScreenState extends ConsumerState<StaffShellScreen> {
                             ),
                           ),
                         ),
-                      if (offline)
-                        Semantics(
-                          liveRegion: true,
-                          container: true,
-                          label: "You're offline — showing cached data",
-                          child: Material(
-                            color: const Color(0xFFF59E0B),
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: HexaDsLayout.pageGutter,
-                                vertical: HexaDsSpace.xs + 2,
-                              ),
-                              child: Row(
-                                children: [
-                                  const Icon(Icons.wifi_off_rounded,
-                                      size: 18, color: Color(0xFF1C1917)),
-                                  const SizedBox(width: HexaDsLayout.inlineGap),
-                                  Expanded(
-                                    child: Text(
-                                      "You're offline — showing cached data",
-                                      style: Theme.of(context)
-                                          .textTheme
-                                          .labelMedium
-                                          ?.copyWith(
-                                            color: const Color(0xFF1C1917),
-                                            fontWeight: FontWeight.w600,
-                                            fontSize: 12,
-                                            height: 1.25,
-                                          ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
-                      Expanded(child: navigationShell),
-                      if (!isDesktop)
-                        _StaffShellBottomBar(
-                          selectedIndex: idx,
-                          onDestinationSelected: go,
-                        ),
                     ],
+                    bottomBar: showsRail
+                        ? null
+                        : _StaffShellBottomBar(
+                            selectedIndex: idx,
+                            onDestinationSelected: go,
+                          ),
                   ),
                 ),
               ],
@@ -227,6 +211,7 @@ class _StaffShellScreenState extends ConsumerState<StaffShellScreen> {
               ),
           ],
         ),
+      ),
       ),
     );
   }
@@ -294,22 +279,22 @@ class _StaffShellBottomBar extends StatelessWidget {
                     ),
                     Expanded(
                       child: _StaffNavTile(
-                        selected: selectedIndex == StaffShellBranch.history,
-                        icon: Icons.receipt_long_outlined,
-                        selectedIcon: Icons.receipt_long_rounded,
-                        label: 'Purchases',
-                        onTap: () =>
-                            onDestinationSelected(StaffShellBranch.history),
+                        selected: selectedIndex == StaffShellBranch.deliveries,
+                        icon: Icons.local_shipping_outlined,
+                        selectedIcon: Icons.local_shipping_rounded,
+                        label: 'Deliveries',
+                        onTap: () => onDestinationSelected(
+                            StaffShellBranch.deliveries),
                       ),
                     ),
                     Expanded(
                       child: _StaffNavTile(
-                        selected: selectedIndex == StaffShellBranch.search,
-                        icon: Icons.search_rounded,
-                        selectedIcon: Icons.manage_search_rounded,
-                        label: 'Search',
+                        selected: selectedIndex == StaffShellBranch.settings,
+                        icon: Icons.settings_outlined,
+                        selectedIcon: Icons.settings_rounded,
+                        label: 'Settings',
                         onTap: () =>
-                            onDestinationSelected(StaffShellBranch.search),
+                            onDestinationSelected(StaffShellBranch.settings),
                       ),
                     ),
                   ],

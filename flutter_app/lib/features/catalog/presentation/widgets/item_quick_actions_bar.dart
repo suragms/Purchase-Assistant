@@ -6,7 +6,7 @@ import '../../../../core/auth/dashboard_role.dart';
 import '../../../../core/auth/session_notifier.dart';
 import '../../../../core/router/post_auth_route.dart';
 import '../../../../core/theme/hexa_colors.dart';
-import '../../../../core/providers/stock_providers.dart';
+import '../../../../core/providers/item_detail_providers.dart';
 import '../../../../core/services/item_export_service.dart';
 import '../../../stock/presentation/stock_quick_purchase_sheet.dart';
 import '../../../stock/presentation/update_stock_sheet.dart';
@@ -35,14 +35,14 @@ class ItemQuickActionsBar extends ConsumerWidget {
         icon: Icons.fact_check_outlined,
         color: HexaColors.brandPrimary,
         onTap: () async {
-          final row = await ref.read(stockItemDetailProvider(itemId).future);
+          final row = ref.read(itemDetailStockProvider(itemId)).valueOrNull;
           if (!context.mounted) return;
           await showUpdateStockSheet(
             context: context,
             ref: ref,
             itemId: itemId,
             itemName: itemName,
-            stockRow: row.isEmpty ? null : row,
+            stockRow: row == null || row.isEmpty ? null : row,
           );
         },
       ),
@@ -51,9 +51,9 @@ class ItemQuickActionsBar extends ConsumerWidget {
         icon: Icons.add_shopping_cart_rounded,
         color: HexaColors.profit,
         onTap: () async {
-          final item = await ref.read(stockItemDetailProvider(itemId).future);
+          final item = ref.read(itemDetailStockProvider(itemId)).valueOrNull;
           if (!context.mounted) return;
-          if (item.isEmpty) return;
+          if (item == null || item.isEmpty) return;
           await showStockQuickPurchaseSheet(context: context, ref: ref, item: item);
         },
       ),
@@ -98,7 +98,9 @@ class ItemQuickActionsBar extends ConsumerWidget {
         label: 'History',
         icon: Icons.history_rounded,
         color: const Color(0xFF1565C0),
-        onTap: () => context.push('/stock/$itemId/history?name=${Uri.encodeComponent(itemName)}'),
+        onTap: () => context.push(
+          '/catalog/item/$itemId?tab=history&name=${Uri.encodeComponent(itemName)}',
+        ),
       ),
     ];
 

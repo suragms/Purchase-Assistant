@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../core/auth/session_notifier.dart';
 import '../../../../core/design_system/hexa_ds_tokens.dart';
+import '../../../../core/router/post_auth_route.dart' show sessionIsStaff;
 import '../../../../core/providers/stock_providers.dart';
 import '../../../../core/utils/unit_utils.dart';
-import '../stock_compact_update_sheet.dart';
+import '../quick_stock_action_sheet.dart';
 import '../stock_quick_purchase_sheet.dart';
 import 'stock_row_metrics.dart';
 
@@ -28,8 +30,13 @@ class StockDesktopDetailPane extends ConsumerWidget {
     final id = item!['id']?.toString() ?? '';
     final name = item!['name']?.toString() ?? 'Item';
     final unit = StockRowMetrics.unit(item!);
+    final session = ref.watch(sessionProvider);
+    final isStaff = session != null && sessionIsStaff(session);
+    final opening = StockRowMetrics.openingQty(item!);
     final purchased = StockRowMetrics.purchasedQty(item!);
-    final stock = StockRowMetrics.stockQty(item!);
+    final pending = StockRowMetrics.pendingDeliveryQty(item!);
+    final stock = StockRowMetrics.systemQty(item!);
+    final physical = StockRowMetrics.physicalQty(item!);
     final diff = StockRowMetrics.diffQty(item!);
     final activityAsync = id.isEmpty
         ? const AsyncValue<Map<String, dynamic>>.data({})
@@ -46,10 +53,29 @@ class StockDesktopDetailPane extends ConsumerWidget {
           ),
           const SizedBox(height: 12),
           _metricRow(
-            'Purchase',
-            purchased == null ? '—' : '${formatStockQtyNumber(purchased)} $unit',
+            'Opening',
+            opening == null ? '—' : '${formatStockQtyNumber(opening)} $unit',
           ),
-          _metricRow('Stock', '${formatStockQtyNumber(stock)} $unit'),
+          if (!isStaff)
+            _metricRow(
+              'Purchased',
+              purchased == null
+                  ? '—'
+                  : '${formatStockQtyNumber(purchased)} $unit',
+            ),
+          _metricRow(
+            'Pending',
+            pending == null || pending < 0.001
+                ? '—'
+                : '${formatStockQtyNumber(pending)} $unit',
+          ),
+          _metricRow('System', '${formatStockQtyNumber(stock)} $unit'),
+          _metricRow(
+            'Physical',
+            physical == null
+                ? '—'
+                : '${formatStockQtyNumber(physical)} $unit',
+          ),
           _metricRow(
             'Difference',
             StockRowMetrics.signedDiffLine(diff, unit).replaceAll('\n', ' '),
@@ -61,23 +87,32 @@ class StockDesktopDetailPane extends ConsumerWidget {
             runSpacing: 8,
             children: [
               FilledButton.tonalIcon(
-                onPressed: () => showStockCompactUpdateSheet(
+                onPressed: () => showQuickStockActionSheet(
                   context: context,
                   ref: ref,
                   item: item!,
                 ),
-                icon: const Icon(Icons.inventory_2_outlined, size: 18),
-                label: const Text('Physical'),
+                icon: const Icon(Icons.fact_check_outlined, size: 18),
+                label: const Text('Verify physical'),
               ),
-              FilledButton.tonalIcon(
-                onPressed: () => showStockQuickPurchaseSheet(
-                  context: context,
-                  ref: ref,
-                  item: item!,
+              if (!isStaff)
+                FilledButton.tonalIcon(
+                  onPressed: () => showStockQuickPurchaseSheet(
+                    context: context,
+                    ref: ref,
+                    item: item!,
+                  ),
+                  icon: const Icon(Icons.add_shopping_cart_outlined, size: 18),
+                  label: const Text('New purchase'),
                 ),
-                icon: const Icon(Icons.add_shopping_cart_outlined, size: 18),
-                label: const Text('Purchase'),
-              ),
+              if (!isStaff)
+                OutlinedButton.icon(
+                  onPressed: id.isEmpty
+                      ? null
+                      : () => context.push('/catalog/item/$id/edit'),
+                  icon: const Icon(Icons.tune_outlined, size: 18),
+                  label: const Text('Set reorder'),
+                ),
               OutlinedButton(
                 onPressed:
                     id.isEmpty ? null : () => context.push('/catalog/item/$id'),

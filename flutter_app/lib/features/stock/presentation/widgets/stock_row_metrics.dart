@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../../core/json_coerce.dart';
 import '../../../../core/utils/unit_utils.dart';
 import '../../../../shared/widgets/stock_number_display.dart';
+import '../../../../shared/widgets/stock_summary_widget.dart';
 
 /// Warehouse table metric formatting (system / purchased / physical / diff / pending).
 abstract final class StockRowMetrics {
@@ -15,19 +16,31 @@ abstract final class StockRowMetrics {
   static double? pendingDeliveryQty(Map<String, dynamic> item) =>
       coerceToDoubleNullable(item['pending_delivery_qty']);
 
-  static double stockQty(Map<String, dynamic> item) {
-    // Stock column must show backend system/on-hand stock truth.
-    // Physical count is displayed separately in item snapshot/workflows.
-    return coerceToDouble(item['current_stock']);
+  static double? openingQty(Map<String, dynamic> item) =>
+      coerceToDoubleNullable(item['opening_stock_qty']);
+
+  static double purchasedLifetimeQty(Map<String, dynamic> item) =>
+      coerceToDoubleNullable(item['total_delivered_qty']) ?? 0;
+
+  /// Opening + committed deliveries (spec system column; not raw current_stock).
+  static double systemQty(Map<String, dynamic> item) {
+    final expected = coerceToDoubleNullable(item['expected_system_qty']);
+    if (expected != null && expected.isFinite) return expected;
+    final opening = openingQty(item) ?? 0;
+    return opening + purchasedLifetimeQty(item);
   }
 
+  /// Ledger on-hand (internal movements); shown only when out of sync.
+  static double ledgerStockQty(Map<String, dynamic> item) =>
+      coerceToDouble(item['current_stock']);
+
   static double diffQty(Map<String, dynamic> item) {
-    final wh = coerceToDoubleNullable(item['warehouse_diff_qty']);
-    if (wh != null && wh.isFinite) return wh;
     final phys = physicalQty(item);
     if (phys != null && phys.isFinite) {
-      return phys - stockQty(item);
+      return phys - systemQty(item);
     }
+    final pd = coerceToDoubleNullable(item['physical_stock_difference_qty']);
+    if (pd != null && pd.isFinite) return pd;
     return double.nan;
   }
 
@@ -63,6 +76,25 @@ abstract final class StockRowMetrics {
   static String unit(Map<String, dynamic> item) =>
       (item['stock_unit']?.toString() ?? item['unit']?.toString() ?? 'piece')
           .toUpperCase();
+
+  /// Primary stock qty cell (delegates to [StockSummaryWidget]).
+  static Widget stockSummary(
+    Map<String, dynamic> item, {
+    bool compact = false,
+    double fontSize = 17,
+  }) {
+    final hasPending = item['has_pending_order'] == true;
+    final pendingDays = (item['pending_order_days'] as num?)?.toInt();
+    return StockSummaryWidget(
+      qty: systemQty(item),
+      unit: unit(item),
+      status: item['stock_status']?.toString(),
+      hasPendingOrder: hasPending,
+      pendingDays: pendingDays,
+      fontSize: fontSize,
+      compact: compact,
+    );
+  }
 
   static String qtyLine(double? qty, String unit) {
     if (qty == null || !qty.isFinite) return '—';

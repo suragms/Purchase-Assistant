@@ -5,6 +5,17 @@ import 'package:flutter/material.dart';
 import 'hexa_ds_tokens.dart';
 import 'hexa_operational_tokens.dart';
 
+/// Spec-aligned breakpoints (DESKTOP_DESIGN_SPEC.md).
+const double kMobileMax = 599;
+const double kTabletMin = 600;
+const double kDesktopMin = 1024;
+
+/// Navigation rail shows at tablet width and above.
+const double kNavigationRailMin = 900;
+
+/// Extended rail / branded sidebar width target on desktop.
+const double kDesktopSidebarWidth = 240;
+
 enum HexaViewportClass {
   compactPhone,
   phone,
@@ -45,6 +56,27 @@ abstract final class HexaBreakpoints {
 
   static bool isDesktop(BuildContext context) =>
       MediaQuery.sizeOf(context).width >= desktop;
+
+  /// Master-detail and desktop dashboard grids (spec: ≥1024).
+  static bool isDesktopLayout(BuildContext context) =>
+      MediaQuery.sizeOf(context).width >= kDesktopMin;
+
+  static bool isNavigationRail(BuildContext context) =>
+      MediaQuery.sizeOf(context).width >= kNavigationRailMin;
+}
+
+/// Layout helpers aligned to DESKTOP_DESIGN_SPEC breakpoints.
+extension HexaLayoutContext on BuildContext {
+  bool get isMobileLayout => MediaQuery.sizeOf(this).width <= kMobileMax;
+
+  bool get isTabletLayout {
+    final w = MediaQuery.sizeOf(this).width;
+    return w >= kTabletMin && w < kDesktopMin;
+  }
+
+  bool get isDesktopLayout => MediaQuery.sizeOf(this).width >= kDesktopMin;
+
+  bool get showsNavigationRail => MediaQuery.sizeOf(this).width >= kNavigationRailMin;
 }
 
 abstract final class HexaResponsive {
@@ -55,6 +87,14 @@ abstract final class HexaResponsive {
   static const double maxContentWidth = 1180;
   static const double maxFormWidth = 720;
   static const double maxSheetWidth = 640;
+
+  /// Vertical gap between home/report sections (tighter on phones).
+  static double sectionGap(BuildContext context) {
+    final width = MediaQuery.sizeOf(context).width;
+    if (width <= kMobileMax) return HexaOp.mobileSectionGap;
+    if (width < kDesktopMin) return HexaOp.sectionGap;
+    return HexaOp.desktopSectionGap;
+  }
 
   static double pageGutter(
     BuildContext context, {

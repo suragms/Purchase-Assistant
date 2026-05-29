@@ -6,6 +6,7 @@ import '../config/app_config.dart';
 import '../models/trade_purchase_models.dart';
 
 import '../auth/session_notifier.dart';
+import 'prefs_provider.dart' show notificationKindTogglesProvider;
 import '../models/session.dart';
 import 'server_notifications_provider.dart';
 import 'staff_home_providers.dart';
@@ -73,6 +74,54 @@ bool notificationMatchesCategoryFilter(
   return cat == filter;
 }
 
+/// Maps feed rows to Settings → per-kind notification toggles.
+String? notificationKindPrefKey(NotificationItem n) {
+  final kind = n.serverKind ?? '';
+  if (kind == 'low_stock' ||
+      kind == 'missing_barcode' ||
+      kind == 'missing_code' ||
+      kind == 'opening_stock_pending') {
+    return 'low_stock';
+  }
+  if (kind == 'reorder_request' || kind == 'staff_alert') {
+    return 'staff_alert';
+  }
+  if (kind == 'delivery_idle' ||
+      kind == 'delivery_pending' ||
+      kind == 'delivery_received' ||
+      kind == 'delivery_verified' ||
+      kind.startsWith('delivery')) {
+    return 'delivery';
+  }
+  if (kind == 'stock_variance' || kind == 'stock_mismatch') {
+    return 'stock_variance';
+  }
+  if (kind == 'physical_count_reminder') {
+    return 'physical_reminder';
+  }
+  if (n.id == 'wh_low_stock' ||
+      n.id == 'wh_missing_barcode' ||
+      n.id == 'wh_missing_code') {
+    return 'low_stock';
+  }
+  if (n.id == 'wh_opening_stock') return 'opening_stock';
+  if (n.id.startsWith('wh_pending_delivery')) return 'delivery';
+  if (n.type == NotificationType.purchaseDue ||
+      n.type == NotificationType.purchaseOverdue) {
+    return 'delivery';
+  }
+  return null;
+}
+
+bool notificationPassesKindToggles(
+  NotificationItem n,
+  Set<String> enabledKinds,
+) {
+  final key = notificationKindPrefKey(n);
+  if (key == null) return true;
+  return enabledKinds.contains(key);
+}
+
 NotificationCategoryFilter notificationCategoryForItem(NotificationItem n) {
   final fromWire = NotificationCategoryFilterX.fromWire(n.category);
   if (fromWire != null) return fromWire;
@@ -96,6 +145,12 @@ NotificationCategoryFilter notificationCategoryForItem(NotificationItem n) {
       n.type == NotificationType.purchaseOverdue ||
       (n.actionRoute?.startsWith('/purchase') ?? false)) {
     return NotificationCategoryFilter.purchases;
+  }
+  if (kind == 'reorder_request' || kind == 'delivery_idle') {
+    return NotificationCategoryFilter.purchases;
+  }
+  if (kind == 'physical_count_reminder') {
+    return NotificationCategoryFilter.warehouse;
   }
   if (n.id.startsWith('wh_pending_delivery') ||
       kind == 'staff_alert' ||
@@ -274,6 +329,7 @@ final mergedNotificationFeedProvider =
   ref.onDispose(timer.cancel);
   final manual = ref.watch(notificationsProvider);
   final dismissed = ref.watch(dismissedPurchaseAlertIdsProvider);
+  final enabledKinds = ref.watch(notificationKindTogglesProvider);
   final session = ref.watch(sessionProvider);
   final isStaff =
       session != null && session.primaryBusiness.role.toLowerCase() == 'staff';
@@ -367,7 +423,9 @@ final mergedNotificationFeedProvider =
       byId[n.id] = pick;
     }
   }
-  final list = byId.values.toList()
+  final list = byId.values
+      .where((n) => notificationPassesKindToggles(n, enabledKinds))
+      .toList()
     ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
   return list;
 });
@@ -652,7 +710,7 @@ NotificationItem notificationItemWithRoleRoutes(
       subtitle: n.subtitle,
       createdAt: n.createdAt,
       isRead: n.isRead,
-      actionRoute: '/staff/purchase-history',
+      actionRoute: '/staff/deliveries',
       serverNotificationId: n.serverNotificationId,
       serverKind: n.serverKind,
       priority: n.priority,
@@ -677,7 +735,10 @@ NotificationItem notificationItemFromServerRow(Map<String, dynamic> row) {
   final body = row['body']?.toString() ?? '';
   var route = row['action_route']?.toString();
   if (route == null || route.isEmpty) {
-    if (kind == 'low_stock' || kind == 'stock_variance') {
+    if (kind == 'low_stock' ||
+        kind == 'stock_variance' ||
+        kind == 'reorder_request' ||
+        kind == 'staff_alert') {
       final payload = row['payload'];
       if (payload is Map) {
         final iid = payload['item_id']?.toString();

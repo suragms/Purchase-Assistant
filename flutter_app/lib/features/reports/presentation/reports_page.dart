@@ -17,6 +17,7 @@ import '../../../core/models/trade_purchase_models.dart';
 import '../../../core/providers/analytics_kpi_provider.dart';
 import '../../../core/providers/app_period_provider.dart';
 import '../../../core/providers/business_profile_provider.dart';
+import '../../../core/navigation/open_trade_item_from_report.dart';
 import '../../../core/providers/home_dashboard_provider.dart';
 import '../../../core/providers/reports_provider.dart'
     show
@@ -37,7 +38,8 @@ import '../reports_bi_tab.dart';
 import '../../../core/providers/analytics_breakdown_providers.dart';
 import '../../../core/providers/reports_bi_providers.dart';
 import '../../../core/design_system/hexa_responsive.dart';
-import 'reports_fullscreen_page.dart';
+import '../../../core/providers/home_owner_dashboard_providers.dart'
+    show stockVariancesTodayProvider;
 import 'widgets/reports_breakdown_tab.dart';
 import 'widgets/reports_insights_strip.dart';
 import 'widgets/reports_movement_tab.dart';
@@ -248,17 +250,6 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
         ReportsBiTab.overview => 'Search overview…',
         _ => 'Search reports…',
       };
-
-  void _openReportsFullscreen() {
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => ReportsFullscreenPage(
-          initialTab: _biTab,
-          initialPresetLabel: _presetLabel(_preset),
-        ),
-      ),
-    );
-  }
 
   void _applyDatePreset(_DatePreset p) {
     final n = DateTime.now();
@@ -777,11 +768,12 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
               index: i + 1,
               row: r,
               rateLine: rateLine,
-              onTap: () {
-                final encK = Uri.encodeComponent(r.key);
-                final encN = Uri.encodeComponent(r.name);
-                context.push('/reports/item-detail?k=$encK&n=$encN');
-              },
+              onTap: () => openCatalogItemFromReportRow(
+                context,
+                ref,
+                {'item_name': r.name},
+                tab: 'purchases',
+              ),
             ),
           );
           if (i < cap - 1) {
@@ -1175,6 +1167,100 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
     }
   }
 
+  Widget _desktopKpiRow(
+    BuildContext context, {
+    required num totalSpent,
+    required int purchaseCount,
+    required int varianceCount,
+    required VoidCallback? onExportPdf,
+    required Future<void> Function()? onExportCsv,
+  }) {
+    Widget kpi(String title, String value, String subtitle) {
+      return Card(
+        margin: EdgeInsets.zero,
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFF64748B),
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                value,
+                style: const TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              Text(
+                subtitle,
+                style: const TextStyle(fontSize: 11, color: Color(0xFF64748B)),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: kpi(
+                'Total spent',
+                _inr0(totalSpent),
+                'In selected period',
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: kpi(
+                'Purchases',
+                '$purchaseCount',
+                'Bills in period',
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: kpi(
+                'Stock variance',
+                '$varianceCount',
+                'Items with diff today',
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          children: [
+            FilledButton.tonalIcon(
+              onPressed: onExportPdf,
+              icon: const Icon(Icons.picture_as_pdf_outlined, size: 18),
+              label: const Text('Export PDF'),
+            ),
+            OutlinedButton.icon(
+              onPressed: onExportCsv == null
+                  ? null
+                  : () => unawaited(onExportCsv()),
+              icon: const Icon(Icons.table_chart_outlined, size: 18),
+              label: const Text('Export CSV'),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final purchasesAsync = ref.watch(reportsPurchasesPayloadProvider);
@@ -1291,11 +1377,6 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
         backgroundColor: HexaColors.brandBackground,
         foregroundColor: HexaColors.brandPrimary,
         actions: [
-          IconButton(
-            tooltip: 'Full screen',
-            icon: const Icon(Icons.fullscreen_rounded),
-            onPressed: _openReportsFullscreen,
-          ),
           IconButton(
             tooltip: 'Export PDF',
             icon: const Icon(Icons.picture_as_pdf_outlined),
@@ -1486,6 +1567,29 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
                           ),
                           const SizedBox(height: 6),
                           _periodBar(),
+                          if (context.isDesktopLayout) ...[
+                            const SizedBox(height: 10),
+                            _desktopKpiRow(
+                              context,
+                              totalSpent: aggAll.totals.inr,
+                              purchaseCount: merged.length,
+                              varianceCount: ref
+                                      .watch(stockVariancesTodayProvider)
+                                      .valueOrNull
+                                      ?.length ??
+                                  0,
+                              onExportPdf: merged.isEmpty
+                                  ? null
+                                  : () => _openReportsPdfSheet(merged),
+                              onExportCsv: merged.isEmpty
+                                  ? null
+                                  : () => _exportCsv(
+                                        purchases: merged,
+                                        agg: aggList,
+                                        range: range,
+                                      ),
+                            ),
+                          ],
                           Builder(
                             builder: (context) {
                               final subCount = ref

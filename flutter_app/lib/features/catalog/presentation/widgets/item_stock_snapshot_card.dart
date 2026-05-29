@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:dio/dio.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../../core/auth/dashboard_role.dart';
 import '../../../../core/auth/session_notifier.dart';
 import '../../../../core/design_system/hexa_operational_tokens.dart';
 import '../../../../core/json_coerce.dart';
 import '../../../../core/providers/item_detail_providers.dart';
-import '../../../../core/providers/stock_providers.dart';
 import '../../../../core/theme/hexa_colors.dart';
 import '../../../../core/utils/unit_utils.dart';
 import '../../domain/item_stock_snapshot.dart';
@@ -24,9 +24,12 @@ class ItemStockSnapshotCard extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final session = ref.watch(sessionProvider);
     final isOwner = session != null && sessionHasOwnerDashboard(session);
-    final stock = ref.watch(stockItemDetailProvider(itemId)).valueOrNull ?? const <String, dynamic>{};
-    final intel = ref.watch(stockItemIntelligenceProvider(itemId)).valueOrNull ?? const <String, dynamic>{};
-    if (stock.isEmpty && intel.isEmpty) {
+    final isStaff = session != null &&
+        session.primaryBusiness.role.toLowerCase() == 'staff';
+    final stock =
+        ref.watch(itemDetailStockProvider(itemId)).valueOrNull ??
+            const <String, dynamic>{};
+    if (stock.isEmpty) {
       return const SizedBox.shrink();
     }
 
@@ -35,14 +38,26 @@ class ItemStockSnapshotCard extends ConsumerWidget {
     final unitLabel = unit.toUpperCase();
 
     final openingQty = coerceToDouble(stock['opening_stock_qty']);
-    final purchasedQty = coerceToDouble(intel['period_purchased_qty'] ?? stock['period_purchased_qty']);
+    final lifetimeDelivered = coerceToDouble(stock['total_delivered_qty']);
+    final periodPurchased = coerceToDouble(stock['period_purchased_qty']);
+    final purchasedQty = lifetimeDelivered > 0 ? lifetimeDelivered : periodPurchased;
+    final expectedSystemQty = coerceToDouble(
+      stock['expected_system_qty'] ??
+          (openingQty + (lifetimeDelivered > 0 ? lifetimeDelivered : 0)),
+    );
     final physicalQty = coerceToDouble(stock['physical_stock_qty']);
     final systemQty = coerceToDouble(stock['current_stock']);
+    final systemOutOfSync = stock['system_stock_out_of_sync'] == true ||
+        (expectedSystemQty > 0.001 &&
+            (systemQty - expectedSystemQty).abs() > 0.001);
     final reorder = coerceToDouble(stock['reorder_level']);
-    final needsVerification = stock['needs_verification'] == true || intel['needs_verification'] == true;
+    final needsVerification = stock['needs_verification'] == true;
     final hasPending = stock['has_pending_order'] == true;
     final pendingDays = stock['pending_order_days'] is num ? (stock['pending_order_days'] as num).toInt() : null;
-    final pendingDeliveryQty = coerceToDouble(stock['pending_delivery_qty']);
+    final lifetimePending = coerceToDouble(stock['total_pending_delivery_qty']);
+    final pendingDeliveryQty = lifetimePending > 0
+        ? lifetimePending
+        : coerceToDouble(stock['pending_delivery_qty']);
     final openingSetAt = stock['opening_stock_set_at'];
     final openingLocked = stock['opening_stock_locked'] == true;
     final showOpeningCta = openingSetAt == null && !openingLocked;
@@ -50,7 +65,7 @@ class ItemStockSnapshotCard extends ConsumerWidget {
     final diff =
         (stock['physical_stock_difference_qty'] as num?)?.toDouble() ??
         (stock['warehouse_diff_qty'] as num?)?.toDouble() ??
-        (physicalQty - systemQty);
+        (physicalQty > 0.001 ? physicalQty - expectedSystemQty : double.nan);
 
     final updatedAtRaw = stock['last_stock_updated_at']?.toString();
     final updatedAt = updatedAtRaw != null ? DateTime.tryParse(updatedAtRaw)?.toLocal() : null;
@@ -81,7 +96,7 @@ class ItemStockSnapshotCard extends ConsumerWidget {
             Row(
               children: [
                 Expanded(
-                  child: Text('Warehouse stock snapshot', style: HexaOp.cardTitle(context)),
+                  child: Text('Stock summary', style: HexaOp.cardTitle(context)),
                 ),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -170,7 +185,7 @@ class ItemStockSnapshotCard extends ConsumerWidget {
                             businessId: session.primaryBusiness.id,
                             itemId: itemId,
                           );
-                      ref.invalidate(stockItemDetailProvider(itemId));
+                      ref.invalidate(itemDetailBundleProvider(itemId));
                       if (context.mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(content: Text('System stock recomputed')),
@@ -195,22 +210,90 @@ class ItemStockSnapshotCard extends ConsumerWidget {
                 ),
               ),
             if (isOwner) const SizedBox(height: 6),
-            _row(
-              leftLabel: 'System stock',
-              leftValue: _qty(systemQty),
-              rightLabel: 'Physical stock',
-              rightValue: _qty(physicalQty),
+            if (systemOutOfSync) ...[
+              Container(
+                width: double.infinity,
+                margin: const EdgeInsets.only(bottom: 8),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFFF7ED),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: const Color(0xFFFDBA74)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.sync_problem_rounded,
+                      size: 18,
+                      color: HexaColors.warning,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'System out of sync — commit pending deliveries or tap Recompute',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.grey.shade800,
+                        ),
+                      ),
+                    ),
+                    if (isOwner)
+                      TextButton(
+                        onPressed: () => context.go('/purchase'),
+                        child: const Text('Purchases'),
+                      ),
+                  ],
+                ),
+              ),
+            ],
+            _summaryLine(
+              label: 'Opening stock',
+              value: _qty(openingQty),
               unitLabel: unitLabel,
-              emphasisRight: true,
-              warningRight: systemQty > 0.001 && physicalQty <= 0.001,
             ),
-            const SizedBox(height: 8),
-            _row(
-              leftLabel: 'Opening stock',
-              leftValue: _qty(openingQty),
-              rightLabel: 'Purchased (period)',
-              rightValue: _qty(purchasedQty),
+            _summaryLine(
+              label: '+ Purchased (committed)',
+              value: _qty(purchasedQty),
               unitLabel: unitLabel,
+              valueColor: const Color(0xFF2563EB),
+            ),
+            const Divider(height: 20),
+            _summaryLine(
+              label: '= System total',
+              value: _qty(expectedSystemQty),
+              unitLabel: unitLabel,
+              emphasized: true,
+            ),
+            if (systemOutOfSync) ...[
+              const SizedBox(height: 4),
+              Text(
+                'Ledger on-hand ${_qty(systemQty)} $unitLabel — commit deliveries or recompute',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.grey.shade700,
+                ),
+              ),
+            ],
+            const SizedBox(height: 6),
+            _summaryLine(
+              label: 'Physical count',
+              value: physicalQty > 0.001 ? _qty(physicalQty) : '—',
+              unitLabel: unitLabel,
+              subtitle: [
+                if (updatedAt != null)
+                  updatedBy != null
+                      ? 'By $updatedBy · ${_timeAgo(updatedAt)}'
+                      : _timeAgo(updatedAt),
+              ].join(),
+            ),
+            _summaryLine(
+              label: 'Difference',
+              value: diff.isFinite ? '${diff > 0 ? '+' : ''}${_qty(diff)}' : '—',
+              unitLabel: unitLabel,
+              valueColor: _diffColor(diff),
+              emphasized: diff.abs() > 0.001,
             ),
             const SizedBox(height: 8),
             Container(
@@ -255,44 +338,53 @@ class ItemStockSnapshotCard extends ConsumerWidget {
                 ],
               ),
             ),
-            if (pendingDeliveryQty > 0.001) ...[
+            if (pendingDeliveryQty > 0.001 || hasPending) ...[
               const SizedBox(height: 8),
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFF8FAFC),
+                  color: const Color(0xFFFFF7ED),
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: const Color(0xFFE2E8F0)),
+                  border: Border.all(color: const Color(0xFFFDBA74)),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
                       children: [
-                        Text(
-                          'Pending delivery',
-                          style: TextStyle(
-                            fontSize: 10,
-                            color: Colors.grey.shade600,
-                            fontWeight: FontWeight.w700,
+                        const Icon(
+                          Icons.local_shipping_outlined,
+                          size: 18,
+                          color: Color(0xFFE65100),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Pending · ${_qty(pendingDeliveryQty)} $unitLabel',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w900,
+                              fontSize: 14,
+                            ),
                           ),
                         ),
-                        const SizedBox(width: 6),
-                        Text(
-                          '${_qty(pendingDeliveryQty)} $unitLabel',
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w900,
-                            fontSize: 16,
-                          ),
+                        TextButton(
+                          onPressed: () {
+                            if (isStaff) {
+                              context.push('/staff/receive');
+                            } else {
+                              context.go('/purchase?filter=pending_delivery');
+                            }
+                          },
+                          child: Text(isStaff ? 'Receive' : 'Purchases'),
                         ),
                       ],
                     ),
                     const SizedBox(height: 4),
                     Text(
                       hasPending && pendingDays != null && pendingDays > 0
-                          ? 'Not in warehouse until bill is received · $pendingDays d on order'
-                          : 'Not in warehouse until bill is received',
+                          ? 'On truck · not in warehouse until verified · $pendingDays d'
+                          : 'On truck · not committed to system stock yet',
                       style: const TextStyle(
                         fontSize: 11,
                         color: Color(0xFF64748B),
@@ -335,80 +427,73 @@ class ItemStockSnapshotCard extends ConsumerWidget {
     return formatStockQtyNumber(n);
   }
 
+  static Color _diffColor(double diff) {
+    if (!diff.isFinite || diff.abs() < 0.001) return const Color(0xFF10B981);
+    if (diff < 0) return const Color(0xFFEF4444);
+    return const Color(0xFF3B82F6);
+  }
+
+  static Widget _summaryLine({
+    required String label,
+    required String value,
+    required String unitLabel,
+    Color? valueColor,
+    String? subtitle,
+    bool emphasized = false,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            flex: 3,
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: Colors.grey.shade700,
+              ),
+            ),
+          ),
+          Expanded(
+            flex: 4,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(
+                  unitLabel.isNotEmpty ? '$value $unitLabel' : value,
+                  textAlign: TextAlign.right,
+                  style: TextStyle(
+                    fontSize: emphasized ? 18 : 15,
+                    fontWeight: FontWeight.w800,
+                    color: valueColor ?? const Color(0xFF1A1A1A),
+                  ),
+                ),
+                if (subtitle != null && subtitle.isNotEmpty)
+                  Text(
+                    subtitle,
+                    textAlign: TextAlign.right,
+                    style: TextStyle(
+                      fontSize: 10,
+                      color: Colors.grey.shade600,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   static Widget _pill(String t) {
     return Chip(
       label: Text(t, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w800)),
       visualDensity: VisualDensity.compact,
       materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-    );
-  }
-
-  static Widget _row({
-    required String leftLabel,
-    required String leftValue,
-    required String rightLabel,
-    required String rightValue,
-    required String unitLabel,
-    bool emphasisRight = false,
-    bool warningRight = false,
-  }) {
-    Widget cell(
-      String label,
-      String value, {
-      bool emphasis = false,
-      bool warning = false,
-    }) {
-      return Expanded(
-        child: Container(
-          padding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
-          decoration: BoxDecoration(
-            color: warning
-                ? const Color(0xFFFFFBEB)
-                : const Color(0xFFF8FAFC),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: warning ? HexaColors.warning : const Color(0xFFE2E8F0),
-            ),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(label, style: const TextStyle(fontSize: 10, color: Color(0xFF64748B), fontWeight: FontWeight.w700)),
-              const SizedBox(height: 2),
-              Row(
-                children: [
-                  Text(
-                    value,
-                    style: TextStyle(
-                      fontWeight: FontWeight.w900,
-                      fontSize: emphasis ? 20 : 18,
-                      height: 1.05,
-                    ),
-                  ),
-                  const SizedBox(width: 6),
-                  Text(
-                    unitLabel,
-                    style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w900, color: Color(0xFF475569)),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-
-    return Row(
-      children: [
-        cell(leftLabel, leftValue),
-        const SizedBox(width: 8),
-        cell(
-          rightLabel,
-          rightValue,
-          emphasis: emphasisRight,
-          warning: warningRight,
-        ),
-      ],
     );
   }
 
@@ -494,7 +579,7 @@ class _OpeningStockSheetState extends ConsumerState<_OpeningStockSheet> {
             itemId: widget.itemId,
             qty: val,
           );
-      ref.invalidate(stockItemDetailProvider(widget.itemId));
+      ref.invalidate(itemDetailBundleProvider(widget.itemId));
       ref.invalidate(itemDetailBundleProvider(widget.itemId));
       if (mounted) Navigator.pop(context);
     } finally {
@@ -582,7 +667,7 @@ class _ReorderLevelSheetState extends ConsumerState<_ReorderLevelSheet> {
             patchReorderLevel: true,
             reorderLevel: val,
           );
-      ref.invalidate(stockItemDetailProvider(widget.itemId));
+      ref.invalidate(itemDetailBundleProvider(widget.itemId));
       ref.invalidate(itemDetailBundleProvider(widget.itemId));
       if (mounted) Navigator.pop(context);
     } finally {

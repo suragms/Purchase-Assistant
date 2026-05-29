@@ -10,40 +10,47 @@ import '../../../core/services/stock_list_pdf.dart';
 import '../../../core/json_coerce.dart';
 import '../../../core/providers/home_dashboard_provider.dart';
 import '../../../core/providers/stock_providers.dart';
+import '../../../core/design_system/hexa_responsive.dart';
 import '../../../core/router/post_auth_route.dart';
 import '../../../core/widgets/friendly_load_error.dart';
 import '../../../core/widgets/list_skeleton.dart';
 import '../stock_list_merge.dart';
 import '../stock_period_utils.dart';
-import 'package:go_router/go_router.dart';
 import 'widgets/stock_pagination_bar.dart';
 import 'widgets/stock_operational_top_bar.dart';
+import 'widgets/stock_changes_tab.dart';
+import 'widgets/stock_movement_tab.dart';
+import 'widgets/stock_today_tab.dart';
 import 'widgets/stock_row_actions.dart';
 import 'widgets/stock_warehouse_row.dart';
 import 'widgets/stock_warehouse_table_header.dart';
-import 'widgets/stock_status_chip_row.dart';
 import 'widgets/stock_inline_search_bar.dart';
 import 'widgets/stock_desktop_detail_pane.dart';
 import 'widgets/operational_stock_filter_sheet.dart'
-    show
-        showOperationalStockFilter,
-        stockActiveFilterSummary,
-        kOperationalDesktopBreakpoint;
+    show showOperationalStockFilter, stockActiveFilterSummary;
 import 'widgets/stock_warehouse_filter_sheet.dart'
     show countWarehouseActiveFilters;
 
 enum StockPageMode { auto, staff, owner }
 
 class StockPage extends ConsumerStatefulWidget {
-  const StockPage({super.key, this.mode = StockPageMode.auto});
+  const StockPage({
+    super.key,
+    this.mode = StockPageMode.auto,
+    this.initialTab,
+  });
 
   final StockPageMode mode;
+  /// `list` | `changes` | `movement` | `today`
+  final String? initialTab;
 
   @override
   ConsumerState<StockPage> createState() => _StockPageState();
 }
 
-class _StockPageState extends ConsumerState<StockPage> {
+class _StockPageState extends ConsumerState<StockPage>
+    with SingleTickerProviderStateMixin {
+  late final TabController _tabs;
   final _searchCtrl = TextEditingController();
   final _subcatCtrl = TextEditingController();
   final _scroll = ScrollController();
@@ -53,9 +60,27 @@ class _StockPageState extends ConsumerState<StockPage> {
   String _instantSearch = '';
   Map<String, dynamic>? _mergedData;
 
+  static int _tabIndex(String? tab) {
+    switch (tab) {
+      case 'changes':
+        return 1;
+      case 'movement':
+        return 2;
+      case 'today':
+        return 3;
+      default:
+        return 0;
+    }
+  }
+
   @override
   void initState() {
     super.initState();
+    _tabs = TabController(
+      length: 4,
+      vsync: this,
+      initialIndex: _tabIndex(widget.initialTab),
+    );
     final initialQuery = ref.read(stockListQueryProvider);
     _searchCtrl.text = initialQuery.q.trim();
     _searchCtrl.addListener(_onSearchChanged);
@@ -74,6 +99,7 @@ class _StockPageState extends ConsumerState<StockPage> {
 
   @override
   void dispose() {
+    _tabs.dispose();
     _debounce?.cancel();
     _searchCtrl.dispose();
     _subcatCtrl.dispose();
@@ -276,10 +302,16 @@ class _StockPageState extends ConsumerState<StockPage> {
     ref.invalidate(stockListProvider);
   }
 
-  void _openHistory() {
-    final route =
-        _isStaffMode ? '/staff/stock/changes' : '/stock/changes';
-    context.push(route);
+  void _openChangesTab() {
+    if (_tabs.index != 1) {
+      _tabs.animateTo(1);
+    }
+  }
+
+  void _openMovementTab() {
+    if (_tabs.index != 2) {
+      _tabs.animateTo(2);
+    }
   }
 
   void _showPeriodPicker() {
@@ -328,7 +360,7 @@ class _StockPageState extends ConsumerState<StockPage> {
     final filterCount = countWarehouseActiveFilters(listQ, op);
 
     final desktop =
-        MediaQuery.sizeOf(context).width >= kOperationalDesktopBreakpoint;
+        MediaQuery.sizeOf(context).width >= kDesktopMin;
     final selected = desktop ? _selectedItem(items) : null;
     if (desktop && items.isNotEmpty) {
       final sid = selected?['id']?.toString();
@@ -350,7 +382,6 @@ class _StockPageState extends ConsumerState<StockPage> {
             onClear: _clearSearch,
           ),
         ),
-      const SliverToBoxAdapter(child: StockStatusChipRow()),
       if (items.isNotEmpty) ...[
         const SliverToBoxAdapter(child: StockWarehouseTableHeader()),
         SliverList(
@@ -488,6 +519,14 @@ class _StockPageState extends ConsumerState<StockPage> {
       body = const ListSkeleton(rowCount: 12);
     }
 
+    final listTab = Column(
+      children: [
+        if (showDebounceProgress)
+          const LinearProgressIndicator(minHeight: 2),
+        Expanded(child: body),
+      ],
+    );
+
     return Scaffold(
       backgroundColor: const Color(0xFFF5F3EE),
       appBar: StockOperationalTopBar(
@@ -500,15 +539,19 @@ class _StockPageState extends ConsumerState<StockPage> {
             setState(() => _searchExpanded = !_searchExpanded),
         onOpenPeriod: _showPeriodPicker,
         onOpenFilters: _openFilters,
-        onOpenHistory: _openHistory,
+        onOpenHistory: _openChangesTab,
+        onOpenMovement: _openMovementTab,
         onExportPdf: _isStaffMode ? null : _exportStockPdf,
         onExportExcel: _isStaffMode ? null : _exportStockExcel,
+        tabController: _tabs,
       ),
-      body: Column(
+      body: TabBarView(
+        controller: _tabs,
         children: [
-          if (showDebounceProgress)
-            const LinearProgressIndicator(minHeight: 2),
-          Expanded(child: body),
+          listTab,
+          StockChangesTab(isStaffMode: _isStaffMode),
+          const StockMovementTab(),
+          const StockTodayTab(),
         ],
       ),
     );

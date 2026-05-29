@@ -146,6 +146,10 @@ class StockListItemOut(BaseModel):
     opening_stock_set_by: str | None = None
     opening_stock_locked: bool = False
     stock_version: int = 0
+    total_delivered_qty: Decimal | None = None
+    total_pending_delivery_qty: Decimal | None = None
+    expected_system_qty: Decimal | None = None
+    system_stock_out_of_sync: bool = False
 
 
 class StockListOut(BaseModel):

@@ -152,11 +152,10 @@ final staffLowStockAlertsProvider =
   final session = await _waitForSession(ref);
   if (session == null) return [];
   try {
-    final m = await ref.read(hexaApiProvider).listStock(
+    final m = await ref.read(hexaApiProvider).listStockLow(
           businessId: session.primaryBusiness.id,
           page: 1,
           perPage: 8,
-          status: 'low',
         );
     final items = m['items'];
     if (items is! List) return [];
@@ -202,12 +201,24 @@ final staffPendingDeliveryCountProvider = Provider.autoDispose<int>((ref) {
   return purchases?.length ?? 0;
 });
 
-/// Pending warehouse deliveries — oldest purchase date first.
+bool staffDeliveryNeedsAction(TradePurchase p) {
+  if (p.statusEnum == PurchaseStatus.deleted ||
+      p.statusEnum == PurchaseStatus.cancelled) {
+    return false;
+  }
+  final ds = p.deliveryStatusEnum;
+  return ds == DeliveryStatus.dispatched ||
+      ds == DeliveryStatus.inTransit ||
+      ds == DeliveryStatus.arrived ||
+      ds == DeliveryStatus.staffVerifying;
+}
+
+/// Warehouse deliveries staff can act on (arrive / verify) — oldest first.
 final staffPendingDeliveriesProvider =
     Provider.autoDispose<AsyncValue<List<TradePurchase>>>((ref) {
   final list = ref.watch(tradePurchasesParsedProvider);
   return list.whenData((purchases) {
-    final pending = purchases.where((p) => !p.isDelivered).toList()
+    final pending = purchases.where(staffDeliveryNeedsAction).toList()
       ..sort((a, b) => a.purchaseDate.compareTo(b.purchaseDate));
     return pending;
   });

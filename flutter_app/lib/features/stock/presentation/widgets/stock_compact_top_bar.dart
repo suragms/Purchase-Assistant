@@ -31,8 +31,7 @@ class StockCompactTopBar extends StatelessWidget implements PreferredSizeWidget 
 
   @override
   Widget build(BuildContext context) {
-    final changesRoute =
-        isStaffMode ? '/staff/stock/changes' : '/stock/changes';
+    final stockBase = isStaffMode ? '/staff/stock' : '/stock';
 
     return AppBar(
       toolbarHeight: _height,
@@ -79,11 +78,11 @@ class StockCompactTopBar extends StatelessWidget implements PreferredSizeWidget 
           onSelected: (v) {
             switch (v) {
               case 'changes':
-                context.push(changesRoute);
+                context.go('$stockBase?tab=changes');
               case 'scan':
                 context.push('/barcode/scan?return=stock');
               case 'movement':
-                context.push('/stock/movement');
+                context.go('$stockBase?tab=movement');
               case 'add':
                 context.push('/catalog/quick-add');
               case 'pdf':

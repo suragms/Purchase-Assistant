@@ -1379,7 +1379,63 @@ class HexaApi {
     return Map<String, dynamic>.from(res.data ?? {});
   }
 
-  /// Marks/unmarks a purchase as delivered (received at warehouse).
+  Future<Map<String, dynamic>> fetchDeliveryPipeline({
+    required String businessId,
+  }) async {
+    final res = await _dio.get<Map<String, dynamic>>(
+      '/v1/businesses/$businessId/trade-purchases/delivery-pipeline',
+    );
+    return Map<String, dynamic>.from(res.data ?? {});
+  }
+
+  Future<Map<String, dynamic>> dispatchPurchase({
+    required String businessId,
+    required String purchaseId,
+    String? truckNumber,
+    String? driverContact,
+    String? dispatchNote,
+    bool markInTransit = false,
+  }) async {
+    final res = await _dio.post<Map<String, dynamic>>(
+      '/v1/businesses/$businessId/trade-purchases/$purchaseId/dispatch',
+      data: {
+        if (truckNumber != null && truckNumber.isNotEmpty)
+          'truck_number': truckNumber,
+        if (driverContact != null && driverContact.isNotEmpty)
+          'driver_contact': driverContact,
+        if (dispatchNote != null && dispatchNote.isNotEmpty)
+          'dispatch_note': dispatchNote,
+        'mark_in_transit': markInTransit,
+      },
+    );
+    return Map<String, dynamic>.from(res.data ?? {});
+  }
+
+  Future<Map<String, dynamic>> arrivePurchase({
+    required String businessId,
+    required String purchaseId,
+    String? notes,
+  }) async {
+    final res = await _dio.post<Map<String, dynamic>>(
+      '/v1/businesses/$businessId/trade-purchases/$purchaseId/arrive',
+      data: {
+        if (notes != null && notes.trim().isNotEmpty) 'notes': notes.trim(),
+      },
+    );
+    return Map<String, dynamic>.from(res.data ?? {});
+  }
+
+  Future<Map<String, dynamic>> commitPurchaseDelivery({
+    required String businessId,
+    required String purchaseId,
+  }) async {
+    final res = await _dio.post<Map<String, dynamic>>(
+      '/v1/businesses/$businessId/trade-purchases/$purchaseId/commit-stock',
+    );
+    return Map<String, dynamic>.from(res.data ?? {});
+  }
+
+  /// Marks delivery pending (reverts stock when previously committed).
   Future<Map<String, dynamic>> markPurchaseDelivered({
     required String businessId,
     required String purchaseId,

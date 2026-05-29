@@ -65,10 +65,29 @@ def test_delivery_confirmation_increments_stock():
     assert stock.status_code == 200, stock.text
     assert Decimal(str(stock.json()["current_stock"])) == Decimal("0")
 
-    delivered = client.patch(
-        f"/v1/businesses/{bid}/trade-purchases/{pid}/delivery",
+    line_id = purchase.json()["lines"][0]["id"]
+    client.post(
+        f"/v1/businesses/{bid}/trade-purchases/{pid}/arrive",
         headers=h,
-        json={"is_delivered": True},
+        json={},
+    ).raise_for_status()
+    client.post(
+        f"/v1/businesses/{bid}/trade-purchases/{pid}/verify",
+        headers=h,
+        json={
+            "lines": [
+                {
+                    "line_id": line_id,
+                    "received_qty": "10",
+                    "damaged_qty": "0",
+                    "return_qty": "0",
+                }
+            ],
+        },
+    ).raise_for_status()
+    delivered = client.post(
+        f"/v1/businesses/{bid}/trade-purchases/{pid}/commit-stock",
+        headers=h,
     )
     assert delivered.status_code == 200, delivered.text
 
@@ -130,19 +149,37 @@ def test_delivery_confirmation_is_idempotent_on_repeat_call():
     assert purchase.status_code in (200, 201), purchase.text
     pid = purchase.json()["id"]
 
-    delivered_first = client.patch(
-        f"/v1/businesses/{bid}/trade-purchases/{pid}/delivery",
+    line_id = purchase.json()["lines"][0]["id"]
+    client.post(
+        f"/v1/businesses/{bid}/trade-purchases/{pid}/arrive",
         headers=h,
-        json={"is_delivered": True},
+        json={},
+    ).raise_for_status()
+    client.post(
+        f"/v1/businesses/{bid}/trade-purchases/{pid}/verify",
+        headers=h,
+        json={
+            "lines": [
+                {
+                    "line_id": line_id,
+                    "received_qty": "10",
+                    "damaged_qty": "0",
+                    "return_qty": "0",
+                }
+            ],
+        },
+    ).raise_for_status()
+    delivered_first = client.post(
+        f"/v1/businesses/{bid}/trade-purchases/{pid}/commit-stock",
+        headers=h,
     )
     assert delivered_first.status_code == 200, delivered_first.text
     assert delivered_first.json()["is_delivered"] is True
     assert len(delivered_first.json().get("stock_updates") or []) == 1
 
-    delivered_repeat = client.patch(
-        f"/v1/businesses/{bid}/trade-purchases/{pid}/delivery",
+    delivered_repeat = client.post(
+        f"/v1/businesses/{bid}/trade-purchases/{pid}/commit-stock",
         headers=h,
-        json={"is_delivered": True},
     )
     assert delivered_repeat.status_code == 200, delivered_repeat.text
     assert delivered_repeat.json()["is_delivered"] is True

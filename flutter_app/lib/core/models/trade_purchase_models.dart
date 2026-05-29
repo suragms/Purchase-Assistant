@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../json_coerce.dart';
 import '../strict_decimal.dart';
+import '../design_system/hexa_operational_tokens.dart';
 import '../theme/hexa_colors.dart';
 
 double _decDouble(Object? value) {
@@ -100,6 +101,91 @@ PurchaseStatus parsePurchaseStatus(String? raw) {
     'cancelled' => PurchaseStatus.cancelled,
     'deleted' => PurchaseStatus.deleted,
     _ => PurchaseStatus.unknown,
+  };
+}
+
+/// Warehouse delivery track (independent of payment status).
+enum DeliveryStatus {
+  pending,
+  dispatched,
+  inTransit,
+  arrived,
+  staffVerifying,
+  staffVerified,
+  stockCommitted,
+  partial,
+  cancelled,
+}
+
+extension DeliveryStatusX on DeliveryStatus {
+  String get wireValue => switch (this) {
+        DeliveryStatus.pending => 'pending',
+        DeliveryStatus.dispatched => 'dispatched',
+        DeliveryStatus.inTransit => 'in_transit',
+        DeliveryStatus.arrived => 'arrived',
+        DeliveryStatus.staffVerifying => 'staff_verifying',
+        DeliveryStatus.staffVerified => 'staff_verified',
+        DeliveryStatus.stockCommitted => 'stock_committed',
+        DeliveryStatus.partial => 'partial',
+        DeliveryStatus.cancelled => 'cancelled',
+      };
+
+  String get label => switch (this) {
+        DeliveryStatus.pending => 'Pending delivery',
+        DeliveryStatus.dispatched => 'Dispatched',
+        DeliveryStatus.inTransit => 'In transit',
+        DeliveryStatus.arrived => 'Arrived — verify',
+        DeliveryStatus.staffVerifying => 'Being verified',
+        DeliveryStatus.staffVerified => 'Verified — commit',
+        DeliveryStatus.stockCommitted => 'Stock added',
+        DeliveryStatus.partial => 'Partial delivery',
+        DeliveryStatus.cancelled => 'Cancelled',
+      };
+
+  Color get color => switch (this) {
+        DeliveryStatus.pending => HexaOp.statusPending,
+        DeliveryStatus.dispatched => HexaOp.statusDispatched,
+        DeliveryStatus.inTransit => HexaOp.statusDispatched,
+        DeliveryStatus.arrived => HexaOp.statusArrived,
+        DeliveryStatus.staffVerifying => HexaOp.statusArrived,
+        DeliveryStatus.staffVerified => HexaOp.statusVerified,
+        DeliveryStatus.stockCommitted => HexaOp.statusCommitted,
+        DeliveryStatus.partial => HexaOp.statusPartial,
+        DeliveryStatus.cancelled => HexaColors.loss,
+      };
+
+  bool get needsStaffAction =>
+      this == DeliveryStatus.arrived || this == DeliveryStatus.staffVerifying;
+
+  bool get readyForOwnerCommit =>
+      this == DeliveryStatus.staffVerified || this == DeliveryStatus.partial;
+
+  IconData get icon => switch (this) {
+        DeliveryStatus.pending => Icons.schedule_rounded,
+        DeliveryStatus.dispatched => Icons.local_shipping_outlined,
+        DeliveryStatus.inTransit => Icons.pin_drop_outlined,
+        DeliveryStatus.arrived => Icons.inventory_2_outlined,
+        DeliveryStatus.staffVerifying => Icons.fact_check_outlined,
+        DeliveryStatus.staffVerified => Icons.verified_outlined,
+        DeliveryStatus.stockCommitted => Icons.check_circle_outline_rounded,
+        DeliveryStatus.partial => Icons.call_split_rounded,
+        DeliveryStatus.cancelled => Icons.cancel_outlined,
+      };
+}
+
+DeliveryStatus parseDeliveryStatus(String? raw) {
+  final s = (raw ?? '').toLowerCase().trim();
+  return switch (s) {
+    'pending' => DeliveryStatus.pending,
+    'dispatched' => DeliveryStatus.dispatched,
+    'in_transit' => DeliveryStatus.inTransit,
+    'arrived' => DeliveryStatus.arrived,
+    'staff_verifying' => DeliveryStatus.staffVerifying,
+    'staff_verified' => DeliveryStatus.staffVerified,
+    'stock_committed' => DeliveryStatus.stockCommitted,
+    'partial' => DeliveryStatus.partial,
+    'cancelled' => DeliveryStatus.cancelled,
+    _ => DeliveryStatus.pending,
   };
 }
 
@@ -319,8 +405,19 @@ class TradePurchase {
     this.totalLineProfit,
     this.hasMissingDetails = false,
     this.isDelivered = false,
+    this.deliveryStatus,
     this.deliveredAt,
     this.deliveryNotes,
+    this.dispatchedAt,
+    this.arrivedAt,
+    this.staffVerifiedAt,
+    this.staffVerifiedByName,
+    this.stockCommittedAt,
+    this.staffVerifiedQty,
+    this.deliveredQtyCommitted,
+    this.dispatchNote,
+    this.truckNumber,
+    this.driverContact,
     this.stockUpdatesCount = 0,
   });
 
@@ -364,11 +461,29 @@ class TradePurchase {
   final double? totalLineProfit;
   final bool hasMissingDetails;
   final bool isDelivered;
+  /// Wire: `delivery_status` (pending, dispatched, stock_committed, …).
+  final String? deliveryStatus;
   final DateTime? deliveredAt;
   final String? deliveryNotes;
+  final DateTime? dispatchedAt;
+  final DateTime? arrivedAt;
+  final DateTime? staffVerifiedAt;
+  final String? staffVerifiedByName;
+  final DateTime? stockCommittedAt;
+  final double? staffVerifiedQty;
+  final double? deliveredQtyCommitted;
+  final String? dispatchNote;
+  final String? truckNumber;
+  final String? driverContact;
   final int stockUpdatesCount;
 
   PurchaseStatus get statusEnum => parsePurchaseStatus(derivedStatus);
+
+  DeliveryStatus get deliveryStatusEnum =>
+      parseDeliveryStatus(deliveryStatus);
+
+  bool get isDeliveryCommitted =>
+      deliveryStatusEnum == DeliveryStatus.stockCommitted || isDelivered;
 
   String get itemsSummary {
     if (lines.isEmpty) return '';
@@ -444,206 +559,202 @@ class TradePurchase {
       hasMissingDetails: j['has_missing_details'] == true ||
           j['has_missing_details']?.toString().toLowerCase() == 'true',
       isDelivered: (j['is_delivered'] as bool?) ?? false,
+      deliveryStatus: j['delivery_status']?.toString() ??
+          ((j['is_delivered'] as bool?) == true ? 'stock_committed' : 'pending'),
       deliveredAt: j['delivered_at'] != null
           ? DateTime.tryParse(j['delivered_at'].toString())
           : null,
       deliveryNotes: j['delivery_notes']?.toString(),
+      dispatchedAt: parseD('dispatched_at'),
+      arrivedAt: parseD('arrived_at'),
+      staffVerifiedAt: parseD('staff_verified_at'),
+      staffVerifiedByName: j['staff_verified_by_name']?.toString(),
+      stockCommittedAt: parseD('stock_committed_at'),
+      staffVerifiedQty: _decNullableDouble(j['staff_verified_qty']),
+      deliveredQtyCommitted: _decNullableDouble(j['delivered_qty_committed']),
+      dispatchNote: j['dispatch_note']?.toString(),
+      truckNumber: j['truck_number']?.toString(),
+      driverContact: j['driver_contact']?.toString(),
       stockUpdatesCount:
           j['stock_updates'] is List ? (j['stock_updates'] as List).length : 0,
+    );
+  }
+
+  TradePurchase copyWith({
+    String? id,
+    String? humanId,
+    String? invoiceNumber,
+    DateTime? purchaseDate,
+    String? supplierId,
+    String? brokerId,
+    int? paymentDays,
+    DateTime? dueDate,
+    double? paidAmount,
+    DateTime? paidAt,
+    double? totalAmount,
+    String? storedStatus,
+    String? derivedStatus,
+    double? remaining,
+    int? itemsCount,
+    String? supplierName,
+    String? brokerName,
+    String? supplierGst,
+    String? supplierAddress,
+    String? supplierPhone,
+    String? supplierWhatsapp,
+    String? brokerPhone,
+    String? brokerLocation,
+    String? brokerImageUrl,
+    double? discount,
+    String? commissionMode,
+    double? commissionPercent,
+    double? commissionMoney,
+    double? deliveredRate,
+    double? billtyRate,
+    double? freightAmount,
+    String? freightType,
+    List<TradePurchaseLine>? lines,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+    double? totalLandingSubtotal,
+    double? totalSellingSubtotal,
+    double? totalLineProfit,
+    bool? hasMissingDetails,
+    bool? isDelivered,
+    String? deliveryStatus,
+    DateTime? deliveredAt,
+    String? deliveryNotes,
+    DateTime? dispatchedAt,
+    DateTime? arrivedAt,
+    DateTime? staffVerifiedAt,
+    String? staffVerifiedByName,
+    DateTime? stockCommittedAt,
+    double? staffVerifiedQty,
+    double? deliveredQtyCommitted,
+    String? dispatchNote,
+    String? truckNumber,
+    String? driverContact,
+    int? stockUpdatesCount,
+    bool clearDeliveredAt = false,
+    bool clearDispatchedAt = false,
+    bool clearArrivedAt = false,
+    bool clearStaffVerifiedAt = false,
+    bool clearStockCommittedAt = false,
+  }) {
+    return TradePurchase(
+      id: id ?? this.id,
+      humanId: humanId ?? this.humanId,
+      invoiceNumber: invoiceNumber ?? this.invoiceNumber,
+      purchaseDate: purchaseDate ?? this.purchaseDate,
+      supplierId: supplierId ?? this.supplierId,
+      brokerId: brokerId ?? this.brokerId,
+      paymentDays: paymentDays ?? this.paymentDays,
+      dueDate: dueDate ?? this.dueDate,
+      paidAmount: paidAmount ?? this.paidAmount,
+      paidAt: paidAt ?? this.paidAt,
+      totalAmount: totalAmount ?? this.totalAmount,
+      storedStatus: storedStatus ?? this.storedStatus,
+      derivedStatus: derivedStatus ?? this.derivedStatus,
+      remaining: remaining ?? this.remaining,
+      itemsCount: itemsCount ?? this.itemsCount,
+      supplierName: supplierName ?? this.supplierName,
+      brokerName: brokerName ?? this.brokerName,
+      supplierGst: supplierGst ?? this.supplierGst,
+      supplierAddress: supplierAddress ?? this.supplierAddress,
+      supplierPhone: supplierPhone ?? this.supplierPhone,
+      supplierWhatsapp: supplierWhatsapp ?? this.supplierWhatsapp,
+      brokerPhone: brokerPhone ?? this.brokerPhone,
+      brokerLocation: brokerLocation ?? this.brokerLocation,
+      brokerImageUrl: brokerImageUrl ?? this.brokerImageUrl,
+      discount: discount ?? this.discount,
+      commissionMode: commissionMode ?? this.commissionMode,
+      commissionPercent: commissionPercent ?? this.commissionPercent,
+      commissionMoney: commissionMoney ?? this.commissionMoney,
+      deliveredRate: deliveredRate ?? this.deliveredRate,
+      billtyRate: billtyRate ?? this.billtyRate,
+      freightAmount: freightAmount ?? this.freightAmount,
+      freightType: freightType ?? this.freightType,
+      lines: lines ?? this.lines,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      totalLandingSubtotal: totalLandingSubtotal ?? this.totalLandingSubtotal,
+      totalSellingSubtotal: totalSellingSubtotal ?? this.totalSellingSubtotal,
+      totalLineProfit: totalLineProfit ?? this.totalLineProfit,
+      hasMissingDetails: hasMissingDetails ?? this.hasMissingDetails,
+      isDelivered: isDelivered ?? this.isDelivered,
+      deliveryStatus: deliveryStatus ?? this.deliveryStatus,
+      deliveredAt: clearDeliveredAt ? null : (deliveredAt ?? this.deliveredAt),
+      deliveryNotes: deliveryNotes ?? this.deliveryNotes,
+      dispatchedAt:
+          clearDispatchedAt ? null : (dispatchedAt ?? this.dispatchedAt),
+      arrivedAt: clearArrivedAt ? null : (arrivedAt ?? this.arrivedAt),
+      staffVerifiedAt: clearStaffVerifiedAt
+          ? null
+          : (staffVerifiedAt ?? this.staffVerifiedAt),
+      staffVerifiedByName: staffVerifiedByName ?? this.staffVerifiedByName,
+      stockCommittedAt: clearStockCommittedAt
+          ? null
+          : (stockCommittedAt ?? this.stockCommittedAt),
+      staffVerifiedQty: staffVerifiedQty ?? this.staffVerifiedQty,
+      deliveredQtyCommitted:
+          deliveredQtyCommitted ?? this.deliveredQtyCommitted,
+      dispatchNote: dispatchNote ?? this.dispatchNote,
+      truckNumber: truckNumber ?? this.truckNumber,
+      driverContact: driverContact ?? this.driverContact,
+      stockUpdatesCount: stockUpdatesCount ?? this.stockUpdatesCount,
     );
   }
 }
 
 extension TradePurchaseOptimisticPatch on TradePurchase {
-  /// Instant UI while [markPurchaseDelivered] round-trips.
+  /// Instant UI while delivery commit round-trips.
   TradePurchase withOptimisticMarkedDelivered() {
-    return TradePurchase(
-      id: id,
-      humanId: humanId,
-      invoiceNumber: invoiceNumber,
-      purchaseDate: purchaseDate,
-      supplierId: supplierId,
-      brokerId: brokerId,
-      paymentDays: paymentDays,
-      dueDate: dueDate,
-      paidAmount: paidAmount,
-      paidAt: paidAt,
-      totalAmount: totalAmount,
-      storedStatus: storedStatus,
-      derivedStatus: derivedStatus,
-      remaining: remaining,
-      itemsCount: itemsCount,
-      supplierName: supplierName,
-      brokerName: brokerName,
-      supplierGst: supplierGst,
-      supplierAddress: supplierAddress,
-      supplierPhone: supplierPhone,
-      supplierWhatsapp: supplierWhatsapp,
-      brokerPhone: brokerPhone,
-      brokerLocation: brokerLocation,
-      brokerImageUrl: brokerImageUrl,
-      discount: discount,
-      commissionMode: commissionMode,
-      commissionPercent: commissionPercent,
-      commissionMoney: commissionMoney,
-      deliveredRate: deliveredRate,
-      billtyRate: billtyRate,
-      freightAmount: freightAmount,
-      freightType: freightType,
-      lines: lines,
-      createdAt: createdAt,
-      updatedAt: updatedAt,
-      totalLandingSubtotal: totalLandingSubtotal,
-      totalSellingSubtotal: totalSellingSubtotal,
-      totalLineProfit: totalLineProfit,
-      hasMissingDetails: hasMissingDetails,
+    final now = DateTime.now();
+    return copyWith(
       isDelivered: true,
-      deliveredAt: deliveredAt ?? DateTime.now(),
-      deliveryNotes: deliveryNotes,
+      deliveryStatus: DeliveryStatus.stockCommitted.wireValue,
+      deliveredAt: deliveredAt ?? now,
+      stockCommittedAt: stockCommittedAt ?? now,
     );
   }
 
   /// Optimistic delivery toggle (detail screen) before GET refresh.
   TradePurchase withDelivered(bool delivered) {
-    return TradePurchase(
-      id: id,
-      humanId: humanId,
-      invoiceNumber: invoiceNumber,
-      purchaseDate: purchaseDate,
-      supplierId: supplierId,
-      brokerId: brokerId,
-      paymentDays: paymentDays,
-      dueDate: dueDate,
-      paidAmount: paidAmount,
-      paidAt: paidAt,
-      totalAmount: totalAmount,
-      storedStatus: storedStatus,
-      derivedStatus: derivedStatus,
-      remaining: remaining,
-      itemsCount: itemsCount,
-      supplierName: supplierName,
-      brokerName: brokerName,
-      supplierGst: supplierGst,
-      supplierAddress: supplierAddress,
-      supplierPhone: supplierPhone,
-      supplierWhatsapp: supplierWhatsapp,
-      brokerPhone: brokerPhone,
-      brokerLocation: brokerLocation,
-      brokerImageUrl: brokerImageUrl,
-      discount: discount,
-      commissionMode: commissionMode,
-      commissionPercent: commissionPercent,
-      commissionMoney: commissionMoney,
-      deliveredRate: deliveredRate,
-      billtyRate: billtyRate,
-      freightAmount: freightAmount,
-      freightType: freightType,
-      lines: lines,
-      createdAt: createdAt,
-      updatedAt: updatedAt,
-      totalLandingSubtotal: totalLandingSubtotal,
-      totalSellingSubtotal: totalSellingSubtotal,
-      totalLineProfit: totalLineProfit,
-      hasMissingDetails: hasMissingDetails,
-      isDelivered: delivered,
-      deliveredAt: delivered ? (deliveredAt ?? DateTime.now()) : null,
-      deliveryNotes: deliveryNotes,
+    if (!delivered) {
+      return copyWith(
+        isDelivered: false,
+        deliveryStatus: DeliveryStatus.pending.wireValue,
+        clearDeliveredAt: true,
+        clearDispatchedAt: true,
+        clearArrivedAt: true,
+        clearStaffVerifiedAt: true,
+        clearStockCommittedAt: true,
+      );
+    }
+    final now = DateTime.now();
+    return copyWith(
+      isDelivered: true,
+      deliveryStatus: DeliveryStatus.stockCommitted.wireValue,
+      deliveredAt: deliveredAt ?? now,
+      stockCommittedAt: stockCommittedAt ?? now,
     );
   }
 
   /// Instant UI while [markPurchasePaid] round-trips.
   TradePurchase withOptimisticMarkedPaid() {
-    return TradePurchase(
-      id: id,
-      humanId: humanId,
-      invoiceNumber: invoiceNumber,
-      purchaseDate: purchaseDate,
-      supplierId: supplierId,
-      brokerId: brokerId,
-      paymentDays: paymentDays,
-      dueDate: dueDate,
+    return copyWith(
       paidAmount: totalAmount,
       paidAt: paidAt ?? DateTime.now(),
-      totalAmount: totalAmount,
-      storedStatus: storedStatus,
       derivedStatus: 'paid',
       remaining: 0,
-      itemsCount: itemsCount,
-      supplierName: supplierName,
-      brokerName: brokerName,
-      supplierGst: supplierGst,
-      supplierAddress: supplierAddress,
-      supplierPhone: supplierPhone,
-      supplierWhatsapp: supplierWhatsapp,
-      brokerPhone: brokerPhone,
-      brokerLocation: brokerLocation,
-      brokerImageUrl: brokerImageUrl,
-      discount: discount,
-      commissionMode: commissionMode,
-      commissionPercent: commissionPercent,
-      commissionMoney: commissionMoney,
-      deliveredRate: deliveredRate,
-      billtyRate: billtyRate,
-      freightAmount: freightAmount,
-      freightType: freightType,
-      lines: lines,
-      createdAt: createdAt,
-      updatedAt: updatedAt,
-      totalLandingSubtotal: totalLandingSubtotal,
-      totalSellingSubtotal: totalSellingSubtotal,
-      totalLineProfit: totalLineProfit,
-      hasMissingDetails: hasMissingDetails,
-      isDelivered: isDelivered,
-      deliveredAt: deliveredAt,
-      deliveryNotes: deliveryNotes,
     );
   }
 
   /// Instant UI while [cancelPurchase] round-trips (detail/history actions).
   TradePurchase withOptimisticCancelled() {
-    return TradePurchase(
-      id: id,
-      humanId: humanId,
-      invoiceNumber: invoiceNumber,
-      purchaseDate: purchaseDate,
-      supplierId: supplierId,
-      brokerId: brokerId,
-      paymentDays: paymentDays,
-      dueDate: dueDate,
-      paidAmount: paidAmount,
-      paidAt: paidAt,
-      totalAmount: totalAmount,
+    return copyWith(
       storedStatus: 'cancelled',
       derivedStatus: 'cancelled',
-      remaining: remaining,
-      itemsCount: itemsCount,
-      supplierName: supplierName,
-      brokerName: brokerName,
-      supplierGst: supplierGst,
-      supplierAddress: supplierAddress,
-      supplierPhone: supplierPhone,
-      supplierWhatsapp: supplierWhatsapp,
-      brokerPhone: brokerPhone,
-      brokerLocation: brokerLocation,
-      brokerImageUrl: brokerImageUrl,
-      discount: discount,
-      commissionMode: commissionMode,
-      commissionPercent: commissionPercent,
-      commissionMoney: commissionMoney,
-      deliveredRate: deliveredRate,
-      billtyRate: billtyRate,
-      freightAmount: freightAmount,
-      freightType: freightType,
-      lines: lines,
-      createdAt: createdAt,
-      updatedAt: updatedAt,
-      totalLandingSubtotal: totalLandingSubtotal,
-      totalSellingSubtotal: totalSellingSubtotal,
-      totalLineProfit: totalLineProfit,
-      hasMissingDetails: hasMissingDetails,
-      isDelivered: isDelivered,
-      deliveredAt: deliveredAt,
-      deliveryNotes: deliveryNotes,
     );
   }
 }

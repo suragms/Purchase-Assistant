@@ -9,7 +9,9 @@ import '../../../core/auth/session_notifier.dart';
 import '../../../core/providers/recent_unified_search_provider.dart';
 import '../../../core/providers/search_focus_provider.dart';
 import '../../../core/router/navigation_ext.dart';
+import '../../../core/design_system/hexa_responsive.dart';
 import '../../../core/router/post_auth_route.dart';
+import 'widgets/search_desktop_preview_pane.dart';
 import '../../../core/widgets/friendly_load_error.dart';
 import '../../../shared/widgets/trade_intel_cards.dart';
 import '../../shell/shell_branch_provider.dart';
@@ -218,6 +220,8 @@ class _SearchPageState extends ConsumerState<SearchPage> {
   String _section = 'all';
   /// Avoid recording the same completed search repeatedly on rebuilds.
   String? _recordedQueryKey;
+  String? _desktopPreviewItemId;
+  String? _desktopPreviewItemName;
 
   static const _sections = {
     'all',
@@ -270,6 +274,8 @@ class _SearchPageState extends ConsumerState<SearchPage> {
       setState(() {
         _debounced = next;
         _recordedQueryKey = null;
+        _desktopPreviewItemId = null;
+        _desktopPreviewItemName = null;
       });
     });
   }
@@ -281,6 +287,8 @@ class _SearchPageState extends ConsumerState<SearchPage> {
       _controller.text = raw;
       _debounced = t;
       _recordedQueryKey = null;
+      _desktopPreviewItemId = null;
+      _desktopPreviewItemName = null;
     });
     _focus.requestFocus();
   }
@@ -306,6 +314,8 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                     setState(() {
                       _debounced = '';
                       _recordedQueryKey = null;
+                      _desktopPreviewItemId = null;
+                      _desktopPreviewItemName = null;
                     });
                     _scheduleSearch('');
                   },
@@ -408,15 +418,6 @@ class _SearchPageState extends ConsumerState<SearchPage> {
         }
       });
     }
-    if (widget.staffShellEmbedded) {
-      ref.listen<int>(staffShellCurrentBranchProvider, (prev, next) {
-        if (next == StaffShellBranch.search) {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted) _focus.requestFocus();
-          });
-        }
-      });
-    }
     final cs = Theme.of(context).colorScheme;
     final tt = Theme.of(context).textTheme;
     final q = _debounced.toLowerCase();
@@ -438,7 +439,8 @@ class _SearchPageState extends ConsumerState<SearchPage> {
       (widget.embeddedInShell || widget.staffShellEmbedded) ? 4 : 12,
       16,
       ((widget.embeddedInShell || widget.staffShellEmbedded) ? 96 : 32) +
-          MediaQuery.viewPaddingOf(context).bottom,
+          MediaQuery.viewPaddingOf(context).bottom +
+          MediaQuery.viewInsetsOf(context).bottom,
     );
 
     final Widget scrollBody;
@@ -683,6 +685,20 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                   return next;
                 }).toList();
                 _sortCatalogItemsByPrefix(items, keyNorm);
+                if (context.isDesktopLayout && items.isNotEmpty) {
+                  final firstId = items.first['id']?.toString() ?? '';
+                  if (_desktopPreviewItemId == null ||
+                      _desktopPreviewItemId != firstId) {
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      if (!mounted) return;
+                      setState(() {
+                        _desktopPreviewItemId = firstId.isEmpty ? null : firstId;
+                        _desktopPreviewItemName =
+                            items.first['name']?.toString();
+                      });
+                    });
+                  }
+                }
                 final contactHits = suppliers.length + brokers.length;
                 final sectionCounts = <String, int>{
                   'types': types.length,
@@ -1250,6 +1266,12 @@ class _SearchPageState extends ConsumerState<SearchPage> {
       );
     }
 
+    final resultsBody = _wrapDesktopSearchSplit(
+      context: context,
+      query: q,
+      scrollBody: scrollBody,
+    );
+
     if (widget.embeddedInShell || widget.staffShellEmbedded) {
       return Scaffold(
         resizeToAvoidBottomInset: true,
@@ -1259,7 +1281,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
             children: [
               _embeddedSearchTextField(cs),
               _embeddedCategoryChips(),
-              Expanded(child: scrollBody),
+              Expanded(child: resultsBody),
             ],
           ),
         ),
@@ -1283,9 +1305,33 @@ class _SearchPageState extends ConsumerState<SearchPage> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           _standaloneTopSearchBar(cs),
-          Expanded(child: scrollBody),
+          Expanded(child: resultsBody),
         ],
       ),
+    );
+  }
+
+  Widget _wrapDesktopSearchSplit({
+    required BuildContext context,
+    required String query,
+    required Widget scrollBody,
+  }) {
+    if (!context.isDesktopLayout || query.isEmpty) {
+      return scrollBody;
+    }
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Expanded(flex: 4, child: scrollBody),
+        const VerticalDivider(width: 1, thickness: 1),
+        Expanded(
+          flex: 5,
+          child: SearchDesktopPreviewPane(
+            itemId: _desktopPreviewItemId,
+            itemName: _desktopPreviewItemName,
+          ),
+        ),
+      ],
     );
   }
 }

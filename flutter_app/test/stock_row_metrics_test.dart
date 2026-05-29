@@ -3,19 +3,20 @@ import 'package:harisree_warehouse/features/stock/presentation/widgets/stock_row
 
 void main() {
   group('StockRowMetrics.diffQty', () {
-    test('uses physical minus system when both present', () {
+    test('uses physical minus expected system when both present', () {
       final item = {
         'current_stock': 100,
+        'expected_system_qty': 100,
         'physical_stock_qty': 80,
       };
       expect(StockRowMetrics.diffQty(item), -20);
     });
 
-    test('prefers warehouse_diff_qty when set', () {
+    test('prefers physical_stock_difference_qty when physical missing', () {
       final item = {
         'current_stock': 100,
-        'physical_stock_qty': 80,
-        'warehouse_diff_qty': 5,
+        'expected_system_qty': 100,
+        'physical_stock_difference_qty': 5,
       };
       expect(StockRowMetrics.diffQty(item), 5);
     });

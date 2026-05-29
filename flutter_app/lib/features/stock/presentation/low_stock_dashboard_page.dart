@@ -8,10 +8,11 @@ import 'package:go_router/go_router.dart';
 import '../../../core/auth/auth_error_messages.dart';
 import '../../../core/auth/session_notifier.dart';
 import '../../../core/design_system/hexa_ds_tokens.dart';
+import '../../../core/design_system/hexa_responsive.dart';
 import '../../../core/providers/stock_providers.dart';
 import '../../../core/theme/hexa_colors.dart';
 import '../../../core/widgets/friendly_load_error.dart';
-import 'stock_compact_update_sheet.dart';
+import 'quick_stock_action_sheet.dart';
 import 'widgets/low_stock_category_tree.dart';
 import 'widgets/reorder_level_sheet.dart';
 
@@ -126,7 +127,7 @@ class _LowStockDashboardPageState extends ConsumerState<LowStockDashboardPage>
   }
 
   Future<void> _stockUpdate(Map<String, dynamic> item) async {
-    final ok = await showStockCompactUpdateSheet(
+    final ok = await showQuickStockActionSheet(
       context: context,
       ref: ref,
       item: item,
@@ -263,12 +264,9 @@ class _LowStockDashboardPageState extends ConsumerState<LowStockDashboardPage>
           message: 'Could not load low stock',
           onRetry: () => ref.invalidate(lowStockByCategoryProvider),
         ),
-        data: (grouped) => RefreshIndicator(
-          onRefresh: () async {
-            ref.invalidate(lowStockByCategoryProvider);
-            await ref.read(lowStockByCategoryProvider.future);
-          },
-          child: TabBarView(
+        data: (grouped) {
+          final desktop = context.isDesktopLayout;
+          final tree = TabBarView(
             controller: _tabs,
             children: [
               for (final tab in LowStockTreeTab.values)
@@ -285,8 +283,21 @@ class _LowStockDashboardPageState extends ConsumerState<LowStockDashboardPage>
                   onReceive: _receive,
                 ),
             ],
-          ),
-        ),
+          );
+          return RefreshIndicator(
+            onRefresh: () async {
+              ref.invalidate(lowStockByCategoryProvider);
+              await ref.read(lowStockByCategoryProvider.future);
+            },
+            child: desktop
+                ? HexaResponsiveCenter(
+                    maxWidth: 1280,
+                    padding: EdgeInsets.zero,
+                    child: tree,
+                  )
+                : tree,
+          );
+        },
       ),
     );
   }

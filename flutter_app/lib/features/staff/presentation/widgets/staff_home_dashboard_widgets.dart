@@ -545,7 +545,7 @@ class StaffHomeToolsGrid extends ConsumerWidget {
         HexaColors.brandPrimary,
         () {
           ref.read(searchFocusRequestedProvider.notifier).state = true;
-          context.go('/staff/search');
+          context.go('/staff/scan');
         },
       ),
       _ToolSpec(
@@ -566,7 +566,7 @@ class StaffHomeToolsGrid extends ConsumerWidget {
           'History',
           Icons.receipt_long_outlined,
           const Color(0xFF0D9488),
-          () => context.go('/staff/purchase-history'),
+          () => context.go('/staff/deliveries'),
         ),
       _ToolSpec(
         'Low stock',

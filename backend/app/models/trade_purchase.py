@@ -65,8 +65,22 @@ class TradePurchase(Base):
     total_line_profit: Mapped[Decimal | None] = mapped_column(Numeric(14, 2), nullable=True)
     status: Mapped[str] = mapped_column(String(24), default="confirmed")
     is_delivered: Mapped[bool] = mapped_column(default=False)
+    delivery_status: Mapped[str] = mapped_column(String(30), default="pending")
     delivered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     delivery_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    dispatched_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    arrived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    staff_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    staff_verified_by: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    staff_verified_by_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    stock_committed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    staff_verified_qty: Mapped[Decimal | None] = mapped_column(Numeric(12, 3), nullable=True)
+    delivered_qty_committed: Mapped[Decimal | None] = mapped_column(Numeric(12, 3), nullable=True)
+    dispatch_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    truck_number: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    driver_contact: Mapped[str | None] = mapped_column(String(100), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 

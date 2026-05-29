@@ -7,10 +7,8 @@ import '../../../core/errors/user_facing_errors.dart';
 import '../../../core/json_coerce.dart';
 import '../../../core/providers/brokers_list_provider.dart';
 import '../../../core/providers/business_aggregates_invalidation.dart';
-import '../../../core/providers/business_write_revision.dart';
-import '../../../core/providers/home_owner_dashboard_providers.dart';
 import '../../../core/providers/staff_home_providers.dart';
-import '../../../core/providers/stock_providers.dart';
+import '../../../core/providers/stock_providers.dart' show stockChangesFeedProvider;
 import '../../../core/providers/suppliers_list_provider.dart';
 import '../../../core/utils/unit_utils.dart';
 import '../../../core/design_system/hexa_responsive.dart';
@@ -163,20 +161,11 @@ class _StockQuickPurchaseBodyState
             notes: _notesCtrl.text,
             idempotencyKey: _idempotencyKey,
           );
-      invalidateWarehouseSurfaces(ref);
-      ref.invalidate(stockListProvider);
-      ref.invalidate(stockStatusCountsProvider);
+      invalidateWarehouseSurfaces(ref, itemId: _itemId);
       ref.invalidate(stockChangesFeedProvider);
-      ref.invalidate(stockAuditPeriodProvider);
-      ref.invalidate(homeInventorySummaryProvider);
       ref.invalidate(staffTodayActivityProvider);
       ref.invalidate(staffTodayStockWorkProvider);
       ref.invalidate(staffTodaySummaryProvider);
-      if (_itemId.isNotEmpty) {
-        ref.invalidate(stockItemIntelligenceProvider(_itemId));
-        ref.invalidate(stockItemActivityProvider(_itemId));
-      }
-      ref.read(businessDataWriteRevisionProvider.notifier).state++;
       if (context.mounted) Navigator.of(context).pop(true);
     } catch (e) {
       if (!mounted) return;

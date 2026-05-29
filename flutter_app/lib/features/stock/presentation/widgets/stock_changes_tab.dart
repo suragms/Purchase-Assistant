@@ -8,7 +8,7 @@ import '../../../../core/json_coerce.dart';
 import '../../../../core/providers/home_dashboard_provider.dart';
 import '../../../../core/providers/stock_providers.dart';
 import '../../../../core/widgets/hexa_error_card.dart';
-import '../quick_stock_patch_sheet.dart';
+import '../quick_stock_action_sheet.dart';
 
 /// **Changes** tab: recent stock audit events for [stockPagePeriodProvider].
 class StockChangesTab extends ConsumerWidget {
@@ -130,7 +130,7 @@ class StockChangesTab extends ConsumerWidget {
                               context.push('/catalog/item/$itemId');
                               return;
                             }
-                            await showQuickStockPatchSheet(
+                            await showQuickStockActionSheet(
                               context: context,
                               ref: ref,
                               item: stock,

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../core/auth/auth_error_messages.dart';
 import '../../../core/auth/session_notifier.dart';
@@ -123,8 +124,14 @@ class _BusinessProfilePageState extends ConsumerState<BusinessProfilePage> {
     }
   }
 
+  bool get _readOnly {
+    final q = GoRouterState.of(context).uri.queryParameters['readonly'];
+    return q == '1' || q == 'true';
+  }
+
   @override
   Widget build(BuildContext context) {
+    final readOnly = _readOnly;
     final cs = Theme.of(context).colorScheme;
     final tt = Theme.of(context).textTheme;
     final session = ref.watch(sessionProvider);
@@ -161,6 +168,7 @@ class _BusinessProfilePageState extends ConsumerState<BusinessProfilePage> {
                 children: [
                   TextField(
                     controller: _nameCtrl,
+                    readOnly: readOnly,
                     textCapitalization: TextCapitalization.words,
                     decoration: const InputDecoration(
                       labelText: 'Registered business name',
@@ -170,6 +178,7 @@ class _BusinessProfilePageState extends ConsumerState<BusinessProfilePage> {
                   const SizedBox(height: 12),
                   TextField(
                     controller: _titleCtrl,
+                    readOnly: readOnly,
                     textCapitalization: TextCapitalization.characters,
                     decoration: const InputDecoration(
                       labelText: 'Order PDF header title',
@@ -180,6 +189,7 @@ class _BusinessProfilePageState extends ConsumerState<BusinessProfilePage> {
                   const SizedBox(height: 12),
                   TextField(
                     controller: _gstCtrl,
+                    readOnly: readOnly,
                     textCapitalization: TextCapitalization.characters,
                     maxLength: 15,
                     decoration: const InputDecoration(
@@ -191,6 +201,7 @@ class _BusinessProfilePageState extends ConsumerState<BusinessProfilePage> {
                   const SizedBox(height: 12),
                   TextField(
                     controller: _phoneCtrl,
+                    readOnly: readOnly,
                     keyboardType: TextInputType.phone,
                     decoration: const InputDecoration(
                       labelText: 'Phone (optional)',
@@ -200,6 +211,7 @@ class _BusinessProfilePageState extends ConsumerState<BusinessProfilePage> {
                   const SizedBox(height: 12),
                   TextField(
                     controller: _emailCtrl,
+                    readOnly: readOnly,
                     keyboardType: TextInputType.emailAddress,
                     autocorrect: false,
                     decoration: const InputDecoration(
@@ -211,6 +223,7 @@ class _BusinessProfilePageState extends ConsumerState<BusinessProfilePage> {
                   const SizedBox(height: 12),
                   TextField(
                     controller: _addressCtrl,
+                    readOnly: readOnly,
                     minLines: 3,
                     maxLines: 6,
                     textCapitalization: TextCapitalization.sentences,
@@ -221,7 +234,12 @@ class _BusinessProfilePageState extends ConsumerState<BusinessProfilePage> {
                     ),
                   ),
                   const SizedBox(height: 20),
-                  if (!isOwner)
+                  if (readOnly)
+                    Text(
+                      'View only — contact an owner to change business details.',
+                      style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+                    )
+                  else if (!isOwner)
                     Text(
                       'Only workspace owners can edit this profile.',
                       style: tt.bodySmall?.copyWith(color: HexaColors.loss),

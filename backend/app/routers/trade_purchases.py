@@ -25,6 +25,9 @@ from app.schemas.trade_purchases import (
     TradePurchaseCreateRequest,
     TradePurchaseOut,
     TradePurchaseDeliveryPatch,
+    TradePurchaseDispatchIn,
+    TradePurchaseArriveIn,
+    TradePurchaseDeliveryPipelineOut,
     TradePurchasePaymentPatch,
     TradePurchaseVerifyIn,
     TradePurchasePreviewOut,
@@ -42,6 +45,7 @@ from app.services.trade_preview_service import (
     build_trade_purchase_validate,
     coerce_raw_to_trade_purchase_create,
 )
+from app.services.realtime_events import publish_business_event
 
 router = APIRouter(prefix="/v1/businesses/{business_id}/trade-purchases", tags=["trade-purchases"])
 _log = logging.getLogger(__name__)
@@ -63,6 +67,67 @@ def _purchase_detail_response(
     if should_redact_financials(role):
         return JSONResponse(trade_purchase_to_staff_dict(out))
     return out
+
+
+def _purchase_detail_with_event(
+    business_id: uuid.UUID,
+    role: str,
+    out: TradePurchaseOut,
+) -> TradePurchaseOut | JSONResponse:
+    _publish_purchase_changed(business_id, out)
+    return _purchase_detail_response(role, out)
+
+
+def _catalog_item_ids_from_purchase(out: TradePurchaseOut) -> list[str]:
+    seen: set[str] = set()
+    ids: list[str] = []
+    for line in out.lines:
+        sid = str(line.catalog_item_id)
+        if sid in seen:
+            continue
+        seen.add(sid)
+        ids.append(sid)
+    return ids
+
+
+def _catalog_item_ids_from_update(body: TradePurchaseUpdateRequest) -> list[str]:
+    seen: set[str] = set()
+    ids: list[str] = []
+    for line in body.lines:
+        sid = str(line.catalog_item_id)
+        if sid in seen:
+            continue
+        seen.add(sid)
+        ids.append(sid)
+    return ids
+
+
+def _catalog_item_ids_from_create(body: TradePurchaseCreateRequest) -> list[str]:
+    seen: set[str] = set()
+    ids: list[str] = []
+    for line in body.lines:
+        sid = str(line.catalog_item_id)
+        if sid in seen:
+            continue
+        seen.add(sid)
+        ids.append(sid)
+    return ids
+
+
+def _publish_purchase_changed(
+    business_id: uuid.UUID,
+    out: TradePurchaseOut,
+    *,
+    item_ids: list[str] | None = None,
+) -> None:
+    ids = item_ids if item_ids is not None else _catalog_item_ids_from_purchase(out)
+    payload: dict[str, Any] = {
+        "purchase_id": str(out.id),
+        "item_ids": ids,
+    }
+    if len(ids) == 1:
+        payload["item_id"] = ids[0]
+    publish_business_event(business_id, "purchase.changed", payload)
 
 
 def _normalize_trade_list_status(status: str | None) -> str | None:
@@ -253,7 +318,13 @@ async def create_trade_purchase(
     _m: Annotated[Membership, Depends(require_permission("purchase_create"))],
 ):
     try:
-        return await tps.create_trade_purchase(db, business_id, user.id, body)
+        out = await tps.create_trade_purchase(db, business_id, user.id, body)
+        _publish_purchase_changed(
+            business_id,
+            out,
+            item_ids=_catalog_item_ids_from_create(body),
+        )
+        return out
     except tps.TradePurchaseValidationError as e:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, detail=e.details) from e
     except tps.TradePurchaseDuplicateError as e:
@@ -286,7 +357,18 @@ async def patch_trade_purchase_payment(
         raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
     if not out:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Purchase not found")
+    _publish_purchase_changed(business_id, out)
     return out
+
+
+@router.get("/delivery-pipeline", response_model=TradePurchaseDeliveryPipelineOut)
+async def get_trade_purchase_delivery_pipeline(
+    business_id: uuid.UUID,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    _m: Annotated[Membership, Depends(require_membership)],
+):
+    del _m
+    return await tps.get_trade_purchase_delivery_pipeline(db, business_id)
 
 
 @router.patch("/{purchase_id}/delivery", response_model=TradePurchaseOut)
@@ -299,10 +381,72 @@ async def patch_trade_purchase_delivery(
     _m: Annotated[Membership, Depends(require_permission("stock_edit"))],
 ):
     del user
-    out = await tps.patch_trade_purchase_delivery(db, business_id, purchase_id, body)
+    try:
+        out = await tps.patch_trade_purchase_delivery(db, business_id, purchase_id, body)
+    except ValueError as e:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
     if not out:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Purchase not found")
-    return _purchase_detail_response(_m.role, out)
+    return _purchase_detail_with_event(business_id, _m.role, out)
+
+
+@router.post("/{purchase_id}/dispatch", response_model=TradePurchaseOut)
+async def dispatch_trade_purchase(
+    business_id: uuid.UUID,
+    purchase_id: uuid.UUID,
+    body: TradePurchaseDispatchIn,
+    user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+    _m: Annotated[Membership, Depends(require_role("owner", "manager", "super_admin"))],
+):
+    try:
+        out = await tps.dispatch_trade_purchase(
+            db, business_id, purchase_id, user, body
+        )
+    except ValueError as e:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
+    if not out:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Purchase not found")
+    return _purchase_detail_with_event(business_id, _m.role, out)
+
+
+@router.post("/{purchase_id}/arrive", response_model=TradePurchaseOut)
+async def arrive_trade_purchase(
+    business_id: uuid.UUID,
+    purchase_id: uuid.UUID,
+    body: TradePurchaseArriveIn,
+    user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+    _m: Annotated[Membership, Depends(require_permission("stock_edit"))],
+):
+    try:
+        out = await tps.arrive_trade_purchase(
+            db, business_id, purchase_id, user, body
+        )
+    except ValueError as e:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
+    if not out:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Purchase not found")
+    return _purchase_detail_with_event(business_id, _m.role, out)
+
+
+@router.post("/{purchase_id}/commit-stock", response_model=TradePurchaseOut)
+async def commit_trade_purchase_delivery(
+    business_id: uuid.UUID,
+    purchase_id: uuid.UUID,
+    user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+    _m: Annotated[Membership, Depends(require_role("owner", "manager", "super_admin"))],
+):
+    try:
+        out = await tps.commit_trade_purchase_delivery(
+            db, business_id, purchase_id, user
+        )
+    except ValueError as e:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
+    if not out:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Purchase not found")
+    return _purchase_detail_with_event(business_id, _m.role, out)
 
 
 @router.post("/{purchase_id}/verify", response_model=TradePurchaseOut)
@@ -326,7 +470,7 @@ async def verify_trade_purchase_delivery(
         raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
     if not out:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Purchase not found")
-    return _purchase_detail_response(_m.role, out)
+    return _purchase_detail_with_event(business_id, _m.role, out)
 
 
 @router.post("/{purchase_id}/mark-paid", response_model=TradePurchaseOut)
@@ -345,6 +489,7 @@ async def mark_trade_purchase_paid(
         raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
     if not out:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Purchase not found")
+    _publish_purchase_changed(business_id, out)
     return out
 
 
@@ -363,6 +508,7 @@ async def cancel_trade_purchase(
         raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
     if not out:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Purchase not found")
+    _publish_purchase_changed(business_id, out)
     return out
 
 
@@ -394,6 +540,11 @@ async def update_trade_purchase(
         raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
     if not out:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Purchase not found")
+    _publish_purchase_changed(
+        business_id,
+        out,
+        item_ids=_catalog_item_ids_from_update(body),
+    )
     return out
 
 

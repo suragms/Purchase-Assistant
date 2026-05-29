@@ -9,12 +9,13 @@ import 'post_auth_route.dart'
 import '../models/trade_purchase_models.dart';
 import 'page_transitions.dart';
 import '../../features/analytics/presentation/full_reports_page.dart';
-import '../../features/analytics/presentation/item_analytics_detail_page.dart';
+import '../../features/catalog/presentation/item_analytics_redirect_page.dart';
+import '../../features/reports/presentation/reports_item_redirect_page.dart';
 import '../../features/catalog/presentation/catalog_add_category_page.dart';
 import '../../features/catalog/presentation/catalog_add_item_page.dart';
 import '../../features/catalog/presentation/catalog_add_subcategory_page.dart';
 import '../../features/catalog/presentation/catalog_category_detail_page.dart';
-import '../../features/catalog/presentation/catalog_item_detail_page.dart';
+import '../../features/catalog/presentation/item_detail_page.dart';
 import '../../features/catalog/presentation/item_edit_page.dart';
 import '../../features/catalog/presentation/catalog_item_timeline_page.dart';
 import '../../features/catalog/presentation/catalog_page.dart';
@@ -46,8 +47,6 @@ import '../../features/purchase/presentation/purchase_home_page.dart';
 import '../../features/purchase/presentation/purchase_entry_wizard_v2.dart';
 import '../../features/purchase/presentation/purchase_scan_draft_wizard_page.dart';
 import '../../features/purchase/presentation/scan_purchase_page.dart';
-import '../../features/reports/presentation/reports_item_detail_page.dart';
-import '../../features/reports/presentation/reports_item_bi_page.dart';
 import '../../features/reports/presentation/sales_comparison_page.dart';
 import '../../features/reports/presentation/reports_category_drill_page.dart';
 import '../../features/reports/presentation/reports_subcategory_drill_page.dart';
@@ -70,15 +69,9 @@ import '../../features/stock/presentation/stock_page.dart';
 import '../../features/stock/presentation/opening_stock_setup_page.dart';
 import '../../features/stock/presentation/staff_purchase_logs_page.dart';
 import '../../features/stock/presentation/low_stock_dashboard_page.dart';
-import '../../features/stock/presentation/stock_changes_page.dart';
 import '../../features/stock/presentation/reorder_list_page.dart';
-import '../../features/stock/presentation/stock_history_page.dart';
-import '../../features/stock/presentation/stock_today_feed_page.dart';
-import '../../features/stock/presentation/stock_movement_page.dart';
-import '../../features/stock/presentation/reorder_suggestions_page.dart';
 import '../../features/staff/presentation/staff_shell_screen.dart';
 import '../../features/staff/presentation/staff_activity_page.dart';
-import '../../features/staff/presentation/staff_purchase_history_page.dart';
 import '../../features/staff/presentation/staff_quick_purchase_page.dart';
 import '../../features/staff/presentation/staff_purchase_order_detail_page.dart';
 import '../../features/staff/presentation/staff_pending_deliveries_page.dart';
@@ -86,14 +79,12 @@ import '../../features/staff/presentation/staff_receive_shipment_page.dart';
 import '../../features/shell/shell_screen.dart';
 import '../../features/splash/presentation/splash_page.dart';
 import '../../features/admin/presentation/super_admin_page.dart';
-import '../../features/get_started/presentation/get_started_page.dart';
 import '../../features/operations/presentation/daily_usage_page.dart';
 import '../../features/operations/presentation/staff_checklist_page.dart';
 import '../../features/operations/presentation/owner_tasks_page.dart';
 import '../../features/catalog/presentation/barcode_quick_create_page.dart';
 import '../../features/catalog/presentation/catalog_duplicates_page.dart';
 import '../../features/stock/presentation/stock_missing_labels_page.dart';
-import '../../features/stock/presentation/stock_operational_list_page.dart';
 
 final _rootNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'root');
 
@@ -109,6 +100,7 @@ bool _isOwnerShellTab(String loc) {
 /// Staff may only open operational routes (shell + stock/barcode/catalog helpers).
 bool _isStaffAllowedRoute(String loc) {
   if (loc.startsWith('/staff')) return true;
+  if (loc == '/settings' || loc.startsWith('/settings/')) return true;
   if (loc == '/notifications') return true;
   if (loc.startsWith('/barcode/')) return true;
   if (loc == '/catalog/missing-codes' ||
@@ -129,9 +121,9 @@ bool _isStaffAllowedRoute(String loc) {
 }
 
 String _staffRedirectForBlockedRoute(String loc) {
-  if (loc.startsWith('/purchase')) return '/staff/purchase-history';
+  if (loc.startsWith('/purchase')) return '/staff/deliveries';
   if (loc.startsWith('/stock')) return '/staff/stock';
-  if (loc.startsWith('/search')) return '/staff/search';
+  if (loc.startsWith('/search')) return '/staff/home';
   if (loc.startsWith('/home')) return '/staff/home';
   if (loc.startsWith('/reports') || loc.startsWith('/analytics')) {
     return '/staff/home';
@@ -167,7 +159,6 @@ final appRouterProvider = Provider<GoRouter>((ref) {
     redirect: (context, state) {
       final loc = state.matchedLocation;
       final public = loc == '/splash' ||
-          loc == '/get-started' ||
           loc == '/login' ||
           loc == '/forgot-password' ||
           loc == '/reset-password';
@@ -214,7 +205,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         if (_isStaffAllowedRoute(loc)) return null;
         if (_isOwnerShellTab(loc)) {
           if (loc == '/stock') return '/staff/stock';
-          if (loc == '/search') return '/staff/search';
+          if (loc == '/search') return '/staff/home';
           if (loc == '/home' || loc.startsWith('/home/')) return '/staff/home';
           return '/staff/home';
         }
@@ -242,10 +233,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/get-started',
-        pageBuilder: (context, state) => iosPushPage(
-          key: state.pageKey,
-          child: const GetStartedPage(),
-        ),
+        redirect: (_, __) => '/login',
       ),
       GoRoute(
         path: '/login',
@@ -428,7 +416,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           final id = state.pathParameters['itemId']!;
           return iosPushPage(
             key: state.pageKey,
-            child: CatalogItemDetailPage(itemId: id),
+            child: ItemDetailPage(itemId: id),
           );
         },
       ),
@@ -455,24 +443,15 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/stock/movement',
-        pageBuilder: (context, state) => iosPushPage(
-          key: state.pageKey,
-          child: const StockMovementPage(),
-        ),
+        redirect: (_, __) => '/stock?tab=movement',
       ),
       GoRoute(
         path: '/stock/changes',
-        pageBuilder: (context, state) => iosPushPage(
-          key: state.pageKey,
-          child: const StockChangesPage(mode: StockChangesPageMode.owner),
-        ),
+        redirect: (_, __) => '/stock?tab=changes',
       ),
       GoRoute(
         path: '/stock/reorder-suggestions',
-        pageBuilder: (context, state) => iosPushPage(
-          key: state.pageKey,
-          child: const ReorderSuggestionsPage(),
-        ),
+        redirect: (_, __) => '/stock/reorder',
       ),
       GoRoute(
         path: '/stock/reorder',
@@ -504,10 +483,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/stock/today-feed',
-        pageBuilder: (context, state) => iosPushPage(
-          key: state.pageKey,
-          child: const StockTodayFeedPage(),
-        ),
+        redirect: (_, __) => '/stock?tab=today',
       ),
       GoRoute(
         path: '/stock/intelligence/:itemId',
@@ -518,13 +494,13 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/stock/:itemId/history',
-        pageBuilder: (context, state) {
+        redirect: (context, state) {
           final id = state.pathParameters['itemId']!;
           final name = state.uri.queryParameters['name'];
-          return iosPushPage(
-            key: state.pageKey,
-            child: StockHistoryPage(itemId: id, itemName: name),
-          );
+          final q = name != null && name.isNotEmpty
+              ? '?tab=history&name=${Uri.encodeComponent(name)}'
+              : '?tab=history';
+          return '/catalog/item/$id$q';
         },
       ),
       GoRoute(
@@ -638,7 +614,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           final name = Uri.decodeComponent(enc);
           return iosPushPage(
             key: state.pageKey,
-            child: ItemAnalyticsDetailPage(itemName: name),
+            child: ItemAnalyticsRedirectPage(itemName: name),
           );
         },
       ),
@@ -925,27 +901,15 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/stock/dead',
-        pageBuilder: (context, state) => iosPushPage(
-          key: state.pageKey,
-          child: const StockOperationalListPage(
-              kind: StockOperationalListKind.dead),
-        ),
+        redirect: (_, __) => '/reports?tab=dead',
       ),
       GoRoute(
         path: '/stock/fast-moving',
-        pageBuilder: (context, state) => iosPushPage(
-          key: state.pageKey,
-          child: const StockOperationalListPage(
-              kind: StockOperationalListKind.fast),
-        ),
+        redirect: (_, __) => '/reports?tab=movement',
       ),
       GoRoute(
         path: '/stock/slow-moving',
-        pageBuilder: (context, state) => iosPushPage(
-          key: state.pageKey,
-          child: const StockOperationalListPage(
-              kind: StockOperationalListKind.slow),
-        ),
+        redirect: (_, __) => '/reports?tab=slow',
       ),
       GoRoute(
         path: '/reports/category-drill',
@@ -984,16 +948,12 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/reports/item/:catalogItemId',
         name: 'reports_item_bi',
-        pageBuilder: (context, state) {
+        redirect: (context, state) {
           final id = state.pathParameters['catalogItemId'] ?? '';
-          final name = state.uri.queryParameters['name'];
-          return iosPushPage(
-            key: state.pageKey,
-            child: ReportsItemBiPage(
-              catalogItemId: id,
-              itemName: name != null ? Uri.decodeComponent(name) : null,
-            ),
-          );
+          if (id.isEmpty) return '/reports';
+          final tab = state.uri.queryParameters['tab'];
+          final q = tab != null && tab.isNotEmpty ? '?tab=$tab' : '';
+          return '/catalog/item/$id$q';
         },
       ),
       GoRoute(
@@ -1004,7 +964,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           final n = Uri.decodeComponent(state.uri.queryParameters['n'] ?? '');
           return iosPushPage(
             key: state.pageKey,
-            child: ReportsItemDetailPage(
+            child: ReportsItemRedirectPage(
               itemKey: k,
               itemName: n.isEmpty ? 'Item' : n,
             ),
@@ -1065,8 +1025,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
               GoRoute(
                 path: '/stock',
                 name: 'stock_tab',
-                builder: (context, state) =>
-                    const StockPage(mode: StockPageMode.owner),
+                builder: (context, state) => StockPage(
+                      mode: StockPageMode.owner,
+                      initialTab: state.uri.queryParameters['tab'],
+                    ),
               ),
             ],
           ),
@@ -1128,17 +1090,14 @@ final appRouterProvider = Provider<GoRouter>((ref) {
               GoRoute(
                 path: '/staff/stock',
                 name: 'staff_stock',
-                builder: (context, state) =>
-                    const StockPage(mode: StockPageMode.staff),
+                builder: (context, state) => StockPage(
+                      mode: StockPageMode.staff,
+                      initialTab: state.uri.queryParameters['tab'],
+                    ),
                 routes: [
                   GoRoute(
                     path: 'changes',
-                    pageBuilder: (context, state) => iosPushPage(
-                      key: state.pageKey,
-                      child: const StockChangesPage(
-                        mode: StockChangesPageMode.staff,
-                      ),
-                    ),
+                    redirect: (_, __) => '/staff/stock?tab=changes',
                   ),
                 ],
               ),
@@ -1156,21 +1115,22 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           StatefulShellBranch(
             routes: [
               GoRoute(
+                path: '/staff/deliveries',
+                name: 'staff_deliveries',
+                builder: (context, state) => const StaffPendingDeliveriesPage(),
+              ),
+              GoRoute(
                 path: '/staff/purchase-history',
-                name: 'staff_purchase_history',
-                builder: (context, state) => const StaffPurchaseHistoryPage(),
+                redirect: (_, __) => '/staff/deliveries',
               ),
             ],
           ),
           StatefulShellBranch(
             routes: [
               GoRoute(
-                path: '/staff/search',
-                name: 'staff_search',
-                builder: (context, state) => const SearchPage(
-                  embeddedInShell: true,
-                  staffShellEmbedded: true,
-                ),
+                path: '/staff/settings',
+                name: 'staff_settings',
+                builder: (context, state) => const SettingsPage(),
               ),
             ],
           ),

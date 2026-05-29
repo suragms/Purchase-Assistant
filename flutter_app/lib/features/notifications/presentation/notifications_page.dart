@@ -9,17 +9,18 @@ import '../../../core/providers/notifications_provider.dart'
         NotificationCategoryFilter,
         NotificationItem,
         dismissedPurchaseAlertIdsProvider,
-        mergedNotificationFeedProvider,
         notificationMatchesCategoryFilter,
         notificationsProvider,
         warehouseAlertReadIdsProvider;
-import '../../../core/providers/realtime_notifications_provider.dart';
+import '../../../core/providers/notification_center_provider.dart'
+    show notificationCenterCoordinatorProvider, notificationFeedForUiProvider;
 import '../../../core/providers/server_notifications_provider.dart';
 import '../../../core/providers/stock_providers.dart';
 import '../../../core/providers/business_aggregates_invalidation.dart';
 import '../../../core/router/navigation_ext.dart';
 import '../../../core/router/post_auth_route.dart' show sessionIsStaff;
 import '../../../core/errors/load_state_error.dart';
+import '../../../core/design_system/hexa_responsive.dart';
 import '../../../core/theme/hexa_colors.dart';
 import '../../../core/theme/theme_context_ext.dart';
 import 'widgets/notification_alert_card.dart';
@@ -61,10 +62,10 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
 
   @override
   Widget build(BuildContext context) {
-    ref.watch(realtimeNotificationsBoostProvider);
+    ref.watch(notificationCenterCoordinatorProvider);
     final tt = Theme.of(context).textTheme;
     final serverAsync = ref.watch(appNotificationsListProvider);
-    final items = ref.watch(mergedNotificationFeedProvider);
+    final items = ref.watch(notificationFeedForUiProvider);
     final filtered =
         items.where((n) => notificationMatchesCategoryFilter(n, _filter)).toList();
     final q = _textSearch.text.trim().toLowerCase();
@@ -294,15 +295,11 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
                         ),
                       ],
                     )
-                  : ListView(
-                      physics: const AlwaysScrollableScrollPhysics(),
-                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-                      children: _buildGroupedNotificationTiles(
-                        context: context,
-                        ref: ref,
-                        visible: visible,
-                        rel: rel,
-                      ),
+                  : _buildNotificationScrollBody(
+                      context: context,
+                      ref: ref,
+                      visible: visible,
+                      rel: rel,
                     ),
             ),
           ),
@@ -321,7 +318,7 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
         );
       } catch (_) {}
     }
-    final items = ref.read(mergedNotificationFeedProvider);
+    final items = ref.read(notificationFeedForUiProvider);
     final whIds = <String>{
       for (final n in items)
         if (n.id.startsWith('wh_') && !n.isRead) n.id,
@@ -383,6 +380,48 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
         );
     ref.invalidate(appNotificationsListProvider);
     if (mounted) setState(() {});
+  }
+
+  Widget _buildNotificationScrollBody({
+    required BuildContext context,
+    required WidgetRef ref,
+    required List<NotificationItem> visible,
+    required DateFormat rel,
+  }) {
+    final tiles = _buildGroupedNotificationTiles(
+      context: context,
+      ref: ref,
+      visible: visible,
+      rel: rel,
+    );
+    if (!context.isDesktopLayout) {
+      return ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+        children: tiles,
+      );
+    }
+    final contentWidth = MediaQuery.sizeOf(context).width - 32;
+    final tileWidth = (contentWidth - 12) / 2;
+    return ListView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+      children: [
+        Wrap(
+          spacing: 12,
+          runSpacing: 12,
+          children: [
+            for (final w in tiles)
+              w is _NotificationDateHeader
+                  ? SizedBox(
+                      width: contentWidth,
+                      child: w,
+                    )
+                  : SizedBox(width: tileWidth, child: w),
+          ],
+        ),
+      ],
+    );
   }
 
   List<Widget> _buildGroupedNotificationTiles({

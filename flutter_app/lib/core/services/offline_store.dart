@@ -172,7 +172,7 @@ class OfflineStore {
     return out;
   }
 
-  /// Pending warehouse stock verify / audit line actions for [businessId].
+  /// Pending warehouse stock verify / audit / delivery actions for [businessId].
   static int pendingStockQueueCount(String businessId) {
     var n = 0;
     for (final e in getPendingEntries()) {
@@ -180,9 +180,27 @@ class OfflineStore {
       if (data is! Map) continue;
       if (data['businessId']?.toString() != businessId) continue;
       final kind = data['kind']?.toString() ?? '';
-      if (kind == 'stock_verify' || kind == 'stock_audit_line') n++;
+      if (kind == 'stock_verify' ||
+          kind == 'stock_audit_line' ||
+          kind == 'purchase_arrive') {
+        n++;
+      }
     }
     return n;
+  }
+
+  static Future<void> queuePurchaseArrive({
+    required String businessId,
+    required String purchaseId,
+    String? notes,
+  }) async {
+    await queueEntry({
+      'kind': 'purchase_arrive',
+      'businessId': businessId,
+      'fingerprint': 'arrive|$purchaseId',
+      'purchase_id': purchaseId,
+      if (notes != null && notes.trim().isNotEmpty) 'notes': notes.trim(),
+    });
   }
 
   static Future<void> queueStockVerify({

@@ -6,8 +6,8 @@ abstract final class StaffShellBranch {
   static const int home = 0;
   static const int stock = 1;
   static const int scan = 2;
-  static const int history = 3;
-  static const int search = 4;
+  static const int deliveries = 3;
+  static const int settings = 4;
 }
 
 final staffShellCurrentBranchProvider = StateProvider<int>(

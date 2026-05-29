@@ -4,7 +4,10 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../core/design_system/hexa_ds_tokens.dart';
 import '../../../../core/providers/home_owner_dashboard_providers.dart';
-import '../../../../core/providers/warehouse_alerts_provider.dart';
+import '../../../../core/providers/notification_center_provider.dart'
+    show homeWarehouseAlertsProvider;
+import '../../../../core/providers/warehouse_alerts_provider.dart'
+    show WarehouseAlerts;
 import '../../../../core/theme/hexa_colors.dart';
 import 'home_formatters.dart';
 
@@ -28,7 +31,7 @@ class HomeLiveStatusBar extends ConsumerWidget {
     final alerts = ref.watch(stockAlertCountsProvider).valueOrNull;
     final low = alerts?.low ?? 0;
     final crit = alerts?.critical ?? 0;
-    final warehouse = ref.watch(warehouseAlertsProvider).valueOrNull;
+    final warehouse = ref.watch(homeWarehouseAlertsProvider).valueOrNull;
     final deliveryN = warehouse?.pendingDeliveries ?? 0;
     final mismatchN =
         warehouse?.pendingVerifications ??

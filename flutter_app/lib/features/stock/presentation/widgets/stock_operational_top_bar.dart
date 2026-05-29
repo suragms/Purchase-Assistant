@@ -15,9 +15,11 @@ class StockOperationalTopBar extends StatelessWidget implements PreferredSizeWid
     required this.currentPeriod,
     required this.onOpenPeriod,
     required this.onOpenHistory,
+    this.onOpenMovement,
     this.onExportPdf,
     this.onExportExcel,
     this.isReloading = false,
+    this.tabController,
   });
 
   final bool isStaffMode;
@@ -28,14 +30,21 @@ class StockOperationalTopBar extends StatelessWidget implements PreferredSizeWid
   final HomePeriod currentPeriod;
   final VoidCallback onOpenPeriod;
   final VoidCallback onOpenHistory;
+  final VoidCallback? onOpenMovement;
   final VoidCallback? onExportPdf;
   final VoidCallback? onExportExcel;
   final bool isReloading;
+  final TabController? tabController;
 
   static const double _height = 48;
+  static const double _tabBarHeight = 40;
 
   @override
-  Size get preferredSize => Size.fromHeight(_height + (isReloading ? 2 : 0));
+  Size get preferredSize => Size.fromHeight(
+        _height +
+            (tabController != null ? _tabBarHeight : 0) +
+            (isReloading ? 2 : 0),
+      );
 
   @override
   Widget build(BuildContext context) {
@@ -101,7 +110,7 @@ class StockOperationalTopBar extends StatelessWidget implements PreferredSizeWid
               case 'scan':
                 context.push('/barcode/scan?return=stock');
               case 'movement':
-                context.push('/stock/movement');
+                onOpenMovement?.call();
               case 'add':
                 context.push('/catalog/quick-add');
               case 'pdf':

@@ -5,15 +5,19 @@ import 'package:intl/intl.dart';
 
 import '../../../core/auth/session_notifier.dart';
 import '../../../core/design_system/hexa_ds_tokens.dart';
+import 'package:dio/dio.dart';
+
+import '../../../core/auth/auth_error_messages.dart';
 import '../../../core/models/trade_purchase_models.dart';
 import '../../../core/providers/business_aggregates_invalidation.dart';
 import '../../../core/providers/staff_home_providers.dart';
 import '../../../core/providers/trade_purchases_provider.dart';
 import '../../../core/theme/hexa_colors.dart';
-import '../../../core/utils/line_display.dart';
+import '../../../core/utils/delivery_offline_actions.dart';
 import '../../../core/utils/snack.dart';
 import '../../../core/widgets/friendly_load_error.dart';
 import '../../../core/widgets/list_skeleton.dart';
+import '../../purchase/presentation/widgets/staff_verification_sheet.dart';
 import '../../purchase/providers/trade_purchase_detail_provider.dart';
 
 class StaffReceiveShipmentPage extends ConsumerStatefulWidget {
@@ -37,43 +41,80 @@ class _StaffReceiveShipmentPageState
     super.dispose();
   }
 
-  Future<void> _markDelivered(TradePurchase p) async {
+  Future<void> _submitReceive(TradePurchase p) async {
     final session = ref.read(sessionProvider);
     if (session == null || _saving) return;
     setState(() => _saving = true);
-    ref.read(tradePurchaseDeliveryOptimisticProvider(p.id).notifier).state =
-        true;
     try {
-      final updated = await ref.read(hexaApiProvider).markPurchaseDelivered(
-            businessId: session.primaryBusiness.id,
-            purchaseId: p.id,
-            isDelivered: true,
-            deliveryNotes: _notesCtrl.text.trim().isEmpty
-                ? null
-                : _notesCtrl.text.trim(),
+      final bid = session.primaryBusiness.id;
+      final ds = p.deliveryStatusEnum;
+      if (ds == DeliveryStatus.stockCommitted || p.isDeliveryCommitted) {
+        if (mounted) {
+          showTopSnack(context, 'Already committed to stock');
+          context.pop();
+        }
+        return;
+      }
+      if (ds.readyForOwnerCommit) {
+        if (mounted) {
+          showTopSnack(
+            context,
+            'Waiting for owner to commit verified qty to stock',
           );
-      final received = TradePurchase.fromJson(updated);
-      invalidateWarehouseSurfaces(ref);
-      ref.invalidate(tradePurchasesListProvider);
-      ref.invalidate(staffPendingDeliveriesProvider);
-      ref.invalidate(tradePurchaseDetailProvider(p.id));
+          context.pop();
+        }
+        return;
+      }
+
+      if (ds == DeliveryStatus.pending ||
+          ds == DeliveryStatus.dispatched ||
+          ds == DeliveryStatus.inTransit) {
+        await markPurchaseArrivedResilient(
+          ref: ref,
+          businessId: bid,
+          purchaseId: p.id,
+          notes: _notesCtrl.text.trim().isEmpty
+              ? null
+              : _notesCtrl.text.trim(),
+        );
+      }
+
+      final lineMaps = [
+        for (final l in p.lines)
+          {
+            'id': l.id,
+            'item_name': l.itemName,
+            'qty': l.qty,
+            'unit': l.unit,
+          }
+      ];
       if (!mounted) return;
-      final itemCount =
-          received.stockUpdatesCount > 0 ? received.stockUpdatesCount : p.lines.length;
-      showTopSnack(
-        context,
-        itemCount == 1
-            ? 'Shipment received · 1 item added to stock'
-            : 'Shipment received · $itemCount items added to stock',
+      final verified = await showStaffVerificationSheet(
+        context: context,
+        ref: ref,
+        purchaseId: p.id,
+        lines: lineMaps,
       );
-      context.pop();
-    } catch (_) {
-      ref.read(tradePurchaseDeliveryOptimisticProvider(p.id).notifier).state =
-          null;
+      if (verified) {
+        invalidateWarehouseSurfaces(ref);
+        ref.invalidate(tradePurchasesListProvider);
+        ref.invalidate(staffPendingDeliveriesProvider);
+        ref.invalidate(tradePurchaseDetailProvider(p.id));
+        if (mounted) {
+          showTopSnack(
+            context,
+            'Submitted for owner approval — stock updates after commit',
+          );
+          context.pop();
+        }
+      }
+    } catch (e) {
       if (mounted) {
         showTopSnack(
           context,
-          'Could not save delivery. Check connection and try again.',
+          e is DioException
+              ? friendlyApiError(e)
+              : 'Could not save receipt. Try again.',
           isError: true,
         );
       }
@@ -85,8 +126,6 @@ class _StaffReceiveShipmentPageState
   @override
   Widget build(BuildContext context) {
     final detailAsync = ref.watch(tradePurchaseDetailProvider(widget.purchaseId));
-    final optimistic =
-        ref.watch(tradePurchaseDeliveryOptimisticProvider(widget.purchaseId));
 
     return Scaffold(
       backgroundColor: HexaColors.brandBackground,
@@ -103,8 +142,8 @@ class _StaffReceiveShipmentPageState
               ref.invalidate(tradePurchaseDetailProvider(widget.purchaseId)),
         ),
         data: (p) {
-          final delivered = optimistic ?? p.isDelivered;
-          if (delivered) {
+          final ds = p.deliveryStatusEnum;
+          if (ds == DeliveryStatus.stockCommitted || p.isDeliveryCommitted) {
             return Center(
               child: Padding(
                 padding: const EdgeInsets.all(24),
@@ -114,8 +153,38 @@ class _StaffReceiveShipmentPageState
                     const Icon(Icons.check_circle, color: Color(0xFF16A34A), size: 48),
                     const SizedBox(height: 12),
                     Text(
-                      'Already marked delivered',
+                      'Stock already committed',
                       style: HexaDsType.heading(18),
+                    ),
+                    const SizedBox(height: 16),
+                    OutlinedButton(
+                      onPressed: () => context.pop(),
+                      child: const Text('Back'),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }
+          if (ds.readyForOwnerCommit) {
+            return Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.hourglass_top_rounded,
+                        color: Color(0xFF7C3AED), size: 48),
+                    const SizedBox(height: 12),
+                    Text(
+                      'Waiting for owner approval',
+                      style: HexaDsType.heading(18),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'You verified this shipment. Owner must commit to stock.',
+                      textAlign: TextAlign.center,
                     ),
                     const SizedBox(height: 16),
                     OutlinedButton(
@@ -146,7 +215,7 @@ class _StaffReceiveShipmentPageState
                       controller: _notesCtrl,
                       maxLines: 3,
                       decoration: const InputDecoration(
-                        labelText: 'Delivery notes (optional)',
+                        labelText: 'Arrival notes (optional)',
                         hintText: 'Shortage, damage, partial receipt…',
                         border: OutlineInputBorder(),
                       ),
@@ -184,7 +253,7 @@ class _StaffReceiveShipmentPageState
                             SizedBox(width: 8),
                             Expanded(
                               child: Text(
-                                'Marking as delivered will update stock quantities for all items in this order.',
+                                'Mark arrival and verify counts. Stock updates only after owner commits.',
                                 style: TextStyle(fontSize: 12),
                               ),
                             ),
@@ -203,7 +272,7 @@ class _StaffReceiveShipmentPageState
                           Expanded(
                             flex: 2,
                             child: FilledButton.icon(
-                              onPressed: _saving ? null : () => _markDelivered(p),
+                              onPressed: _saving ? null : () => _submitReceive(p),
                               icon: _saving
                                   ? const SizedBox(
                                       width: 18,
@@ -213,8 +282,8 @@ class _StaffReceiveShipmentPageState
                                         color: Colors.white,
                                       ),
                                     )
-                                  : const Icon(Icons.inventory_rounded),
-                              label: const Text('Save & mark delivered'),
+                                  : const Icon(Icons.fact_check_outlined),
+                              label: const Text('Arrive & verify'),
                             ),
                           ),
                         ],
@@ -238,41 +307,25 @@ class _HeaderCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final p = purchase;
+    final df = DateFormat('d MMM yyyy');
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(14),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              children: [
-                const Icon(Icons.local_shipping_rounded,
-                    color: HexaColors.brandPrimary),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    p.supplierName?.trim().isNotEmpty == true
-                        ? p.supplierName!
-                        : 'Supplier',
-                    style: HexaDsType.heading(17),
-                  ),
-                ),
-              ],
+            Text(
+              purchase.humanId,
+              style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16),
             ),
-            if (p.supplierPhone?.trim().isNotEmpty == true) ...[
+            if (purchase.supplierName != null) ...[
               const SizedBox(height: 4),
-              Text(p.supplierPhone!, style: HexaDsType.body(13)),
+              Text(purchase.supplierName!),
             ],
-            const SizedBox(height: 8),
+            const SizedBox(height: 4),
             Text(
-              '${p.humanId}'
-              '${p.invoiceNumber != null ? ' · Inv ${p.invoiceNumber}' : ''}',
-              style: HexaDsType.body(13, color: HexaDsColors.textMuted),
-            ),
-            Text(
-              DateFormat('EEE, d MMM yyyy').format(p.purchaseDate),
-              style: HexaDsType.body(13, color: HexaDsColors.textMuted),
+              df.format(purchase.purchaseDate),
+              style: const TextStyle(color: Color(0xFF64748B), fontSize: 12),
             ),
           ],
         ),
@@ -290,17 +343,10 @@ class _LineCheckTile extends StatelessWidget {
   Widget build(BuildContext context) {
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
-      child: CheckboxListTile(
-        value: true,
-        onChanged: null,
-        controlAffinity: ListTileControlAffinity.leading,
-        title: Text(
-          line.itemName,
-          style: const TextStyle(fontWeight: FontWeight.w800),
-        ),
+      child: ListTile(
+        title: Text(line.itemName),
         subtitle: Text(
-          formatLineQtyWeightFromTradeLine(line),
-          style: const TextStyle(fontWeight: FontWeight.w700),
+          '${line.qty.toStringAsFixed(0)} ${line.unit}',
         ),
       ),
     );

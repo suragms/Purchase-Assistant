@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/design_system/hexa_operational_tokens.dart';
 import '../../../../core/design_system/hexa_responsive.dart';
 import '../../../../core/providers/stock_providers.dart';
 
@@ -94,14 +95,22 @@ class StockStatusChipRow extends ConsumerWidget {
                 _ => 'all',
               };
               final n = counts[countKey] ?? 0;
-              return FilterChip(
-                label: Text('${c.label} ($n)'),
-                selected: c.selected,
-                onSelected: (_) => c.onTap(),
-                visualDensity: VisualDensity.compact,
-                padding: const EdgeInsets.symmetric(horizontal: 4),
-                labelStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-                showCheckmark: false,
+              return ConstrainedBox(
+                constraints: const BoxConstraints(
+                  minHeight: HexaOp.touchTargetMin,
+                ),
+                child: FilterChip(
+                  label: Text('${c.label} ($n)'),
+                  selected: c.selected,
+                  onSelected: (_) => c.onTap(),
+                  materialTapTargetSize: MaterialTapTargetSize.padded,
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  labelStyle: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  showCheckmark: false,
+                ),
               );
             },
           ),

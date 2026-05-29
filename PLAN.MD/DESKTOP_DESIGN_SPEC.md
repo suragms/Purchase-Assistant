@@ -1,0 +1,276 @@
+# DESKTOP_DESIGN_SPEC.md
+## Desktop / Tablet Layout Specification — Every Page, Every Breakpoint
+**Audit Date:** May 29, 2026
+
+---
+
+## BREAKPOINT DEFINITIONS
+
+```dart
+// File: flutter_app/lib/core/design_system/hexa_responsive.dart
+// CURRENT BREAKPOINTS (use these, do not change)
+const double kMobileMax = 599;       // < 600px = mobile
+const double kTabletMin = 600;       // 600–1023 = tablet
+const double kDesktopMin = 1024;     // ≥ 1024 = desktop
+
+// LAYOUT RULES
+// Mobile: 1-column, full-width cards, bottom nav, no sidebar
+// Tablet: 1-column with wider gutters, optional split pane
+// Desktop: 2-column split pane (left nav 240px + content), master-detail panels
+```
+
+---
+
+## OWNER HOME PAGE — DESKTOP LAYOUT
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  SIDEBAR (240px fixed)    │  MAIN CONTENT AREA                  │
+│  ─────────────────────    │  ─────────────────────────────────── │
+│  🏠 Home (active)         │  ┌─────────────┐  ┌─────────────┐  │
+│  📦 Stock                 │  │ 🚨 CRITICAL  │  │ 📊 STOCK    │  │
+│  🛒 Purchase              │  │   ALERTS    │  │  SUMMARY    │  │
+│  📊 Reports               │  │  3 items    │  │ Sys: 812    │  │
+│  👥 Users                 │  │  need action│  │ Phy: 800    │  │
+│  ⚙️  Settings             │  │             │  │ Diff: -12   │  │
+│                           │  └─────────────┘  └─────────────┘  │
+│  ─────────────────────    │                                      │
+│  BUSINESS                 │  ┌─────────────┐  ┌─────────────┐  │
+│  Harisree Traders         │  │ 🚛 PENDING  │  │ ⚠️ LOW STOCK│  │
+│  Owner                    │  │ DELIVERIES  │  │   8 items   │  │
+│                           │  │  2 dispatched│  │ Reorder now │  │
+│  [Notification Bell 🔔 3] │  │  1 to verify│  │             │  │
+│                           │  └─────────────┘  └─────────────┘  │
+│                           │                                      │
+│                           │  ┌──────────────────────────────┐   │
+│                           │  │  TOOLS ROW (horizontal)      │   │
+│                           │  │  [New Purchase] [Stock Audit] │   │
+│                           │  │  [Reorder] [Reports]         │   │
+│                           │  └──────────────────────────────┘   │
+│                           │                                      │
+│                           │  ┌──────────────────────────────┐   │
+│                           │  │  RECENT ACTIVITY             │   │
+│                           │  │  May 29 11:45  Anil verified │   │
+│                           │  │  May 29 11:00  Sugar arrived │   │
+│                           │  │  May 29 10:15  PO #145 saved │   │
+│                           │  └──────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## STOCK PAGE — DESKTOP LAYOUT (Master-Detail)
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│ SIDEBAR │  STOCK LIST (left pane 50%)  │ ITEM DETAIL (right 50%)│
+│         │  ────────────────────────   │ ─────────────────────   │
+│         │  [🔍 Search items]          │ SUGAR (1kg Bag)         │
+│         │  [Filters ▼] [Sort ▼]       │ Category: Grocery       │
+│         │                             │ ───────────────────      │
+│         │  Item     Sys  Phy  Diff    │ STOCK SUMMARY           │
+│         │  ─────────────────────────  │ Opening:  101 bags      │
+│         │  Sugar  ● 812  800  -12     │ Purchased: 711 bags      │
+│         │  Rice   ● 220  220   0      │ Pending:   50 bags       │
+│         │  Oil    ⚠️ 15   15   0      │ System:   812 bags      │
+│         │  Flour  🔴 0     0   0      │ Physical: 800 bags      │
+│         │                             │ Diff:     -12 bags ⚠️   │
+│         │  [← 1 2 3 →]               │ ───────────────────      │
+│         │                             │ ACTIONS                  │
+│         │                             │ [Verify Count]           │
+│         │                             │ [New Purchase]           │
+│         │                             │ [Set Reorder Level]      │
+│         │                             │ ───────────────────      │
+│         │                             │ RECENT ACTIVITY          │
+│         │                             │ May 29 — Anil: 800       │
+│         │                             │ May 22 — 711 delivered   │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Implementation:** Use `lib/features/stock/presentation/widgets/stock_desktop_detail_pane.dart` (already exists). Connect to `stockSelectedItemProvider` (check if exists, create if not).
+
+---
+
+## PURCHASE PAGE — DESKTOP LAYOUT
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│ SIDEBAR │  PURCHASE LIST (left 40%)   │ PURCHASE DETAIL (right) │
+│         │  ────────────────────────   │ ─────────────────────── │
+│         │  [+ New Purchase]           │ PO #P-2024-0145         │
+│         │  [🔍 Filter by status ▼]    │ Supplier: ABC Traders    │
+│         │                             │ Date: May 20, 2026       │
+│         │  #145 Sugar                 │ ───────────────────────  │
+│         │  ₹45,200 | 🚛 Dispatched   │ DELIVERY STATUS         │
+│         │                             │ ● Dispatched May 20     │
+│         │  #144 Rice                  │ ○ Arrived               │
+│         │  ₹12,000 | ✅ Committed     │ ○ Verified              │
+│         │                             │ ○ Committed             │
+│         │  #143 Oil                   │                          │
+│         │  ₹8,500  | ⏳ Pending       │ [Mark Arrived ▶]        │
+│         │                             │ ───────────────────────  │
+│         │                             │ ITEMS                    │
+│         │                             │ Sugar 1kg × 711 bags    │
+│         │                             │ ₹45,200 incl. GST       │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## ITEM DETAIL PAGE — DESKTOP LAYOUT
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│ SIDEBAR │              ITEM DETAIL — FULL WIDTH                  │
+│         │  ───────────────────────────────────────────────────   │
+│         │  SUGAR (1kg Bag)              [Edit] [Purchase Now]    │
+│         │  Grocery · Staples                                     │
+│         │  Code: SGR-001                                         │
+│         │  ─────────────────────────────────────────────────     │
+│         │                                                         │
+│         │  ┌──────────────────┐  ┌─────────────────────────┐    │
+│         │  │  STOCK SUMMARY   │  │  DELIVERY PIPELINE      │    │
+│         │  │                  │  │                          │    │
+│         │  │  Opening:  101   │  │  🚛 50 bags dispatched  │    │
+│         │  │  Purchased: 711  │  │  📦 0 awaiting verify   │    │
+│         │  │  Pending:   50   │  │  ✅ 711 committed        │    │
+│         │  │  System:   812   │  │                          │    │
+│         │  │  Physical: 800   │  │  [View All Purchases]    │    │
+│         │  │  Diff:    -12 ⚠️ │  │                          │    │
+│         │  │                  │  │                          │    │
+│         │  │  [Verify Now]    │  │                          │    │
+│         │  └──────────────────┘  └─────────────────────────┘    │
+│         │                                                         │
+│         │  ┌─── TABS ──────────────────────────────────────┐    │
+│         │  │ [Purchase History] [Physical Counts] [Activity]│    │
+│         │  ├────────────────────────────────────────────────┤    │
+│         │  │  Date        Qty   Supplier    Status           │    │
+│         │  │  May 20     711   ABC         Committed ✅      │    │
+│         │  │  Mar 15     500   ABC         Committed ✅      │    │
+│         │  │  Jan 02     200   XYZ         Committed ✅      │    │
+│         │  └────────────────────────────────────────────────┘    │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## USER MANAGEMENT PAGE — DESKTOP LAYOUT (Currently Broken)
+
+**Problem:** Nested tabs inside the user management page cause horizontal scroll conflicts on desktop. Left-side tab indicators get cut off.
+
+**Fix:**
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│ SIDEBAR │  LEFT SECTION (tabs as list)  │  RIGHT SECTION (form) │
+│         │  ─────────────────────────    │  ────────────────────  │
+│         │  TABS:                        │                        │
+│         │  ● All Users (12)             │  [User selected]       │
+│         │  ○ Owners (2)                 │  Name: Anil Kumar      │
+│         │  ○ Managers (3)               │  Role: Staff           │
+│         │  ○ Staff (7)                  │  Phone: +91...         │
+│         │                               │                        │
+│         │  USER LIST:                   │  Permissions:          │
+│         │  👤 Anil Kumar   Staff        │  ☑ View stock          │
+│         │  👤 Meena        Manager      │  ☑ Verify delivery     │
+│         │  👤 Rajan        Staff        │  ☐ Edit purchases      │
+│         │                               │                        │
+│         │  [+ Add User]                 │  [Save] [Deactivate]   │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Replace** current `TabBarView` inside `TabBar` inside `Column` with `Row` → left column `ListView` of roles → right column `UserDetailPanel`.
+
+---
+
+## REPORTS PAGE — DESKTOP LAYOUT
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│ SIDEBAR │  REPORTS                                               │
+│         │  [Today] [Week] [Month] [Year] [Custom Range]         │
+│         │  ──────────────────────────────────────────────────   │
+│         │                                                         │
+│         │  ┌──────────┐  ┌──────────┐  ┌──────────────────┐    │
+│         │  │ TOTAL    │  │ PURCHASES│  │ STOCK VARIANCE   │    │
+│         │  │ SPENT    │  │  COUNT   │  │                  │    │
+│         │  │ ₹2.4L   │  │   24     │  │  12 items ⚠️     │    │
+│         │  └──────────┘  └──────────┘  └──────────────────┘    │
+│         │                                                         │
+│         │  ┌─── PURCHASE REPORT ──────────────────────────┐     │
+│         │  │ Item       Qty    Rate    Total    Supplier   │     │
+│         │  │ Sugar      711   ₹63.50  ₹45,128  ABC       │     │
+│         │  │ Rice       200   ₹55.00  ₹11,000  XYZ       │     │
+│         │  │ ─────────────────────────────────────────    │     │
+│         │  │ TOTAL              56,128                    │     │
+│         │  └──────────────────────────────────────────────┘     │
+│         │                                                         │
+│         │  [📄 Export PDF] [📊 Export Excel]                     │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## MOBILE-SPECIFIC FIXES
+
+### Touch Targets
+All tappable elements must be ≥ 48×48dp:
+- Current stock row tap target: estimated 36dp height → increase to 56dp
+- Current filter chips: 28dp → increase to 36dp minimum
+
+### Keyboard Aware Forms
+Every bottom sheet with a text field must use:
+```dart
+Padding(
+  padding: EdgeInsets.only(
+    bottom: MediaQuery.of(context).viewInsets.bottom,
+  ),
+  child: form,
+)
+```
+
+### Scroll Performance
+Stock list (potentially 500+ items) must use:
+```dart
+ListView.builder(  // not ListView.separated
+  itemCount: items.length,
+  itemBuilder: (ctx, i) => StockTableRow(item: items[i]),  // const where possible
+)
+```
+
+### Card Compact Mode on Mobile
+```dart
+// HexaResponsive extension needed:
+double get sectionGap => isDesktop ? 20 : isMobile ? 10 : 14;
+double get cardPadding => isDesktop ? 16 : 12;
+double get listItemHeight => isDesktop ? 64 : 52;
+```
+
+---
+
+## DESIGN TOKENS TO ADD
+
+**File:** `flutter_app/lib/core/design_system/hexa_operational_tokens.dart`
+
+```dart
+class HexaOp {
+  // EXISTING
+  static const double cardPadding = 16.0;
+  
+  // ADD THESE:
+  static const double mobileCardPadding = 12.0;
+  static const double mobileSectionGap = 10.0;
+  static const double desktopSectionGap = 20.0;
+  static const double listRowHeight = 56.0;       // mobile
+  static const double desktopListRowHeight = 48.0;
+  static const double touchTargetMin = 48.0;
+  
+  // DELIVERY STATUS COLORS
+  static const Color statusPending = Color(0xFF94A3B8);     // grey
+  static const Color statusDispatched = Color(0xFF3B82F6);  // blue
+  static const Color statusArrived = Color(0xFFF59E0B);     // amber
+  static const Color statusVerified = Color(0xFF8B5CF6);    // purple
+  static const Color statusCommitted = Color(0xFF10B981);   // green
+  static const Color statusPartial = Color(0xFFEA580C);     // orange
+}
+```

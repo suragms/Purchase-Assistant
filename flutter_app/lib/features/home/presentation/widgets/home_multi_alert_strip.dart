@@ -3,7 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/design_system/hexa_operational_tokens.dart';
-import '../../../../core/providers/warehouse_alerts_provider.dart';
+import '../../../../core/providers/notification_center_provider.dart'
+    show homeWarehouseAlertsProvider;
 
 /// Horizontal scrollable operational alert pills (owner home).
 class HomeMultiAlertStrip extends ConsumerWidget {
@@ -11,7 +12,7 @@ class HomeMultiAlertStrip extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final a = ref.watch(warehouseAlertsProvider).valueOrNull;
+    final a = ref.watch(homeWarehouseAlertsProvider).valueOrNull;
     if (a == null || !a.hasAny) return const SizedBox.shrink();
 
     final pills = <({String label, Color color, VoidCallback onTap})>[];

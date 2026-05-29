@@ -67,11 +67,28 @@ def test_cancel_delivered_purchase_reverts_stock():
     )
     assert purchase.status_code in (200, 201), purchase.text
     pid = purchase.json()["id"]
+    line_id = purchase.json()["lines"][0]["id"]
 
-    delivered = client.patch(
-        f"/v1/businesses/{bid}/trade-purchases/{pid}/delivery",
+    client.post(
+        f"/v1/businesses/{bid}/trade-purchases/{pid}/arrive", headers=h, json={}
+    ).raise_for_status()
+    client.post(
+        f"/v1/businesses/{bid}/trade-purchases/{pid}/verify",
         headers=h,
-        json={"is_delivered": True},
+        json={
+            "lines": [
+                {
+                    "line_id": line_id,
+                    "received_qty": "10",
+                    "damaged_qty": "0",
+                    "return_qty": "0",
+                }
+            ],
+        },
+    ).raise_for_status()
+    delivered = client.post(
+        f"/v1/businesses/{bid}/trade-purchases/{pid}/commit-stock",
+        headers=h,
     )
     assert delivered.status_code == 200, delivered.text
 
@@ -132,11 +149,28 @@ def test_delivery_revoke_reverts_stock():
     )
     assert purchase.status_code in (200, 201), purchase.text
     pid = purchase.json()["id"]
+    line_id = purchase.json()["lines"][0]["id"]
 
-    delivered = client.patch(
-        f"/v1/businesses/{bid}/trade-purchases/{pid}/delivery",
+    client.post(
+        f"/v1/businesses/{bid}/trade-purchases/{pid}/arrive", headers=h, json={}
+    ).raise_for_status()
+    client.post(
+        f"/v1/businesses/{bid}/trade-purchases/{pid}/verify",
         headers=h,
-        json={"is_delivered": True},
+        json={
+            "lines": [
+                {
+                    "line_id": line_id,
+                    "received_qty": "10",
+                    "damaged_qty": "0",
+                    "return_qty": "0",
+                }
+            ],
+        },
+    ).raise_for_status()
+    delivered = client.post(
+        f"/v1/businesses/{bid}/trade-purchases/{pid}/commit-stock",
+        headers=h,
     )
     assert delivered.status_code == 200, delivered.text
 
@@ -152,3 +186,78 @@ def test_delivery_revoke_reverts_stock():
 
     stock = client.get(f"/v1/businesses/{bid}/stock/{iid}", headers=h)
     assert Decimal(str(stock.json()["current_stock"])) == Decimal("0")
+
+
+def test_delivery_double_commit_is_idempotent():
+    """Second deliver PATCH must not double-apply stock (PLAN.MD V2 Task 9)."""
+    h, bid = _register_owner()
+    cat = client.post(
+        f"/v1/businesses/{bid}/item-categories", headers=h, json={"name": "Cat3"}
+    ).json()["id"]
+    sup = client.post(
+        f"/v1/businesses/{bid}/suppliers",
+        headers=h,
+        json={"name": "Sup3", "phone": "9000000399", "gst_number": "22AAAAA0000A1Z8"},
+    ).json()["id"]
+    item = client.post(
+        f"/v1/businesses/{bid}/catalog-items",
+        headers=h,
+        json={
+            "category_id": cat,
+            "name": "Oil Bag",
+            "default_unit": "piece",
+            "default_supplier_ids": [sup],
+        },
+    )
+    assert item.status_code == 201, item.text
+    iid = item.json()["id"]
+
+    purchase = client.post(
+        f"/v1/businesses/{bid}/trade-purchases",
+        headers=h,
+        json={
+            "supplier_id": sup,
+            "purchase_date": "2026-05-22",
+            "status": "confirmed",
+            "lines": [
+                {
+                    "catalog_item_id": iid,
+                    "item_name": "Oil Bag",
+                    "qty": "5",
+                    "unit": "piece",
+                    "purchase_rate": "80",
+                    "landing_cost": "80",
+                }
+            ],
+        },
+    )
+    assert purchase.status_code in (200, 201), purchase.text
+    pid = purchase.json()["id"]
+
+    line_id = purchase.json()["lines"][0]["id"]
+    client.post(
+        f"/v1/businesses/{bid}/trade-purchases/{pid}/arrive", headers=h, json={}
+    ).raise_for_status()
+    client.post(
+        f"/v1/businesses/{bid}/trade-purchases/{pid}/verify",
+        headers=h,
+        json={
+            "lines": [
+                {
+                    "line_id": line_id,
+                    "received_qty": "5",
+                    "damaged_qty": "0",
+                    "return_qty": "0",
+                }
+            ],
+        },
+    ).raise_for_status()
+    for _ in range(2):
+        r = client.post(
+            f"/v1/businesses/{bid}/trade-purchases/{pid}/commit-stock",
+            headers=h,
+        )
+        assert r.status_code == 200, r.text
+
+    stock = client.get(f"/v1/businesses/{bid}/stock/{iid}", headers=h)
+    assert Decimal(str(stock.json()["current_stock"])) == Decimal("5")

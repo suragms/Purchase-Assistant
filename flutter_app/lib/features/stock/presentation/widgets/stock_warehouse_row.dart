@@ -34,23 +34,26 @@ class StockWarehouseRow extends StatelessWidget {
     final name = item['name']?.toString() ?? '—';
     final codeRaw = item['item_code']?.toString().trim() ?? '';
     final cat = item['category_name']?.toString().trim() ?? '';
-    final unit = StockRowMetrics.unit(item);
-    final stock = StockRowMetrics.stockQty(item);
+    final system = StockRowMetrics.systemQty(item);
+    final openingQty = StockRowMetrics.openingQty(item);
+    final purchased = StockRowMetrics.purchasedLifetimeQty(item);
+    final pending = StockRowMetrics.pendingDeliveryQty(item) ?? 0;
     final physical = StockRowMetrics.physicalQty(item);
     final diff = StockRowMetrics.diffQty(item);
+    final wide = MediaQuery.sizeOf(context).width >= 720;
     final status = (item['stock_status']?.toString() ?? 'healthy').toLowerCase();
     final updatedAt = item['last_stock_updated_at']?.toString();
     final updatedBy = item['last_stock_updated_by']?.toString();
     final relative = formatStockRelativeTime(updatedAt);
     final isLowOrCritical = status == 'low' || status == 'critical' || status == 'out';
 
-    final opening = StockRowMetrics.openingLabel(item);
+    final openingLabel = StockRowMetrics.openingLabel(item);
     final delivery = StockRowMetrics.deliveryMetaLine(item);
 
     final metaParts = <String>[
       if (codeRaw.isNotEmpty) '#$codeRaw',
       if (cat.isNotEmpty) cat,
-      if (opening.isNotEmpty) opening,
+      if (openingLabel.isNotEmpty) openingLabel,
       if (delivery.isNotEmpty) delivery,
       if (relative.isNotEmpty) relative,
       if (!isStaffMode && updatedBy != null && updatedBy.isNotEmpty) updatedBy,
@@ -123,21 +126,66 @@ class StockWarehouseRow extends StatelessWidget {
                       ),
                     ),
                   ),
-                  _boxedMetric(
-                    formatStockQtyNumber(stock),
-                    unit,
-                    StockRowMetrics.inlineStatusColor(item),
-                  ),
-                  _boxedMetric(
-                    physical == null ? '—' : formatStockQtyNumber(physical),
-                    unit,
-                    const Color(0xFF0F766E),
-                  ),
-                  _boxedMetric(
-                    _diffPrimary(diff),
-                    _diffSecondary(diff),
-                    StockRowMetrics.diffColor(diff),
-                  ),
+                  if (!isStaffMode && wide) ...[
+                    _boxedMetric(
+                      openingQty == null ? '—' : formatStockQtyNumber(openingQty),
+                      'Open',
+                      const Color(0xFF64748B),
+                    ),
+                    _boxedMetric(
+                      formatStockQtyNumber(purchased),
+                      'Bought',
+                      const Color(0xFF2563EB),
+                    ),
+                    _boxedMetric(
+                      pending < 0.001 ? '—' : formatStockQtyNumber(pending),
+                      'Pending',
+                      const Color(0xFFE65100),
+                    ),
+                    _boxedMetric(
+                      formatStockQtyNumber(system),
+                      'System',
+                      StockRowMetrics.inlineStatusColor(item),
+                    ),
+                    _boxedMetric(
+                      physical == null ? '—' : formatStockQtyNumber(physical),
+                      'Physical',
+                      const Color(0xFF0F766E),
+                    ),
+                    _boxedMetric(
+                      _diffPrimary(diff),
+                      _diffSecondary(diff),
+                      StockRowMetrics.diffColor(diff),
+                    ),
+                  ] else if (isStaffMode) ...[
+                    _boxedMetric(
+                      physical == null ? '—' : formatStockQtyNumber(physical),
+                      'Physical',
+                      const Color(0xFF0F766E),
+                    ),
+                    if (pending >= 0.001)
+                      _boxedMetric(
+                        formatStockQtyNumber(pending),
+                        'Pending',
+                        const Color(0xFFE65100),
+                      ),
+                  ] else ...[
+                    _boxedMetric(
+                      formatStockQtyNumber(system),
+                      'System',
+                      StockRowMetrics.inlineStatusColor(item),
+                    ),
+                    _boxedMetric(
+                      physical == null ? '—' : formatStockQtyNumber(physical),
+                      'Physical',
+                      const Color(0xFF0F766E),
+                    ),
+                    _boxedMetric(
+                      _diffPrimary(diff),
+                      _diffSecondary(diff),
+                      StockRowMetrics.diffColor(diff),
+                    ),
+                  ],
                 ],
               ),
             ),

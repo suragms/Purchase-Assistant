@@ -15,3 +15,6 @@ final businessUsersListProvider =
 void invalidateUserManagementCaches(dynamic ref) {
   ref.invalidate(businessUsersListProvider);
 }
+
+/// Desktop user management master-detail selection (≥ [kDesktopMin]).
+final selectedUserIdProvider = StateProvider<String?>((ref) => null);

@@ -152,8 +152,7 @@ class _WarehouseScanActionBodyState extends ConsumerState<_WarehouseScanActionBo
               notes: _notesCtl.text.trim().isEmpty ? null : _notesCtl.text.trim(),
             );
       }
-      invalidateWarehouseSurfaces(ref);
-      ref.invalidate(stockItemIntelligenceProvider(_itemId));
+      invalidateWarehouseSurfaces(ref, itemId: _itemId);
       ref.invalidate(activeStockAuditProvider);
       if (!mounted) return;
       await HapticFeedback.mediumImpact();
@@ -395,7 +394,8 @@ class _WarehouseScanActionBodyState extends ConsumerState<_WarehouseScanActionBo
           );
         }),
         TextButton(
-          onPressed: () => context.push('/stock/$_itemId/history'),
+          onPressed: () =>
+              context.push('/catalog/item/$_itemId?tab=history'),
           child: const Text('Open full ledger'),
         ),
       ],

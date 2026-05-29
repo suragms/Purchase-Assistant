@@ -10,8 +10,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.database import get_db
-from app.deps import get_current_user, require_membership, require_permission
+from app.deps import get_current_user, require_membership, require_permission, require_role
 from app.services.staff_audit import log_staff_activity
+from app.services.stock_inventory import (
+    compute_expected_system_qty,
+    movement_delivered_qty_map,
+)
 from app.models import (
     Broker,
     CatalogItem,
@@ -205,6 +209,8 @@ def _item_to_list_row(
     physical_stock_difference_qty: Decimal | None = None,
     physical_stock_counted_at: datetime | None = None,
     physical_stock_counted_by: str | None = None,
+    total_delivered_qty: Decimal | None = None,
+    total_pending_delivery_qty: Decimal | None = None,
 ) -> StockListItemOut:
     cur = catalog_stock_qty(item)
     warehouse_diff: Decimal | None = None
@@ -221,6 +227,16 @@ def _item_to_list_row(
         else stock_qty_kg_equivalent(item, cur)
     )
     ledger_var = ledger_variance_qty if ledger_variance_qty is not None else period_variance_qty
+    opening = Decimal(getattr(item, "opening_stock_qty", None) or 0)
+    delivered_lifetime = Decimal(total_delivered_qty or 0)
+    expected = compute_expected_system_qty(
+        getattr(item, "opening_stock_qty", None),
+        total_delivered_qty,
+    )
+    out_of_sync = (
+        (opening > 0 or delivered_lifetime > 0)
+        and abs(cur - expected) > Decimal("0.001")
+    )
     return StockListItemOut(
         id=item.id,
         item_code=item.item_code,
@@ -265,7 +281,46 @@ def _item_to_list_row(
         opening_stock_set_by=getattr(item, "opening_stock_set_by", None),
         opening_stock_locked=bool(getattr(item, "opening_stock_locked", False)),
         stock_version=int(getattr(item, "stock_version", 0) or 0),
+        total_delivered_qty=total_delivered_qty,
+        total_pending_delivery_qty=total_pending_delivery_qty,
+        expected_system_qty=expected,
+        system_stock_out_of_sync=out_of_sync,
     )
+
+
+async def _lifetime_purchase_qty_maps(
+    db: AsyncSession,
+    business_id: uuid.UUID,
+    item_ids: list[uuid.UUID],
+) -> tuple[dict[uuid.UUID, Decimal], dict[uuid.UUID, Decimal]]:
+    """Lifetime delivered vs undelivered purchase line qty (stock unit). PLAN.MD V2 Task 7."""
+    if not item_ids:
+        return {}, {}
+    r = await db.execute(
+        select(TradePurchaseLine, CatalogItem, TradePurchase.is_delivered)
+        .join(TradePurchase, TradePurchase.id == TradePurchaseLine.trade_purchase_id)
+        .join(CatalogItem, TradePurchaseLine.catalog_item_id == CatalogItem.id)
+        .where(
+            TradePurchase.business_id == business_id,
+            TradePurchase.status.notin_(("deleted", "cancelled")),
+            TradePurchaseLine.catalog_item_id.in_(item_ids),
+            CatalogItem.business_id == business_id,
+            CatalogItem.deleted_at.is_(None),
+        )
+    )
+    pending: dict[uuid.UUID, Decimal] = defaultdict(lambda: Decimal(0))
+    for line, cat_item, is_delivered in r.all():
+        cid = line.catalog_item_id
+        if cid is None:
+            continue
+        qty = line_qty_in_stock_unit(line, cat_item)
+        if qty <= 0:
+            continue
+        if is_delivered:
+            continue
+        pending[cid] += qty
+    delivered = await movement_delivered_qty_map(db, business_id, item_ids)
+    return delivered, dict(pending)
 
 
 async def _pending_order_meta_map(
@@ -282,7 +337,7 @@ async def _pending_order_meta_map(
         .join(CatalogItem, TradePurchaseLine.catalog_item_id == CatalogItem.id)
         .where(
             TradePurchase.business_id == business_id,
-            TradePurchase.is_delivered.is_(False),
+            TradePurchase.delivery_status.notin_(("stock_committed", "cancelled")),
             TradePurchase.status.notin_(("deleted", "cancelled")),
             TradePurchaseLine.catalog_item_id.in_(item_ids),
             CatalogItem.business_id == business_id,
@@ -337,11 +392,16 @@ async def _latest_physical_count_map(
 def _parse_period_dates(
     period_start: str | None, period_end: str | None
 ) -> tuple[date | None, date | None]:
-    if not period_start or not period_end:
+    # Route handlers called directly (not via HTTP) may pass FastAPI Query() defaults.
+    if not isinstance(period_start, str) or not isinstance(period_end, str):
+        return None, None
+    ps_raw = period_start.strip()
+    pe_raw = period_end.strip()
+    if not ps_raw or not pe_raw:
         return None, None
     try:
-        ps = date.fromisoformat(period_start.strip()[:10])
-        pe = date.fromisoformat(period_end.strip()[:10])
+        ps = date.fromisoformat(ps_raw[:10])
+        pe = date.fromisoformat(pe_raw[:10])
         return ps, pe
     except ValueError:
         return None, None
@@ -1169,6 +1229,7 @@ async def list_stock(
     ledger_map = await _ledger_variance_map(db, business_id, catalog_items)
     pending_meta = await _pending_order_meta_map(db, business_id, item_ids)
     physical_meta = await _latest_physical_count_map(db, business_id, item_ids)
+    movement_delivered = await movement_delivered_qty_map(db, business_id, item_ids)
     items: list[StockListItemOut] = []
     for item, cat_name, type_name in rows:
         sup = await _supplier_name(db, item)
@@ -1186,6 +1247,15 @@ async def list_stock(
             verify = _needs_verification(cur, purchased)
         perishable = perishable_by_cat.get(item.category_id, False) if item.category_id else False
         su = catalog_stock_unit(item)
+        total_delivered = movement_delivered.get(item.id, Decimal(0))
+        expected_sys = compute_expected_system_qty(
+            getattr(item, "opening_stock_qty", None),
+            total_delivered,
+        )
+        phys_qty = phys.counted_qty if phys else None
+        spec_diff: Decimal | None = None
+        if phys_qty is not None:
+            spec_diff = phys_qty - expected_sys
         items.append(
             _item_to_list_row(
                 item,
@@ -1205,10 +1275,14 @@ async def list_stock(
                 has_pending_order=pend[0],
                 pending_order_days=pend[1],
                 pending_delivery_qty=pend[2],
-                physical_stock_qty=phys.counted_qty if phys else None,
-                physical_stock_difference_qty=phys.difference_qty if phys else None,
+                physical_stock_qty=phys_qty,
+                physical_stock_difference_qty=spec_diff
+                if spec_diff is not None
+                else (phys.difference_qty if phys else None),
                 physical_stock_counted_at=phys.counted_at if phys else None,
                 physical_stock_counted_by=phys.counted_by_name if phys else None,
+                total_delivered_qty=total_delivered,
+                total_pending_delivery_qty=pend[2],
             )
         )
     return StockListOut(items=items, total=total, page=page, per_page=per_page)
@@ -2822,6 +2896,11 @@ async def get_stock_item(
     item, cat_name, type_name = row
     sup = await _supplier_name(db, item)
     phys = (await _latest_physical_count_map(db, business_id, [item_id])).get(item_id)
+    delivered_map, pending_lifetime_map = await _lifetime_purchase_qty_maps(
+        db, business_id, [item_id]
+    )
+    total_delivered = delivered_map.get(item_id)
+    total_pending_lifetime = pending_lifetime_map.get(item_id)
     pend = (await _pending_order_meta_map(db, business_id, [item_id])).get(
         item_id, (False, None, None)
     )
@@ -2859,6 +2938,8 @@ async def get_stock_item(
         physical_stock_difference_qty=phys.difference_qty if phys else None,
         physical_stock_counted_at=phys.counted_at if phys else None,
         physical_stock_counted_by=phys.counted_by_name if phys else None,
+        total_delivered_qty=total_delivered,
+        total_pending_delivery_qty=total_pending_lifetime or pend[2],
     )
     purchases = await _recent_purchases(db, item)
     if should_redact_financials(_m.role):
@@ -2897,7 +2978,7 @@ async def set_opening_stock(
     body: OpeningStockIn,
     db: Annotated[AsyncSession, Depends(get_db)],
     user: Annotated[User, Depends(get_current_user)],
-    membership: Annotated[Membership, Depends(require_permission("stock_edit"))],
+    _m: Annotated[Membership, Depends(require_role("owner", "super_admin"))],
 ):
     r = await db.execute(
         select(CatalogItem).where(
@@ -2957,7 +3038,14 @@ async def set_opening_stock(
             "kind": "opening_stock",
         },
     )
-    return await get_stock_item(business_id, item_id, db, membership)
+    return await get_stock_item(
+        business_id,
+        item_id,
+        db,
+        _m,
+        period_start=None,
+        period_end=None,
+    )
 
 
 @router.post("/{item_id}/physical-count", response_model=PhysicalStockCountOut)
@@ -3341,7 +3429,7 @@ async def notify_owner_about_item(
     ro = catalog_reorder(item)
     inserted = 0
     for uid, role in targets:
-        dedupe = f"notify_owner:{item_id}:{uid}:{day}"
+        dedupe = f"reorder_request:{item_id}:{uid}:{day}"
         ex = await db.execute(
             select(AppNotification.id).where(
                 AppNotification.business_id == business_id,
@@ -3350,20 +3438,23 @@ async def notify_owner_about_item(
         )
         if ex.scalar_one_or_none() is not None:
             continue
+        item_route = f"/catalog/item/{item_id}"
         db.add(
             AppNotification(
                 id=uuid.uuid4(),
                 business_id=business_id,
                 user_id=uid,
-                kind="staff_alert",
-                title="Stock attention needed",
-                body=f"{display} flagged {item.name} ({cur} on hand, reorder {ro})",
+                kind="reorder_request",
+                title="Reorder requested",
+                body=f"{display} needs reorder for {item.name} ({cur} on hand, reorder {ro})",
                 payload={
                     "item_id": str(item_id),
                     "from_user_id": str(user.id),
                     "from_user_name": display,
                     "target_role": role,
+                    "cta": "purchase",
                 },
+                action_route=item_route,
                 dedupe_key=dedupe,
             )
         )

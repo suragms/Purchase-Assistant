@@ -1,9 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../auth/session_notifier.dart';
 import 'catalog_providers.dart';
 import 'stock_providers.dart';
-import 'trade_purchases_provider.dart';
 
 class ItemDetailBundle {
   const ItemDetailBundle({
@@ -23,6 +24,10 @@ class ItemDetailBundle {
 /// `/catalog/item/:id` is opened.
 final itemDetailBundleProvider =
     FutureProvider.autoDispose.family<ItemDetailBundle, String>((ref, itemId) async {
+  final keepAlive = ref.keepAlive();
+  final timer = Timer(const Duration(seconds: 45), keepAlive.close);
+  ref.onDispose(timer.cancel);
+
   final session = ref.watch(sessionProvider);
   if (session == null) {
     return const ItemDetailBundle(
@@ -33,11 +38,11 @@ final itemDetailBundleProvider =
     );
   }
 
+  // Purchase history loads lazily via [tradePurchasesForItemProvider].
   final results = await Future.wait([
-    ref.watch(catalogItemDetailProvider(itemId).future),
-    ref.watch(stockItemDetailProvider(itemId).future),
-    ref.watch(stockItemActivityProvider(itemId).future),
-    ref.watch(tradePurchasesCatalogIntelProvider.future),
+    ref.read(catalogItemDetailProvider(itemId).future),
+    ref.read(stockItemDetailProvider(itemId).future),
+    ref.read(stockItemActivityProvider(itemId).future),
   ]);
 
   final catalog = (results[0] as Map?) != null
@@ -49,18 +54,34 @@ final itemDetailBundleProvider =
   final activity = (results[2] as Map?) != null
       ? Map<String, dynamic>.from(results[2] as Map)
       : <String, dynamic>{};
-  final purchases = (results[3] as List?) != null
-      ? (results[3] as List)
-          .whereType<Map>()
-          .map((e) => Map<String, dynamic>.from(e))
-          .toList()
-      : <Map<String, dynamic>>[];
-
   return ItemDetailBundle(
     catalogItem: catalog,
     stockDetail: stock,
     activity: activity,
-    tradePurchases: purchases,
+    tradePurchases: const [],
   );
+});
+
+/// Stock map for item detail sections — sourced from [itemDetailBundleProvider]
+/// (no extra HTTP while bundle is mounted on `/catalog/item/:id`).
+final itemDetailStockProvider =
+    Provider.autoDispose.family<AsyncValue<Map<String, dynamic>>, String>(
+        (ref, itemId) {
+  return ref.watch(itemDetailBundleProvider(itemId)).when(
+        data: (b) => AsyncValue.data(b.stockDetail),
+        loading: () => const AsyncValue.loading(),
+        error: (e, st) => AsyncValue.error(e, st),
+      );
+});
+
+/// Catalog map for item detail sections (same bundle, no duplicate fetch).
+final itemDetailCatalogProvider =
+    Provider.autoDispose.family<AsyncValue<Map<String, dynamic>>, String>(
+        (ref, itemId) {
+  return ref.watch(itemDetailBundleProvider(itemId)).when(
+        data: (b) => AsyncValue.data(b.catalogItem),
+        loading: () => const AsyncValue.loading(),
+        error: (e, st) => AsyncValue.error(e, st),
+      );
 });
 

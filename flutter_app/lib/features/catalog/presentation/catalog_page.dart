@@ -10,6 +10,7 @@ import '../../../core/router/navigation_ext.dart';
 import '../../../core/providers/catalog_providers.dart';
 import '../../../core/search/catalog_fuzzy.dart';
 import '../../../core/search/search_highlight.dart';
+import '../../../core/design_system/hexa_responsive.dart';
 import '../../../core/theme/hexa_colors.dart';
 import '../../../core/widgets/list_skeleton.dart';
 import '../../../core/widgets/friendly_load_error.dart';
@@ -240,6 +241,9 @@ class _CatalogPageState extends ConsumerState<CatalogPage> {
                         limit: 500,
                       );
 
+                final desktop = context.isDesktopLayout;
+                final gridCols = desktop ? 2 : 1;
+
                 return RefreshIndicator(
                   onRefresh: () async {
                     ref.invalidate(itemCategoriesListProvider);
@@ -275,104 +279,151 @@ class _CatalogPageState extends ConsumerState<CatalogPage> {
                             ),
                           ],
                         )
-                      : ListView.builder(
-                          keyboardDismissBehavior:
-                              ScrollViewKeyboardDismissBehavior.onDrag,
-                          physics: const AlwaysScrollableScrollPhysics(
-                              parent: BouncingScrollPhysics()),
-                          padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
-                          itemCount: display.length,
-                          itemBuilder: (context, i) {
-                            final c = display[i];
-                            final id = c['id']?.toString() ?? '';
-                            final name = c['name']?.toString() ?? '';
-                            final itemCount =
-                                items.where((it) => it['category_id']?.toString() == id).length;
-                            final subN = ref.watch(
-                              categoryTypesListProvider(id)
-                                  .select((a) => a.valueOrNull?.length ?? -1),
-                            );
-                            final subCount = subN < 0 ? 0 : subN;
-                            return Card(
-                              margin: const EdgeInsets.only(bottom: 10),
-                              elevation: 0,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(14),
-                                side: BorderSide(
-                                  color: Theme.of(context).colorScheme.outlineVariant.withValues(alpha: 0.85),
+                      : HexaResponsiveCenter(
+                          maxWidth: desktop ? 1100 : HexaResponsive.maxContentWidth,
+                          padding: EdgeInsets.zero,
+                          child: GridView.builder(
+                            keyboardDismissBehavior:
+                                ScrollViewKeyboardDismissBehavior.onDrag,
+                            physics: const AlwaysScrollableScrollPhysics(
+                              parent: BouncingScrollPhysics(),
+                            ),
+                            padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
+                            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                              crossAxisCount: gridCols,
+                              mainAxisSpacing: 10,
+                              crossAxisSpacing: 10,
+                              childAspectRatio: desktop ? 3.6 : 4.2,
+                            ),
+                            itemCount: display.length,
+                            itemBuilder: (context, i) {
+                              final c = display[i];
+                              final id = c['id']?.toString() ?? '';
+                              final name = c['name']?.toString() ?? '';
+                              final itemCount = items
+                                  .where(
+                                    (it) =>
+                                        it['category_id']?.toString() == id,
+                                  )
+                                  .length;
+                              final subN = ref.watch(
+                                categoryTypesListProvider(id).select(
+                                  (a) => a.valueOrNull?.length ?? -1,
                                 ),
-                              ),
-                              child: InkWell(
-                                onTap: () => context.push('/catalog/category/$id'),
-                                borderRadius: BorderRadius.circular(12),
-                                child: Padding(
-                                  padding: const EdgeInsets.all(12),
-                                  child: Row(
-                                    children: [
-                                      CircleAvatar(
-                                        backgroundColor:
-                                            HexaColors.primaryMid.withValues(alpha: 0.2),
-                                        foregroundColor: HexaColors.primaryMid,
-                                        child: Text(
-                                          name.isNotEmpty ? name[0].toUpperCase() : '?',
-                                          style: const TextStyle(fontWeight: FontWeight.w800),
+                              );
+                              final subCount = subN < 0 ? 0 : subN;
+                              return Card(
+                                margin: EdgeInsets.zero,
+                                elevation: 0,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(14),
+                                  side: BorderSide(
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .outlineVariant
+                                        .withValues(alpha: 0.85),
+                                  ),
+                                ),
+                                child: InkWell(
+                                  onTap: () =>
+                                      context.push('/catalog/category/$id'),
+                                  borderRadius: BorderRadius.circular(12),
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(12),
+                                    child: Row(
+                                      children: [
+                                        CircleAvatar(
+                                          backgroundColor: HexaColors.primaryMid
+                                              .withValues(alpha: 0.2),
+                                          foregroundColor: HexaColors.primaryMid,
+                                          child: Text(
+                                            name.isNotEmpty
+                                                ? name[0].toUpperCase()
+                                                : '?',
+                                            style: const TextStyle(
+                                              fontWeight: FontWeight.w800,
+                                            ),
+                                          ),
                                         ),
-                                      ),
-                                      const SizedBox(width: 12),
-                                      Expanded(
-                                        child: Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
-                                          children: [
-                                            Text.rich(
-                                              TextSpan(
-                                                children: highlightSearchQuery(
-                                                  name,
-                                                  _searchQuery.trim(),
-                                                  baseStyle: const TextStyle(
-                                                    fontWeight: FontWeight.w800,
-                                                    fontSize: 16,
-                                                  ),
-                                                  highlightStyle: TextStyle(
-                                                    fontWeight: FontWeight.w900,
-                                                    fontSize: 16,
-                                                    color: Theme.of(context).colorScheme.primary,
-                                                    backgroundColor: Theme.of(context)
-                                                        .colorScheme
-                                                        .primaryContainer
-                                                        .withValues(alpha: 0.4),
+                                        const SizedBox(width: 12),
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            mainAxisAlignment:
+                                                MainAxisAlignment.center,
+                                            children: [
+                                              Text.rich(
+                                                TextSpan(
+                                                  children: highlightSearchQuery(
+                                                    name,
+                                                    _searchQuery.trim(),
+                                                    baseStyle: const TextStyle(
+                                                      fontWeight: FontWeight.w800,
+                                                      fontSize: 16,
+                                                    ),
+                                                    highlightStyle: TextStyle(
+                                                      fontWeight: FontWeight.w900,
+                                                      fontSize: 16,
+                                                      color: Theme.of(context)
+                                                          .colorScheme
+                                                          .primary,
+                                                      backgroundColor:
+                                                          Theme.of(context)
+                                                              .colorScheme
+                                                              .primaryContainer
+                                                              .withValues(
+                                                                alpha: 0.4,
+                                                              ),
+                                                    ),
                                                   ),
                                                 ),
+                                                maxLines: 2,
+                                                overflow: TextOverflow.ellipsis,
                                               ),
-                                              maxLines: 1,
-                                              overflow: TextOverflow.ellipsis,
+                                              const SizedBox(height: 4),
+                                              Text(
+                                                '$subCount subcategories · $itemCount items',
+                                                style: Theme.of(context)
+                                                    .textTheme
+                                                    .bodySmall
+                                                    ?.copyWith(
+                                                      color: Theme.of(context)
+                                                          .colorScheme
+                                                          .onSurfaceVariant,
+                                                    ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                        PopupMenuButton<String>(
+                                          onSelected: (v) {
+                                            if (v == 'edit') {
+                                              _editCategory(context, id, name);
+                                            }
+                                            if (v == 'del') {
+                                              _deleteCategory(context, id, name);
+                                            }
+                                          },
+                                          itemBuilder: (ctx) => const [
+                                            PopupMenuItem(
+                                              value: 'edit',
+                                              child: Text('Rename'),
                                             ),
-                                            const SizedBox(height: 4),
-                                            Text(
-                                              '$subCount subcategories · $itemCount items',
-                                              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                                                  ),
+                                            PopupMenuItem(
+                                              value: 'del',
+                                              child: Text('Delete'),
                                             ),
                                           ],
                                         ),
-                                      ),
-                                      PopupMenuButton<String>(
-                                        onSelected: (v) {
-                                          if (v == 'edit') _editCategory(context, id, name);
-                                          if (v == 'del') _deleteCategory(context, id, name);
-                                        },
-                                        itemBuilder: (ctx) => const [
-                                          PopupMenuItem(value: 'edit', child: Text('Rename')),
-                                          PopupMenuItem(value: 'del', child: Text('Delete')),
-                                        ],
-                                      ),
-                                      const Icon(Icons.chevron_right_rounded),
-                                    ],
+                                        const Icon(Icons.chevron_right_rounded),
+                                      ],
+                                    ),
                                   ),
                                 ),
-                              ),
-                            );
-                          },
+                              );
+                            },
+                          ),
                         ),
                 );
               },

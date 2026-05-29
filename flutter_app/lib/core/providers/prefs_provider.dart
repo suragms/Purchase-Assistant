@@ -56,6 +56,44 @@ final localNotificationsOptInProvider =
     NotifierProvider<LocalNotificationsNotifier, bool>(
         LocalNotificationsNotifier.new);
 
+/// Per-kind in-app notification toggles (local prefs; server still emits).
+final notificationKindTogglesProvider =
+    NotifierProvider<NotificationKindTogglesNotifier, Set<String>>(
+        NotificationKindTogglesNotifier.new);
+
+class NotificationKindTogglesNotifier extends Notifier<Set<String>> {
+  static const _prefix = 'pref_notif_kind_';
+  static const allKinds = {
+    'low_stock',
+    'delivery',
+    'stock_variance',
+    'staff_alert',
+    'opening_stock',
+    'physical_reminder',
+  };
+
+  @override
+  Set<String> build() {
+    final p = ref.watch(sharedPreferencesProvider);
+    final enabled = <String>{};
+    for (final k in allKinds) {
+      if (p.getBool('$_prefix$k') ?? true) enabled.add(k);
+    }
+    return enabled;
+  }
+
+  Future<void> setEnabled(String kind, bool on) async {
+    await ref.read(sharedPreferencesProvider).setBool('$_prefix$kind', on);
+    final next = Set<String>.from(state);
+    if (on) {
+      next.add(kind);
+    } else {
+      next.remove(kind);
+    }
+    state = next;
+  }
+}
+
 const kThemeModeKey = 'pref_theme_mode';
 
 final themeModeProvider =

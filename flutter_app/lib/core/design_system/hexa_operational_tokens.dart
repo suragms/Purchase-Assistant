@@ -20,6 +20,21 @@ abstract final class HexaOp {
   static const double fabSize = 56;
   static const double quickActionIcon = 48;
 
+  static const double mobileCardPadding = 12;
+  static const double mobileSectionGap = 10;
+  static const double desktopSectionGap = 20;
+  static const double listRowHeight = 56;
+  static const double desktopListRowHeight = 48;
+  static const double touchTargetMin = 48;
+
+  /// Delivery pipeline status colors (DESKTOP_DESIGN_SPEC).
+  static const Color statusPending = Color(0xFF94A3B8);
+  static const Color statusDispatched = Color(0xFF3B82F6);
+  static const Color statusArrived = Color(0xFFF59E0B);
+  static const Color statusVerified = Color(0xFF8B5CF6);
+  static const Color statusCommitted = Color(0xFF10B981);
+  static const Color statusPartial = Color(0xFFEA580C);
+
   static EdgeInsets get pagePadding =>
       const EdgeInsets.fromLTRB(pageGutter, 8, pageGutter, 16);
 

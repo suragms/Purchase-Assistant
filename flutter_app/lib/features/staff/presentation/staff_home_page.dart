@@ -4,8 +4,8 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/auth/session_notifier.dart';
-import '../../../core/models/trade_purchase_models.dart';
 import '../../../core/design_system/hexa_ds_tokens.dart';
+import '../../../core/design_system/hexa_desktop_layout.dart';
 import '../../../core/design_system/hexa_operational_tokens.dart';
 import '../../../core/providers/app_period_provider.dart';
 import '../../../core/providers/notifications_provider.dart';
@@ -16,6 +16,7 @@ import '../../../core/providers/trade_purchases_provider.dart';
 import '../../../core/theme/hexa_colors.dart';
 import '../../../core/widgets/friendly_load_error.dart';
 import 'widgets/staff_home_dashboard_widgets.dart';
+import 'widgets/staff_home_pending_delivery_cards.dart';
 import 'widgets/staff_warehouse_totals_card.dart';
 import 'widgets/staff_warehouse_difference_card.dart';
 
@@ -26,15 +27,7 @@ String _staffInitials(String name) {
   return list.map((w) => w[0].toUpperCase()).join();
 }
 
-String _pendingDeliverySubtitle(List<TradePurchase> pending) {
-  if (pending.isEmpty) return 'Trucks waiting — open receive checklist';
-  final first = pending.first.supplierName?.trim();
-  if (first != null && first.isNotEmpty) {
-    if (pending.length == 1) return 'From $first — tap to receive';
-    return 'From $first + ${pending.length - 1} more';
-  }
-  return '${pending.length} orders waiting at warehouse';
-}
+// (Removed) `_pendingDeliverySubtitle` — now rendered inline by cards.
 
 String _staffFocusLabel(StaffHomeFocus f) => switch (f) {
       StaffHomeFocus.all => 'All tasks',
@@ -181,8 +174,7 @@ class StaffHomePage extends ConsumerWidget {
     final focus = ref.watch(staffHomeFocusProvider);
     final missingCount = ref.watch(staffMissingCodeCountProvider);
     final pendingDeliveries = ref.watch(staffPendingDeliveryCountProvider);
-    final pendingList =
-        ref.watch(staffPendingDeliveriesProvider).valueOrNull ?? const [];
+    // Cards read pending list directly from provider.
     final lowCount = ref.watch(staffLowStockAttentionCountProvider);
     final openingCount = ref.watch(staffOpeningStockCountProvider);
     final mismatchAsync = ref.watch(staffStockMismatchCountProvider);
@@ -298,6 +290,60 @@ class StaffHomePage extends ConsumerWidget {
                   },
                 ),
               ],
+              if (myTasks.isNotEmpty) ...[
+                const SizedBox(height: HexaOp.cardGap),
+                const StaffHomeSectionHeader(
+                  title: 'My tasks',
+                  subtitle: 'Complete these first',
+                ),
+                ...myTasks.take(5).map((task) {
+                  final slot = task['slot']?.toString() ?? 'morning';
+                  final key = task['task_key']?.toString() ?? '';
+                  final label = task['label']?.toString() ?? 'Task';
+                  return ListTile(
+                    dense: true,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 6),
+                    leading: Checkbox(
+                      value: false,
+                      onChanged: (_) async {
+                        final session = ref.read(sessionProvider);
+                        if (session == null || key.isEmpty) return;
+                        await ref.read(hexaApiProvider).completeChecklistTask(
+                              businessId: session.primaryBusiness.id,
+                              slot: slot,
+                              taskKey: key,
+                            );
+                        ref.invalidate(checklistTodayProvider);
+                      },
+                    ),
+                    title: Text(label),
+                  );
+                }),
+              ],
+              const SizedBox(height: HexaOp.cardGap),
+              const StaffHomeSectionHeader(
+                title: 'Warehouse summary',
+                subtitle: 'Today on the floor',
+              ),
+              DesktopTwoColumnGrid(
+                spacing: HexaOp.cardGap,
+                runSpacing: HexaOp.cardGap,
+                children: const [
+                  StaffHomeShiftSnapshotStrip(),
+                  StaffHomePendingDeliveryCards(),
+                ],
+              ),
+              if (lowCount > 0) ...[
+                const SizedBox(height: HexaOp.cardGap),
+                StaffHomeAttentionTile(
+                  icon: Icons.warning_amber_rounded,
+                  title: 'Low stock',
+                  subtitle: 'Tap to inform owner for reorder',
+                  count: lowCount,
+                  accent: const Color(0xFFDC2626),
+                  onTap: () => context.push('/staff/low-stock'),
+                ),
+              ],
               const SizedBox(height: HexaOp.cardGap),
               const StaffHomeSectionHeader(
                 title: 'Tools',
@@ -307,7 +353,7 @@ class StaffHomePage extends ConsumerWidget {
               const SizedBox(height: HexaOp.cardGap),
               const StaffHomeSectionHeader(
                 title: 'Start here',
-                subtitle: 'Most used actions for floor staff',
+                subtitle: 'Scan and quick actions',
               ),
               Material(
                 elevation: 2,
@@ -371,32 +417,15 @@ class StaffHomePage extends ConsumerWidget {
                   ],
                 ],
               ),
-              const SizedBox(height: HexaOp.cardGap),
-              const StaffHomeShiftSnapshotStrip(),
-              if (showAttention) ...[
+              if (showAttention &&
+                  (openingCount > 0 ||
+                      (staffHomeShowsBarcodeTools(focus) && missingCount > 0) ||
+                      mismatchCount > 0)) ...[
                 const SizedBox(height: HexaOp.cardGap),
                 const StaffHomeSectionHeader(
                   title: 'Needs attention',
-                  subtitle: 'Tap to open and complete',
+                  subtitle: 'Other warehouse items',
                 ),
-                if (staffHomeShowsPurchaseTools(focus) && pendingDeliveries > 0)
-                  StaffHomeAttentionTile(
-                    icon: Icons.local_shipping_rounded,
-                    title: 'Pending deliveries',
-                    subtitle: _pendingDeliverySubtitle(pendingList),
-                    count: pendingDeliveries,
-                    accent: const Color(0xFFBA7517),
-                    onTap: () => context.push('/staff/receive'),
-                  ),
-                if (lowCount > 0)
-                  StaffHomeAttentionTile(
-                    icon: Icons.warning_amber_rounded,
-                    title: 'Low stock',
-                    subtitle: 'Items need reorder or stock update',
-                    count: lowCount,
-                    accent: const Color(0xFFDC2626),
-                    onTap: () => context.push('/staff/low-stock'),
-                  ),
                 if (openingCount > 0)
                   StaffHomeAttentionTile(
                     icon: Icons.inventory_outlined,
@@ -425,50 +454,55 @@ class StaffHomePage extends ConsumerWidget {
                     onTap: () => context.go('/reports'),
                   ),
               ],
-              if (myTasks.isNotEmpty) ...[
-                const SizedBox(height: HexaOp.cardGap),
-                const StaffHomeSectionHeader(
-                  title: 'My Tasks',
-                  subtitle: 'Assigned checklist items',
-                ),
-                ...myTasks.take(3).map((task) {
-                  final slot = task['slot']?.toString() ?? 'morning';
-                  final key = task['task_key']?.toString() ?? '';
-                  final label = task['label']?.toString() ?? 'Task';
-                  return ListTile(
-                    dense: true,
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 6),
-                    leading: Checkbox(
-                      value: false,
-                      onChanged: (_) async {
-                        final session = ref.read(sessionProvider);
-                        if (session == null || key.isEmpty) return;
-                        await ref.read(hexaApiProvider).completeChecklistTask(
-                              businessId: session.primaryBusiness.id,
-                              slot: slot,
-                              taskKey: key,
-                            );
-                        ref.invalidate(checklistTodayProvider);
-                      },
-                    ),
-                    title: Text(label),
-                  );
-                }),
-              ],
+              const SizedBox(height: HexaOp.cardGap),
+              const StaffHomeSectionHeader(
+                title: 'Recent activity',
+                subtitle: 'Latest stock and warehouse updates',
+              ),
+              const StaffHomeRecentActivitySection(),
               if (staffHomeShowsWarehouse(focus)) ...[
                 const SizedBox(height: HexaOp.cardGap),
-                const StaffHomeSectionHeader(
-                  title: 'Warehouse on hand',
-                  subtitle: 'Totals across bags, kg, boxes, tins',
-                ),
-                const StaffWarehouseTotalsCard(),
-                const SizedBox(height: HexaOp.cardGap),
-                const StaffWarehouseDifferenceCard(),
+                _StaffWarehouseTotalsExpandable(),
               ],
-              const SizedBox(height: HexaOp.cardGap),
-              const StaffHomeRecentActivitySection(),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Collapsed warehouse totals — expand for full unit breakdown (roadmap: de-emphasize).
+class _StaffWarehouseTotalsExpandable extends StatelessWidget {
+  const _StaffWarehouseTotalsExpandable();
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      elevation: 0,
+      margin: EdgeInsets.zero,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: Colors.grey.shade300),
+      ),
+      child: Theme(
+        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          tilePadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+          childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+          title: const Text(
+            'Warehouse totals',
+            style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14),
+          ),
+          subtitle: const Text(
+            'All units — bags, kg, boxes, tins',
+            style: TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+          ),
+          children: const [
+            StaffWarehouseTotalsCard(),
+            SizedBox(height: HexaOp.cardGap),
+            StaffWarehouseDifferenceCard(),
+          ],
         ),
       ),
     );

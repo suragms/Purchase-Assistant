@@ -75,6 +75,9 @@ final purchaseHistoryValueSortProvider = StateProvider<String?>((ref) => null);
 /// Client-side filter only (not sent to list API — avoids refetch per keystroke).
 final purchaseHistorySearchProvider = StateProvider<String>((ref) => '');
 
+/// Desktop purchase history master-detail selection (≥ [kDesktopMin]).
+final purchaseSelectedIdProvider = StateProvider<String?>((ref) => null);
+
 /// True while [_PurchaseHistoryFullscreenSearchPage] is mounted so
 /// [tradePurchasesListProvider] still loads the history API even if
 /// [shellCurrentBranchProvider] is not [ShellBranch.history] (IndexedStack
@@ -344,6 +347,32 @@ final purchaseUnitTotalsProvider =
     },
     orElse: () => (bags: 0, boxes: 0, tins: 0),
   );
+});
+
+/// Purchases for one catalog item (item detail / supplier intel) — not full business list.
+final tradePurchasesForItemProvider =
+    FutureProvider.autoDispose.family<List<Map<String, dynamic>>, String>(
+        (ref, itemId) async {
+  final keepAlive = ref.keepAlive();
+  final timer = Timer(const Duration(seconds: 45), keepAlive.close);
+  ref.onDispose(timer.cancel);
+  final session = ref.watch(sessionProvider);
+  if (session == null || itemId.isEmpty) return [];
+  return ref.read(hexaApiProvider).listTradePurchases(
+        businessId: session.primaryBusiness.id,
+        catalogItemId: itemId,
+        limit: 50,
+      );
+});
+
+final tradePurchasesForItemParsedProvider =
+    Provider.autoDispose.family<AsyncValue<List<TradePurchase>>, String>(
+        (ref, itemId) {
+  return ref.watch(tradePurchasesForItemProvider(itemId)).whenData(
+        (maps) => maps
+            .map((e) => TradePurchase.fromJson(Map<String, dynamic>.from(e)))
+            .toList(),
+      );
 });
 
 /// Trade list for catalog item intel — full list, not tied to History tab filters.

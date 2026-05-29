@@ -38,7 +38,8 @@ class _ItemPurchaseHistorySectionState
     final isStaff = session != null && sessionIsStaff(session);
     final hideFinancials = session != null && !sessionCanSeeFinancials(session);
 
-    final purchasesAsync = ref.watch(tradePurchasesCatalogIntelParsedProvider);
+    final purchasesAsync =
+        ref.watch(tradePurchasesForItemParsedProvider(widget.itemId));
 
     return Card(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -72,7 +73,7 @@ class _ItemPurchaseHistorySectionState
               error: (_, __) => FriendlyLoadError(
                 message: 'Could not load purchase history',
                 onRetry: () =>
-                    ref.invalidate(tradePurchasesCatalogIntelProvider),
+                    ref.invalidate(tradePurchasesForItemProvider(widget.itemId)),
               ),
               data: (purchases) {
                 final rows = itemTradeHistoryRows(

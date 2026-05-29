@@ -126,21 +126,17 @@ class LowStockItemDetailTile extends StatefulWidget {
 }
 
 class _LowStockItemDetailTileState extends State<LowStockItemDetailTile> {
-  bool _expanded = false;
-
   @override
   Widget build(BuildContext context) {
     final item = widget.item;
     final name = item['name']?.toString() ?? '—';
     final system = coerceToDouble(item['current_stock']);
-    final purchased = coerceToDouble(item['period_purchased_qty']);
     final physicalRaw = item['physical_stock_qty'];
     final physical = physicalRaw == null
         ? system
         : coerceToDouble(physicalRaw);
     final pendingDel = coerceToDoubleNullable(item['pending_delivery_qty']) ?? 0;
     final pending = item['has_pending_order'] == true;
-    final pendingDays = (item['pending_order_days'] as num?)?.toInt();
     final unit =
         item['stock_unit']?.toString() ?? item['unit']?.toString() ?? '';
     final unitUp = unit.trim().isEmpty ? '' : unit.toUpperCase();
@@ -162,7 +158,9 @@ class _LowStockItemDetailTileState extends State<LowStockItemDetailTile> {
         child: Material(
           color: Colors.transparent,
           child: InkWell(
-            onTap: () => setState(() => _expanded = !_expanded),
+            onTap: id.isEmpty
+                ? null
+                : () => context.push('/catalog/item/$id'),
             borderRadius: BorderRadius.circular(8),
             child: Padding(
               padding: const EdgeInsets.all(10),
@@ -176,56 +174,26 @@ class _LowStockItemDetailTileState extends State<LowStockItemDetailTile> {
                           name,
                           style: const TextStyle(
                             fontWeight: FontWeight.w800,
-                            fontSize: 13,
+                            fontSize: 14,
                           ),
                         ),
                       ),
-                      Icon(
-                        _expanded
-                            ? Icons.expand_less_rounded
-                            : Icons.expand_more_rounded,
-                        size: 20,
-                      ),
+                      const Icon(Icons.chevron_right_rounded, size: 22),
                     ],
                   ),
-                  if (_expanded) ...[
-                    const SizedBox(height: 8),
-                    LowStockUnitGrid(item: item),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Stock progress · Sys ${formatStockQtyNumber(system)}'
-                      '${unitUp.isNotEmpty ? ' $unitUp' : ''}'
-                      ' · Bought ${formatStockQtyNumber(purchased)}'
-                      ' · Phys ${formatStockQtyNumber(physical)}'
-                      '${pendingDel > 0.001 ? ' · Pend del ${formatStockQtyNumber(pendingDel)}' : ''}',
-                      style: const TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                        color: Color(0xFF64748B),
-                      ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Physical ${formatStockQtyNumber(physical)}'
+                    '${unitUp.isNotEmpty ? ' $unitUp' : ''}'
+                    '${pendingDel > 0.001 ? ' · Pending ${formatStockQtyNumber(pendingDel)}' : ''}',
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF64748B),
                     ),
-                    if (pending)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 6),
-                        child: Chip(
-                          visualDensity: VisualDensity.compact,
-                          avatar: const Icon(
-                            Icons.local_shipping_rounded,
-                            size: 16,
-                          ),
-                          label: Text(
-                            pendingDays != null
-                                ? 'Ordered · $pendingDays d ago'
-                                : 'Ordered · pending',
-                            style: const TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ),
-                      ),
-                    const SizedBox(height: 8),
-                    Wrap(
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(
                       spacing: 8,
                       runSpacing: 6,
                       children: [
@@ -279,12 +247,11 @@ class _LowStockItemDetailTileState extends State<LowStockItemDetailTile> {
                           ),
                         if (id.isNotEmpty)
                           TextButton(
-                            onPressed: () => context.push('/catalog/items/$id'),
+                            onPressed: () => context.push('/catalog/item/$id'),
                             child: const Text('Open item'),
                           ),
                       ],
                     ),
-                  ],
                 ],
               ),
             ),

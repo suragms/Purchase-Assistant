@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/design_system/hexa_operational_tokens.dart';
+import '../../../../core/design_system/hexa_responsive.dart';
 import '../../../../core/providers/catalog_providers.dart';
 import '../../../../core/providers/stock_providers.dart';
 import '../../../../core/providers/suppliers_list_provider.dart';
@@ -10,7 +11,9 @@ import '../../../../shared/widgets/inline_search_field.dart';
 import '../../../../shared/widgets/search_picker_sheet.dart';
 import 'stock_bulk_actions_sheet.dart';
 
-const kOperationalDesktopBreakpoint = 1100.0;
+/// Re-export spec desktop breakpoint for operational stock surfaces.
+@Deprecated('Use kDesktopMin from hexa_responsive.dart')
+const double kOperationalDesktopBreakpoint = kDesktopMin;
 
 /// Opens advanced filter UI (category, supplier, etc.) — not unit/status chips.
 Future<void> showOperationalStockFilter({
@@ -22,7 +25,7 @@ Future<void> showOperationalStockFilter({
   double bottomNavInset = 0,
 }) async {
   final width = MediaQuery.sizeOf(context).width;
-  if (width >= kOperationalDesktopBreakpoint) {
+  if (width >= kDesktopMin) {
     await showGeneralDialog<void>(
       context: context,
       barrierDismissible: true,

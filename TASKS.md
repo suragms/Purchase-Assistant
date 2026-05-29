@@ -1,6 +1,149 @@
 # Purchase Assistant — Living task board
 
-**Last updated:** 2026-05-28 (Notifications blank-cards P0 fix)
+**Last updated:** 2026-05-29 (final release gate — all automated checks green)
+
+## Ship now (automated ✅ — you run deploy)
+
+1. **Prod DB:** `cd backend && alembic upgrade head` (migrations **040**, **041**, **042**).
+2. **API:** deploy Render backend from current `main`.
+3. **Web:** publish `flutter_app/build/web` to Vercel (or host).
+4. **Smoke:** owner Home → Stock → Purchase → Reports; staff **Deliveries** + **Settings** tabs.
+5. **Sign out/in** once after deploy if session was stale.
+
+---
+
+## PLAN.MD execution (2026-05-28)
+
+**Controller:** [PLAN.MD/README.md](PLAN.MD/README.md) (23 files)
+
+### Phase 0 — manifest
+- [x] All 23 MD files on disk under `PLAN.MD/`
+- [x] `PLAN.MD/README.md` status board + V1/V2 map
+
+### Phase 1 — audits (tickets extracted; implement in Phase 2+)
+- [x] 1–14 read → P0 backlog: stock formula truth, provider `ref.read`, polling, delivery pipeline, dedupe files, UI sheets
+- [x] Reconciled done: notifications blank cards (`7fcae7c`), low-stock dashboard, stock ITEM/SYSTEM/PHYS/DIFF
+
+### Phase 2 — V2 P0
+- [x] Task 1: `item_detail_providers` → `ref.read` for parallel futures
+- [x] Task 2: home single 60s poll + throttle on full invalidate
+- [x] Task 3: migration `040_purchase_delivery_tracking` + model columns
+- [x] Task 4: Flutter `deliveryStatus` on `TradePurchase`
+- [x] Task 5: delivery pipeline API (`dispatch` / `arrive` / `verify` / `commit-stock` / `delivery-pipeline`); PATCH delivery = revert only; stock on commit only
+- [x] Tasks 6–7: `total_delivered_qty` / `total_pending_delivery_qty` on stock detail API + snapshot card
+- [x] Task 8: deleted `catalog_item_detail_page.dart` (~3k lines); `/catalog/item/:id` → `ItemDetailPage`; edit → `ItemEditPage` + `catalog_item_defaults_edit_form.dart`
+- [x] Task 9: purchase delivery stock idempotency + `test_delivery_double_commit_is_idempotent`
+
+### Phase 3 — rebuild MDs 17–20
+- [x] Reconciled with 2026-05-28 warehouse sprints + notification card fix
+
+### Phase 4 — V2 P1
+- [x] Staff/owner home, stock table, reports overlap (prior commits)
+ (Task 19 backlog)
+- [x] Duplicate cleanup (2026-05-29): deleted monolith catalog detail; redirect `/stock/reorder-suggestions` → `/stock/reorder`; removed `reorder_suggestions_page`, `low_stock_owner_page`
+- [x] Full duplicate cleanup (2026-05-29, validated): `ItemDetailPage` + redirects; `StockPage` 4-tab hub; stock history → `StockItemHistoryPanel` on item detail + `/stock/:id/history` redirect; `notification_center_provider` + `homeWarehouseAlertsProvider` + `notificationFeedForUiProvider`; `AppShellBody` (owner/staff); `StockSummaryWidget` via `StockRowMetrics.stockSummary` + quick view + bulk print; opening-stock `opening_stock_sheets.dart` barrel; deleted ~15 duplicate pages; `flutter analyze` + `trade_date_range_parity_test` pass
+
+### Duplicate cleanup — route audit (2026-05-29)
+
+| Route / feature | Status |
+|-----------------|--------|
+| `/get-started` | Redirect → `/login` |
+| `/operations/daily-usage` (DailyUsagePage) | Active — owner route |
+| `/item-analytics/:name` | → `ItemAnalyticsRedirectPage` → catalog item when resolved |
+| `/reports/item-detail` | → `ReportsItemRedirectPage` → catalog or thin fallback |
+| Reports BI (`reports_bi_tab.dart`) | Active on `/reports` |
+| `/stock/dead`, `/fast-moving`, `/slow-moving` | Redirect to `/reports?tab=…` |
+| `/stock/changes`, `/movement`, `/today-feed` | Redirect to `/stock?tab=…` |
+
+**Manual QA:** Owner home alerts + notifications tabs; stock Warehouse/Changes/Movement/Today; reports item drill; catalog item edit; staff scan → quick stock sheet.
+
+### Performance sprint (2026-05-29)
+
+- [x] Home: debounced `_scheduleRefresh` (500ms); single 60s poll; notification coordinator skips periodic timer on Home tab; realtime yields `RealtimeInvalidationSignal` (alerts-only vs full refresh)
+- [x] Item detail: `itemDetailStockProvider` / `itemDetailCatalogProvider` from bundle; sections stop duplicate `stockItemDetailProvider` fetches; revision → `itemDetailBundleProvider` only
+- [x] `stockListProvider` keepAlive TTL **30s**; lazy heavy sections on mobile item detail (400ms defer)
+- [x] `HexaResponsive.sectionGap(context)` on owner home blocks; search list padding includes keyboard `viewInsets`
+- [x] **Refresh storm fix:** `invalidateWarehouseSurfacesLight` (no KPI/aggregate bump); realtime poll signals only (no invalidate inside poll); shell stops watching realtime; removed global `businessDataWriteRevision` listener on item detail; bundle drops catalog-wide `tradePurchasesCatalogIntel` + snapshot drops extra intelligence fetch; stock writes pass `itemId` for scoped bust
+- [x] **Production perf closure (2026-05-29):** `BusinessWriteEvent` + scoped listeners (item detail, category, trade ledger); backend `purchase.changed` with `item_ids`; `tradePurchasesForItemProvider` (per-item API); realtime `affectedItemIds`; `stockItemDetail` + notifications **30s** keepAlive; removed dead `homeInsights` invalidation + `realtime_notifications_provider`; `test/realtime_item_ids_test.dart` + `test_realtime_purchase_payload.py`
+- [x] Verified: `flutter analyze` (1 pre-existing `bid` warning), `trade_date_range_parity_test` + `realtime_item_ids_test` pass
+
+**Manual QA (performance) — run before prod:**
+
+| Check | Pass |
+|-------|------|
+| Home idle 60s: ≤6 API calls | [ ] |
+| Open item: 3 calls (catalog + stock + activity), no full `trade-purchases` list | [ ] |
+| Scroll purchase history: one `trade-purchases?catalog_item_id=` | [ ] |
+| Two devices: staff patches item A; owner item B detail stable | [ ] |
+| Shell tabs + redirects (`/stock/changes`, `/dashboard`, …) | [ ] |
+| Staff scan → quick stock → save | [ ] |
+
+**Deploy blockers (Phase 8):** Alembic `040` + `041` on production; Render health; owner + staff soak 15 min (no full-app refresh loop).
+
+### V2 release gate (2026-05-29)
+
+| Check | Pass |
+|-------|------|
+| P0 pytest delivery + stock + notifications (21 tests) | [x] 2026-05-29 |
+| `flutter analyze` (touched surfaces) | [x] |
+| Flutter unit tests (15: realtime, stock metrics, notifications, parity, cache) | [x] 2026-05-29 |
+| Alembic head `042_catalog_stock_list_sort_index` (repo) | [x] |
+| `flutter build web --release` → `flutter_app/build/web` | [x] 2026-05-29 |
+| Shell: `ShellRealtimeListener` + `notificationCenterCoordinator` (owner + staff) | [x] |
+| Alembic **040 + 041 + 042** on production | [ ] manual |
+| Owner + staff **15 min soak** (no refresh loop) | [ ] manual |
+| Delivery/stock validation checklist (roadmap) | [ ] manual |
+
+### Phase 5–7 — pruning / desktop / P2
+- [x] FEATURE_PRUNING: settings workspace branding removed; deleted unrouted `low_stock_operations_page.dart`
+- [x] **FEATURE_PRUNING_COMPLETE (2026-05-29):** removed `tenant_branding_provider`; `/get-started` → login; deleted `reports_item_bi_page` (route → catalog item); removed reports fullscreen BI launcher; staff nav **Home | Stock | Scan | Deliveries | Settings** (`/staff/deliveries`, `/staff/settings`); dead stock sheets / low-stock orphan pages already gone
+- [x] FEATURE_PRUNING dead files removed: `reports_fullscreen_page`, `stock_compact_update_sheet`, `quick_stock_patch_sheet` (active stock UX: `update_stock_sheet` + `quick_stock_action_sheet` only)
+- [ ] FEATURE_PRUNING backlog (post-v1): merge owner/staff shells into single `AppShell(role)`; reports inner TabBar → single scroll
+- [ ] Broker UI: keep (purchase workflow); audit DB for `broker_id` usage before removal
+- [x] DESKTOP_DESIGN_SPEC (2026-05-29): `kDesktopMin=1024`, shell extended rail + footer, owner home 2-col grid, stock/purchase/users master-detail, item detail 2-card row, reports KPI row; secondary: catalog 2-col grid, notifications 2-col cards, search list+preview, settings max-width 720, staff home 2-col, opening/low-stock max-width 1280; `flutter analyze` clean; desktop layout smoke tests
+- [x] V2 execution plan (2026-05-29): P0 pytest 14 passed; `HomeDeliveryPipelineCard` after critical alerts; staff home activity before collapsed totals; `reorder_request` notifications + `/catalog/item/:id` deep link; `update_stock_sheet` + `HexaResponsiveSheetViewport`; stock row min 56dp; `stock_row_metrics_test` aligned to expected_system_qty
+- [x] V2 Tasks 21–30 polish (2026-05-29): stock row 56dp; notification toggles wired; staff physical-only row; reports already on `CustomScrollView`
+- [x] UIUX_DEEP_AUDIT (2026-05-29): single `Stock summary` card on item detail; removed duplicate delivery card; verification log only; stock list drops status chip row; low-stock tap → item detail; reports insights 5m keepAlive; delivery/diff colors in summary
+- [x] UIUX build pass (2026-05-29): mobile item detail **Overview / Purchases / Activity** tabs (`NestedScrollView`); opening stock **pinned table header**; `flutter analyze` + build verify
+ (FEATURE_PRUNING §8A backlog)
+
+### Phase 8 — release
+- [x] Supabase MCP: 2 unread notifications in DB
+- [ ] Render MCP logs (workspace auth required)
+- [ ] Manual QA owner + staff post-deploy
+
+### STOCK_LOGIC_DEEP_AUDIT closure (2026-05-28)
+
+- [x] `expected_system_qty` + `system_stock_out_of_sync` on stock detail API; item snapshot shows expected vs system + out-of-sync warning
+- [x] PO `commit-stock` writes `delivery_receive` stock_movements with `trade_purchase:{purchase_id}:{item_id}` idempotency
+- [x] `purchase_delivery_stock_already_applied` checks movement keys + legacy adjustment log
+- [x] Fix `set_opening_stock` → `get_stock_item` internal call (Query default bug)
+- [x] Backfill script: `backend/scripts/backfill_purchase_stock_commit.py` (dry-run supported)
+- [ ] Deploy Alembic `040` + `041` on production
+- [ ] Manual QA: opening + delivered vs system mismatch banner; recompute / commit flows
+- **Backlog (out of scope):** consumption/daily usage tracking; persisted `catalog_items.total_delivered_qty` columns
+
+### Purchase delivery lifecycle (PURCHASE_FLOW_DEEP_AUDIT — 2026-05-28)
+- [x] Backend: migration `041_purchase_delivery_extras`; `TradePurchaseOut.delivery_status` + transition endpoints; staff verify does not commit stock
+- [x] Flutter: `DeliveryStatus` enum, icon badges, full delivery fields on `TradePurchase`, detail timeline + truck meta, role-gated arrive (staff-only), `HomePendingDeliveriesCard`, history filters (`delivery_dispatched` / `delivery_arrived` / `delivery_commit`)
+- [x] Tests: `test_trade_purchase_delivery_pipeline.py` + updated stock increment/reversal tests (9 passed)
+- [ ] Deploy: run Alembic `040` + `041` on production before release
+- [ ] Manual QA: owner dispatch → staff arrive/verify → owner commit; staff cannot commit
+- **Out of scope:** expense tracker (per product decision May 2026 — not in LOGIC_AND_FEATURES_SPEC rollout)
+
+### LOGIC_AND_FEATURES_SPEC rollout (2026-05-29)
+- [x] P1: Staff delivery filters; owner-only opening stock POST; manager read-only business profile; admin-only user mgmt
+- [x] P2: Stock list uses movement `delivery_receive` for purchased; pending by `delivery_status`; expected system + spec diff on list API
+- [x] P2 Flutter: 6-column stock row (wide owner); staff Phys/System/Diff focus
+- [x] P3: Item delivery card; staff financial sections hidden; staff sticky physical-only
+- [x] P4: Staff home tasks-first order; inline pending delivery cards
+- [x] P5: Owner home section reorder; opening stock + OOS + owner tasks snapshot
+- [x] P6: Per-type notification toggles in Settings
+- [x] Build fix (2026-05-29): settings role gates, owner tasks snapshot, stock row/desktop pane, `_parse_period_dates` Query guard; `flutter analyze` clean; `test_staff_cannot_commit_stock` + `test_stock_list_columns` pass
+- [x] Wire notification kind toggles into merged feed (`notificationPassesKindToggles` + Settings kinds incl. physical_reminder)
+- [x] Notification triggers: `delivery_idle` hourly scan (2h+ dispatched); `physical_count_reminder` cron 18:00 IST (`scheduled_notification_jobs.py`)
+- [x] Staff stock row: warehouse row shows Physical (+ Pending truck) only — no System/Diff for staff
+- [ ] Manual QA + prod migrations 040/041
 
 ---
 
@@ -289,7 +432,9 @@ Verification gates per phase:
 - [x] Quick add **Basics | Unit & codes | Review** tabs
 - [x] Stock movement page: `stockPagePeriodProvider` + error retry
 - [x] Network: QUIC/`ERR_NETWORK_CHANGED` retry, session-expired banner, web bulk list 100/page
+- [x] **NETWORK_DEEP_AUDIT (2026-05-29):** `stockListCacheProvider` (30s family dedupe); home OOS uses scoped query; staff low → `listStockLow`; shell `ShellRealtimeListener` (owner+staff); notifications list 120s keepAlive + off-home poll 120s; warehouse alerts 60s cache; delivery `purchase_arrive` offline queue + sync; Alembic **042** stock-list sort index
 - [ ] Deploy Vercel + sign out/in after release
+- [ ] **Prod DB:** Alembic **040 + 041 + 042** (delivery + catalog sort index) — manual after review
 
 ---
 

@@ -8,7 +8,7 @@ import '../auth/session_notifier.dart';
 final appNotificationsListProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
   final keepAlive = ref.keepAlive();
-  final timer = Timer(const Duration(minutes: 2), keepAlive.close);
+  final timer = Timer(const Duration(seconds: 120), keepAlive.close);
   ref.onDispose(timer.cancel);
   final session = ref.watch(sessionProvider);
   if (session == null) return [];

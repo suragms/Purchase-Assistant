@@ -8,7 +8,9 @@ import '../../../../core/auth/dashboard_role.dart';
 import '../../../../core/auth/session_notifier.dart';
 import '../../../../core/design_system/hexa_operational_tokens.dart';
 import '../../../../core/json_coerce.dart';
-import '../../../../core/providers/stock_providers.dart';
+import '../../../../core/providers/item_detail_providers.dart';
+import '../../../../core/providers/stock_providers.dart'
+    show stockItemActivityProvider, stockItemAuditProvider;
 import '../../../../core/theme/hexa_colors.dart';
 
 class ItemPhysicalVerificationCard extends ConsumerWidget {
@@ -18,7 +20,9 @@ class ItemPhysicalVerificationCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final stock = ref.watch(stockItemDetailProvider(itemId)).valueOrNull ?? const <String, dynamic>{};
+    final stock =
+        ref.watch(itemDetailStockProvider(itemId)).valueOrNull ??
+            const <String, dynamic>{};
     final audit = ref.watch(stockItemAuditProvider(itemId)).valueOrNull ?? const <Map<String, dynamic>>[];
     final session = ref.watch(sessionProvider);
     final canVerify = session != null && sessionHasOwnerDashboard(session);
@@ -27,17 +31,15 @@ class ItemPhysicalVerificationCard extends ConsumerWidget {
     final countedAt =
         countedAtRaw != null ? DateTime.tryParse(countedAtRaw)?.toLocal() : null;
     final countedBy = stock['physical_stock_counted_by']?.toString();
-    final phys = coerceToDouble(stock['physical_stock_qty']);
-    final sys = coerceToDouble(stock['current_stock']);
-    final diff = (stock['physical_stock_difference_qty'] as num?)?.toDouble() ?? (phys - sys);
-    final unit = (stock['stock_unit'] ?? stock['unit'] ?? '').toString().toUpperCase();
+    final diff = (stock['physical_stock_difference_qty'] as num?)?.toDouble() ?? 0;
 
-    if (countedAt == null && phys == 0 && diff.abs() < 0.001 && audit.isEmpty) {
+    if (countedAt == null && audit.isEmpty) {
       return const SizedBox.shrink();
     }
 
     final df = DateFormat('dd MMM yyyy • h:mm a');
     final showVerify = canVerify && countedAt != null && diff.abs() > 0.001;
+    final phys = coerceToDouble(stock['physical_stock_qty']);
 
     return Card(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -49,7 +51,7 @@ class ItemPhysicalVerificationCard extends ConsumerWidget {
             Row(
               children: [
                 Expanded(
-                  child: Text('Physical stock verification', style: HexaOp.cardTitle(context)),
+                  child: Text('Verification log', style: HexaOp.cardTitle(context)),
                 ),
                 if (showVerify)
                   FilledButton(
@@ -58,16 +60,12 @@ class ItemPhysicalVerificationCard extends ConsumerWidget {
                   ),
               ],
             ),
-            const SizedBox(height: 8),
-            _kv('Last counted', countedAt != null ? df.format(countedAt) : '—'),
-            _kv('Counted by', (countedBy != null && countedBy.trim().isNotEmpty) ? countedBy.trim() : '—'),
-            _kv('Physical', '${_fmt(phys)} ${unit.isEmpty ? '' : unit}'.trim()),
-            _kv('System', '${_fmt(sys)} ${unit.isEmpty ? '' : unit}'.trim()),
-            _kv(
-              'Difference',
-              '${diff > 0 ? '+' : ''}${_fmt(diff)} ${unit.isEmpty ? '' : unit}'.trim(),
-              valueColor: diff.abs() > 0.001 ? const Color(0xFFA32D2D) : const Color(0xFF2E7D32),
-            ),
+            if (countedAt != null) ...[
+              const SizedBox(height: 8),
+              _kv('Last counted', df.format(countedAt)),
+              if (countedBy != null && countedBy.trim().isNotEmpty)
+                _kv('Counted by', countedBy.trim()),
+            ],
             if (audit.isNotEmpty) ...[
               const SizedBox(height: 10),
               Text('Recent adjustments', style: HexaOp.caption(context).copyWith(fontWeight: FontWeight.w900)),
@@ -143,7 +141,7 @@ class ItemPhysicalVerificationCard extends ConsumerWidget {
             countedQty: countedQty,
             reason: 'Physical count',
           );
-      ref.invalidate(stockItemDetailProvider(itemId));
+      ref.invalidate(itemDetailBundleProvider(itemId));
       ref.invalidate(stockItemActivityProvider(itemId));
       ref.invalidate(stockItemAuditProvider(itemId));
       if (!context.mounted) return;

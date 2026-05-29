@@ -1444,7 +1444,7 @@ class _PurchaseEntryWizardV2State extends ConsumerState<PurchaseEntryWizardV2>
     if (!mounted) return;
     final session = ref.read(sessionProvider);
     if (session == null) return;
-    final bid = session.primaryBusiness.id;
+    // business id is already available from session; keep local only when needed
 
     final delivered = await showModalBottomSheet<bool>(
       context: context,
@@ -1495,14 +1495,10 @@ class _PurchaseEntryWizardV2State extends ConsumerState<PurchaseEntryWizardV2>
     );
 
     if (delivered == true && mounted) {
-      try {
-        await ref.read(hexaApiProvider).markPurchaseDelivered(
-              businessId: bid,
-              purchaseId: purchaseId,
-              isDelivered: true,
-            );
-        invalidatePurchaseWorkspace(ref);
-      } catch (_) {}
+      showTopSnack(
+        context,
+        'Purchase saved — warehouse will receive and verify separately',
+      );
     }
   }
 
