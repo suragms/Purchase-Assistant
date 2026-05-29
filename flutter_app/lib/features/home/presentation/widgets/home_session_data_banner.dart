@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../core/auth/session_notifier.dart';
 import '../../../../core/providers/api_degraded_provider.dart';
 import '../../../../core/providers/home_dashboard_provider.dart';
 
@@ -56,8 +57,11 @@ class HomeSessionDataBanner extends ConsumerWidget {
               ),
               if (authHint)
                 TextButton(
-                  onPressed: () => context.push('/settings'),
-                  child: const Text('Settings'),
+                  onPressed: () async {
+                    await ref.read(sessionProvider.notifier).logout();
+                    if (context.mounted) context.go('/login');
+                  },
+                  child: const Text('Sign in again'),
                 ),
             ],
           ),

@@ -12,6 +12,9 @@ enum BulkLabelsPerPdfFile {
   final int count;
 }
 
+/// Default max labels in one downloaded PDF (single file unless exceeded).
+const kMaxLabelsSinglePdf = 200;
+
 /// Expand [items] with [copiesPerItem] then split into chunks of at most [perFile].
 List<List<BarcodeLabelData>> chunkExpandedLabelsForPdfFiles({
   required List<BarcodeLabelData> items,

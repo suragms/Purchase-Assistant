@@ -150,6 +150,7 @@ class StockListItemOut(BaseModel):
     total_pending_delivery_qty: Decimal | None = None
     expected_system_qty: Decimal | None = None
     system_stock_out_of_sync: bool = False
+    public_token: str | None = None
 
 
 class StockListOut(BaseModel):

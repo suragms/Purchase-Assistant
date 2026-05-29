@@ -134,6 +134,17 @@ final stockCriticalCountProvider = FutureProvider.autoDispose<int>((ref) async {
   return c.critical;
 });
 
+/// Items needing attention on home live bar (matches low-stock page semantics).
+final homeStockAttentionCountProvider =
+    FutureProvider.autoDispose<int>((ref) async {
+  _providerKeepAlive(ref, const Duration(minutes: 2));
+  final counts = await ref.watch(stockStatusCountsProvider.future);
+  final out = coerceToInt(counts['out']);
+  final low = coerceToInt(counts['low']);
+  final critical = coerceToInt(counts['critical']);
+  return out + low + critical;
+});
+
 /// Top low-stock rows (server sorts by stock vs reorder).
 final stockLowTopHomeProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {

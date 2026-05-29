@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/design_system/hexa_operational_tokens.dart';
-import '../../../core/design_system/hexa_responsive.dart';
 import '../../../core/widgets/operational_async_button.dart';
 import '../services/bulk_pdf_chunks.dart';
 
@@ -43,6 +42,90 @@ class BulkBarcodePrintToolbar extends StatelessWidget {
   final Future<void> Function() onPrint;
   final String pdfButtonLabel;
 
+  Future<void> _openSettings(BuildContext context) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                'Label settings',
+                style: Theme.of(ctx).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w900,
+                    ),
+              ),
+              const SizedBox(height: 12),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('A4 sheet layout'),
+                subtitle: const Text('Off = thermal roll'),
+                value: denseA4,
+                onChanged: busy ? null : onDenseA4Changed,
+              ),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('QR codes'),
+                subtitle: const Text('Off = Code128 barcode'),
+                value: useQr,
+                onChanged: busy ? null : onQrChanged,
+              ),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Copies per item'),
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      onPressed: busy || copies <= 1
+                          ? null
+                          : () => onCopiesChanged(copies - 1),
+                      icon: const Icon(Icons.remove),
+                    ),
+                    Text('×$copies'),
+                    IconButton(
+                      onPressed: busy || copies >= 5
+                          ? null
+                          : () => onCopiesChanged(copies + 1),
+                      icon: const Icon(Icons.add),
+                    ),
+                  ],
+                ),
+              ),
+              if (denseA4)
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Labels per page'),
+                  subtitle: Text('${labelsPerPdfFile.count} labels per A4 page'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: busy
+                      ? null
+                      : () {
+                          final next = switch (labelsPerPdfFile) {
+                            BulkLabelsPerPdfFile.n30 =>
+                              BulkLabelsPerPdfFile.n50,
+                            BulkLabelsPerPdfFile.n50 =>
+                              BulkLabelsPerPdfFile.n60,
+                            _ => BulkLabelsPerPdfFile.n30,
+                          };
+                          onLabelsPerPdfFileChanged(next);
+                        },
+                ),
+              Text(
+                'Downloads one PDF up to $kMaxLabelsSinglePdf labels.',
+                style: Theme.of(ctx).textTheme.bodySmall,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final enabled = selectedCount > 0 && !busy;
@@ -73,194 +156,38 @@ class BulkBarcodePrintToolbar extends StatelessWidget {
                     ),
                   ),
               ],
-              Align(
-                alignment: Alignment.centerLeft,
-                child: Wrap(
-                  spacing: 6,
-                  runSpacing: 6,
-                  children: [
-                    _FmtChip(
-                      label: denseA4 ? 'A4' : 'Thermal',
-                      selected: denseA4,
-                      onTap: busy ? null : () => onDenseA4Changed(!denseA4),
-                    ),
-                    _FmtChip(
-                      label: useQr ? 'QR' : 'Code128',
-                      selected: !useQr,
-                      onTap: busy ? null : () => onQrChanged(!useQr),
-                    ),
-                    _CopiesChip(
-                      value: copies,
-                      enabled: !busy,
-                      onChanged: onCopiesChanged,
-                    ),
-                    if (denseA4) ...[
-                      _FmtChip(
-                        label: '${labelsPerPdfFile.count}/pg',
-                        selected: true,
-                        onTap: busy
-                            ? null
-                            : () {
-                                final next = switch (labelsPerPdfFile) {
-                                  BulkLabelsPerPdfFile.n30 =>
-                                    BulkLabelsPerPdfFile.n50,
-                                  BulkLabelsPerPdfFile.n50 =>
-                                    BulkLabelsPerPdfFile.n60,
-                                  _ => BulkLabelsPerPdfFile.n30,
-                                };
-                                onLabelsPerPdfFileChanged(next);
-                              },
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-              const SizedBox(height: 6),
-              LayoutBuilder(
-                builder: (context, constraints) {
-                  final narrow = constraints.maxWidth < 360;
-                  final buttons = [
-                    OperationalAsyncButton(
-                      label: 'Preview',
-                      icon: Icons.visibility_outlined,
-                      busy: busy,
-                      enabled: enabled,
-                      onPressed: enabled ? onPreview : null,
-                    ),
-                    OperationalAsyncButton(
-                      label: pdfButtonLabel,
-                      icon: Icons.download_outlined,
-                      busy: busy,
-                      enabled: enabled,
-                      onPressed: enabled ? onPdf : null,
-                    ),
-                    OperationalAsyncButton(
-                      label: 'Print',
+              Row(
+                children: [
+                  Expanded(
+                    child: OperationalAsyncButton(
+                      label: selectedCount > 0
+                          ? 'Print selected ($selectedCount)'
+                          : 'Print selected',
                       icon: Icons.print_outlined,
                       filled: true,
                       busy: busy,
                       enabled: enabled,
                       onPressed: enabled ? onPrint : null,
                     ),
-                  ];
-                  if (narrow) {
-                    return Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        for (var i = 0; i < buttons.length; i++) ...[
-                          buttons[i],
-                          if (i != buttons.length - 1)
-                            const SizedBox(height: 6),
-                        ],
-                      ],
-                    );
-                  }
-                  return Row(
-                    children: [
-                      for (var i = 0; i < buttons.length; i++) ...[
-                        Expanded(child: buttons[i]),
-                        if (i != buttons.length - 1) const SizedBox(width: 6),
-                      ],
-                    ],
-                  );
-                },
+                  ),
+                  const SizedBox(width: 8),
+                  IconButton(
+                    tooltip: 'Label settings',
+                    onPressed: busy ? null : () => _openSettings(context),
+                    icon: const Icon(Icons.settings_outlined),
+                  ),
+                ],
+              ),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton(
+                  onPressed: enabled ? () => onPdf() : null,
+                  child: Text(pdfButtonLabel),
+                ),
               ),
             ],
           ),
         ),
-      ),
-    );
-  }
-}
-
-class _FmtChip extends StatelessWidget {
-  const _FmtChip({
-    required this.label,
-    required this.selected,
-    this.onTap,
-  });
-
-  final String label;
-  final bool selected;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return HexaAccessibleFilterChip(
-      label: label,
-      selected: selected,
-      compact: true,
-      onSelected: onTap == null ? null : (_) => onTap!(),
-    );
-  }
-}
-
-class _CopiesChip extends StatelessWidget {
-  const _CopiesChip({
-    required this.value,
-    required this.enabled,
-    required this.onChanged,
-  });
-
-  final int value;
-  final bool enabled;
-  final ValueChanged<int> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    return ConstrainedBox(
-      constraints:
-          const BoxConstraints(minHeight: HexaResponsive.minTouchTarget),
-      child: Container(
-        decoration: BoxDecoration(
-          border: Border.all(color: Colors.black26),
-          borderRadius: BorderRadius.circular(20),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _MiniIconBtn(
-              icon: Icons.remove,
-              enabled: enabled && value > 1,
-              onTap: () => onChanged(value - 1),
-            ),
-            Text(
-              '×$value',
-              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800),
-            ),
-            _MiniIconBtn(
-              icon: Icons.add,
-              enabled: enabled && value < 5,
-              onTap: () => onChanged(value + 1),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _MiniIconBtn extends StatelessWidget {
-  const _MiniIconBtn({
-    required this.icon,
-    required this.enabled,
-    required this.onTap,
-  });
-
-  final IconData icon;
-  final bool enabled;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: 40,
-      height: 40,
-      child: IconButton(
-        padding: EdgeInsets.zero,
-        iconSize: 16,
-        icon: Icon(icon),
-        onPressed: enabled ? onTap : null,
       ),
     );
   }

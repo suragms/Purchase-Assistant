@@ -888,6 +888,10 @@ class _BrokerWizardPageState extends ConsumerState<BrokerWizardPage> {
       canPop: false,
       onPopInvokedWithResult: (didPop, result) async {
         if (didPop) return;
+        if (_step > 0) {
+          setState(() => _step--);
+          return;
+        }
         await _exit();
       },
       child: FullScreenFormScaffold(

@@ -28,9 +28,8 @@ class HomeLiveStatusBar extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     if (!isOwner) return const SizedBox.shrink();
 
-    final alerts = ref.watch(stockAlertCountsProvider).valueOrNull;
-    final low = alerts?.low ?? 0;
-    final crit = alerts?.critical ?? 0;
+    final attentionAsync = ref.watch(homeStockAttentionCountProvider);
+    final attention = attentionAsync.valueOrNull ?? 0;
     final warehouse = ref.watch(homeWarehouseAlertsProvider).valueOrNull;
     final deliveryN = warehouse?.pendingDeliveries ?? 0;
     final mismatchN =
@@ -39,10 +38,13 @@ class HomeLiveStatusBar extends ConsumerWidget {
         0;
     final ago = homeRefreshAgo(lastRefreshedAt);
 
+    final attentionLabel = attention == 1
+        ? '1 need attention'
+        : '$attention need attention';
+
     final statusLine = offline
         ? 'OFFLINE • Showing cached data • Last synced $ago'
-        : 'LIVE • Updated $ago • $low low stock • $deliveryN pending delivery'
-            '${crit > 0 ? ' • $crit critical' : ''}'
+        : 'LIVE • Updated $ago • $attentionLabel • $deliveryN pending delivery'
             '${mismatchN > 0 ? ' • $mismatchN stock mismatch' : ''}';
 
     return Material(
@@ -50,7 +52,7 @@ class HomeLiveStatusBar extends ConsumerWidget {
       borderRadius: BorderRadius.circular(10),
       child: InkWell(
         borderRadius: BorderRadius.circular(10),
-        onTap: () => _showHealthCenter(context, warehouse),
+        onTap: () => _showHealthCenter(context, warehouse, attention),
         child: Container(
           height: 36,
           padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -86,7 +88,11 @@ class HomeLiveStatusBar extends ConsumerWidget {
     );
   }
 
-  void _showHealthCenter(BuildContext context, WarehouseAlerts? a) {
+  void _showHealthCenter(
+    BuildContext context,
+    WarehouseAlerts? a,
+    int attention,
+  ) {
     showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
@@ -107,9 +113,9 @@ class HomeLiveStatusBar extends ConsumerWidget {
                 _healthTile(
                   ctx,
                   icon: Icons.inventory_2_outlined,
-                  label: 'Low stock items',
-                  value: '${alerts.lowStock + alerts.criticalStock}',
-                  route: '/stock',
+                  label: 'Items need attention',
+                  value: '$attention',
+                  route: '/stock/low-stock',
                 ),
                 _healthTile(
                   ctx,

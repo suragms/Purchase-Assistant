@@ -6,23 +6,43 @@ from starlette.responses import HTMLResponse
 
 from app.database import async_session_factory
 from app.models import CatalogItem, ItemCategory
-from app.services.stock_inventory import stock_status
+from app.services.stock_inventory import (
+    compute_expected_system_qty,
+    movement_delivered_qty_map,
+    stock_status,
+)
 
 router = APIRouter(prefix="/public/items", tags=["public-items"])
 
 
-def _safe_item_payload(item: CatalogItem, category_name: str | None) -> dict:
-    current = item.current_stock or 0
-    reorder = item.reorder_level or 0
+async def _safe_item_payload(
+    item: CatalogItem,
+    category_name: str | None,
+    *,
+    delivered_qty: float | None = None,
+) -> dict:
+    current = float(item.current_stock or 0)
+    reorder = float(item.reorder_level or 0)
     unit = item.stock_unit or item.default_unit or item.selling_unit or "unit"
+    opening = float(getattr(item, "opening_stock_qty", None) or 0)
+    delivered = delivered_qty if delivered_qty is not None else 0.0
+    expected = float(
+        compute_expected_system_qty(
+            getattr(item, "opening_stock_qty", None),
+            delivered,
+        )
+    )
     return {
         "name": item.name,
         "category": category_name,
         "item_code": item.item_code,
         "barcode": item.barcode,
-        "current_stock": float(current),
+        "current_stock": current,
+        "expected_system_qty": expected,
+        "opening_stock_qty": opening,
+        "total_delivered_qty": delivered,
         "stock_unit": unit,
-        "status": stock_status(current, reorder),
+        "status": stock_status(item.current_stock, item.reorder_level),
         "rack_location": item.rack_location,
         "last_stock_updated_at": item.last_stock_updated_at.isoformat()
         if item.last_stock_updated_at
@@ -30,12 +50,12 @@ def _safe_item_payload(item: CatalogItem, category_name: str | None) -> dict:
     }
 
 
-async def _load_public_item(token: str) -> tuple[CatalogItem, str | None]:
+async def _load_public_item(token: str) -> tuple[CatalogItem, str | None, float]:
     clean = token.strip()
     if not clean or len(clean) > 64:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Item not found")
     async with async_session_factory() as db:
-        res = await db.execute(
+        by_token = await db.execute(
             select(CatalogItem, ItemCategory.name)
             .join(ItemCategory, ItemCategory.id == CatalogItem.category_id)
             .where(
@@ -43,23 +63,44 @@ async def _load_public_item(token: str) -> tuple[CatalogItem, str | None]:
                 CatalogItem.deleted_at.is_(None),
             )
         )
-        row = res.first()
+        row = by_token.first()
         if row is None:
-            raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Item not found")
-        return row[0], row[1]
+            by_code = await db.execute(
+                select(CatalogItem, ItemCategory.name)
+                .join(ItemCategory, ItemCategory.id == CatalogItem.category_id)
+                .where(
+                    CatalogItem.item_code == clean,
+                    CatalogItem.deleted_at.is_(None),
+                )
+                .limit(2)
+            )
+            code_rows = by_code.all()
+            if len(code_rows) != 1:
+                raise HTTPException(
+                    status.HTTP_404_NOT_FOUND,
+                    detail="Item not found — scan the QR on the label",
+                )
+            row = code_rows[0]
+        item, category_name = row[0], row[1]
+        delivered_map = await movement_delivered_qty_map(
+            db, item.business_id, [item.id]
+        )
+        delivered = float(delivered_map.get(item.id, 0))
+        return item, category_name, delivered
 
 
 @router.get("/{token}.json")
 async def public_item_json(token: str) -> dict:
-    item, category_name = await _load_public_item(token)
-    return _safe_item_payload(item, category_name)
+    item, category_name, delivered = await _load_public_item(token)
+    return _safe_item_payload(item, category_name, delivered_qty=delivered)
 
 
 @router.get("/{token}", response_class=HTMLResponse)
 async def public_item_page(token: str) -> HTMLResponse:
-    item, category_name = await _load_public_item(token)
-    payload = _safe_item_payload(item, category_name)
+    item, category_name, delivered = await _load_public_item(token)
+    payload = _safe_item_payload(item, category_name, delivered_qty=delivered)
     status_label = str(payload["status"]).replace("_", " ").title()
+    stock_qty = payload["expected_system_qty"]
     body = f"""
 <!doctype html>
 <html lang="en">
@@ -84,8 +125,8 @@ async def public_item_page(token: str) -> HTMLResponse:
     <h1>{html.escape(payload["name"])}</h1>
     <div class="muted">{html.escape(payload.get("category") or "Catalog item")}</div>
     <div class="stock">
-      <div class="muted">Current stock</div>
-      <div class="qty">{payload["current_stock"]:g} {html.escape(str(payload["stock_unit"]).upper())}</div>
+      <div class="muted">System stock</div>
+      <div class="qty">{stock_qty:g} {html.escape(str(payload["stock_unit"]).upper())}</div>
       <div class="status">{html.escape(status_label)}</div>
     </div>
     <p class="muted">Item code: {html.escape(payload.get("item_code") or "-")}</p>
@@ -95,4 +136,3 @@ async def public_item_page(token: str) -> HTMLResponse:
 </html>
 """
     return HTMLResponse(body)
-

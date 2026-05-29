@@ -100,4 +100,18 @@ class AppConfig {
 
   /// Keep in sync with `pubspec.yaml` `version:` (shown in Settings).
   static const String packageVersion = '0.1.4+5';
+
+  /// Flutter web origin for QR label URLs (public scan route).
+  static String get webAppBaseUrl {
+    if (kIsWeb) {
+      final page = Uri.base;
+      if (page.host.isNotEmpty) {
+        return page.origin;
+      }
+    }
+    return const String.fromEnvironment(
+      'WEB_APP_BASE_URL',
+      defaultValue: 'https://harisree.app',
+    );
+  }
 }

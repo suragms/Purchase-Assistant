@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../auth/auth_failure_policy.dart';
 import '../auth/session_notifier.dart';
 import 'post_auth_route.dart'
     show authenticatedHomePath, sessionCanManageUsers, sessionIsStaff;
@@ -15,11 +16,12 @@ import '../../features/catalog/presentation/catalog_add_category_page.dart';
 import '../../features/catalog/presentation/catalog_add_item_page.dart';
 import '../../features/catalog/presentation/catalog_add_subcategory_page.dart';
 import '../../features/catalog/presentation/catalog_category_detail_page.dart';
-import '../../features/catalog/presentation/item_detail_page.dart';
-import '../../features/catalog/presentation/item_edit_page.dart';
+import '../../features/catalog/presentation/catalog_item_create_page.dart';
 import '../../features/catalog/presentation/catalog_item_timeline_page.dart';
 import '../../features/catalog/presentation/catalog_page.dart';
 import '../../features/catalog/presentation/catalog_type_items_page.dart';
+import '../../features/catalog/presentation/item_detail_page.dart';
+import '../../features/catalog/presentation/item_edit_page.dart';
 import '../../features/catalog/presentation/quick_add_catalog_item_page.dart';
 import '../../features/catalog/presentation/batch_item_create_page.dart';
 import '../../features/catalog/presentation/catalog_missing_codes_page.dart';
@@ -63,6 +65,7 @@ import '../../features/barcode/presentation/barcode_print_page.dart';
 import '../../features/barcode/presentation/bulk_barcode_print_page.dart';
 import '../../features/barcode/presentation/barcode_scan_page.dart';
 import '../../features/barcode/presentation/barcode_scan_history_page.dart';
+import '../../features/barcode/presentation/public_item_scan_page.dart';
 import '../../features/barcode/presentation/stock_audit_session_page.dart';
 import '../../features/barcode/presentation/stock_audit_summary_page.dart';
 import '../../features/stock/presentation/stock_page.dart';
@@ -161,7 +164,8 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       final public = loc == '/splash' ||
           loc == '/login' ||
           loc == '/forgot-password' ||
-          loc == '/reset-password';
+          loc == '/reset-password' ||
+          loc.startsWith('/scan/');
 
       ProviderContainer container;
       try {
@@ -173,8 +177,9 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       }
 
       final session = container.read(sessionProvider);
+      final authExpired = container.read(authSessionExpiredProvider);
       // No session → only public auth/onboarding routes. (JWT may still be restoring in main(); splash handles that.)
-      if (session == null) {
+      if (session == null || authExpired) {
         if (loc == '/signup') {
           return '/login?tab=signin&notice=owner_only';
         }
@@ -281,6 +286,15 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         ),
       ),
       GoRoute(
+        path: '/scan/:token',
+        pageBuilder: (context, state) => iosPushPage(
+          key: state.pageKey,
+          child: PublicItemScanPage(
+            token: state.pathParameters['token'] ?? '',
+          ),
+        ),
+      ),
+      GoRoute(
         path: '/barcode/scan',
         name: 'barcode_scan',
         pageBuilder: (context, state) => iosPushPage(
@@ -372,10 +386,22 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/catalog/quick-add',
         name: 'catalog_quick_add',
-        pageBuilder: (context, state) => iosPushPage(
-          key: state.pageKey,
-          child: const QuickAddCatalogItemPage(),
-        ),
+        pageBuilder: (context, state) {
+          final sup = state.uri.queryParameters['defaultSupplierId']?.trim();
+          final bro = state.uri.queryParameters['defaultBrokerId']?.trim();
+          final returnResult =
+              state.uri.queryParameters['returnToPurchase'] == '1';
+          return iosPushPage(
+            key: state.pageKey,
+            child: CatalogItemCreatePage(
+              defaultSupplierId:
+                  sup != null && sup.isNotEmpty ? sup : null,
+              defaultBrokerId:
+                  bro != null && bro.isNotEmpty ? bro : null,
+              returnResultOnSave: returnResult,
+            ),
+          );
+        },
       ),
       GoRoute(
         path: '/catalog/new-category',
@@ -400,12 +426,14 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           final cid = state.pathParameters['categoryId']!;
           final tid = state.pathParameters['typeId']!;
           final sid = state.uri.queryParameters['defaultSupplierId']?.trim();
+          final bid = state.uri.queryParameters['defaultBrokerId']?.trim();
           return iosPushPage(
             key: state.pageKey,
             child: CatalogAddItemPage(
               categoryId: cid,
               typeId: tid,
               defaultSupplierId: sid != null && sid.isNotEmpty ? sid : null,
+              defaultBrokerId: bid != null && bid.isNotEmpty ? bid : null,
             ),
           );
         },

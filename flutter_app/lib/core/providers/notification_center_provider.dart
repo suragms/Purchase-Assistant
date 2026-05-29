@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../auth/auth_failure_policy.dart';
 import '../auth/session_notifier.dart';
 import '../../features/shell/shell_branch_provider.dart';
 import 'business_aggregates_invalidation.dart' show invalidateNotificationSurfaces;
@@ -13,7 +14,8 @@ import 'warehouse_alerts_provider.dart';
 final notificationCenterCoordinatorProvider =
     Provider.autoDispose<void>((ref) {
   final session = ref.watch(sessionProvider);
-  if (session == null) return;
+  final authExpired = ref.watch(authSessionExpiredProvider);
+  if (session == null || authExpired) return;
 
   ref.watch(appNotificationsListProvider);
   ref.watch(warehouseAlertsProvider);

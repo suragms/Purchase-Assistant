@@ -4,9 +4,14 @@ import '../../../../core/design_system/hexa_ds_tokens.dart';
 import '../../../../core/design_system/hexa_responsive.dart';
 import 'stock_table_layout.dart';
 
-/// Warehouse table header: item + system / physical / difference.
+/// Warehouse table header: item + metric columns (staff vs owner).
 class StockWarehouseTableHeader extends StatelessWidget {
-  const StockWarehouseTableHeader({super.key});
+  const StockWarehouseTableHeader({
+    super.key,
+    this.isStaffMode = false,
+  });
+
+  final bool isStaffMode;
 
   @override
   Widget build(BuildContext context) {
@@ -16,6 +21,10 @@ class StockWarehouseTableHeader extends StatelessWidget {
       letterSpacing: 0.2,
       height: 1.15,
     );
+
+    final metrics = isStaffMode
+        ? const ['PHYS', 'PENDING']
+        : const ['SYSTEM', 'PHYS', 'DIFF'];
 
     return Padding(
       padding: EdgeInsets.symmetric(
@@ -40,9 +49,7 @@ class StockWarehouseTableHeader extends StatelessWidget {
                   child: Text('ITEM', style: hdr),
                 ),
               ),
-              _metricHeader('SYSTEM', hdr),
-              _metricHeader('PHYS', hdr),
-              _metricHeader('DIFF', hdr),
+              for (final label in metrics) _metricHeader(label, hdr),
             ],
           ),
         ),

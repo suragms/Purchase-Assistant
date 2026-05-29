@@ -5,6 +5,7 @@ import 'package:barcode/barcode.dart';
 import 'package:flutter/foundation.dart';
 
 import '../../../core/errors/barcode_operation_errors.dart';
+import '../../../core/config/app_config.dart';
 import '../../../core/json_coerce.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -19,6 +20,7 @@ class BarcodeLabelData {
     required this.itemCode,
     required this.itemName,
     this.barcode,
+    this.publicToken,
     this.unit,
     this.currentStock,
     this.lastPurchaseDate,
@@ -30,6 +32,8 @@ class BarcodeLabelData {
 
   /// Scannable packaging barcode (Code128/QR payload).
   final String? barcode;
+  /// Public scan token for QR URL labels.
+  final String? publicToken;
   /// Internal shelf / ERP code (printed as text).
   final String itemCode;
   final String itemName;
@@ -46,6 +50,14 @@ class BarcodeLabelData {
     final b = barcode?.trim() ?? '';
     if (b.isNotEmpty) return BarcodePdfService.sanitizePrintPayload(b);
     return BarcodePdfService.sanitizePrintPayload(itemCode.trim());
+  }
+
+  /// QR payload when [publicToken] is set (browser scan route).
+  String? qrScanUrl(String webBase) {
+    final token = publicToken?.trim();
+    if (token == null || token.isEmpty) return null;
+    final base = webBase.endsWith('/') ? webBase.substring(0, webBase.length - 1) : webBase;
+    return '$base/scan/$token';
   }
 
   Map<String, dynamic> toJson() => {
@@ -143,7 +155,17 @@ class BarcodePdfService {
     return out.length > 48 ? out.substring(0, 48) : out;
   }
 
-  static String _symbologyValue(BarcodeLabelData data) {
+  static String _symbologyValue(
+    BarcodeLabelData data, {
+    BarcodeSymbolMode symbol = BarcodeSymbolMode.code128,
+    String? webBase,
+  }) {
+    if (symbol == BarcodeSymbolMode.qrCode && webBase != null) {
+      final url = data.qrScanUrl(webBase);
+      if (url != null && url.isNotEmpty) {
+        return sanitizePrintPayload(url, forQr: true);
+      }
+    }
     final v = data.symbologyValue;
     if (v.isEmpty || v == '0') {
       throw BarcodeOperationException(
@@ -383,7 +405,7 @@ class BarcodePdfService {
 
     final mm = PdfPageFormat.mm;
     const margin = 5.0 * PdfPageFormat.mm;
-    const gap = 2.0 * PdfPageFormat.mm;
+    const gap = 4.0 * PdfPageFormat.mm;
     const sheet = PdfPageFormat.a4;
     final innerW = sheet.width - 2 * margin;
     final innerH = sheet.height - 2 * margin;
@@ -787,18 +809,22 @@ class BarcodePdfService {
         ),
       ];
     }
-    final code = data.symbologyValue.isEmpty
-        ? sanitizePrintPayload(data.itemName, forQr: symbol == BarcodeSymbolMode.qrCode)
-        : data.symbologyValue;
+    final code = _symbologyValue(
+      data,
+      symbol: symbol,
+      webBase: AppConfig.webAppBaseUrl,
+    );
     final codeLine = data.itemCode.trim().isEmpty ? code : data.itemCode.trim();
     final (titleSize, codeSize, bcHeight, qrSize) = _sizes(size);
     final titleSz = compact ? math.min(titleSize, 6.0) : titleSize;
     final codeSz = compact ? math.min(codeSize, 5.0) : codeSize;
     final bcH = compact ? math.min(bcHeight, 14.0) : bcHeight;
+    final safeName =
+        sanitizePrintPayload(data.itemName, forQr: symbol == BarcodeSymbolMode.qrCode);
 
     final children = <pw.Widget>[
       pw.Text(
-        data.itemName,
+        safeName,
         maxLines: compact ? 1 : 2,
         style: pw.TextStyle(fontSize: titleSz, fontWeight: pw.FontWeight.bold),
       ),
@@ -910,13 +936,17 @@ class BarcodePdfService {
     int? serialNumber,
     bool showSerialBadge = true,
   }) {
-    final code = data.symbologyValue.isEmpty
-        ? sanitizePrintPayload(data.itemName, forQr: symbol == BarcodeSymbolMode.qrCode)
-        : data.symbologyValue;
+    final code = _symbologyValue(
+      data,
+      symbol: symbol,
+      webBase: AppConfig.webAppBaseUrl,
+    );
     final codeLine = data.itemCode.trim().isEmpty ? code : data.itemCode.trim();
     final bcH = compact ? 12.0 : 22.0;
     final nameSize = compact ? 5.0 : 7.0;
     final metaSize = compact ? 5.0 : 6.0;
+    final safeName =
+        sanitizePrintPayload(data.itemName, forQr: symbol == BarcodeSymbolMode.qrCode);
 
     final qtyStr = pdfQtyDisplayString(data.lastPurchaseQty);
     String? dateStr;
@@ -957,7 +987,7 @@ class BarcodePdfService {
             mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
             children: [
               pw.Text(
-                data.itemName,
+                safeName,
                 maxLines: compact ? 1 : 2,
                 style: pw.TextStyle(
                   fontSize: nameSize,

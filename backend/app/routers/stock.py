@@ -285,6 +285,7 @@ def _item_to_list_row(
         total_pending_delivery_qty=total_pending_delivery_qty,
         expected_system_qty=expected,
         system_stock_out_of_sync=out_of_sync,
+        public_token=getattr(item, "public_token", None),
     )
 
 

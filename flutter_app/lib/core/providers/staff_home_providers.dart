@@ -206,20 +206,82 @@ bool staffDeliveryNeedsAction(TradePurchase p) {
       p.statusEnum == PurchaseStatus.cancelled) {
     return false;
   }
+  if (p.isDeliveryCommitted) return false;
   final ds = p.deliveryStatusEnum;
-  return ds == DeliveryStatus.dispatched ||
+  if (ds == DeliveryStatus.dispatched ||
       ds == DeliveryStatus.inTransit ||
       ds == DeliveryStatus.arrived ||
-      ds == DeliveryStatus.staffVerifying;
+      ds == DeliveryStatus.staffVerifying) {
+    return true;
+  }
+  if (p.isDelivered) return true;
+  return false;
 }
+
+/// Grouped delivery pipeline for staff deliveries page sections.
+class StaffDeliverySections {
+  const StaffDeliverySections({
+    this.dispatched = const [],
+    this.arrived = const [],
+    this.pendingVerification = const [],
+  });
+
+  final List<TradePurchase> dispatched;
+  final List<TradePurchase> arrived;
+  final List<TradePurchase> pendingVerification;
+
+  int get total =>
+      dispatched.length + arrived.length + pendingVerification.length;
+}
+
+StaffDeliverySections groupStaffDeliverySections(List<TradePurchase> purchases) {
+  final dispatched = <TradePurchase>[];
+  final arrived = <TradePurchase>[];
+  final pendingVerification = <TradePurchase>[];
+  for (final p in purchases) {
+    if (p.statusEnum == PurchaseStatus.deleted ||
+        p.statusEnum == PurchaseStatus.cancelled ||
+        p.isDeliveryCommitted) {
+      continue;
+    }
+    final ds = p.deliveryStatusEnum;
+    if (ds == DeliveryStatus.dispatched || ds == DeliveryStatus.inTransit) {
+      dispatched.add(p);
+    } else if (ds == DeliveryStatus.staffVerified ||
+        ds == DeliveryStatus.partial) {
+      pendingVerification.add(p);
+    } else if (ds == DeliveryStatus.arrived ||
+        ds == DeliveryStatus.staffVerifying ||
+        p.isDelivered ||
+        staffDeliveryNeedsAction(p)) {
+      arrived.add(p);
+    }
+  }
+  int cmp(TradePurchase a, TradePurchase b) =>
+      a.purchaseDate.compareTo(b.purchaseDate);
+  dispatched.sort(cmp);
+  arrived.sort(cmp);
+  pendingVerification.sort(cmp);
+  return StaffDeliverySections(
+    dispatched: dispatched,
+    arrived: arrived,
+    pendingVerification: pendingVerification,
+  );
+}
+
+final staffDeliverySectionsProvider =
+    Provider.autoDispose<AsyncValue<StaffDeliverySections>>((ref) {
+  final list = ref.watch(tradePurchasesParsedProvider);
+  return list.whenData(groupStaffDeliverySections);
+});
 
 /// Warehouse deliveries staff can act on (arrive / verify) — oldest first.
 final staffPendingDeliveriesProvider =
     Provider.autoDispose<AsyncValue<List<TradePurchase>>>((ref) {
-  final list = ref.watch(tradePurchasesParsedProvider);
-  return list.whenData((purchases) {
-    final pending = purchases.where(staffDeliveryNeedsAction).toList()
-      ..sort((a, b) => a.purchaseDate.compareTo(b.purchaseDate));
+  final sections = ref.watch(staffDeliverySectionsProvider);
+  return sections.whenData((s) {
+    final pending = [...s.dispatched, ...s.arrived, ...s.pendingVerification];
+    pending.sort((a, b) => a.purchaseDate.compareTo(b.purchaseDate));
     return pending;
   });
 });

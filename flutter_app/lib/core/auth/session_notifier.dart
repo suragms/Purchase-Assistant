@@ -18,6 +18,7 @@ import '../providers/staff_home_providers.dart' show invalidateStaffHomeCaches;
 import '../providers/suppliers_list_provider.dart';
 import '../router/post_auth_route.dart' show sessionIsStaff;
 import '../services/staff_activity_logger.dart';
+import 'auth_failure_policy.dart';
 import 'google_sign_in_helper.dart';
 import 'secure_token_store.dart';
 import 'session_cache.dart';
@@ -105,8 +106,21 @@ final hexaApiProvider = Provider<HexaApi>((ref) {
               final invalidRefresh = sc == 401 || sc == 403;
               if (!disposed && invalidRefresh) {
                 try {
+                  ref.read(authRefreshFailureTrackerProvider).reset();
+                  ref.read(authSessionExpiredProvider.notifier).markExpired();
                   await ref.read(sessionProvider.notifier).logout();
                 } catch (_) {/* container disposed */}
+              } else if (!disposed) {
+                final tracker = ref.read(authRefreshFailureTrackerProvider);
+                tracker.recordTransientFailure();
+                if (tracker.shouldForceLogout()) {
+                  try {
+                    tracker.reset();
+                    ref.read(authSessionExpiredProvider.notifier).markExpired();
+                    await ref.read(sessionProvider.notifier).logout();
+                  } catch (_) {/* container disposed */}
+                  return false;
+                }
               }
               if (!disposed) {
                 SchedulerBinding.instance.addPostFrameCallback((_) {
@@ -126,6 +140,16 @@ final hexaApiProvider = Provider<HexaApi>((ref) {
               return false;
             } catch (_) {
               if (!disposed) {
+                final tracker = ref.read(authRefreshFailureTrackerProvider);
+                tracker.recordTransientFailure();
+                if (tracker.shouldForceLogout()) {
+                  try {
+                    tracker.reset();
+                    ref.read(authSessionExpiredProvider.notifier).markExpired();
+                    await ref.read(sessionProvider.notifier).logout();
+                  } catch (_) {/* container disposed */}
+                  return false;
+                }
                 SchedulerBinding.instance.addPostFrameCallback((_) {
                   if (disposed) return;
                   try {
@@ -139,6 +163,14 @@ final hexaApiProvider = Provider<HexaApi>((ref) {
             }
           },
         ),
+    onTerminalAuthFailure: (reason) async {
+      if (disposed) return;
+      try {
+        ref.read(authRefreshFailureTrackerProvider).reset();
+        ref.read(authSessionExpiredProvider.notifier).markExpired();
+        await ref.read(sessionProvider.notifier).logout();
+      } catch (_) {/* container disposed */}
+    },
     onConnectivityBanner: (degraded, hint) {
       if (disposed) return;
       // Dio interceptors can run synchronously while a frame is building; never
@@ -226,6 +258,14 @@ class SessionNotifier extends Notifier<Session?> {
     final cache = SessionCache(ref.read(sharedPreferencesProvider));
     await cache.saveBusinesses(session.businesses,
         isSuperAdmin: session.isSuperAdmin);
+  }
+
+  void _clearAuthFailureFlags() {
+    if (_disposed) return;
+    try {
+      ref.read(authSessionExpiredProvider.notifier).clear();
+      ref.read(authRefreshFailureTrackerProvider).reset();
+    } catch (_) {}
   }
 
   void _notifySessionExpiredBanner() {
@@ -352,6 +392,7 @@ class SessionNotifier extends Notifier<Session?> {
           isSuperAdmin: isSa);
       state = session;
       await _persistSession(session);
+      _clearAuthFailureFlags();
       authRefresh.value++;
       invalidateStaffHomeCaches(ref);
       _scheduleWorkspaceBootstrap();
@@ -394,6 +435,7 @@ class SessionNotifier extends Notifier<Session?> {
               isSuperAdmin: isSa);
           state = session;
           await _persistSession(session);
+          _clearAuthFailureFlags();
           authRefresh.value++;
           _scheduleWorkspaceBootstrap();
           _warmWorkspaceListCaches();
@@ -528,6 +570,7 @@ class SessionNotifier extends Notifier<Session?> {
         isSuperAdmin: isSa);
     state = session;
     await _persistSession(session);
+    _clearAuthFailureFlags();
     authRefresh.value++;
     invalidateStaffHomeCaches(ref);
     _notifyStaffAuthEvent(session, signedIn: true);
@@ -602,6 +645,7 @@ class SessionNotifier extends Notifier<Session?> {
         isSuperAdmin: isSa);
     state = session;
     await _persistSession(session);
+    _clearAuthFailureFlags();
     authRefresh.value++;
     invalidateStaffHomeCaches(ref);
     _notifyStaffAuthEvent(session, signedIn: true);
@@ -645,6 +689,8 @@ class SessionNotifier extends Notifier<Session?> {
     api.setAuthToken(null);
     try {
       ref.read(apiDegradedProvider.notifier).clear();
+      ref.read(authSessionExpiredProvider.notifier).clear();
+      ref.read(authRefreshFailureTrackerProvider).reset();
     } catch (_) {}
     state = null;
     invalidateStaffHomeCaches(ref);

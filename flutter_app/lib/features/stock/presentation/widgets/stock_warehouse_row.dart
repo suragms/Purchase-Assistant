@@ -160,24 +160,23 @@ class StockWarehouseRow extends StatelessWidget {
                   ] else if (isStaffMode) ...[
                     _boxedMetric(
                       physical == null ? '—' : formatStockQtyNumber(physical),
-                      'Physical',
+                      physical == null ? 'Not counted' : '',
                       const Color(0xFF0F766E),
                     ),
-                    if (pending >= 0.001)
-                      _boxedMetric(
-                        formatStockQtyNumber(pending),
-                        'Pending',
-                        const Color(0xFFE65100),
-                      ),
+                    _boxedMetric(
+                      pending < 0.001 ? '—' : formatStockQtyNumber(pending),
+                      '',
+                      const Color(0xFFE65100),
+                    ),
                   ] else ...[
                     _boxedMetric(
                       formatStockQtyNumber(system),
-                      'System',
+                      '',
                       StockRowMetrics.inlineStatusColor(item),
                     ),
                     _boxedMetric(
                       physical == null ? '—' : formatStockQtyNumber(physical),
-                      'Physical',
+                      physical == null ? 'Not counted' : '',
                       const Color(0xFF0F766E),
                     ),
                     _boxedMetric(

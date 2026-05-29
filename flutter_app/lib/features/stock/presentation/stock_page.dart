@@ -383,7 +383,9 @@ class _StockPageState extends ConsumerState<StockPage>
           ),
         ),
       if (items.isNotEmpty) ...[
-        const SliverToBoxAdapter(child: StockWarehouseTableHeader()),
+        SliverToBoxAdapter(
+          child: StockWarehouseTableHeader(isStaffMode: _isStaffMode),
+        ),
         SliverList(
           delegate: SliverChildBuilderDelegate(
             (ctx, i) {

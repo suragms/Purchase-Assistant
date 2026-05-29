@@ -169,11 +169,25 @@ class _LowStockDashboardPageState extends ConsumerState<LowStockDashboardPage>
         title: const Text('Low stock'),
         backgroundColor: Colors.transparent,
         foregroundColor: HexaColors.brandPrimary,
+        actions: [
+          PopupMenuButton<LowStockSearchScope>(
+            tooltip: 'Search in',
+            icon: const Icon(Icons.filter_list_rounded),
+            onSelected: (scope) => setState(() => _searchScope = scope),
+            itemBuilder: (ctx) => [
+              for (final scope in LowStockSearchScope.values)
+                PopupMenuItem(
+                  value: scope,
+                  child: Text(_scopeLabel(scope)),
+                ),
+            ],
+          ),
+        ],
         bottom: groupedAsync.maybeWhen(
           data: (grouped) {
             final n = countLowStockForTab(grouped, LowStockTreeTab.allLow);
             return PreferredSize(
-              preferredSize: const Size.fromHeight(168),
+              preferredSize: const Size.fromHeight(132),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
@@ -204,27 +218,6 @@ class _LowStockDashboardPageState extends ConsumerState<LowStockDashboardPage>
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(10),
                         ),
-                      ),
-                    ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(12, 0, 12, 4),
-                    child: SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: Row(
-                        children: [
-                          for (final scope in LowStockSearchScope.values)
-                            Padding(
-                              padding: const EdgeInsets.only(right: 6),
-                              child: FilterChip(
-                                label: Text(_scopeLabel(scope)),
-                                selected: _searchScope == scope,
-                                onSelected: (_) =>
-                                    setState(() => _searchScope = scope),
-                                visualDensity: VisualDensity.compact,
-                              ),
-                            ),
-                        ],
                       ),
                     ),
                   ),

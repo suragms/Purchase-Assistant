@@ -1,4 +1,5 @@
 import '../../../core/json_coerce.dart';
+import '../../stock/presentation/widgets/stock_row_metrics.dart';
 import 'barcode_pdf_service.dart';
 
 String normalizeItemId(String id) => id.trim().toLowerCase();
@@ -41,16 +42,18 @@ BarcodeLabelData? labelDataFromStockRow(Map<String, dynamic>? row) {
       row['stock_unit']?.toString().trim() ??
       row['default_unit']?.toString().trim();
 
+  final token = row['public_token']?.toString().trim();
+  final systemStock = StockRowMetrics.systemQty(row);
+
   return BarcodeLabelData(
     barcode: bc.isEmpty ? null : bc,
     itemCode: ic.isEmpty ? bc : ic,
+    publicToken: token != null && token.isNotEmpty ? token : null,
     itemName: row['name']?.toString().trim().isNotEmpty == true
         ? row['name'].toString().trim()
         : (ic.isNotEmpty ? ic : bc),
     unit: unit?.isEmpty == true ? null : unit,
-    currentStock: BarcodeLabelData.finiteQty(
-      coerceToDoubleNullable(row['current_stock']),
-    ),
+    currentStock: BarcodeLabelData.finiteQty(systemStock),
     lastPurchaseDate: lpDate,
     lastPurchaseQty: BarcodeLabelData.finiteQty(
       coerceToDoubleNullable(

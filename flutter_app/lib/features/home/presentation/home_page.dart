@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/auth/dashboard_role.dart';
+import '../../../core/auth/auth_failure_policy.dart';
 import '../../../core/auth/session_notifier.dart'
     show hexaApiProvider, sessionProvider;
 import '../../../core/models/trade_purchase_models.dart';
@@ -135,6 +136,11 @@ class _HomePageState extends ConsumerState<HomePage>
     _rtPollHome?.cancel();
     _rtPollHome = Timer.periodic(const Duration(seconds: 60), (_) {
       if (!mounted) return;
+      if (ref.read(sessionProvider) == null ||
+          ref.read(authSessionExpiredProvider)) {
+        _setHomePollingActive(false);
+        return;
+      }
       if (ref.read(shellCurrentBranchProvider) != ShellBranch.home) return;
       _scheduleRefresh();
     });

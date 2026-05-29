@@ -12,6 +12,30 @@
 
 ---
 
+## Auth 401 storm + item create (2026-05-29)
+
+- [x] Central `auth_failure_policy.dart`: `authSessionExpiredProvider` + refresh failure cap (2 in 60s)
+- [x] Dio: 401/403 on business routes → refresh; second 401 after retry → terminal logout
+- [x] Router redirect when session null **or** `authSessionExpiredProvider`
+- [x] Pause home 60s poll + realtime poll + notification coordinator when session invalid
+- [x] Home session banner **Sign in again** → logout + `/login`
+- [x] Unified `CatalogItemCreatePage` (supplier/broker → subcategory → name/unit/weight → optional code); 2 steps
+- [x] All add-item routes + purchase wizard → `/catalog/quick-add` with supplier/broker query params
+- [x] PopScope step-back on catalog create + supplier/broker wizards
+
+**Manual QA (auth + item create) — run after Vercel deploy:**
+
+| Check | Pass |
+|-------|------|
+| Expired token: one refresh attempt → login screen; no 60s 401 loop in console | [ ] |
+| Home/stock/notifications stop polling after logout | [ ] |
+| Purchase wizard **Add item**: supplier/broker prefilled → save → returns new item on line | [ ] |
+| Catalog type list FAB **Add item**: same 2-step flow | [ ] |
+| System back on step 2 → step 1; step 1 back exits wizard | [ ] |
+| Supplier/broker create wizards: system back steps back before exit dialog | [ ] |
+
+---
+
 ## PLAN.MD execution (2026-05-28)
 
 **Controller:** [PLAN.MD/README.md](PLAN.MD/README.md) (23 files)
@@ -93,6 +117,20 @@
 | Alembic **040 + 041 + 042** on production | [ ] manual |
 | Owner + staff **15 min soak** (no refresh loop) | [ ] manual |
 | Delivery/stock validation checklist (roadmap) | [ ] manual |
+
+### Screenshot fixes (May 29, 2026)
+
+- [x] Owner home: error/skeleton states (no silent `SizedBox.shrink` on warehouse snapshot / OOS / pipeline errors)
+- [x] Live bar: **N need attention** = out + low + critical (`homeStockAttentionCountProvider`)
+- [x] Staff stock: `PHYS | PENDING` header/row; no SYSTEM column; fix “Physical” label in diff column
+- [x] Deliveries: sectioned staff page (Dispatched / Arrived / Pending verification); `isDeliveryCommitted` = `stock_committed` only; `backfill_delivery_status.py`
+- [x] Stock math: bulk print + public scan use `expected_system_qty`; list API exposes `public_token`
+- [x] Staff home: My Tasks removed from home; Tasks header icon; zero-activity message; pending deliveries block; low-stock tool orange only when count > 0
+- [x] Low stock: single tab row (scope in filter menu); one primary action per row + overflow menu
+- [x] Bulk labels: simplified toolbar; single PDF up to 200 labels; PDF spacing + name sanitization; QR → `/scan/{public_token}`
+- [x] Public scan route `/scan/:token` (no login)
+- [ ] **Manual:** `alembic upgrade head` + `python -m scripts.backfill_delivery_status` on production
+- [ ] **Manual QA:** owner home body loads; live bar count ≈ low-stock page; staff stock columns; deliveries sections; SUGAR stock on labels; QR scan in browser logged out
 
 ### Phase 5–7 — pruning / desktop / P2
 - [x] FEATURE_PRUNING: settings workspace branding removed; deleted unrouted `low_stock_operations_page.dart`

@@ -37,8 +37,8 @@ class StaffPendingDeliveriesPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final pendingAsync = ref.watch(staffPendingDeliveriesProvider);
-    final total = pendingAsync.valueOrNull?.length ?? 0;
+    final sectionsAsync = ref.watch(staffDeliverySectionsProvider);
+    final total = sectionsAsync.valueOrNull?.total ?? 0;
 
     return Scaffold(
       backgroundColor: HexaColors.brandBackground,
@@ -48,88 +48,120 @@ class StaffPendingDeliveriesPage extends ConsumerWidget {
         ),
         backgroundColor: Colors.transparent,
         foregroundColor: HexaColors.brandPrimary,
+        actions: [
+          IconButton(
+            tooltip: 'Scan purchase',
+            icon: const Icon(Icons.qr_code_scanner_rounded),
+            onPressed: () => context.push('/barcode/scan'),
+          ),
+        ],
       ),
-      body: pendingAsync.when(
+      body: sectionsAsync.when(
         loading: () => const ListSkeleton(rowCount: 6),
         error: (_, __) => FriendlyLoadError(
           message: 'Could not load pending deliveries',
           onRetry: () {
+            ref.invalidate(staffDeliverySectionsProvider);
             ref.invalidate(staffPendingDeliveriesProvider);
             ref.invalidate(tradePurchasesListProvider);
           },
         ),
-        data: (rows) {
-          if (rows.isEmpty) {
-            return Center(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Text(
-                  'No pending deliveries right now.',
-                  textAlign: TextAlign.center,
-                  style: HexaDsType.body(15, color: HexaDsColors.textMuted),
-                ),
-              ),
-            );
-          }
-          final delivered = ref
-                  .watch(tradePurchasesParsedProvider)
-                  .valueOrNull
-                  ?.where((p) => p.isDelivered)
-                  .length ??
-              0;
+        data: (sections) {
           return ListView(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 88),
             children: [
-              Card(
-                margin: EdgeInsets.zero,
-                child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          '$total pending · $delivered delivered',
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w800,
-                            fontSize: 13,
-                          ),
-                        ),
-                      ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 4,
-                        ),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFE65100).withValues(alpha: 0.12),
-                          borderRadius: BorderRadius.circular(999),
-                        ),
-                        child: Text(
-                          '$total waiting',
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w900,
-                            fontSize: 11,
-                            color: Color(0xFFE65100),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
+              _DeliverySection(
+                title: 'Dispatched',
+                count: sections.dispatched.length,
+                emptyMessage: 'No dispatches in transit.',
+                purchases: sections.dispatched,
               ),
-              const SizedBox(height: 10),
-              for (var i = 0; i < rows.length; i++) ...[
-                if (i > 0) const SizedBox(height: 8),
-                _PendingDeliveryTile(
-                  index: i + 1,
-                  total: rows.length,
-                  purchase: rows[i],
+              const SizedBox(height: 16),
+              _DeliverySection(
+                title: 'Arrived',
+                count: sections.arrived.length,
+                emptyMessage: 'Nothing waiting at the warehouse.',
+                purchases: sections.arrived,
+                highlight: true,
+              ),
+              const SizedBox(height: 16),
+              _DeliverySection(
+                title: 'Pending verification',
+                count: sections.pendingVerification.length,
+                emptyMessage: 'No purchases awaiting owner commit.',
+                purchases: sections.pendingVerification,
+              ),
+              if (sections.total == 0) ...[
+                const SizedBox(height: 32),
+                Center(
+                  child: Text(
+                    'No pending deliveries right now.',
+                    textAlign: TextAlign.center,
+                    style: HexaDsType.body(15, color: HexaDsColors.textMuted),
+                  ),
                 ),
               ],
             ],
           );
         },
       ),
+    );
+  }
+}
+
+class _DeliverySection extends StatelessWidget {
+  const _DeliverySection({
+    required this.title,
+    required this.count,
+    required this.emptyMessage,
+    required this.purchases,
+    this.highlight = false,
+  });
+
+  final String title;
+  final int count;
+  final String emptyMessage;
+  final List<TradePurchase> purchases;
+  final bool highlight;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            Text(
+              '$title ($count)',
+              style: HexaDsType.heading(14).copyWith(
+                color: highlight && count > 0
+                    ? const Color(0xFFE65100)
+                    : const Color(0xFF0F172A),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        if (purchases.isEmpty)
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: Text(
+                emptyMessage,
+                style: HexaDsType.body(13, color: HexaDsColors.textMuted),
+              ),
+            ),
+          )
+        else
+          for (var i = 0; i < purchases.length; i++) ...[
+            if (i > 0) const SizedBox(height: 8),
+            _PendingDeliveryTile(
+              index: i + 1,
+              total: purchases.length,
+              purchase: purchases[i],
+            ),
+          ],
+      ],
     );
   }
 }

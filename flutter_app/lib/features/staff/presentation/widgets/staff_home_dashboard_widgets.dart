@@ -69,12 +69,29 @@ class StaffHomeShiftSnapshotStrip extends ConsumerWidget {
         purchases: '–',
         deliveries: pendingDel > 0 ? '$pendingDel' : '–',
       ),
-      data: (s) => StaffHomeShiftSnapshotRow(
-        scans: '${s.scanned}',
-        stock: '${s.stockUpdates}',
-        purchases: '${s.purchases}',
-        deliveries: '$pendingDel',
-      ),
+      data: (s) {
+        if (s.total == 0 && pendingDel == 0) {
+          return Material(
+            color: Colors.white,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+              side: const BorderSide(color: HexaColors.brandBorder),
+            ),
+            child: ListTile(
+              leading: const Icon(Icons.today_outlined),
+              title: const Text('No activity today'),
+              subtitle: const Text('Tap Stock or Scan to log work'),
+              onTap: () => context.push('/barcode/scan'),
+            ),
+          );
+        }
+        return StaffHomeShiftSnapshotRow(
+          scans: '${s.scanned}',
+          stock: '${s.stockUpdates}',
+          purchases: '${s.purchases}',
+          deliveries: '$pendingDel',
+        );
+      },
     );
   }
 }
@@ -571,7 +588,7 @@ class StaffHomeToolsGrid extends ConsumerWidget {
       _ToolSpec(
         'Low stock',
         Icons.warning_amber_rounded,
-        HexaColors.warning,
+        lowCount > 0 ? HexaColors.warning : const Color(0xFF455A64),
         () => context.push('/staff/low-stock'),
       ),
       if (staffHomeShowsPurchaseTools(focus))

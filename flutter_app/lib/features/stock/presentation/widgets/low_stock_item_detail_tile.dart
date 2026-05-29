@@ -3,102 +3,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../core/json_coerce.dart';
 import '../../../../core/utils/unit_utils.dart';
-
-/// BAG / TIN / BOX / KG display columns for a stock row.
-class LowStockUnitGrid extends StatelessWidget {
-  const LowStockUnitGrid({super.key, required this.item});
-
-  final Map<String, dynamic> item;
-
-  static String? _qtyForColumn(Map<String, dynamic> item, String column) {
-    final unit =
-        (item['stock_unit'] ?? item['unit'] ?? '').toString().trim().toLowerCase();
-    final stock = coerceToDouble(item['current_stock']);
-    final kg = coerceToDoubleNullable(item['current_stock_kg']);
-
-    switch (column) {
-      case 'kg':
-        if (kg != null && kg > 0) return formatStockQtyNumber(kg);
-        return null;
-      case 'bag':
-        if (unit.contains('bag') || unit == 'sack') {
-          return formatStockQtyNumber(stock);
-        }
-        return null;
-      case 'tin':
-        if (unit.contains('tin')) return formatStockQtyNumber(stock);
-        return null;
-      case 'box':
-        if (unit.contains('box')) return formatStockQtyNumber(stock);
-        return null;
-      default:
-        return null;
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    const cols = ['BAG', 'TIN', 'BOX', 'KG'];
-    final keys = ['bag', 'tin', 'box', 'kg'];
-    return Row(
-      children: [
-        for (var i = 0; i < cols.length; i++)
-          Expanded(
-            child: _UnitCell(
-              label: cols[i],
-              value: _qtyForColumn(item, keys[i]) ?? '—',
-            ),
-          ),
-      ],
-    );
-  }
-}
-
-class _UnitCell extends StatelessWidget {
-  const _UnitCell({required this.label, required this.value});
-
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 2),
-      padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.black.withValues(alpha: 0.08)),
-      ),
-      child: Column(
-        children: [
-          Text(
-            label,
-            style: const TextStyle(
-              fontSize: 9,
-              fontWeight: FontWeight.w800,
-              color: Color(0xFF64748B),
-            ),
-          ),
-          const SizedBox(height: 2),
-          FittedBox(
-            fit: BoxFit.scaleDown,
-            child: Text(
-              value,
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w900,
-                color: value == '—'
-                    ? const Color(0xFF94A3B8)
-                    : const Color(0xFFDC2626),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
+import 'low_stock_category_tree.dart';
 
 /// Expandable item tile with unit grid, stock progress, and role actions.
 class LowStockItemDetailTile extends StatefulWidget {
@@ -130,10 +35,9 @@ class _LowStockItemDetailTileState extends State<LowStockItemDetailTile> {
   Widget build(BuildContext context) {
     final item = widget.item;
     final name = item['name']?.toString() ?? '—';
-    final system = coerceToDouble(item['current_stock']);
     final physicalRaw = item['physical_stock_qty'];
     final physical = physicalRaw == null
-        ? system
+        ? coerceToDouble(item['current_stock'])
         : coerceToDouble(physicalRaw);
     final pendingDel = coerceToDoubleNullable(item['pending_delivery_qty']) ?? 0;
     final pending = item['has_pending_order'] == true;
@@ -141,9 +45,16 @@ class _LowStockItemDetailTileState extends State<LowStockItemDetailTile> {
         item['stock_unit']?.toString() ?? item['unit']?.toString() ?? '';
     final unitUp = unit.trim().isEmpty ? '' : unit.toUpperCase();
     final id = item['id']?.toString() ?? '';
+    final pendingDelivery = lowStockItemPendingDelivery(item);
     final showReceive = pending &&
-        (item['last_purchase_delivered'] == false ||
-            pendingDel > 0.001);
+        (item['last_purchase_delivered'] == false || pendingDel > 0.001);
+
+    final primary = _RowPrimaryAction.resolve(
+      pendingDelivery: pendingDelivery,
+      showReceive: showReceive,
+      hasPending: pending,
+      staffMode: widget.staffMode,
+    );
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
@@ -158,9 +69,7 @@ class _LowStockItemDetailTileState extends State<LowStockItemDetailTile> {
         child: Material(
           color: Colors.transparent,
           child: InkWell(
-            onTap: id.isEmpty
-                ? null
-                : () => context.push('/catalog/item/$id'),
+            onTap: id.isEmpty ? null : () => context.push('/catalog/item/$id'),
             borderRadius: BorderRadius.circular(8),
             child: Padding(
               padding: const EdgeInsets.all(10),
@@ -178,7 +87,44 @@ class _LowStockItemDetailTileState extends State<LowStockItemDetailTile> {
                           ),
                         ),
                       ),
-                      const Icon(Icons.chevron_right_rounded, size: 22),
+                      PopupMenuButton<String>(
+                        icon: const Icon(Icons.more_horiz_rounded),
+                        itemBuilder: (ctx) => [
+                          const PopupMenuItem(
+                            value: 'open',
+                            child: Text('Open item'),
+                          ),
+                          if (widget.onEditReorder != null)
+                            const PopupMenuItem(
+                              value: 'reorder',
+                              child: Text('Reorder level'),
+                            ),
+                          if (widget.onStockUpdate != null)
+                            const PopupMenuItem(
+                              value: 'stock',
+                              child: Text('Stock update'),
+                            ),
+                          if (widget.staffMode && widget.onNotifyOwner != null)
+                            const PopupMenuItem(
+                              value: 'notify',
+                              child: Text('Inform owner'),
+                            ),
+                        ],
+                        onSelected: (v) {
+                          switch (v) {
+                            case 'open':
+                              if (id.isNotEmpty) {
+                                context.push('/catalog/item/$id');
+                              }
+                            case 'reorder':
+                              widget.onEditReorder?.call(item);
+                            case 'stock':
+                              widget.onStockUpdate?.call(item);
+                            case 'notify':
+                              widget.onNotifyOwner?.call(item);
+                          }
+                        },
+                      ),
                     ],
                   ),
                   const SizedBox(height: 6),
@@ -193,71 +139,75 @@ class _LowStockItemDetailTileState extends State<LowStockItemDetailTile> {
                     ),
                   ),
                   const SizedBox(height: 8),
-                  Wrap(
-                      spacing: 8,
-                      runSpacing: 6,
-                      children: [
-                        if (!widget.staffMode && widget.onOrderNow != null)
-                          FilledButton.tonalIcon(
-                            style: FilledButton.styleFrom(
-                              visualDensity: VisualDensity.compact,
-                            ),
-                            onPressed: () => widget.onOrderNow!(item),
-                            icon: const Icon(Icons.shopping_cart_outlined, size: 18),
-                            label: const Text('Order now'),
-                          ),
-                        if (widget.onEditReorder != null)
-                          OutlinedButton.icon(
-                            style: OutlinedButton.styleFrom(
-                              visualDensity: VisualDensity.compact,
-                            ),
-                            onPressed: () => widget.onEditReorder!(item),
-                            icon: const Icon(Icons.tune_rounded, size: 18),
-                            label: const Text('Reorder level'),
-                          ),
-                        if (widget.onStockUpdate != null)
-                          OutlinedButton.icon(
-                            style: OutlinedButton.styleFrom(
-                              visualDensity: VisualDensity.compact,
-                            ),
-                            onPressed: () => widget.onStockUpdate!(item),
-                            icon: const Icon(Icons.inventory_2_outlined, size: 18),
-                            label: const Text('Stock update'),
-                          ),
-                        if (widget.staffMode && widget.onNotifyOwner != null)
-                          OutlinedButton.icon(
-                            style: OutlinedButton.styleFrom(
-                              visualDensity: VisualDensity.compact,
-                            ),
-                            onPressed: () => widget.onNotifyOwner!(item),
-                            icon: const Icon(
-                              Icons.notifications_active_outlined,
-                              size: 18,
-                            ),
-                            label: const Text('Inform owner'),
-                          ),
-                        if (showReceive && widget.onReceive != null)
-                          OutlinedButton.icon(
-                            style: OutlinedButton.styleFrom(
-                              visualDensity: VisualDensity.compact,
-                            ),
-                            onPressed: () => widget.onReceive!(item),
-                            icon: const Icon(Icons.local_shipping_outlined, size: 18),
-                            label: const Text('Receive'),
-                          ),
-                        if (id.isNotEmpty)
-                          TextButton(
-                            onPressed: () => context.push('/catalog/item/$id'),
-                            child: const Text('Open item'),
-                          ),
-                      ],
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: FilledButton.tonal(
+                      onPressed: () => _runPrimary(context, primary, item),
+                      child: Text(primary.label),
                     ),
+                  ),
                 ],
               ),
             ),
           ),
         ),
       ),
+    );
+  }
+
+  void _runPrimary(
+    BuildContext context,
+    _RowPrimaryAction primary,
+    Map<String, dynamic> item,
+  ) {
+    switch (primary.kind) {
+      case _PrimaryKind.verify:
+      case _PrimaryKind.receive:
+        widget.onReceive?.call(item);
+      case _PrimaryKind.pending:
+        break;
+      case _PrimaryKind.order:
+        if (widget.staffMode) {
+          widget.onNotifyOwner?.call(item);
+        } else {
+          widget.onOrderNow?.call(item);
+        }
+    }
+  }
+}
+
+enum _PrimaryKind { verify, receive, pending, order }
+
+class _RowPrimaryAction {
+  const _RowPrimaryAction({
+    required this.kind,
+    required this.label,
+  });
+
+  final _PrimaryKind kind;
+  final String label;
+
+  factory _RowPrimaryAction.resolve({
+    required bool pendingDelivery,
+    required bool showReceive,
+    required bool hasPending,
+    required bool staffMode,
+  }) {
+    if (pendingDelivery && showReceive) {
+      return const _RowPrimaryAction(
+        kind: _PrimaryKind.verify,
+        label: 'Verify delivery',
+      );
+    }
+    if (hasPending) {
+      return const _RowPrimaryAction(
+        kind: _PrimaryKind.pending,
+        label: 'Pending order',
+      );
+    }
+    return _RowPrimaryAction(
+      kind: _PrimaryKind.order,
+      label: staffMode ? 'Inform owner' : 'Order now',
     );
   }
 }

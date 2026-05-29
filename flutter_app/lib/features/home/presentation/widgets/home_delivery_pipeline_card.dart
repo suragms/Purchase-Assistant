@@ -5,7 +5,9 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/design_system/hexa_operational_tokens.dart';
 import '../../../../core/providers/delivery_pipeline_provider.dart';
 import '../../../../core/theme/hexa_colors.dart';
+import '../../../../core/widgets/section_inline_error.dart';
 import 'home_formatters.dart';
+import 'home_recent_changes_section.dart' show HomeSectionSkeleton;
 
 /// Owner home: delivery pipeline counts with filtered purchase deep links.
 ///
@@ -18,8 +20,18 @@ class HomeDeliveryPipelineCard extends ConsumerWidget {
     final pipeline = ref.watch(deliveryPipelineProvider);
 
     return pipeline.when(
-      loading: () => const SizedBox.shrink(),
-      error: (_, __) => const SizedBox.shrink(),
+      loading: () => const Card(
+        child: Padding(
+          padding: EdgeInsets.all(HexaOp.cardPadding),
+          child: HomeSectionSkeleton(rows: 2),
+        ),
+      ),
+      error: (_, __) => Card(
+        child: SectionInlineError(
+          message: 'Could not load delivery pipeline',
+          onRetry: () => ref.invalidate(deliveryPipelineProvider),
+        ),
+      ),
       data: (p) {
         final dispatched =
             ((p['dispatched'] as num?)?.toInt() ?? 0) +

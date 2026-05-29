@@ -15,6 +15,7 @@ import '../../../core/errors/barcode_operation_errors.dart';
 import '../../../core/json_coerce.dart';
 import '../../../core/services/pdf_actions.dart';
 import '../../../core/providers/stock_providers.dart';
+import '../../stock/presentation/widgets/stock_row_metrics.dart';
 import '../../stock/presentation/widgets/stock_table_layout.dart';
 import '../../../shared/widgets/stock_summary_widget.dart';
 import '../../../core/widgets/hexa_error_card.dart';
@@ -1215,9 +1216,11 @@ class _BulkBarcodePrintPageState extends ConsumerState<BulkBarcodePrintPage> {
               final code = it['item_code']?.toString() ?? '';
               final barcode = it['barcode']?.toString() ?? '';
               final st = it['stock_status']?.toString() ?? '';
-              final cur = coerceToDouble(it['current_stock']);
+              final cur = StockRowMetrics.systemQty(it);
               final purchased = coerceToDouble(
-                it['period_purchased_qty'] ?? it['purchased_today_qty'],
+                it['total_delivered_qty'] ??
+                    it['period_purchased_qty'] ??
+                    it['purchased_today_qty'],
               );
               final unit = it['stock_unit']?.toString() ??
                   it['unit']?.toString() ??

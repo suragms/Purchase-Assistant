@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../auth/auth_failure_policy.dart';
 import '../auth/session_notifier.dart';
 import 'business_aggregates_invalidation.dart';
 import 'low_stock_providers.dart';
@@ -58,7 +59,8 @@ final realtimeInvalidationProvider =
   ref.onDispose(() => link.close());
 
   final session = ref.watch(sessionProvider);
-  if (session == null) return;
+  final authExpired = ref.watch(authSessionExpiredProvider);
+  if (session == null || authExpired) return;
   final api = ref.read(hexaApiProvider);
   final seen = <String>{};
   var tick = 0;
@@ -99,6 +101,10 @@ final realtimeInvalidationProvider =
   yield await poll(initial: true);
   final timer = Stream.periodic(const Duration(seconds: 60));
   await for (final _ in timer) {
+    if (ref.read(sessionProvider) == null ||
+        ref.read(authSessionExpiredProvider)) {
+      break;
+    }
     tick++;
     yield await poll(initial: false);
   }

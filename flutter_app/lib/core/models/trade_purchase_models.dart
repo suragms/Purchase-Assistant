@@ -483,7 +483,7 @@ class TradePurchase {
       parseDeliveryStatus(deliveryStatus);
 
   bool get isDeliveryCommitted =>
-      deliveryStatusEnum == DeliveryStatus.stockCommitted || isDelivered;
+      deliveryStatusEnum == DeliveryStatus.stockCommitted;
 
   String get itemsSummary {
     if (lines.isEmpty) return '';
@@ -560,7 +560,7 @@ class TradePurchase {
           j['has_missing_details']?.toString().toLowerCase() == 'true',
       isDelivered: (j['is_delivered'] as bool?) ?? false,
       deliveryStatus: j['delivery_status']?.toString() ??
-          ((j['is_delivered'] as bool?) == true ? 'stock_committed' : 'pending'),
+          ((j['is_delivered'] as bool?) == true ? 'arrived' : 'pending'),
       deliveredAt: j['delivered_at'] != null
           ? DateTime.tryParse(j['delivered_at'].toString())
           : null,

@@ -9,7 +9,9 @@ import '../../../../core/providers/stock_providers.dart';
 import '../../../../core/providers/notification_center_provider.dart'
     show homeWarehouseAlertsProvider;
 import '../../../../core/utils/unit_utils.dart';
+import '../../../../core/widgets/section_inline_error.dart';
 import 'home_formatters.dart';
+import 'home_recent_changes_section.dart' show HomeSectionSkeleton;
 
 /// On-hand warehouse units + operational counts (quantity-first).
 class HomeWarehouseSnapshotCard extends ConsumerWidget {
@@ -29,10 +31,18 @@ class HomeWarehouseSnapshotCard extends ConsumerWidget {
       loading: () => const Card(
         child: Padding(
           padding: EdgeInsets.all(HexaOp.cardPadding),
-          child: LinearProgressIndicator(minHeight: 2),
+          child: HomeSectionSkeleton(rows: 2),
         ),
       ),
-      error: (_, __) => const SizedBox.shrink(),
+      error: (_, __) => Card(
+        child: SectionInlineError(
+          message: 'Could not load warehouse snapshot',
+          onRetry: () {
+            ref.invalidate(homeInventorySummaryProvider);
+            ref.invalidate(stockStatusCountsProvider);
+          },
+        ),
+      ),
       data: (inv) {
         final wh = warehouse.valueOrNull;
         final statusMap = status.valueOrNull ?? const {};

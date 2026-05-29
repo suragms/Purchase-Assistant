@@ -109,9 +109,11 @@ class HexaApi {
   HexaApi({
     String? baseUrl,
     Future<bool> Function()? onUnauthorizedRefresh,
+    Future<void> Function(String reason)? onTerminalAuthFailure,
     Future<String?> Function()? resolveAccessToken,
     void Function(bool degraded, String? hint)? onConnectivityBanner,
   })  : _onUnauthorizedRefresh = onUnauthorizedRefresh,
+        _onTerminalAuthFailure = onTerminalAuthFailure,
         _resolveAccessToken = resolveAccessToken,
         _onConnectivityBanner = onConnectivityBanner,
         _dio = Dio(
@@ -173,18 +175,24 @@ class HexaApi {
           return handler.next(options);
         },
         onError: (DioException err, ErrorInterceptorHandler handler) async {
-          if (err.response?.statusCode != 401) {
+          final sc = err.response?.statusCode;
+          final path = err.requestOptions.uri.path;
+          final isAuthFailure =
+              sc == 401 || (sc == 403 && path.startsWith('/v1/businesses/'));
+          if (!isAuthFailure) {
             return handler.next(err);
           }
           final req = err.requestOptions;
-          if (req.extra['authRetried'] == true) {
+          if (_isAuthEndpoint(path)) {
             return handler.next(err);
           }
-          if (_isAuthEndpoint(req.uri.path)) {
+          if (req.extra['authRetried'] == true) {
+            await _onTerminalAuthFailure?.call('auth_retry_failed');
             return handler.next(err);
           }
           final ok = await _onUnauthorizedRefresh?.call() ?? false;
           if (!ok) {
+            await _onTerminalAuthFailure?.call('refresh_failed');
             return handler.next(err);
           }
           final auth = _dio.options.headers['Authorization'];
@@ -196,6 +204,10 @@ class HexaApi {
             final res = await _dio.fetch(req);
             return handler.resolve(res);
           } on DioException catch (e) {
+            if (e.response?.statusCode == 401 ||
+                e.response?.statusCode == 403) {
+              await _onTerminalAuthFailure?.call('auth_retry_failed');
+            }
             return handler.next(e);
           }
         },
@@ -243,6 +255,7 @@ class HexaApi {
   final Dio _dio;
   final Dio _plain;
   final Future<bool> Function()? _onUnauthorizedRefresh;
+  final Future<void> Function(String reason)? _onTerminalAuthFailure;
   final Future<String?> Function()? _resolveAccessToken;
   final void Function(bool degraded, String? hint)? _onConnectivityBanner;
 

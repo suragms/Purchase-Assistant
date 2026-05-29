@@ -264,13 +264,19 @@ Future<List<Uint8List>> generateBulkPdfParts({
   }
 
   try {
+    final totalExpanded = uniqueLabels.length * copyN;
+    final effectivePerFile = denseA4
+        ? (totalExpanded <= kMaxLabelsSinglePdf
+            ? totalExpanded
+            : kMaxLabelsSinglePdf)
+        : perFile.clamp(1, kMaxLabelsSinglePdf);
+
     if (denseA4) {
       final chunks = chunkExpandedLabelsForPdfFiles(
         items: uniqueLabels,
         copiesPerItem: copyN,
-        perFile: perFile,
+        perFile: effectivePerFile,
       );
-      final totalExpanded = uniqueLabels.length * copyN;
       final out = <Uint8List>[];
       var serial = 1;
       for (final chunk in chunks) {
@@ -294,12 +300,12 @@ Future<List<Uint8List>> generateBulkPdfParts({
       return out;
     }
 
+    final thermalExpanded = batch.labels.length * copyN;
     final chunks = chunkExpandedLabelsForPdfFiles(
       items: batch.labels,
       copiesPerItem: copyN,
-      perFile: perFile,
+      perFile: effectivePerFile,
     );
-    final totalExpanded = batch.labels.length * copyN;
     final out = <Uint8List>[];
     var serial = 1;
     for (final chunk in chunks) {
@@ -314,7 +320,7 @@ Future<List<Uint8List>> generateBulkPdfParts({
           thermalSize: thermalSize,
           hideFinancials: hideFinancials,
           serialStart: serial,
-          totalLabelCount: totalExpanded,
+          totalLabelCount: thermalExpanded,
         ),
       );
       serial += chunk.length;

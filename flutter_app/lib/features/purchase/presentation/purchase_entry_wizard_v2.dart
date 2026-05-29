@@ -1261,22 +1261,20 @@ class _PurchaseEntryWizardV2State extends ConsumerState<PurchaseEntryWizardV2>
           navigateCatalogQuickAddItem: session == null || catalog.isEmpty
               ? null
               : () async {
-                  final row = catalog.first;
-                  final catId = row['category_id']?.toString();
-                  final tid = row['type_id']?.toString();
-                  if (catId == null ||
-                      tid == null ||
-                      catId.isEmpty ||
-                      tid.isEmpty) {
-                    return null;
-                  }
                   final supId = draft.supplierId?.trim();
-                  final q = supId != null && supId.isNotEmpty
-                      ? '?defaultSupplierId=${Uri.encodeComponent(supId)}'
-                      : '';
-                  final res = await ctx.push<Map<String, dynamic>?>(
-                    '/catalog/category/$catId/type/$tid/add-item$q',
+                  final broId = draft.brokerId?.trim();
+                  final q = <String, String>{
+                    if (supId != null && supId.isNotEmpty)
+                      'defaultSupplierId': supId,
+                    if (broId != null && broId.isNotEmpty)
+                      'defaultBrokerId': broId,
+                    'returnToPurchase': '1',
+                  };
+                  final uri = Uri(
+                    path: '/catalog/quick-add',
+                    queryParameters: q.isEmpty ? null : q,
                   );
+                  final res = await ctx.push<Map<String, dynamic>?>(uri.toString());
                   if (!ctx.mounted) return null;
                   if (res != null &&
                       (res['id']?.toString().trim().isNotEmpty ?? false)) {
