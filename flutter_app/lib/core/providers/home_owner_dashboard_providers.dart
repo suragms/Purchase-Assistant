@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../features/shell/shell_branch_provider.dart';
-import '../auth/session_notifier.dart';
+import '../auth/session_notifier.dart' show activeSessionProvider, hexaApiProvider;
 import '../json_coerce.dart';
 import 'stock_providers.dart'
     show lowStockByCategoryProvider, stockStatusCountsProvider;
@@ -87,7 +87,7 @@ final homeInventorySummaryProvider =
   if (!shellBranchIsVisible(ref, ShellBranch.home)) {
     return HomeInventorySummary.empty;
   }
-  final session = ref.watch(sessionProvider);
+  final session = ref.watch(activeSessionProvider);
   if (session == null) return HomeInventorySummary.empty;
   try {
     final raw = await ref
@@ -109,7 +109,7 @@ final homeTodayDashboardDataProvider =
   if (!shellBranchIsVisible(ref, ShellBranch.home)) {
     return HomeDashboardData.empty;
   }
-  final session = ref.watch(sessionProvider);
+  final session = ref.watch(activeSessionProvider);
   if (session == null) return HomeDashboardData.empty;
   final now = DateTime.now();
   final day = DateTime(now.year, now.month, now.day);
@@ -199,7 +199,7 @@ final stockLowTopHomeProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
   _providerKeepAlive(ref, const Duration(minutes: 2));
   if (!shellBranchIsVisible(ref, ShellBranch.home)) return [];
-  final session = ref.watch(sessionProvider);
+  final session = ref.watch(activeSessionProvider);
   if (session == null) return [];
   final m = await ref.read(hexaApiProvider).listStockLow(
         businessId: session.primaryBusiness.id,
@@ -216,7 +216,7 @@ final stockLowTopHomeProvider =
 
 final stockAuditRecentHomeProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
-  final session = ref.watch(sessionProvider);
+  final session = ref.watch(activeSessionProvider);
   if (session == null) return [];
   return ref.read(hexaApiProvider).listStockAuditRecent(
         businessId: session.primaryBusiness.id,
@@ -227,7 +227,7 @@ final stockAuditRecentHomeProvider =
 /// Stock adjustments for a single calendar day (legacy / stock detail).
 final stockAuditDayProvider = FutureProvider.autoDispose
     .family<List<Map<String, dynamic>>, DateTime>((ref, day) async {
-  final session = ref.watch(sessionProvider);
+  final session = ref.watch(activeSessionProvider);
   if (session == null) return [];
   final d = DateTime(day.year, day.month, day.day);
   return ref.read(hexaApiProvider).listStockAuditRecent(
@@ -242,7 +242,7 @@ final stockAuditPeriodProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
   _providerKeepAlive(ref, const Duration(minutes: 2));
   if (!shellBranchIsVisible(ref, ShellBranch.home)) return [];
-  final session = ref.watch(sessionProvider);
+  final session = ref.watch(activeSessionProvider);
   if (session == null) return [];
   ref.watch(homePeriodProvider);
   ref.watch(homeCustomDateRangeProvider);
@@ -268,7 +268,7 @@ final stockVariancesTodayProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
   _providerKeepAlive(ref, const Duration(minutes: 2));
   if (!shellBranchIsVisible(ref, ShellBranch.home)) return [];
-  final session = ref.watch(sessionProvider);
+  final session = ref.watch(activeSessionProvider);
   if (session == null) return [];
   return ref.read(hexaApiProvider).listStockVariancesToday(
         businessId: session.primaryBusiness.id,
@@ -279,7 +279,7 @@ final activeStaffSessionsProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
   _providerKeepAlive(ref, const Duration(minutes: 2));
   if (!shellBranchIsVisible(ref, ShellBranch.home)) return [];
-  final session = ref.watch(sessionProvider);
+  final session = ref.watch(activeSessionProvider);
   if (session == null) return [];
   return ref.read(hexaApiProvider).listActiveSessions(
         businessId: session.primaryBusiness.id,
@@ -298,7 +298,7 @@ final homeMonthDashboardDataProvider =
   if (!shellBranchIsVisible(ref, ShellBranch.home)) {
     return HomeDashboardData.empty;
   }
-  final session = ref.watch(sessionProvider);
+  final session = ref.watch(activeSessionProvider);
   if (session == null) return HomeDashboardData.empty;
   final now = DateTime.now();
   final start = DateTime(now.year, now.month, 1);
@@ -411,7 +411,7 @@ final homeRecentActivityFeedProvider =
     FutureProvider.autoDispose<List<HomeActivityItem>>((ref) async {
   _providerKeepAlive(ref, const Duration(minutes: 3));
   if (!shellBranchIsVisible(ref, ShellBranch.home)) return [];
-  final session = ref.watch(sessionProvider);
+  final session = ref.watch(activeSessionProvider);
   if (session == null) return [];
   ref.watch(homePeriodProvider);
   ref.watch(homeCustomDateRangeProvider);
@@ -471,7 +471,7 @@ final homeRecentActivityFeedProvider =
     items.add(
       HomeActivityItem(
         kind: delivered ? 'delivery_verified' : 'purchase',
-        title: delivered ? 'Delivery received' : 'Purchase added',
+        title: delivered ? 'Delivery verified' : 'Purchase bill added',
         subtitle: p['supplier_name']?.toString() ??
             p['human_id']?.toString() ??
             p['invoice_number']?.toString() ??
@@ -538,6 +538,17 @@ final homeRecentActivityFeedProvider =
     );
   }
 
+  const keepKinds = {
+    'purchase',
+    'delivery_verified',
+    'stock_quick_purchase',
+    'physical_count',
+    'opening_stock_set',
+    'stock_correction',
+    'reorder_created',
+  };
+  items.removeWhere((i) => !keepKinds.contains(i.kind));
+
   items.sort((a, b) => b.at.compareTo(a.at));
   return items.take(15).toList();
 });
@@ -545,7 +556,7 @@ final homeRecentActivityFeedProvider =
 /// @deprecated Use [homeRecentActivityFeedProvider] only — kept for invalidation parity.
 final homeRecentPurchasesCompactProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
-  final session = ref.watch(sessionProvider);
+  final session = ref.watch(activeSessionProvider);
   if (session == null) return [];
   final q = homeDateRangeForRef(ref);
   final rows = await ref.read(hexaApiProvider).listTradePurchases(

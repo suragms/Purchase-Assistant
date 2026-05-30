@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart';
 import '../../../core/errors/barcode_operation_errors.dart';
 import '../../../core/config/app_config.dart';
 import '../../../core/json_coerce.dart';
+import '../../../core/services/pdf_text_safe.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 
@@ -227,6 +228,7 @@ class BarcodePdfService {
               size: size,
               showLastPurchase: showLastPurchase,
               hideFinancials: hideFinancials,
+              showStockOnLabel: true,
             ),
           ),
         ),
@@ -241,6 +243,7 @@ class BarcodePdfService {
     int copiesPerItem = 1,
     bool showLastPurchase = true,
     bool hideFinancials = false,
+    bool showStockOnLabel = true,
     int labelsPerRow = 1,
     BarcodeSymbolMode symbol = BarcodeSymbolMode.code128WithQr,
   }) async {
@@ -267,6 +270,7 @@ class BarcodePdfService {
                 size: size,
                 showLastPurchase: showLastPurchase,
                 hideFinancials: hideFinancials,
+                showStockOnLabel: showStockOnLabel,
                 symbol: symbol,
               ),
             ),
@@ -306,6 +310,7 @@ class BarcodePdfService {
                         size: size,
                         showLastPurchase: showLastPurchase,
                         hideFinancials: hideFinancials,
+                        showStockOnLabel: showStockOnLabel,
                         symbol: symbol,
                       ),
                     ),
@@ -323,12 +328,16 @@ class BarcodePdfService {
 
   /// Maximizes labels per A4 page: 5mm margins, 2mm gaps; cell size 30×10 (S),
   /// 50×25 (M), 80×40 (L). Runs off the UI thread on VM via [Isolate.run].
+  /// PDF-safe display text (WinAnsi fonts cannot render ₹, em dash, etc.).
+  static String pdfLabelText(String? raw) => safePdfText(raw);
+
   static Future<Uint8List> generateBatchA4Dense({
     required List<BarcodeLabelData> items,
     LabelSize size = LabelSize.small,
     int copiesPerItem = 1,
     bool showLastPurchase = true,
     bool hideFinancials = false,
+    bool showStockOnLabel = true,
     int columns = 4,
     /// When set, fits about this many stickers per A4 page (e.g. 50).
     int? targetLabelsPerPage,
@@ -350,6 +359,7 @@ class BarcodePdfService {
       'size': size.index,
       'showLastPurchase': showLastPurchase,
       'hideFinancials': hideFinancials,
+      'showStockOnLabel': showStockOnLabel,
       'maxCols': columns.clamp(1, 6),
       if (targetLabelsPerPage != null)
         'targetLabelsPerPage': targetLabelsPerPage.clamp(20, 60),
@@ -371,6 +381,7 @@ class BarcodePdfService {
           copiesPerItem: copiesPerItem,
           showLastPurchase: showLastPurchase,
           hideFinancials: hideFinancials,
+          showStockOnLabel: showStockOnLabel,
           columns: columns,
           targetLabelsPerPage: targetLabelsPerPage,
           symbol: BarcodeSymbolMode.code128,
@@ -399,6 +410,7 @@ class BarcodePdfService {
     final size = LabelSize.values[sizeIdx.clamp(0, LabelSize.values.length - 1)];
     final showLastPurchase = payload['showLastPurchase'] as bool? ?? true;
     final hideFinancials = payload['hideFinancials'] as bool? ?? false;
+    final showStockOnLabel = payload['showStockOnLabel'] as bool? ?? true;
     final symbolIdx = (payload['symbol'] as int?) ?? BarcodeSymbolMode.code128WithQr.index;
     final symbol = BarcodeSymbolMode.values[
         symbolIdx.clamp(0, BarcodeSymbolMode.values.length - 1)];
@@ -491,6 +503,7 @@ class BarcodePdfService {
                         cellSize: cellSize,
                         showLastPurchase: showLastPurchase,
                         hideFinancials: hideFinancials,
+                        showStockOnLabel: showStockOnLabel,
                         symbol: symbol,
                         compact: compact,
                       ),
@@ -643,6 +656,7 @@ class BarcodePdfService {
     required LabelSize cellSize,
     required bool showLastPurchase,
     required bool hideFinancials,
+    required bool showStockOnLabel,
     required BarcodeSymbolMode symbol,
     required bool compact,
   }) {
@@ -655,6 +669,7 @@ class BarcodePdfService {
         cellSize: cellSize,
         showLastPurchase: showLastPurchase,
         hideFinancials: hideFinancials,
+        showStockOnLabel: showStockOnLabel,
         symbol: symbol,
         compact: compact,
       );
@@ -685,6 +700,7 @@ class BarcodePdfService {
     required LabelSize cellSize,
     required bool showLastPurchase,
     required bool hideFinancials,
+    required bool showStockOnLabel,
     required BarcodeSymbolMode symbol,
     required bool compact,
   }) {
@@ -720,7 +736,7 @@ class BarcodePdfService {
                 child: pw.Text(
                   data.itemCode.trim().isEmpty
                       ? ''
-                      : data.itemCode.trim(),
+                      : pdfLabelText(data.itemCode.trim()),
                   maxLines: 1,
                   textAlign: pw.TextAlign.right,
                   style: pw.TextStyle(fontSize: compact ? 4.5 : 6),
@@ -736,6 +752,7 @@ class BarcodePdfService {
               cellSize: cellSize,
               showLastPurchase: showLastPurchase,
               hideFinancials: hideFinancials,
+              showStockOnLabel: showStockOnLabel,
               symbol: symbol,
               serialNumber: serialNumber,
             ),
@@ -752,6 +769,7 @@ class BarcodePdfService {
     required LabelSize cellSize,
     required bool showLastPurchase,
     required bool hideFinancials,
+    required bool showStockOnLabel,
     required BarcodeSymbolMode symbol,
     int? serialNumber,
   }) {
@@ -760,6 +778,7 @@ class BarcodePdfService {
       size: cellSize,
       showLastPurchase: showLastPurchase,
       hideFinancials: hideFinancials,
+      showStockOnLabel: showStockOnLabel,
       symbol: symbol,
       compact: compact,
       serialNumber: serialNumber,
@@ -792,6 +811,7 @@ class BarcodePdfService {
     required LabelSize size,
     required bool showLastPurchase,
     bool hideFinancials = false,
+    bool showStockOnLabel = true,
     BarcodeSymbolMode symbol = BarcodeSymbolMode.code128WithQr,
     bool compact = false,
     int? serialNumber,
@@ -809,48 +829,58 @@ class BarcodePdfService {
         ),
       ];
     }
+    if (compact) {
+      return _denseA4LabelBody(
+        data: data,
+        size: size,
+        symbol: symbol,
+        showLastPurchase: showLastPurchase,
+        hideFinancials: hideFinancials,
+        showStockOnLabel: showStockOnLabel,
+      );
+    }
     final code = _symbologyValue(
       data,
       symbol: symbol,
       webBase: AppConfig.webAppBaseUrl,
     );
-    final codeLine = data.itemCode.trim().isEmpty ? code : data.itemCode.trim();
+    final codeLine = pdfLabelText(
+      data.itemCode.trim().isEmpty ? code : data.itemCode.trim(),
+    );
     final (titleSize, codeSize, bcHeight, qrSize) = _sizes(size);
-    final titleSz = compact ? math.min(titleSize, 6.0) : titleSize;
-    final codeSz = compact ? math.min(codeSize, 5.0) : codeSize;
-    final bcH = compact ? math.min(bcHeight, 14.0) : bcHeight;
-    final safeName =
-        sanitizePrintPayload(data.itemName, forQr: symbol == BarcodeSymbolMode.qrCode);
+    final titleSz = titleSize;
+    final codeSz = codeSize;
+    final bcH = bcHeight;
+    final safeName = pdfLabelText(
+      sanitizePrintPayload(data.itemName, forQr: symbol == BarcodeSymbolMode.qrCode),
+    );
 
     final children = <pw.Widget>[
       pw.Text(
         safeName,
-        maxLines: compact ? 1 : 2,
+        maxLines: 2,
         style: pw.TextStyle(fontSize: titleSz, fontWeight: pw.FontWeight.bold),
       ),
-      pw.SizedBox(height: compact ? 1 : 3),
+      pw.SizedBox(height: 3),
     ];
 
     children.add(
       _safeBarcodeWidget(
         qr: symbol == BarcodeSymbolMode.qrCode,
         data: code,
-        height: compact
-            ? (symbol == BarcodeSymbolMode.qrCode ? 22.0 : bcH)
-            : (symbol == BarcodeSymbolMode.qrCode
-                ? (qrSize > 0 ? qrSize : bcHeight)
-                : bcH),
-        width: compact && symbol == BarcodeSymbolMode.qrCode ? 22.0 : (qrSize > 0 ? qrSize : bcH),
+        height: symbol == BarcodeSymbolMode.qrCode
+            ? (qrSize > 0 ? qrSize : bcHeight)
+            : bcH,
+        width: qrSize > 0 ? qrSize : bcH,
       ),
     );
     children.add(pw.Text(codeLine, style: pw.TextStyle(fontSize: codeSz)));
-    if (!compact &&
-        data.barcode != null &&
+    if (data.barcode != null &&
         data.barcode!.trim().isNotEmpty &&
         data.barcode!.trim() != codeLine) {
       children.add(
         pw.Text(
-          'BC ${data.barcode!.trim()}',
+          pdfLabelText('BC ${data.barcode!.trim()}'),
           style: pw.TextStyle(fontSize: codeSz - 1),
         ),
       );
@@ -858,9 +888,7 @@ class BarcodePdfService {
 
     final stockDisplay = pdfQtyDisplayString(data.currentStock);
 
-    if (!compact &&
-        qrSize > 0 &&
-        symbol == BarcodeSymbolMode.code128WithQr) {
+    if (qrSize > 0 && symbol == BarcodeSymbolMode.code128WithQr) {
       children.addAll([
         pw.SizedBox(height: 3),
         pw.Row(
@@ -873,9 +901,9 @@ class BarcodePdfService {
               width: qrSize,
               height: qrSize,
             ),
-            if (stockDisplay != null && size == LabelSize.large)
+            if (showStockOnLabel && stockDisplay != null && size == LabelSize.large)
               pw.Text(
-                'Stock: $stockDisplay ${data.unit ?? ''}',
+                pdfLabelText('Stock: $stockDisplay ${data.unit ?? ''}'),
                 style: pw.TextStyle(fontSize: codeSize - 1),
               ),
           ],
@@ -884,14 +912,14 @@ class BarcodePdfService {
     }
 
     final stockStr = stockDisplay;
-    if (stockStr != null) {
-      final u = (data.unit ?? '').trim();
-      children.add(pw.SizedBox(height: compact ? 1 : 2));
+    if (showStockOnLabel && stockStr != null) {
+      final u = pdfLabelText((data.unit ?? '').trim());
+      children.add(pw.SizedBox(height: 2));
       children.add(
         pw.Text(
-          'Stock: $stockStr${u.isEmpty ? '' : ' $u'}',
+          pdfLabelText('Stock: $stockStr${u.isEmpty ? '' : ' $u'}'),
           style: pw.TextStyle(
-            fontSize: compact ? codeSz - 0.5 : codeSize - 1,
+            fontSize: codeSize - 1,
             fontWeight: pw.FontWeight.bold,
           ),
           maxLines: 1,
@@ -904,13 +932,13 @@ class BarcodePdfService {
       showLastPurchase: showLastPurchase,
       size: size,
       hideFinancials: hideFinancials,
-      compact: compact || size != LabelSize.large,
+      compact: size != LabelSize.large,
     );
     if (lastLine != null) {
       children.add(pw.SizedBox(height: 1));
       children.add(
         pw.Text(
-          size == LabelSize.small ? 'Last: $lastLine' : lastLine,
+          pdfLabelText(lastLine),
           style: pw.TextStyle(fontSize: codeSize - 1.5),
           maxLines: 2,
         ),
@@ -920,11 +948,107 @@ class BarcodePdfService {
     final bags = _bagsLine(data);
     if (bags != null && size != LabelSize.small) {
       children.add(
-        pw.Text(bags, style: pw.TextStyle(fontSize: codeSize - 1.5)),
+        pw.Text(
+          pdfLabelText(bags),
+          style: pw.TextStyle(fontSize: codeSize - 1.5),
+        ),
       );
     }
 
     return children;
+  }
+
+  /// A4 dense grid: name, larger barcode, one optional footer line (item code in cell header).
+  static List<pw.Widget> _denseA4LabelBody({
+    required BarcodeLabelData data,
+    required LabelSize size,
+    required BarcodeSymbolMode symbol,
+    required bool showLastPurchase,
+    required bool hideFinancials,
+    required bool showStockOnLabel,
+  }) {
+    final code = _symbologyValue(
+      data,
+      symbol: symbol,
+      webBase: AppConfig.webAppBaseUrl,
+    );
+    final (_, codeSize, bcHeight, qrSize) = _sizes(size);
+    final titleSz = math.min(_sizes(size).$1, 7.5);
+    final bcH = math.max(20.0, math.min(bcHeight, 24.0));
+    final safeName = pdfLabelText(
+      sanitizePrintPayload(data.itemName, forQr: symbol == BarcodeSymbolMode.qrCode),
+    );
+
+    final children = <pw.Widget>[
+      pw.Text(
+        safeName,
+        maxLines: 2,
+        style: pw.TextStyle(fontSize: titleSz, fontWeight: pw.FontWeight.bold),
+      ),
+      pw.SizedBox(height: 2),
+      _safeBarcodeWidget(
+        qr: symbol == BarcodeSymbolMode.qrCode,
+        data: code,
+        height: symbol == BarcodeSymbolMode.qrCode
+            ? math.max(22.0, qrSize)
+            : bcH,
+        width: symbol == BarcodeSymbolMode.qrCode
+            ? math.max(22.0, qrSize)
+            : bcH * 2.4,
+      ),
+    ];
+
+    final footer = _denseA4FooterLine(
+      data,
+      showStockOnLabel: showStockOnLabel,
+      showLastPurchase: showLastPurchase,
+      hideFinancials: hideFinancials,
+      size: size,
+    );
+    if (footer != null) {
+      children.addAll([
+        pw.SizedBox(height: 2),
+        pw.Text(
+          footer,
+          style: pw.TextStyle(
+            fontSize: codeSize - 1,
+            fontWeight: pw.FontWeight.bold,
+          ),
+          maxLines: 2,
+        ),
+      ]);
+    }
+
+    return children;
+  }
+
+  static String? _denseA4FooterLine(
+    BarcodeLabelData data, {
+    required bool showStockOnLabel,
+    required bool showLastPurchase,
+    required bool hideFinancials,
+    required LabelSize size,
+  }) {
+    final stockDisplay = pdfQtyDisplayString(data.currentStock);
+    final u = pdfLabelText((data.unit ?? '').trim());
+    String? stockLine;
+    if (showStockOnLabel && stockDisplay != null) {
+      stockLine = pdfLabelText(
+        'Stock: $stockDisplay${u.isEmpty ? '' : ' $u'}',
+      );
+    }
+    final purchaseLine = _lastPurchaseLine(
+      data,
+      showLastPurchase: showLastPurchase,
+      size: size,
+      hideFinancials: hideFinancials,
+      compact: true,
+      omitEmptyPlaceholder: true,
+    );
+    if (stockLine != null && purchaseLine != null) {
+      return pdfLabelText('$stockLine | $purchaseLine');
+    }
+    return stockLine ?? purchaseLine;
   }
 
   /// Thermal small: barcode left; name + date + qty right — no price, no unit text.
@@ -942,11 +1066,12 @@ class BarcodePdfService {
       webBase: AppConfig.webAppBaseUrl,
     );
     final codeLine = data.itemCode.trim().isEmpty ? code : data.itemCode.trim();
-    final bcH = compact ? 12.0 : 22.0;
-    final nameSize = compact ? 5.0 : 7.0;
-    final metaSize = compact ? 5.0 : 6.0;
-    final safeName =
-        sanitizePrintPayload(data.itemName, forQr: symbol == BarcodeSymbolMode.qrCode);
+    final bcH = compact ? 18.0 : 22.0;
+    final nameSize = compact ? 6.0 : 7.0;
+    final metaSize = compact ? 5.5 : 6.0;
+    final safeName = pdfLabelText(
+      sanitizePrintPayload(data.itemName, forQr: symbol == BarcodeSymbolMode.qrCode),
+    );
 
     final qtyStr = pdfQtyDisplayString(data.lastPurchaseQty);
     String? dateStr;
@@ -972,7 +1097,11 @@ class BarcodePdfService {
               ),
               if (!compact)
                 pw.Text(
-                  codeLine.length > 18 ? '${codeLine.substring(0, 18)}…' : codeLine,
+                  pdfLabelText(
+                    codeLine.length > 18
+                        ? '${codeLine.substring(0, 18)}...'
+                        : codeLine,
+                  ),
                   style: pw.TextStyle(fontSize: metaSize - 0.5),
                   maxLines: 1,
                 ),
@@ -1031,12 +1160,32 @@ class BarcodePdfService {
     return row;
   }
 
+  /// Last purchase footer for PDF labels (ASCII-safe for default fonts).
+  @visibleForTesting
+  static String? lastPurchaseLineForLabel(
+    BarcodeLabelData data, {
+    required bool showLastPurchase,
+    required LabelSize size,
+    bool hideFinancials = false,
+    bool compact = false,
+    bool omitEmptyPlaceholder = false,
+  }) =>
+      _lastPurchaseLine(
+        data,
+        showLastPurchase: showLastPurchase,
+        size: size,
+        hideFinancials: hideFinancials,
+        compact: compact,
+        omitEmptyPlaceholder: omitEmptyPlaceholder,
+      );
+
   static String? _lastPurchaseLine(
     BarcodeLabelData data, {
     required bool showLastPurchase,
     required LabelSize size,
     bool hideFinancials = false,
     bool compact = false,
+    bool omitEmptyPlaceholder = false,
   }) {
     if (!showLastPurchase) return null;
     if (size == LabelSize.small && !compact) return null;
@@ -1049,20 +1198,22 @@ class BarcodePdfService {
     }
     final qtyStr = pdfQtyDisplayString(data.lastPurchaseQty);
     if (qtyStr != null) {
-      final u = (data.lastPurchaseUnit ?? data.unit ?? '').trim();
+      final u = pdfLabelText((data.lastPurchaseUnit ?? data.unit ?? '').trim());
       parts.add('$qtyStr${u.isEmpty ? '' : ' $u'}');
     }
     final rate = BarcodeLabelData.finiteQty(data.lastPurchaseRate);
     if (!hideFinancials && rate != null && rate > 0) {
-      parts.add('₹${rate.toStringAsFixed(0)}');
+      parts.add('Rs.${rate.toStringAsFixed(0)}');
     }
     final sup = data.supplierName?.trim() ?? '';
-    if (sup.isNotEmpty) {
-      final short = sup.length > 18 ? '${sup.substring(0, 18)}…' : sup;
-      parts.add(short);
+    if (sup.isNotEmpty && !compact) {
+      final short = sup.length > 18 ? '${sup.substring(0, 18)}...' : sup;
+      parts.add(pdfLabelText(short));
     }
-    if (parts.isEmpty) return 'No purchase yet';
-    return parts.join(' · ');
+    if (parts.isEmpty) {
+      return omitEmptyPlaceholder ? null : 'No purchase yet';
+    }
+    return pdfLabelText(parts.join(' · '));
   }
 
   static String? _bagsLine(BarcodeLabelData data) {

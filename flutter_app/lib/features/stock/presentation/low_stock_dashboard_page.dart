@@ -37,6 +37,15 @@ class _LowStockDashboardPageState extends ConsumerState<LowStockDashboardPage>
     with SingleTickerProviderStateMixin {
   static const _tabCount = 5;
 
+  /// Visual tab order (segmented control); maps to [TabController] index.
+  static const _tabOrder = <LowStockTreeTab>[
+    LowStockTreeTab.allLow,
+    LowStockTreeTab.outOfStock,
+    LowStockTreeTab.purchasedInPeriod,
+    LowStockTreeTab.pendingOrder,
+    LowStockTreeTab.pendingDelivery,
+  ];
+
   late final TabController _tabs;
   final _searchCtrl = TextEditingController();
   Timer? _debounce;
@@ -74,16 +83,22 @@ class _LowStockDashboardPageState extends ConsumerState<LowStockDashboardPage>
 
   int? _tabIndexFromFilter(String? raw) {
     if (raw == null || raw.trim().isEmpty) return null;
-    return switch (raw.trim().toLowerCase()) {
-      'all' || 'low' => 0,
-      'pending' => 1,
-      'out' => 2,
-      'purchased' => 3,
-      'delivery' || 'pending_delivery' || 'pending-delivery' => 4,
-      'delayed' || 'verification' || 'urgent' || 'high_impact' => 0,
+    final tab = switch (raw.trim().toLowerCase()) {
+      'all' || 'low' => LowStockTreeTab.allLow,
+      'out' => LowStockTreeTab.outOfStock,
+      'purchased' || 'bought' => LowStockTreeTab.purchasedInPeriod,
+      'pending' => LowStockTreeTab.pendingOrder,
+      'delivery' || 'pending_delivery' || 'pending-delivery' =>
+        LowStockTreeTab.pendingDelivery,
+      'delayed' || 'verification' || 'urgent' || 'high_impact' =>
+        LowStockTreeTab.allLow,
       _ => null,
     };
+    if (tab == null) return null;
+    return _tabOrder.indexOf(tab);
   }
+
+  LowStockTreeTab get _activeTab => _tabOrder[_tabs.index];
 
   @override
   void dispose() {
@@ -175,7 +190,7 @@ class _LowStockDashboardPageState extends ConsumerState<LowStockDashboardPage>
   List<Map<String, dynamic>> _filteredFlatItems(
     Map<String, Map<String, List<Map<String, dynamic>>>> grouped,
   ) {
-    final tab = LowStockTreeTab.values[_tabs.index];
+    final tab = _activeTab;
     final filtered = filterLowStockGrouped(
       grouped: grouped,
       tab: tab,
@@ -207,7 +222,7 @@ class _LowStockDashboardPageState extends ConsumerState<LowStockDashboardPage>
           const SnackBar(content: Text('Preparing low-stock PDF…')),
         );
       }
-      final tabLabel = _tabLabel(LowStockTreeTab.values[_tabs.index]);
+      final tabLabel = _tabLabel(_activeTab);
       final filterParts = <String>[tabLabel];
       if (_search.isNotEmpty) filterParts.add('Search: $_search');
       if (_subcategoryFilter != null && _subcategoryFilter!.isNotEmpty) {
@@ -292,8 +307,8 @@ class _LowStockDashboardPageState extends ConsumerState<LowStockDashboardPage>
             return PreferredSize(
               preferredSize: Size.fromHeight(
                 _subcategoryFilter != null && _subcategoryFilter!.trim().isNotEmpty
-                    ? 118
-                    : 96,
+                    ? 108
+                    : 88,
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -364,50 +379,15 @@ class _LowStockDashboardPageState extends ConsumerState<LowStockDashboardPage>
                       style: HexaDsType.label(10, color: HexaDsColors.textMuted),
                     ),
                   ),
-                  TabBar(
-                    controller: _tabs,
-                    isScrollable: true,
-                    tabAlignment: TabAlignment.start,
-                    labelPadding: const EdgeInsets.symmetric(horizontal: 8),
-                    tabs: [
-                      _tabWithBadge(
-                        icon: Icons.warning_amber_rounded,
-                        label: 'All',
-                        count: n,
-                      ),
-                      _tabWithBadge(
-                        icon: Icons.schedule_rounded,
-                        label: 'Pending',
-                        count: countLowStockForTab(
-                          grouped,
-                          LowStockTreeTab.pendingOrder,
-                        ),
-                      ),
-                      _tabWithBadge(
-                        icon: Icons.remove_shopping_cart_outlined,
-                        label: 'Out',
-                        count: countLowStockForTab(
-                          grouped,
-                          LowStockTreeTab.outOfStock,
-                        ),
-                      ),
-                      _tabWithBadge(
-                        icon: Icons.shopping_bag_outlined,
-                        label: 'Bought',
-                        count: countLowStockForTab(
-                          grouped,
-                          LowStockTreeTab.purchasedInPeriod,
-                        ),
-                      ),
-                      _tabWithBadge(
-                        icon: Icons.local_shipping_outlined,
-                        label: 'Delivery',
-                        count: countLowStockForTab(
-                          grouped,
-                          LowStockTreeTab.pendingDelivery,
-                        ),
-                      ),
-                    ],
+                  _LowStockSegmentedTabs(
+                    selectedIndex: _tabs.index,
+                    counts: {
+                      for (final t in _tabOrder)
+                        t: countLowStockForTab(grouped, t),
+                    },
+                    onSelected: (i) {
+                      if (i != _tabs.index) _tabs.animateTo(i);
+                    },
                   ),
                 ],
               ),
@@ -427,7 +407,7 @@ class _LowStockDashboardPageState extends ConsumerState<LowStockDashboardPage>
           final tree = TabBarView(
             controller: _tabs,
             children: [
-              for (final tab in LowStockTreeTab.values)
+              for (final tab in _tabOrder)
                 LowStockCategoryTree(
                   grouped: grouped,
                   tab: tab,
@@ -473,149 +453,144 @@ class _LowStockDashboardPageState extends ConsumerState<LowStockDashboardPage>
       context: context,
       showDragHandle: true,
       isScrollControlled: true,
-      builder: (ctx) => HexaResponsiveSheetViewport(
-        compact: true,
-        child: StatefulBuilder(
-          builder: (ctx, setSheetState) {
-            return Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text(
-                  'Search & filters',
-                  style: HexaDsType.heading(16),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'Choose where search matches and optional subcategory.',
-                  style: HexaDsType.body(12, color: HexaDsColors.textMuted),
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  'Search in',
-                  style: HexaDsType.label(11, color: HexaDsColors.textMuted),
-                ),
-                const SizedBox(height: 6),
-                Wrap(
-                  spacing: 6,
-                  runSpacing: 6,
-                  children: [
-                    for (final entry in <(LowStockSearchScope, String)>[
-                      (LowStockSearchScope.all, 'All fields'),
-                      (LowStockSearchScope.category, 'Category'),
-                      (LowStockSearchScope.subcategory, 'Subcategory'),
-                      (LowStockSearchScope.item, 'Item name'),
-                    ])
-                      FilterChip(
-                        label: Text(entry.$2),
-                        selected: scope == entry.$1,
-                        onSelected: (_) =>
-                            setSheetState(() => scope = entry.$1),
-                      ),
-                  ],
-                ),
-                if (subOptions.length > 1) ...[
-                  const SizedBox(height: 12),
-                  Text(
-                    'Subcategory',
-                    style: HexaDsType.label(11, color: HexaDsColors.textMuted),
-                  ),
-                  const SizedBox(height: 6),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    decoration: BoxDecoration(
-                      border: Border.all(color: const Color(0xFFE2E8E6)),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: DropdownButtonHideUnderline(
-                      child: DropdownButton<String?>(
-                        isExpanded: true,
-                        value: sub,
-                        items: [
-                          const DropdownMenuItem(
-                            value: null,
-                            child: Text('All subcategories'),
+      builder: (ctx) {
+        final bottom = MediaQuery.paddingOf(ctx).bottom;
+        return Padding(
+          padding: EdgeInsets.only(bottom: bottom),
+          child: StatefulBuilder(
+            builder: (ctx, setSheetState) {
+              return Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Text(
+                          'Filters',
+                          style: HexaDsType.heading(16),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Search scope and subcategory.',
+                          style: HexaDsType.body(
+                            13,
+                            color: HexaDsColors.textMuted,
                           ),
-                          for (final s in subOptions)
-                            DropdownMenuItem(
-                              value: s,
-                              child: Text(
-                                s,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 14),
+                        Text(
+                          'Search in',
+                          style: HexaDsType.label(
+                            12,
+                            color: HexaDsColors.textMuted,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
+                            for (final entry in <(LowStockSearchScope, String)>[
+                              (LowStockSearchScope.all, 'All fields'),
+                              (LowStockSearchScope.category, 'Category'),
+                              (LowStockSearchScope.subcategory, 'Subcategory'),
+                              (LowStockSearchScope.item, 'Item name'),
+                            ])
+                              ChoiceChip(
+                                label: Text(entry.$2),
+                                selected: scope == entry.$1,
+                                onSelected: (_) =>
+                                    setSheetState(() => scope = entry.$1),
+                              ),
+                          ],
+                        ),
+                        if (subOptions.length > 1) ...[
+                          const SizedBox(height: 14),
+                          Text(
+                            'Subcategory',
+                            style: HexaDsType.label(
+                              12,
+                              color: HexaDsColors.textMuted,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          DropdownButtonFormField<String?>(
+                            initialValue: sub,
+                            decoration: InputDecoration(
+                              isDense: true,
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 10,
                               ),
                             ),
+                            items: [
+                              const DropdownMenuItem(
+                                value: null,
+                                child: Text('All subcategories'),
+                              ),
+                              for (final s in subOptions)
+                                DropdownMenuItem(
+                                  value: s,
+                                  child: Text(
+                                    s,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                            ],
+                            onChanged: (v) => setSheetState(() => sub = v),
+                          ),
                         ],
-                        onChanged: (v) => setSheetState(() => sub = v),
-                      ),
+                        const SizedBox(height: 12),
+                      ],
+                    ),
+                  ),
+                  const Divider(height: 1),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        FilledButton(
+                          style: FilledButton.styleFrom(
+                            backgroundColor: const Color(0xFF065F46),
+                            minimumSize: const Size.fromHeight(48),
+                          ),
+                          onPressed: () {
+                            setState(() {
+                              _searchScope = scope;
+                              _subcategoryFilter = sub;
+                            });
+                            Navigator.pop(ctx);
+                          },
+                          child: const Text('Apply filters'),
+                        ),
+                        if (_filtersActive)
+                          TextButton(
+                            onPressed: () {
+                              setState(() {
+                                _searchScope = LowStockSearchScope.all;
+                                _subcategoryFilter = null;
+                              });
+                              Navigator.pop(ctx);
+                            },
+                            child: const Text('Clear filters'),
+                          ),
+                      ],
                     ),
                   ),
                 ],
-                const SizedBox(height: 16),
-                FilledButton(
-                  onPressed: () {
-                    setState(() {
-                      _searchScope = scope;
-                      _subcategoryFilter = sub;
-                    });
-                    Navigator.pop(ctx);
-                  },
-                  child: const Text('Apply'),
-                ),
-                if (_filtersActive) ...[
-                  const SizedBox(height: 8),
-                  TextButton(
-                    onPressed: () {
-                      setState(() {
-                        _searchScope = LowStockSearchScope.all;
-                        _subcategoryFilter = null;
-                      });
-                      Navigator.pop(ctx);
-                    },
-                    child: const Text('Clear filters'),
-                  ),
-                ],
-              ],
-            );
-          },
-        ),
-      ),
-    );
-  }
-
-  Tab _tabWithBadge({
-    required IconData icon,
-    required String label,
-    required int count,
-  }) {
-    return Tab(
-      height: 40,
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 16),
-          const SizedBox(width: 4),
-          Text(label, style: const TextStyle(fontSize: 12)),
-          if (count > 0) ...[
-            const SizedBox(width: 4),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-              decoration: BoxDecoration(
-                color: const Color(0xFFDC2626),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Text(
-                count > 999 ? '999+' : '$count',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 10,
-                  fontWeight: FontWeight.w900,
-                ),
-              ),
-            ),
-          ],
-        ],
-      ),
+              );
+            },
+          ),
+        );
+      },
     );
   }
 
@@ -626,4 +601,87 @@ class _LowStockDashboardPageState extends ConsumerState<LowStockDashboardPage>
         LowStockTreeTab.purchasedInPeriod => 'Purchased in period',
         LowStockTreeTab.pendingDelivery => 'Pending delivery',
       };
+}
+
+class _LowStockSegmentedTabs extends StatelessWidget {
+  const _LowStockSegmentedTabs({
+    required this.selectedIndex,
+    required this.counts,
+    required this.onSelected,
+  });
+
+  final int selectedIndex;
+  final Map<LowStockTreeTab, int> counts;
+  final ValueChanged<int> onSelected;
+
+  static const _tabs = _LowStockDashboardPageState._tabOrder;
+
+  static String _label(LowStockTreeTab t) => switch (t) {
+        LowStockTreeTab.allLow => 'All',
+        LowStockTreeTab.outOfStock => 'Out',
+        LowStockTreeTab.purchasedInPeriod => 'Bought',
+        LowStockTreeTab.pendingOrder => 'Pending',
+        LowStockTreeTab.pendingDelivery => 'Delivery',
+      };
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 0, 12, 6),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: [
+            for (var i = 0; i < _tabs.length; i++) ...[
+              if (i > 0) const SizedBox(width: 6),
+              _Segment(
+                label: _label(_tabs[i]),
+                count: counts[_tabs[i]] ?? 0,
+                selected: i == selectedIndex,
+                onTap: () => onSelected(i),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _Segment extends StatelessWidget {
+  const _Segment({
+    required this.label,
+    required this.count,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final int count;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final fg = selected ? Colors.white : const Color(0xFF334155);
+    return Material(
+      color: selected ? const Color(0xFF065F46) : const Color(0xFFF1F5F4),
+      borderRadius: BorderRadius.circular(20),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(20),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          child: Text(
+            '$label ($count)',
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: fg,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }

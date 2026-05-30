@@ -219,16 +219,8 @@ class _LowStockCategoryTreeState extends State<LowStockCategoryTree> {
   }
 
   void _resetExpandedForFilter() {
+    // Categories stay collapsed — user expands one at a time (faster scan).
     _expandedCats.clear();
-    final filtered = filterLowStockGrouped(
-      grouped: widget.grouped,
-      tab: widget.tab,
-      searchQuery: widget.searchQuery,
-      searchScope: widget.searchScope,
-      subcategoryFilter: widget.subcategoryFilter,
-    );
-    final first = categoryWithHighestOut(filtered, widget.tab);
-    if (first != null) _expandedCats.add(first);
     _lastFilterKey =
         '${widget.tab}|${widget.searchQuery}|${widget.searchScope}|${widget.subcategoryFilter}|${widget.grouped.length}';
   }
@@ -298,9 +290,11 @@ class _LowStockCategoryTreeState extends State<LowStockCategoryTree> {
                 trailing: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    _DualBadge(label: 'LOW', count: counts.low),
+                    if (counts.out > 0)
+                      _OutCountBadge(count: counts.out)
+                    else if (counts.low > 0)
+                      _OutCountBadge(count: counts.low, label: 'LOW'),
                     const SizedBox(width: 4),
-                    _DualBadge(label: 'OUT', count: counts.out),
                     Icon(expanded ? Icons.expand_less : Icons.expand_more, size: 20),
                   ],
                 ),
@@ -353,11 +347,8 @@ class _LowStockCategoryTreeState extends State<LowStockCategoryTree> {
   }
 }
 
-class _DualBadge extends StatelessWidget {
-  const _DualBadge({
-    required this.label,
-    required this.count,
-  });
+class _OutCountBadge extends StatelessWidget {
+  const _OutCountBadge({required this.count, this.label = 'OUT'});
 
   final String label;
   final int count;
@@ -375,7 +366,7 @@ class _DualBadge extends StatelessWidget {
         '$label $count',
         style: const TextStyle(
           color: Colors.white,
-          fontWeight: FontWeight.w900,
+          fontWeight: FontWeight.w700,
           fontSize: 12,
         ),
       ),

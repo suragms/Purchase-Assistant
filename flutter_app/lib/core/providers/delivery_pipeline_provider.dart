@@ -2,13 +2,14 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../auth/session_notifier.dart';
+import '../auth/session_notifier.dart'
+    show activeSessionProvider, hexaApiProvider;
 import '../json_coerce.dart';
 
 /// Owner dashboard: counts per delivery_status from API.
 final deliveryPipelineProvider =
     FutureProvider.autoDispose<Map<String, dynamic>>((ref) async {
-  final session = ref.watch(sessionProvider);
+  final session = ref.watch(activeSessionProvider);
   if (session == null) return {};
   try {
     return await ref

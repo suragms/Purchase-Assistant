@@ -5,7 +5,8 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../api/hexa_api.dart';
-import '../auth/session_notifier.dart';
+import '../auth/session_notifier.dart'
+    show activeSessionProvider, hexaApiProvider;
 import '../json_coerce.dart';
 import 'analytics_kpi_provider.dart' show analyticsDateRangeProvider;
 import 'app_period_provider.dart';
@@ -132,7 +133,7 @@ const kHomeOutOfStockListQuery = StockListQuery(
 /// Item drill-down: period purchases, variance, recent lines.
 final stockItemIntelligenceProvider = FutureProvider.autoDispose
     .family<Map<String, dynamic>, String>((ref, itemId) async {
-  final session = ref.watch(sessionProvider);
+  final session = ref.watch(activeSessionProvider);
   if (session == null) return {};
   final range = ref.watch(stockListQueryProvider);
   return ref.read(hexaApiProvider).getStockIntelligence(
@@ -145,7 +146,7 @@ final stockItemIntelligenceProvider = FutureProvider.autoDispose
 
 final stockItemActivityProvider = FutureProvider.autoDispose
     .family<Map<String, dynamic>, String>((ref, itemId) async {
-  final session = ref.watch(sessionProvider);
+  final session = ref.watch(activeSessionProvider);
   if (session == null) return {};
   return ref.read(hexaApiProvider).getStockItemActivity(
         businessId: session.primaryBusiness.id,
@@ -241,7 +242,7 @@ int countOperationalActiveFilters(
 final stockOnHandTotalsProvider =
     FutureProvider.autoDispose<Map<String, dynamic>>((ref) async {
   providerKeepAlive(ref, const Duration(minutes: 3));
-  final session = ref.watch(sessionProvider);
+  final session = ref.watch(activeSessionProvider);
   if (session == null) return {};
   return ref.read(hexaApiProvider).getStockTotals(
         businessId: session.primaryBusiness.id,
@@ -253,7 +254,7 @@ final stockTotalsProvider =
     FutureProvider.autoDispose.family<Map<String, dynamic>, AppPeriod>(
   (ref, period) async {
     providerKeepAlive(ref, const Duration(minutes: 3));
-    final session = ref.watch(sessionProvider);
+    final session = ref.watch(activeSessionProvider);
     if (session == null) return {};
     return ref.read(hexaApiProvider).getStockTotals(
           businessId: session.primaryBusiness.id,
@@ -267,7 +268,7 @@ final stockTotalsProvider =
 final stockChangesFeedProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
   providerKeepAlive(ref, const Duration(minutes: 2));
-  final session = ref.watch(sessionProvider);
+  final session = ref.watch(activeSessionProvider);
   if (session == null) return [];
   ref.watch(stockPagePeriodProvider);
   final rows = await ref.read(hexaApiProvider).listStockAuditRecent(
@@ -310,7 +311,7 @@ final stockChangesFeedProvider =
 final stockListCacheProvider = FutureProvider.autoDispose
     .family<Map<String, dynamic>, StockListQuery>((ref, query) async {
   providerKeepAlive(ref, const Duration(seconds: 30));
-  final session = ref.watch(sessionProvider);
+  final session = ref.watch(activeSessionProvider);
   if (session == null) {
     return <String, dynamic>{
       'items': <dynamic>[],
@@ -357,7 +358,7 @@ final bulkBarcodeDownloadedIdsProvider =
 
 final bulkStockListProvider =
     FutureProvider.autoDispose<Map<String, dynamic>>((ref) async {
-  final session = ref.watch(sessionProvider);
+  final session = ref.watch(activeSessionProvider);
   final query = ref.watch(stockListQueryProvider);
   if (session == null) {
     return {'items': <Map<String, dynamic>>[], 'total': 0, 'loaded': 0};
@@ -415,7 +416,7 @@ final stockItemDetailProvider =
     final timer = Timer(const Duration(seconds: 30), keepAlive.close);
     ref.onDispose(timer.cancel);
 
-    final session = ref.watch(sessionProvider);
+    final session = ref.watch(activeSessionProvider);
     if (session == null) return {};
     try {
       return await ref.read(hexaApiProvider).getStockItem(
@@ -432,7 +433,7 @@ final stockItemDetailProvider =
 final stockItemAuditProvider =
     FutureProvider.autoDispose.family<List<Map<String, dynamic>>, String>(
   (ref, itemId) async {
-    final session = ref.watch(sessionProvider);
+    final session = ref.watch(activeSessionProvider);
     if (session == null) return [];
     return ref.read(hexaApiProvider).listStockAuditForItem(
           businessId: session.primaryBusiness.id,
@@ -447,7 +448,7 @@ final stockStatusCountsProvider =
   final keepAlive = ref.keepAlive();
   final timer = Timer(const Duration(minutes: 2), keepAlive.close);
   ref.onDispose(timer.cancel);
-  final session = ref.watch(sessionProvider);
+  final session = ref.watch(activeSessionProvider);
   if (session == null) return {};
   final api = ref.read(hexaApiProvider);
   final bid = session.primaryBusiness.id;
@@ -526,7 +527,7 @@ Future<List<Map<String, dynamic>>> _fetchStockListAllPages({
 final lowStockByCategoryProvider =
     FutureProvider.autoDispose<LowStockByCategoryMap>((ref) async {
   providerKeepAlive(ref, const Duration(minutes: 2));
-  final session = ref.watch(sessionProvider);
+  final session = ref.watch(activeSessionProvider);
   if (session == null) return {};
   final api = ref.read(hexaApiProvider);
   final bid = session.primaryBusiness.id;
@@ -663,7 +664,7 @@ final openingStockSetupQueryProvider =
 final openingStockSetupProvider = FutureProvider.autoDispose<Map<String, dynamic>>(
   (ref) async {
     providerKeepAlive(ref, const Duration(minutes: 2));
-    final session = ref.watch(sessionProvider);
+    final session = ref.watch(activeSessionProvider);
     if (session == null) {
       return {
         'summary': {},
@@ -702,7 +703,7 @@ final openingStockBulkSelectionProvider = StateProvider<Set<String>>(
 final openingStockMissingProvider =
     FutureProvider.autoDispose<Map<String, dynamic>>((ref) async {
   providerKeepAlive(ref, const Duration(minutes: 2));
-  final session = ref.watch(sessionProvider);
+  final session = ref.watch(activeSessionProvider);
   if (session == null) {
     return {'items': <Map<String, dynamic>>[], 'missing_count': 0};
   }

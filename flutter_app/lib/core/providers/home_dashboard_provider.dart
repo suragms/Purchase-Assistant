@@ -8,7 +8,7 @@ import 'package:dio/dio.dart';
 
 import '../../features/shell/shell_branch_provider.dart';
 import '../api/hexa_api.dart';
-import '../auth/session_notifier.dart';
+import '../auth/session_notifier.dart' show activeSessionProvider, hexaApiProvider;
 import '../json_coerce.dart';
 import '../models/trade_purchase_models.dart';
 import '../services/offline_store.dart';
@@ -412,7 +412,7 @@ bool _purchaseInInclusiveLocalRange(
 /// Last persisted trade-dashboard snapshot for the current period (instant paint).
 final homeDashboardSyncCacheProvider =
     Provider.autoDispose<HomeDashboardData?>((ref) {
-  final session = ref.watch(sessionProvider);
+  final session = ref.watch(activeSessionProvider);
   if (session == null) return null;
   final period = ref.watch(homePeriodProvider);
   final custom = ref.watch(homeCustomDateRangeProvider);
@@ -877,7 +877,7 @@ class HomeDashboardDataNotifier extends AutoDisposeNotifier<HomeDashboardDashSta
     ref.onDispose(() => _dead = true);
     final period = ref.watch(homePeriodProvider);
     final custom = ref.watch(homeCustomDateRangeProvider);
-    final session = ref.watch(sessionProvider);
+    final session = ref.watch(activeSessionProvider);
 
     if (session == null) {
       return const HomeDashboardDashState(

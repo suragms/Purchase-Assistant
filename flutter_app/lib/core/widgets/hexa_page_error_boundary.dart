@@ -165,8 +165,6 @@ bool hexaErrorLikelyNonFatal(FlutterErrorDetails details) {
       s.contains('SocketException') ||
       s.contains('TimeoutException') ||
       s.contains('FormatException') ||
-      s.contains('type \'Null\' is not') ||
-      s.contains('is not a subtype of type') ||
       s.contains('NoSuchMethodError') ||
       s.contains('PlatformException') ||
       s.contains('StaleHomeDashboardFetch') ||

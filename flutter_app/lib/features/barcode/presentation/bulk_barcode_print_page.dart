@@ -46,6 +46,9 @@ class _BulkBarcodePrintPageState extends ConsumerState<BulkBarcodePrintPage> {
   bool _busy = false;
   bool _denseA4 = true;
   bool _useQr = false;
+  bool _showStockOnLabel = true;
+  bool _showLastPurchaseOnLabel = true;
+  bool _showRateOnLabel = false;
   BulkLabelsPerPdfFile _labelsPerPdfFile = BulkLabelsPerPdfFile.n50;
   String? _pdfStatus;
   int _labelProgressDone = 0;
@@ -401,6 +404,9 @@ class _BulkBarcodePrintPageState extends ConsumerState<BulkBarcodePrintPage> {
           symbol: symbol,
           thermalSize: _thermalSize,
           labelsPerFile: _labelsPerPdfFile.count,
+          showLastPurchaseOnLabel: _showLastPurchaseOnLabel,
+          showStockOnLabel: _showStockOnLabel,
+          showRateOnLabel: _showRateOnLabel,
         );
         if (_pdfCancelled) return false;
         await action(pdfs, targetIds);
@@ -893,6 +899,9 @@ class _BulkBarcodePrintPageState extends ConsumerState<BulkBarcodePrintPage> {
         useQr: _useQr,
         copies: _copies,
         labelsPerPdfFile: _labelsPerPdfFile,
+        showStockOnLabel: _showStockOnLabel,
+        showLastPurchaseOnLabel: _showLastPurchaseOnLabel,
+        showRateOnLabel: _showRateOnLabel,
         progress: progress,
         statusText: _pdfStatus,
         onDenseA4Changed: (v) => setState(() {
@@ -904,6 +913,10 @@ class _BulkBarcodePrintPageState extends ConsumerState<BulkBarcodePrintPage> {
         onQrChanged: (v) => setState(() => _useQr = v),
         onCopiesChanged: (v) => setState(() => _copies = v),
         onLabelsPerPdfFileChanged: (v) => setState(() => _labelsPerPdfFile = v),
+        onShowStockOnLabelChanged: (v) => setState(() => _showStockOnLabel = v),
+        onShowLastPurchaseOnLabelChanged: (v) =>
+            setState(() => _showLastPurchaseOnLabel = v),
+        onShowRateOnLabelChanged: (v) => setState(() => _showRateOnLabel = v),
         onPreview: _preview,
         onPdf: _downloadPdf,
         onPrint: _print,

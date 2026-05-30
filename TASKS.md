@@ -2,6 +2,15 @@
 
 **Last updated:** 2026-05-29 (owner dashboard num coercion + stock UX)
 
+## Owner home UX rebuild (2026-05-29)
+
+- [x] Compact alert chips: Low · Opening · Out · Pending delivery (red when > 0)
+- [x] Order: header → chips → **sticky period** → purchases → warehouse → stock lists → **Tools** → recent activity
+- [x] Removed **My tasks** from home (Settings → Owner tasks)
+- [x] `HexaPageErrorBoundary`: type-cast errors fatal again (fixes silent blank Home/Stock/Reports)
+- [x] Recent activity: purchase · delivery verified · staff qty · stock corrections only
+- [ ] Deploy Flutter Vercel + hard refresh
+
 ## Owner dashboard blank fix (2026-05-29)
 
 - [x] **Root cause:** API returns decimals as **strings** — `as num?` casts in dashboard parse + status counts crashed Home (gray blank + console `not a subtype of type num?`)
@@ -19,6 +28,15 @@
 - [x] Barcode scan: deferred camera init, faster debounce (900ms), app bar icons → single **More** menu
 - [x] Scan action sheet: compact (no 62% blank sheet), label print toolbar unchanged (settings in one button)
 - [x] Tests: `test_staff_system_stock_notify.py`
+
+## Low stock mobile UX v2 (2026-05-29)
+
+- [x] Item row ~90px: name · stock · status · **+ Stock** + **Order** only; overflow → detail sheet
+- [x] Detail sheet: physical, reorder, supplier, secondary actions (reorder lvl, receive, profile)
+- [x] Categories collapsed by default; single **OUT n** badge per category
+- [x] Segmented tabs: All · Out · Bought · Pending · Delivery with counts
+- [x] Filter sheet: content-sized, sticky Apply (no 70% empty gap)
+- [ ] Manual QA on device (owner + staff low-stock routes)
 
 ## Low stock mobile UX (2026-05-29)
 

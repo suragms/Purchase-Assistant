@@ -204,6 +204,12 @@ final tokenStoreProvider = Provider<SecureTokenStore>((ref) {
 final sessionProvider =
     NotifierProvider<SessionNotifier, Session?>(SessionNotifier.new);
 
+/// Session for API providers: null when logged out or after terminal 401/refresh failure.
+final activeSessionProvider = Provider<Session?>((ref) {
+  if (ref.watch(authSessionExpiredProvider)) return null;
+  return ref.watch(sessionProvider);
+});
+
 class SessionNotifier extends Notifier<Session?> {
   /// Tracked manually because Riverpod 2.6 does not expose `ref.mounted` on
   /// `NotifierProviderRef`. Flipped by [Ref.onDispose] in [build].
@@ -677,6 +683,11 @@ class SessionNotifier extends Notifier<Session?> {
     final api = ref.read(hexaApiProvider);
     final store = ref.read(tokenStoreProvider);
     final cache = SessionCache(ref.read(sharedPreferencesProvider));
+    // Drop session + Bearer immediately so home/stock providers stop polling
+    // while async Google sign-out and secure-store clears run (401 storms on web).
+    state = null;
+    api.setAuthToken(null);
+    authRefresh.value++;
     if (prev != null) {
       _notifyStaffAuthEvent(prev, signedIn: false);
       if (sessionIsStaff(prev)) {
@@ -686,14 +697,11 @@ class SessionNotifier extends Notifier<Session?> {
     await signOutGoogleIfNeeded();
     await store.clear();
     await cache.clear();
-    api.setAuthToken(null);
     try {
       ref.read(apiDegradedProvider.notifier).clear();
       ref.read(authSessionExpiredProvider.notifier).clear();
       ref.read(authRefreshFailureTrackerProvider).reset();
     } catch (_) {}
-    state = null;
     invalidateStaffHomeCaches(ref);
-    authRefresh.value++;
   }
 }

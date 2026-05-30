@@ -24,6 +24,34 @@ void main() {
     });
   });
 
+  group('BarcodePdfService.lastPurchaseLineForLabel', () {
+    test('uses Rs. not rupee symbol and omits empty placeholder when asked', () {
+      const data = BarcodeLabelData(
+        itemCode: '1928',
+        itemName: 'Sugar',
+        lastPurchaseDate: null,
+        lastPurchaseRate: 2750,
+      );
+      final withRate = BarcodePdfService.lastPurchaseLineForLabel(
+        data,
+        showLastPurchase: true,
+        size: LabelSize.medium,
+        hideFinancials: false,
+      );
+      expect(withRate, isNotNull);
+      expect(withRate!, contains('Rs.2750'));
+      expect(withRate, isNot(contains('₹')));
+
+      final empty = BarcodePdfService.lastPurchaseLineForLabel(
+        const BarcodeLabelData(itemCode: '1', itemName: 'X'),
+        showLastPurchase: true,
+        size: LabelSize.medium,
+        omitEmptyPlaceholder: true,
+      );
+      expect(empty, isNull);
+    });
+  });
+
   group('bulk label printable filter', () {
     test('isStockRowPrintable requires code or barcode', () {
       expect(isStockRowPrintable(null), isFalse);

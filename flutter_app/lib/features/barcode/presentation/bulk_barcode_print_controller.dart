@@ -171,6 +171,8 @@ Future<Uint8List> _generatePdfForLabelChunk({
   required BarcodeSymbolMode symbol,
   required LabelSize thermalSize,
   required bool hideFinancials,
+  required bool showLastPurchaseOnLabel,
+  required bool showStockOnLabel,
   int? targetLabelsPerPage,
   int serialStart = 1,
   int? totalLabelCount,
@@ -180,7 +182,9 @@ Future<Uint8List> _generatePdfForLabelChunk({
       items: labels,
       size: thermalSize,
       copiesPerItem: 1,
+      showLastPurchase: showLastPurchaseOnLabel,
       hideFinancials: hideFinancials,
+      showStockOnLabel: showStockOnLabel,
       columns: MediaQuery.sizeOf(context).width >= 600 ? 5 : 4,
       targetLabelsPerPage: targetLabelsPerPage,
       symbol: symbol,
@@ -193,7 +197,9 @@ Future<Uint8List> _generatePdfForLabelChunk({
     size: thermalSize,
     copiesPerItem: 1,
     labelsPerRow: perRow,
+    showLastPurchase: showLastPurchaseOnLabel,
     hideFinancials: hideFinancials,
+    showStockOnLabel: showStockOnLabel,
     symbol: symbol,
   );
 }
@@ -208,6 +214,9 @@ Future<Uint8List> generateBulkPdfBytes({
   required BarcodeSymbolMode symbol,
   required LabelSize thermalSize,
   required int labelsPerFile,
+  bool showLastPurchaseOnLabel = true,
+  bool showStockOnLabel = true,
+  bool showRateOnLabel = false,
 }) async {
   final parts = await generateBulkPdfParts(
     context: context,
@@ -219,6 +228,9 @@ Future<Uint8List> generateBulkPdfBytes({
     symbol: symbol,
     thermalSize: thermalSize,
     labelsPerFile: labelsPerFile,
+    showLastPurchaseOnLabel: showLastPurchaseOnLabel,
+    showStockOnLabel: showStockOnLabel,
+    showRateOnLabel: showRateOnLabel,
   );
   if (parts.isEmpty) {
     throw BarcodeOperationException(
@@ -240,6 +252,9 @@ Future<List<Uint8List>> generateBulkPdfParts({
   required BarcodeSymbolMode symbol,
   required LabelSize thermalSize,
   required int labelsPerFile,
+  bool showLastPurchaseOnLabel = true,
+  bool showStockOnLabel = true,
+  bool showRateOnLabel = false,
 }) async {
   if (batch.labels.isEmpty) {
     throw BarcodeOperationException(
@@ -250,8 +265,11 @@ Future<List<Uint8List>> generateBulkPdfParts({
     );
   }
   final session = ref.read(sessionProvider);
-  final hideFinancials =
+  final sessionHideFinancials =
       session != null && !sessionCanSeeFinancials(session);
+  final hideFinancials = denseA4
+      ? (!showRateOnLabel || sessionHideFinancials)
+      : sessionHideFinancials;
   final perFile = labelsPerFile.clamp(1, 100);
   final copyN = copies.clamp(1, 5);
   final uniqueLabels = dedupeBarcodeLabels(batch.labels);
@@ -290,6 +308,8 @@ Future<List<Uint8List>> generateBulkPdfParts({
             symbol: symbol,
             thermalSize: thermalSize,
             hideFinancials: hideFinancials,
+            showLastPurchaseOnLabel: showLastPurchaseOnLabel,
+            showStockOnLabel: showStockOnLabel,
             targetLabelsPerPage: perFile,
             serialStart: serial,
             totalLabelCount: totalExpanded,
@@ -319,6 +339,8 @@ Future<List<Uint8List>> generateBulkPdfParts({
           symbol: symbol,
           thermalSize: thermalSize,
           hideFinancials: hideFinancials,
+          showLastPurchaseOnLabel: showLastPurchaseOnLabel,
+          showStockOnLabel: showStockOnLabel,
           serialStart: serial,
           totalLabelCount: thermalExpanded,
         ),

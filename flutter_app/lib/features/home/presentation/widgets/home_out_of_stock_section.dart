@@ -8,7 +8,9 @@ import 'home_recent_changes_section.dart' show HomeSectionSkeleton;
 
 /// Out-of-stock items with Buy Now CTA.
 class HomeOutOfStockSection extends ConsumerWidget {
-  const HomeOutOfStockSection({super.key});
+  const HomeOutOfStockSection({super.key, this.dense = false});
+
+  final bool dense;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -31,7 +33,7 @@ class HomeOutOfStockSection extends ConsumerWidget {
             : <Map<String, dynamic>>[];
         final out = rows
             .where((r) => (r['stock_status']?.toString() ?? '') == 'out')
-            .take(5)
+            .take(dense ? 3 : 5)
             .toList();
         if (out.isEmpty) return const SizedBox.shrink();
 
@@ -42,16 +44,23 @@ class HomeOutOfStockSection extends ConsumerWidget {
               'Out of stock',
               style: Theme.of(context).textTheme.titleSmall?.copyWith(
                     fontWeight: FontWeight.w900,
+                    fontSize: dense ? 13 : null,
                   ),
             ),
-            const SizedBox(height: 8),
+            SizedBox(height: dense ? 4 : 8),
             ...out.map(
               (r) => Card(
-                margin: const EdgeInsets.only(bottom: 6),
+                margin: EdgeInsets.only(bottom: dense ? 4 : 6),
                 child: ListTile(
+                  dense: dense,
+                  visualDensity:
+                      dense ? VisualDensity.compact : VisualDensity.standard,
                   title: Text(
                     r['name']?.toString() ?? 'Item',
-                    style: const TextStyle(fontWeight: FontWeight.w800),
+                    style: TextStyle(
+                      fontWeight: FontWeight.w800,
+                      fontSize: dense ? 13 : 14,
+                    ),
                   ),
                   trailing: FilledButton(
                     onPressed: () {

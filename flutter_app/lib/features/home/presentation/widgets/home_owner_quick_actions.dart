@@ -10,7 +10,7 @@ class HomeOwnerQuickActions extends StatelessWidget {
     required this.onStock,
     required this.onPurchase,
     required this.onLowStock,
-    required this.onPendingDeliveries,
+    required this.onDelivered,
     required this.onReports,
     required this.onUsers,
     required this.onBarcode,
@@ -21,7 +21,7 @@ class HomeOwnerQuickActions extends StatelessWidget {
   final VoidCallback onStock;
   final VoidCallback onPurchase;
   final VoidCallback onLowStock;
-  final VoidCallback onPendingDeliveries;
+  final VoidCallback onDelivered;
   final VoidCallback onReports;
   final VoidCallback onUsers;
   final VoidCallback onBarcode;
@@ -34,22 +34,36 @@ class HomeOwnerQuickActions extends StatelessWidget {
       _Spec('Purchase', Icons.add_shopping_cart_rounded, HexaColors.brandPrimary, onPurchase),
       _Spec('Stock', Icons.inventory_2_rounded, const Color(0xFF1565C0), onStock),
       _Spec('Low stock', Icons.warning_amber_rounded, HexaColors.warning, onLowStock, badge: lowStockCount),
-      _Spec('Deliveries', Icons.local_shipping_outlined, HexaColors.profit, onPendingDeliveries),
+      _Spec('Delivered', Icons.check_circle_outline_rounded, HexaColors.profit, onDelivered),
       _Spec('Reports', Icons.bar_chart_rounded, const Color(0xFF0D9488), onReports),
       _Spec('Users', Icons.group_rounded, const Color(0xFF5D4037), onUsers),
       _Spec('Barcode', Icons.qr_code_2_rounded, const Color(0xFF455A64), onBarcode),
       _Spec('Reorder', Icons.autorenew_rounded, const Color(0xFF7C3AED), onReorder),
     ];
 
-    return GridView.count(
-      crossAxisCount: 4,
+    final cols = MediaQuery.sizeOf(context).width < 360 ? 3 : 4;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          'Tools',
+          style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.w900,
+              ),
+        ),
+        const SizedBox(height: 8),
+        GridView.count(
+      crossAxisCount: cols,
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
       mainAxisSpacing: 8,
       crossAxisSpacing: 8,
-      childAspectRatio: 1.35,
+      childAspectRatio: cols == 3 ? 1.1 : 1.35,
       children: [
         for (final a in actions) _Tile(spec: a),
+      ],
+    ),
       ],
     );
   }

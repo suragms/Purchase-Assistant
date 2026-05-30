@@ -46,16 +46,11 @@ import '../../../core/theme/hexa_colors.dart';
 import '../../purchase/presentation/widgets/purchase_saved_sheet.dart';
 import '../../purchase/presentation/widgets/resume_purchase_draft_banner.dart';
 import 'widgets/home_compact_header.dart';
-import 'widgets/home_critical_alerts_grid.dart';
-import 'widgets/home_delivery_pipeline_card.dart';
 import 'widgets/home_session_data_banner.dart';
 import 'widgets/home_quick_actions_grid.dart';
 import 'widgets/home_live_status_bar.dart';
-import 'widgets/home_warehouse_activity_feed.dart';
-import '../../stock/presentation/widgets/low_stock_category_tree.dart'
-    show countLowStockForTab, LowStockTreeTab;
-import 'widgets/home_owner_quick_actions.dart';
-import 'widgets/home_desktop_dashboard_grid.dart';
+import 'widgets/home_owner_compact_alerts.dart';
+import 'widgets/home_owner_dashboard_body.dart';
 import 'widgets/home_sticky_period_header.dart';
 
 /// Harisree owner/admin home — purchase-first warehouse control center.
@@ -400,9 +395,8 @@ class _HomePageState extends ConsumerState<HomePage>
                         const ResumePurchaseDraftBanner(),
                         if (hasDashboard) ...[
                           const HomeSessionDataBanner(),
-                          const HomeCriticalAlertsGrid(),
                           const SizedBox(height: HexaOp.cardGap),
-                          const HomeDeliveryPipelineCard(),
+                          const HomeOwnerCompactAlerts(),
                         ],
                       ],
                     ),
@@ -423,32 +417,9 @@ class _HomePageState extends ConsumerState<HomePage>
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        if (hasDashboard) ...[
-                          const HomeDesktopDashboardGrid(),
-                          SizedBox(height: HexaResponsive.sectionGap(context)),
-                          HomeOwnerQuickActions(
-                            lowStockCount: ref
-                                .watch(lowStockByCategoryProvider)
-                                .maybeWhen(
-                              data: (g) => countLowStockForTab(
-                                g,
-                                LowStockTreeTab.allLow,
-                              ),
-                              orElse: () => 0,
-                            ),
-                            onPurchase: () => context.push('/purchase/new'),
-                            onStock: () => context.go('/stock'),
-                            onLowStock: () => context.push('/stock/low-stock'),
-                            onPendingDeliveries: () => context.go('/purchase'),
-                            onReports: () => context.go('/reports'),
-                            onUsers: () => context.push('/settings/users'),
-                            onBarcode: () => context.push('/barcode/bulk-print'),
-                            onReorder: () =>
-                                context.push('/stock/reorder'),
-                          ),
-                          SizedBox(height: HexaResponsive.sectionGap(context)),
-                          const HomeWarehouseActivityFeed(),
-                        ] else
+                        if (hasDashboard)
+                          const HomeOwnerDashboardBody()
+                        else
                           HomeQuickActionsGrid(
                             isOwner: false,
                             onScan: () => context.push('/barcode/scan'),

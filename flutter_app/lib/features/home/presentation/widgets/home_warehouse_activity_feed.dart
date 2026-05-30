@@ -33,12 +33,12 @@ class _HomeWarehouseActivityFeedState
     final session = ref.watch(sessionProvider);
     final isStaff = session != null && sessionIsStaff(session);
     final title = switch (period) {
-      HomePeriod.today => 'Warehouse activity (today)',
-      HomePeriod.week => 'Warehouse activity (week)',
-      HomePeriod.month => 'Warehouse activity (month)',
-      HomePeriod.year => 'Warehouse activity (year)',
-      HomePeriod.allTime => 'Warehouse activity (all time)',
-      HomePeriod.custom => 'Warehouse activity (custom range)',
+      HomePeriod.today => 'Recent activity (today)',
+      HomePeriod.week => 'Recent activity (week)',
+      HomePeriod.month => 'Recent activity (month)',
+      HomePeriod.year => 'Recent activity (year)',
+      HomePeriod.allTime => 'Recent activity (all time)',
+      HomePeriod.custom => 'Recent activity (custom range)',
     };
 
     return feedAsync.when(

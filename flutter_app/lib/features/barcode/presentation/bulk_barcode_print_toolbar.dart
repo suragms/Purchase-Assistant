@@ -13,12 +13,18 @@ class BulkBarcodePrintToolbar extends StatelessWidget {
     required this.useQr,
     required this.copies,
     required this.labelsPerPdfFile,
+    required this.showStockOnLabel,
+    required this.showLastPurchaseOnLabel,
+    required this.showRateOnLabel,
     required this.progress,
     required this.statusText,
     required this.onDenseA4Changed,
     required this.onQrChanged,
     required this.onCopiesChanged,
     required this.onLabelsPerPdfFileChanged,
+    required this.onShowStockOnLabelChanged,
+    required this.onShowLastPurchaseOnLabelChanged,
+    required this.onShowRateOnLabelChanged,
     required this.onPreview,
     required this.onPdf,
     required this.onPrint,
@@ -31,12 +37,18 @@ class BulkBarcodePrintToolbar extends StatelessWidget {
   final bool useQr;
   final int copies;
   final BulkLabelsPerPdfFile labelsPerPdfFile;
+  final bool showStockOnLabel;
+  final bool showLastPurchaseOnLabel;
+  final bool showRateOnLabel;
   final double? progress;
   final String? statusText;
   final ValueChanged<bool> onDenseA4Changed;
   final ValueChanged<bool> onQrChanged;
   final ValueChanged<int> onCopiesChanged;
   final ValueChanged<BulkLabelsPerPdfFile> onLabelsPerPdfFileChanged;
+  final ValueChanged<bool> onShowStockOnLabelChanged;
+  final ValueChanged<bool> onShowLastPurchaseOnLabelChanged;
+  final ValueChanged<bool> onShowRateOnLabelChanged;
   final Future<void> Function() onPreview;
   final Future<void> Function() onPdf;
   final Future<void> Function() onPrint;
@@ -115,6 +127,27 @@ class BulkBarcodePrintToolbar extends StatelessWidget {
                           onLabelsPerPdfFileChanged(next);
                         },
                 ),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Stock on label'),
+                subtitle: const Text('Current qty and unit'),
+                value: showStockOnLabel,
+                onChanged: busy ? null : onShowStockOnLabelChanged,
+              ),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Last purchase'),
+                subtitle: const Text('Date and qty (no empty filler)'),
+                value: showLastPurchaseOnLabel,
+                onChanged: busy ? null : onShowLastPurchaseOnLabelChanged,
+              ),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Rate on label'),
+                subtitle: const Text('Uses Rs. — safe for PDF print'),
+                value: showRateOnLabel,
+                onChanged: busy ? null : onShowRateOnLabelChanged,
+              ),
               Text(
                 'Downloads one PDF up to $kMaxLabelsSinglePdf labels.',
                 style: Theme.of(ctx).textTheme.bodySmall,

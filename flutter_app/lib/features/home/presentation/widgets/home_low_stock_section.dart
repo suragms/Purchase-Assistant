@@ -9,9 +9,10 @@ import '../../../../shared/widgets/operational_ui.dart';
 
 /// Dense low-stock table with status colors and reorder CTA.
 class HomeLowStockSection extends ConsumerStatefulWidget {
-  const HomeLowStockSection({super.key, this.embedded = false});
+  const HomeLowStockSection({super.key, this.embedded = false, this.dense = false});
 
   final bool embedded;
+  final bool dense;
 
   @override
   ConsumerState<HomeLowStockSection> createState() => _HomeLowStockSectionState();
@@ -64,7 +65,7 @@ class _HomeLowStockSectionState extends ConsumerState<HomeLowStockSection> {
               ),
             );
           }
-          final visible = rows.take(5).toList();
+          final visible = rows.take(widget.dense ? 3 : 5).toList();
           return Column(
             children: [
               for (var i = 0; i < visible.length; i++) ...[
@@ -163,7 +164,7 @@ class _HomeLowStockSectionState extends ConsumerState<HomeLowStockSection> {
 
     return OperationalSection(
       title: 'Low stock',
-      dense: true,
+      dense: widget.dense,
       trailing: trailing,
       onTitleTap: () => context.push('/stock/low-stock'),
       child: body,
