@@ -134,7 +134,7 @@ async def upsert_audit_line(
         )
     item = await _get_catalog_item(db, business_id, item_id)
     system_qty = catalog_stock_qty(item)
-    difference_qty = system_qty - counted_qty
+    difference_qty = counted_qty - system_qty
     if difference_qty != 0 and not (reason and reason.strip()):
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,

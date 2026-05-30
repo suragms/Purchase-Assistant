@@ -16,6 +16,7 @@ from app.services.notification_emitter import CATEGORY_STAFF
 from app.services.stock_inventory import (
     compute_expected_system_qty,
     movement_delivered_qty_map,
+    movement_quick_purchase_qty_map,
 )
 from app.models import (
     Broker,
@@ -48,7 +49,9 @@ from app.schemas.stock import (
     StockDetailOut,
     StockIntelligenceOut,
     StockListItemOut,
+    StockListItemMinimalOut,
     StockListOut,
+    StockListCompactOut,
     StockPatchIn,
     RecentPurchaseOut,
     ReorderListEntryOut,
@@ -115,7 +118,7 @@ from app.services.unit_normalization import (
 
 router = APIRouter(prefix="/v1/businesses/{business_id}/stock", tags=["stock"])
 
-StatusFilter = Literal["all", "low", "critical", "out"]
+StatusFilter = Literal["all", "low", "critical", "out", "shortage"]
 OpeningSetupStatus = Literal["pending", "completed", "all"]
 SortBy = Literal["name", "stock_asc", "stock_desc", "recent"]
 
@@ -212,6 +215,7 @@ def _item_to_list_row(
     physical_stock_counted_at: datetime | None = None,
     physical_stock_counted_by: str | None = None,
     total_delivered_qty: Decimal | None = None,
+    total_quick_purchase_qty: Decimal | None = None,
     total_pending_delivery_qty: Decimal | None = None,
 ) -> StockListItemOut:
     cur = catalog_stock_qty(item)
@@ -231,12 +235,14 @@ def _item_to_list_row(
     ledger_var = ledger_variance_qty if ledger_variance_qty is not None else period_variance_qty
     opening = Decimal(getattr(item, "opening_stock_qty", None) or 0)
     delivered_lifetime = Decimal(total_delivered_qty or 0)
+    quick_lifetime = Decimal(total_quick_purchase_qty or 0)
     expected = compute_expected_system_qty(
         getattr(item, "opening_stock_qty", None),
         total_delivered_qty,
+        total_quick_purchase_qty=total_quick_purchase_qty,
     )
     out_of_sync = (
-        (opening > 0 or delivered_lifetime > 0)
+        (opening > 0 or delivered_lifetime > 0 or quick_lifetime > 0)
         and abs(cur - expected) > Decimal("0.001")
     )
     return StockListItemOut(
@@ -459,7 +465,9 @@ async def _period_purchased_map(
         CatalogItem.deleted_at.is_(None),
     ]
     if delivered_only:
-        filters.append(TradePurchase.is_delivered.is_(True))
+        filters.append(
+            TradePurchase.delivery_status.in_(("stock_committed", "partial", "staff_verified"))
+        )
     stmt = (
         select(TradePurchaseLine, CatalogItem)
         .join(TradePurchase, TradePurchaseLine.trade_purchase_id == TradePurchase.id)
@@ -660,7 +668,10 @@ async def _query_items(
         cur = catalog_stock_qty(item)
         ro = catalog_reorder(item)
         st = stock_status(cur, ro)
-        if status_val != "all" and st != status_val:
+        if status_val == "shortage":
+            if st not in ("low", "critical", "out"):
+                continue
+        elif status_val != "all" and st != status_val:
             continue
         out.append((item, cat_name, type_name))
 
@@ -848,8 +859,10 @@ async def list_opening_stock_setup(
         per_page=per_page,
     )
     items: list[OpeningStockSetupItemOut] = []
+    items_dict = {item.id: item for item, _, _ in rows}
+    sup_map = await _supplier_names_bulk(db, items_dict)
     for item, cat_name, type_name in rows:
-        sup = await _supplier_name(db, item)
+        sup = sup_map.get(item.id)
         items.append(_opening_setup_item_row(item, cat_name, type_name, sup))
     return OpeningStockSetupOut(
         summary=summary,
@@ -1233,9 +1246,12 @@ async def list_stock(
     pending_meta = await _pending_order_meta_map(db, business_id, item_ids)
     physical_meta = await _latest_physical_count_map(db, business_id, item_ids)
     movement_delivered = await movement_delivered_qty_map(db, business_id, item_ids)
+    movement_quick = await movement_quick_purchase_qty_map(db, business_id, item_ids)
+    items_dict = {item.id: item for item, _, _ in rows}
+    sup_map = await _supplier_names_bulk(db, items_dict)
     items: list[StockListItemOut] = []
     for item, cat_name, type_name in rows:
-        sup = await _supplier_name(db, item)
+        sup = sup_map.get(item.id)
         meta = trade_meta.get(item.id, (None, None))
         pend = pending_meta.get(item.id, (False, None, None))
         phys = physical_meta.get(item.id)
@@ -1251,13 +1267,17 @@ async def list_stock(
         perishable = perishable_by_cat.get(item.category_id, False) if item.category_id else False
         su = catalog_stock_unit(item)
         total_delivered = movement_delivered.get(item.id, Decimal(0))
+        total_quick = movement_quick.get(item.id, Decimal(0))
         expected_sys = compute_expected_system_qty(
             getattr(item, "opening_stock_qty", None),
             total_delivered,
+            total_quick_purchase_qty=total_quick,
         )
         phys_qty = phys.counted_qty if phys else None
         spec_diff: Decimal | None = None
-        if phys_qty is not None:
+        if phys is not None:
+            spec_diff = phys.difference_qty
+        elif phys_qty is not None:
             spec_diff = phys_qty - expected_sys
         items.append(
             _item_to_list_row(
@@ -1285,10 +1305,74 @@ async def list_stock(
                 physical_stock_counted_at=phys.counted_at if phys else None,
                 physical_stock_counted_by=phys.counted_by_name if phys else None,
                 total_delivered_qty=total_delivered,
+                total_quick_purchase_qty=total_quick,
                 total_pending_delivery_qty=pend[2],
             )
         )
     return StockListOut(items=items, total=total, page=page, per_page=per_page)
+
+
+def _stock_row_to_minimal(row: StockListItemOut) -> StockListItemMinimalOut:
+    return StockListItemMinimalOut(
+        id=row.id,
+        name=row.name,
+        item_code=row.item_code,
+        barcode=row.barcode,
+        current_stock=row.current_stock,
+        stock_unit=row.stock_unit,
+        stock_status=row.stock_status,
+        supplier_name=row.supplier_name,
+        reorder_level=row.reorder_level,
+        rack_location=row.rack_location,
+        is_perishable=row.is_perishable,
+        missing_barcode=row.missing_barcode,
+        opening_stock_qty=row.opening_stock_qty,
+        last_stock_updated_at=row.last_stock_updated_at,
+    )
+
+
+@router.get("/list/compact", response_model=StockListCompactOut)
+async def list_stock_compact(
+    business_id: uuid.UUID,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    _m: Annotated[Membership, Depends(require_membership)],
+    page: int = Query(1, ge=1),
+    per_page: int = Query(50, ge=1, le=2000),
+    q: str = Query(""),
+    category: str = Query(""),
+    subcategory: str = Query(""),
+    status: StatusFilter = Query("all"),
+    sort: SortBy = Query("name"),
+    include_period: bool = Query(False),
+    period_start: str | None = Query(None),
+    period_end: str | None = Query(None),
+    include_today: bool = Query(True),
+    purchased_in_period: bool = Query(False),
+):
+    """Slim stock list payload for mobile table views."""
+    full = await list_stock(
+        business_id,
+        db,
+        _m,
+        page=page,
+        per_page=per_page,
+        q=q,
+        category=category,
+        subcategory=subcategory,
+        status=status,
+        sort=sort,
+        include_period=include_period,
+        period_start=period_start,
+        period_end=period_end,
+        include_today=include_today,
+        purchased_in_period=purchased_in_period,
+    )
+    return StockListCompactOut(
+        items=[_stock_row_to_minimal(i) for i in full.items],
+        total=full.total,
+        page=full.page,
+        per_page=full.per_page,
+    )
 
 
 @router.get("/search", response_model=StockListOut)
@@ -1348,9 +1432,11 @@ async def low_stock(
     total = len(filtered)
     start = (page - 1) * per_page
     page_slice = filtered[start : start + per_page]
+    items_dict = {item.id: item for item, _, _, _ in page_slice}
+    sup_map = await _supplier_names_bulk(db, items_dict)
     items: list[StockListItemOut] = []
     for item, cat_name, type_name, _ in page_slice:
-        sup = await _supplier_name(db, item)
+        sup = sup_map.get(item.id)
         items.append(_item_to_list_row(item, cat_name, type_name, sup))
     return StockListOut(items=items, total=total, page=page, per_page=per_page)
 
@@ -1701,11 +1787,11 @@ async def _enrich_low_stock_ops_rows(
                 priority_score=pr.score,
                 priority_band=pr.band,
                 is_delayed_supplier=pr.delayed_flag,
-                has_mismatch=disputed,
+                has_mismatch=pr.mismatch_flag,
                 verification_state=verification_state,
                 lifecycle_stage=lifecycle,
                 reorder_entry_status=ro_status,
-                has_open_dispute=open_dispute,
+                has_open_dispute=open_dispute or disputed,
             )
         )
     return out
@@ -1726,25 +1812,22 @@ async def low_stock_operations_summary(
     ps, pe = _parse_period_dates(period_start, period_end)
     period_days = _days_between(ps, pe)
 
-    # Fetch low/critical/out candidates (capped) and compute counts.
+    # Fetch low/critical/out candidates in one sweep (capped).
     fetch_per_page = 200
     max_pages = 12
-    merged: dict[uuid.UUID, StockListItemOut] = {}
-    for status in ("low", "critical", "out"):
-        _, chunk = await _fetch_low_stock_candidates(
-            business_id=business_id,
-            db=db,
-            membership=_m,
-            q=q,
-            category=category,
-            subcategory=subcategory,
-            status=status,  # type: ignore[arg-type]
-            period_start=period_start,
-            period_end=period_end,
-            fetch_per_page=fetch_per_page,
-            max_pages=max_pages,
-        )
-        merged.update(chunk)
+    _, merged = await _fetch_low_stock_candidates(
+        business_id=business_id,
+        db=db,
+        membership=_m,
+        q=q,
+        category=category,
+        subcategory=subcategory,
+        status="shortage",  # type: ignore[arg-type]
+        period_start=period_start,
+        period_end=period_end,
+        fetch_per_page=fetch_per_page,
+        max_pages=max_pages,
+    )
 
     total_attention = 0
     out_of_stock = 0
@@ -1823,22 +1906,19 @@ async def low_stock_operations(
 
     fetch_per_page = min(200, per_page * 4)
     max_pages = 20
-    merged: dict[uuid.UUID, StockListItemOut] = {}
-    for status in ("low", "critical", "out"):
-        _, chunk = await _fetch_low_stock_candidates(
-            business_id=business_id,
-            db=db,
-            membership=_m,
-            q=q,
-            category=category,
-            subcategory=subcategory,
-            status=status,  # type: ignore[arg-type]
-            period_start=period_start,
-            period_end=period_end,
-            fetch_per_page=fetch_per_page,
-            max_pages=max_pages,
-        )
-        merged.update(chunk)
+    _, merged = await _fetch_low_stock_candidates(
+        business_id=business_id,
+        db=db,
+        membership=_m,
+        q=q,
+        category=category,
+        subcategory=subcategory,
+        status="shortage",  # type: ignore[arg-type]
+        period_start=period_start,
+        period_end=period_end,
+        fetch_per_page=fetch_per_page,
+        max_pages=max_pages,
+    )
 
     items = list(merged.values())
     if supplier_id is not None and items:
@@ -1941,7 +2021,7 @@ async def low_stock_operations(
     pending_cnt = sum(1 for it in filtered if it.has_pending_order)
     delayed_cnt = sum(1 for it in filtered if it.is_delayed_supplier)
     mismatch_cnt = sum(1 for it in filtered if it.has_mismatch)
-    disputed_cnt = sum(1 for it in filtered if it.has_mismatch)
+    disputed_cnt = sum(1 for it in filtered if it.has_open_dispute)
     total_attention = total
     usage_sum: Decimal = Decimal(0)
     for it in filtered:
@@ -2436,11 +2516,13 @@ async def list_reorder_entries(
     if st != "all":
         q = q.where(ReorderListEntry.status == st)
     rows = (await db.execute(q)).all()
+    items_dict = {item.id: item for _, item in rows}
+    sup_map = await _supplier_names_bulk(db, items_dict)
     items: list[ReorderListEntryOut] = []
     for entry, item in rows:
         cur = catalog_stock_qty(item)
         ro = catalog_reorder(item)
-        sup = await _supplier_name(db, item)
+        sup = sup_map.get(item.id)
         purchases = await _recent_purchases(db, item, limit=1)
         lp = purchases[0] if purchases else None
         items.append(
@@ -2549,8 +2631,10 @@ async def missing_opening_stock(
             CatalogItem.opening_stock_set_at.is_(None),
         )
     )
+    items_dict = {item.id: item for item, _, _ in rows}
+    sup_map = await _supplier_names_bulk(db, items_dict)
     items = [
-        _item_to_list_row(item, cat_name, type_name, await _supplier_name(db, item))
+        _item_to_list_row(item, cat_name, type_name, sup_map.get(item.id))
         for item, cat_name, type_name in rows
     ]
     return OpeningStockMissingOut(
@@ -3293,6 +3377,26 @@ async def patch_stock_item(
     user: Annotated[User, Depends(get_current_user)],
     _membership: Annotated[Membership, Depends(require_permission("stock_edit"))],
 ):
+    item_r = await db.execute(
+        select(CatalogItem).where(
+            CatalogItem.id == item_id,
+            CatalogItem.business_id == business_id,
+            CatalogItem.deleted_at.is_(None),
+        )
+    )
+    item = item_r.scalar_one_or_none()
+    if not item:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Item not found")
+    role = (_membership.role or "").strip().lower()
+    if bool(getattr(item, "opening_stock_locked", False)) and role not in (
+        "owner",
+        "super_admin",
+        "admin",
+    ):
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            detail="Opening stock is locked — only the owner can adjust this item",
+        )
     kind = {
         "verification": "physical_count",
         "damaged": "damage",
@@ -3378,6 +3482,17 @@ async def undo_last_stock_change(
             status.HTTP_404_NOT_FOUND,
             detail="No recent stock change to undo",
         )
+    if log.adjustment_type in ("opening_stock", "opening_stock_setup") and (
+        _membership.role or ""
+    ) not in (
+        "owner",
+        "super_admin",
+        "admin",
+    ):
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            detail="Opening stock cannot be undone. Contact owner.",
+        )
     item_r = await db.execute(
         select(CatalogItem).where(
             CatalogItem.id == item_id,
@@ -3388,26 +3503,35 @@ async def undo_last_stock_change(
     item = item_r.scalar_one_or_none()
     if not item:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Item not found")
-    current = catalog_stock_qty(item)
     revert_to = log.old_qty
-    display = _user_display(user)
-    db.add(
-        StockAdjustmentLog(
+    try:
+        result = await apply_stock_movement(
+            db,
             business_id=business_id,
             item_id=item_id,
-            old_qty=current,
-            new_qty=revert_to,
-            adjustment_type="correction",
+            user=user,
+            movement_kind="undo",
+            mode="absolute",
+            qty=revert_to,
             reason="Undo previous adjustment",
-            updated_by=user.id,
-            updated_by_name=display,
+            source_type="undo",
+            source_id=log.id,
+            idempotency_key=f"undo:{log.id}",
         )
-    )
-    item.current_stock = revert_to
-    item.last_stock_updated_at = datetime.now(timezone.utc)
-    item.last_stock_updated_by = display
+    except ValueError as e:
+        if str(e) == "Item not found":
+            raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Item not found") from e
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
     await db.commit()
-    await db.refresh(item)
+    publish_business_event(
+        business_id,
+        "stock.changed",
+        {
+            "item_id": str(item_id),
+            "movement_id": str(result.movement.id),
+            "kind": "undo",
+        },
+    )
     return await get_stock_item(business_id, item_id, db, _membership)
 
 

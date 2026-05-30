@@ -36,9 +36,14 @@ String? _purchaseFromApi(DateTime? d) {
 }
 
 /// Derives API `status` from history chips / route. [null] means unfiltered (`all`).
+@visibleForTesting
+String? tradeListApiStatusFromFilters(String primaryRaw, String? secondaryRaw) =>
+    _tradeListApiStatus(primaryRaw, secondaryRaw);
+
 String? _tradeListApiStatus(String primaryRaw, String? secondaryRaw) {
   final sec = secondaryRaw?.trim().toLowerCase();
   if (sec == 'overdue') return sec;
+  if (sec == 'pending') return 'pending';
 
   final p = primaryRaw.trim().toLowerCase();
   if (p == 'paid') return 'paid';

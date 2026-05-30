@@ -8,10 +8,14 @@ import 'package:intl/intl.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../../core/utils/snack.dart';
+import '../../../core/utils/unit_utils.dart';
+import '../../../shared/widgets/hexa_empty_state.dart';
 
 import '../../../core/auth/session_notifier.dart';
 import '../../../core/models/session.dart';
 import '../../../core/router/post_auth_route.dart';
+import '../../../core/router/shell_navigation.dart';
+import '../../../features/shell/shell_branch_provider.dart';
 import '../../../core/errors/user_facing_errors.dart';
 import '../../../core/models/trade_purchase_models.dart';
 import '../../../core/providers/analytics_kpi_provider.dart';
@@ -62,8 +66,7 @@ AppPeriod _appPeriodFromPreset(_DatePreset preset) => switch (preset) {
       _DatePreset.custom => AppPeriod.custom,
     };
 
-String _qtyReadable(double q) =>
-    q == q.roundToDouble() ? '${q.round()}' : q.toStringAsFixed(1);
+String _qtyReadable(double q) => formatStockQtyNumber(q);
 
 String _kgReadable(double kg) {
   if (kg < 1e-9) return '0';
@@ -166,6 +169,19 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final tab = ReportsBiTabX.fromQuery(
+      GoRouterState.of(context).uri.queryParameters['tab'],
+    );
+    if (tab != null && tab != _biTab) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) setState(() => _biTab = tab);
+      });
+    }
+  }
+
+  @override
   void didUpdateWidget(covariant ReportsPage oldWidget) {
     super.didUpdateWidget(oldWidget);
     final next = widget.initialTab;
@@ -257,7 +273,7 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
         ReportsBiTab.brokers => 'Search brokers…',
         ReportsBiTab.categories => 'Search categories…',
         ReportsBiTab.subcategories => 'Search subcategories…',
-        ReportsBiTab.overview => 'Search overview…',
+        ReportsBiTab.purchases => 'Search purchases…',
         _ => 'Search reports…',
       };
 
@@ -352,6 +368,7 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
       );
 
       switch (_biTab) {
+        case ReportsBiTab.purchases:
         case ReportsBiTab.overview:
         case ReportsBiTab.categories:
         case ReportsBiTab.subcategories:
@@ -588,18 +605,20 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
             ),
           ),
         ),
-        ActionChip(
-          label: Text(
-            moreSelected?.shortLabel ?? 'More',
-            style: tt.labelSmall?.copyWith(fontWeight: FontWeight.w800),
+        ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 48),
+          child: ActionChip(
+            label: Text(
+              moreSelected?.shortLabel ?? 'More',
+              style: tt.labelSmall?.copyWith(fontWeight: FontWeight.w800),
+            ),
+            avatar: moreSelected != null
+                ? Icon(Icons.check_rounded,
+                    size: 16, color: HexaColors.brandPrimary)
+                : null,
+            onPressed: _openMoreTabsSheet,
+            materialTapTargetSize: MaterialTapTargetSize.padded,
           ),
-          avatar: moreSelected != null
-              ? Icon(Icons.check_rounded,
-                  size: 16, color: HexaColors.brandPrimary)
-              : null,
-          onPressed: _openMoreTabsSheet,
-          visualDensity: VisualDensity.compact,
-          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
         ),
       ],
     );
@@ -664,7 +683,12 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
               subtitle: const Text('View stock levels and filters'),
               onTap: () {
                 Navigator.pop(ctx);
-                context.go('/stock');
+                goShellTab(
+                  context,
+                  ref,
+                  branch: ShellBranch.stock,
+                  location: '/stock',
+                );
               },
             ),
           ],
@@ -832,6 +856,74 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: children,
+        );
+
+      case ReportsBiTab.purchases:
+        final filteredPurchases = q.isEmpty
+            ? merged
+            : merged.where((p) {
+                final hay = [
+                  p.supplierName,
+                  p.humanId,
+                  p.invoiceNumber,
+                ].whereType<String>().join(' ').toLowerCase();
+                return hay.contains(q);
+              }).toList();
+        if (filteredPurchases.isEmpty) {
+          return Padding(
+            padding: const EdgeInsets.all(24),
+            child: Text(
+              'No purchases in this period.',
+              style: TextStyle(color: HexaColors.textBody),
+            ),
+          );
+        }
+        final purchaseCap = _visibleCap < filteredPurchases.length
+            ? _visibleCap
+            : filteredPurchases.length;
+        final df = DateFormat('d MMM yyyy');
+        final purchaseChildren = <Widget>[];
+        for (var i = 0; i < purchaseCap; i++) {
+          final p = filteredPurchases[i];
+          purchaseChildren.add(
+            ListTile(
+              dense: true,
+              title: Text(
+                p.supplierName ?? p.humanId,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontWeight: FontWeight.w800),
+              ),
+              subtitle: Text(
+                '${p.humanId} · ${df.format(p.purchaseDate)}',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              trailing: Text(
+                '₹${p.totalAmount.round()}',
+                style: const TextStyle(fontWeight: FontWeight.w800),
+              ),
+              onTap: () => context.push('/purchase/detail/${p.id}', extra: p),
+            ),
+          );
+          if (i < purchaseCap - 1) {
+            purchaseChildren.add(
+              Divider(height: 1, color: HexaColors.brandBorder),
+            );
+          }
+        }
+        if (purchaseCap < filteredPurchases.length) {
+          purchaseChildren.add(
+            TextButton(
+              onPressed: () =>
+                  setState(() => _visibleCap = filteredPurchases.length),
+              child: const Text('Show all'),
+            ),
+          );
+        }
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: purchaseChildren,
         );
 
       case ReportsBiTab.suppliers:
@@ -1178,6 +1270,7 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
           ),
         );
       case ReportsBiTab.items:
+      case ReportsBiTab.purchases:
       case ReportsBiTab.suppliers:
       case ReportsBiTab.brokers:
         return RepaintBoundary(
@@ -1324,70 +1417,68 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
       final msg = (liveErr != null && liveErr.trim().isNotEmpty)
           ? 'Could not refresh live data.\n$liveErr'
           : 'No purchases in this period.';
-      return Card(
-        margin: const EdgeInsets.symmetric(vertical: 10),
-        color: HexaColors.brandCard,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Icon(Icons.analytics_outlined,
-                  size: 36, color: Colors.grey.shade400),
-              const SizedBox(height: 8),
-              Text(
-                msg,
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: HexaColors.textBody,
-                      height: 1.35,
-                      fontWeight: FontWeight.w700,
-                    ),
-              ),
-              const SizedBox(height: 12),
-              FilledButton.tonal(
-                onPressed: () => _bumpInvalidate(),
-                child: const Text('Retry'),
-              ),
-              const SizedBox(height: 8),
-              OutlinedButton(
-                onPressed: _syncRangeWithHome,
-                child: Text(_matchHomePeriodButtonLabel(
-                    ref.watch(appSelectedPeriodProvider))),
-              ),
-              const SizedBox(height: 8),
-              OutlinedButton(
-                onPressed: () => unawaited(_pickCustomRange()),
-                child: const Text('Pick date range'),
-              ),
-              const SizedBox(height: 8),
-              FilledButton.icon(
-                onPressed: () => context.pushNamed('purchase_scan'),
-                icon: const Icon(Icons.document_scanner_outlined, size: 18),
-                label: const Text('Scan purchase bill'),
-              ),
-              const SizedBox(height: 8),
-              OutlinedButton.icon(
-                onPressed: () => context.go('/purchase/new'),
-                icon: const Icon(Icons.add_shopping_cart_outlined, size: 18),
-                label: const Text('New purchase'),
-              ),
-            ],
-          ),
+      return HexaEmptyState(
+        icon: Icons.analytics_outlined,
+        title: msg.split('\n').first,
+        subtitle: msg.contains('\n') ? msg.split('\n').skip(1).join('\n') : null,
+        action: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            FilledButton.tonal(
+              onPressed: () => _bumpInvalidate(),
+              child: const Text('Retry'),
+            ),
+            const SizedBox(height: 8),
+            OutlinedButton(
+              onPressed: _syncRangeWithHome,
+              child: Text(_matchHomePeriodButtonLabel(
+                  ref.watch(appSelectedPeriodProvider))),
+            ),
+            const SizedBox(height: 8),
+            OutlinedButton(
+              onPressed: () => unawaited(_pickCustomRange()),
+              child: const Text('Pick date range'),
+            ),
+            const SizedBox(height: 8),
+            FilledButton.icon(
+              onPressed: () => context.pushNamed('purchase_scan'),
+              icon: const Icon(Icons.document_scanner_outlined, size: 18),
+              label: const Text('Scan purchase bill'),
+            ),
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              onPressed: () => context.go('/purchase/new'),
+              icon: const Icon(Icons.add_shopping_cart_outlined, size: 18),
+              label: const Text('New purchase'),
+            ),
+          ],
         ),
       );
     }
 
-    return Scaffold(
+    final returnBranch = ref.watch(shellReturnBranchProvider);
+    final homePath = session != null
+        ? authenticatedHomePath(session)
+        : '/home';
+
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+        popShellTabOrGoHome(context, ref, homePath: homePath);
+      },
+      child: Scaffold(
       backgroundColor: HexaColors.brandBackground,
       appBar: AppBar(
         automaticallyImplyLeading: false,
         leading: IconButton(
-          tooltip: 'Home',
-          icon: const Icon(Icons.home_outlined),
-          onPressed: () {
-            final s = ref.read(sessionProvider);
-            if (s != null) context.go(authenticatedHomePath(s));
-          },
+          tooltip: returnBranch != null ? 'Back' : 'Home',
+          icon: Icon(
+            returnBranch != null
+                ? Icons.arrow_back_rounded
+                : Icons.home_outlined,
+          ),
+          onPressed: () => popShellTabOrGoHome(context, ref, homePath: homePath),
         ),
         title: const Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -1741,6 +1832,7 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
                 ),
               ),
             ),
+    ),
     );
   }
 

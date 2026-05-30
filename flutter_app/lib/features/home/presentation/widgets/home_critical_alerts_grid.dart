@@ -11,6 +11,8 @@ import '../../../../core/providers/notifications_provider.dart'
 import '../../../../core/providers/stock_providers.dart'
     show openingStockMissingProvider;
 import '../../../../core/router/post_auth_route.dart' show sessionIsStaff;
+import '../../../../core/router/shell_navigation.dart';
+import '../../../../features/shell/shell_branch_provider.dart';
 import '../../../../core/theme/hexa_colors.dart';
 
 /// Priority alert cards (2-column grid); hidden when all counts are zero.
@@ -123,7 +125,12 @@ class HomeCriticalAlertsGrid extends ConsumerWidget {
         count: variances,
         subtitle: 'Physical count differs from system',
         color: const Color(0xFFA32D2D),
-        onTap: () => context.go('/reports'),
+        onTap: () => goShellTab(
+              context,
+              ref,
+              branch: ShellBranch.reports,
+              location: '/reports',
+            ),
         actionLabel: 'Review',
       ));
     }

@@ -146,7 +146,7 @@ class PartyInlineSuggestField extends StatefulWidget {
     this.debugLabel,
     /// When true, suggestions render in an [Overlay] below the field (full-page
     /// catalog pick) so the IME does not cover the list. Party step stays inline.
-    this.suggestionsAsOverlay = false,
+    this.suggestionsAsOverlay = true,
   })  : assert(minQueryLength >= 0),
         assert(
           !showAddRow || (addRowLabel != null && onAddRow != null),

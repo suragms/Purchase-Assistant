@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/auth/session_notifier.dart';
+import '../../../../core/design_system/hexa_responsive.dart';
 import '../../../../core/providers/business_aggregates_invalidation.dart';
 import '../../../../core/providers/catalog_providers.dart';
 import '../../../../core/providers/stock_providers.dart';
@@ -22,18 +23,14 @@ Future<void> showStockBulkArchiveSheet({
     return;
   }
   final selected = <String>{};
-  await showModalBottomSheet<void>(
+  await showHexaBottomSheet<void>(
     context: context,
-    isScrollControlled: true,
-    useSafeArea: true,
-    builder: (ctx) => StatefulBuilder(
-      builder: (ctx, setLocal) {
-        return DraggableScrollableSheet(
-          expand: false,
-          initialChildSize: 0.72,
-          minChildSize: 0.4,
-          maxChildSize: 0.92,
-          builder: (_, scroll) => Column(
+    compact: false,
+    child: SizedBox(
+      height: MediaQuery.sizeOf(context).height * 0.72,
+      child: StatefulBuilder(
+        builder: (ctx, setLocal) {
+          return Column(
             children: [
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
@@ -80,7 +77,6 @@ Future<void> showStockBulkArchiveSheet({
               ),
               Expanded(
                 child: ListView.builder(
-                  controller: scroll,
                   itemCount: items.length,
                   itemBuilder: (_, i) {
                     final row = items[i];
@@ -106,9 +102,9 @@ Future<void> showStockBulkArchiveSheet({
                 ),
               ),
             ],
-          ),
-        );
-      },
+          );
+        },
+      ),
     ),
   );
 }

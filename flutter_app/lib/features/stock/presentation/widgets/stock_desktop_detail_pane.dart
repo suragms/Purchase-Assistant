@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../core/auth/session_notifier.dart';
 import '../../../../core/design_system/hexa_ds_tokens.dart';
+import '../../../../core/theme/hexa_colors.dart';
 import '../../../../core/router/post_auth_route.dart' show sessionIsStaff;
 import '../../../../core/providers/stock_providers.dart';
 import '../../../../core/utils/unit_utils.dart';
@@ -20,10 +21,31 @@ class StockDesktopDetailPane extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     if (item == null) {
-      return const Center(
-        child: Text(
-          'Select an item',
-          style: TextStyle(color: Color(0xFF64748B), fontSize: 13),
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.inventory_2_outlined,
+              size: 48,
+              color: HexaColors.brandPrimary.withValues(alpha: 0.35),
+            ),
+            const SizedBox(height: 12),
+            const Text(
+              'Select an item',
+              style: TextStyle(
+                fontWeight: FontWeight.w800,
+                fontSize: 15,
+                color: Color(0xFF334155),
+              ),
+            ),
+            const SizedBox(height: 6),
+            const Text(
+              'Choose a row on the left to see stock metrics and recent activity.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Color(0xFF64748B), fontSize: 13),
+            ),
+          ],
         ),
       );
     }

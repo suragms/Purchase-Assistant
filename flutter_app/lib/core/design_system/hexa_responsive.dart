@@ -237,6 +237,33 @@ class HexaResponsiveSheetViewport extends StatelessWidget {
   }
 }
 
+/// Standard bottom sheet host — compact sheets hug content (no top blank gap).
+Future<T?> showHexaBottomSheet<T>({
+  required BuildContext context,
+  required Widget child,
+  bool compact = true,
+  EdgeInsetsGeometry? padding,
+  double maxWidth = HexaResponsive.maxSheetWidth,
+  ShapeBorder? shape,
+}) {
+  return showModalBottomSheet<T>(
+    context: context,
+    isScrollControlled: true,
+    useSafeArea: true,
+    showDragHandle: true,
+    shape: shape ??
+        const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+    builder: (ctx) => HexaResponsiveSheetViewport(
+      compact: compact,
+      padding: padding,
+      maxWidth: maxWidth,
+      child: child,
+    ),
+  );
+}
+
 class HexaAccessibleFilterChip extends StatelessWidget {
   const HexaAccessibleFilterChip({
     super.key,

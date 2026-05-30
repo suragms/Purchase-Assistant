@@ -160,6 +160,32 @@ class StockListOut(BaseModel):
     per_page: int
 
 
+class StockListItemMinimalOut(BaseModel):
+    """Slim list row — intelligence fields load on item tap only."""
+
+    id: uuid.UUID
+    name: str
+    item_code: str | None = None
+    barcode: str | None = None
+    current_stock: Decimal
+    stock_unit: str
+    stock_status: str
+    supplier_name: str | None = None
+    reorder_level: Decimal
+    rack_location: str | None = None
+    is_perishable: bool = False
+    missing_barcode: bool = False
+    opening_stock_qty: Decimal | None = None
+    last_stock_updated_at: datetime | None = None
+
+
+class StockListCompactOut(BaseModel):
+    items: list[StockListItemMinimalOut]
+    total: int
+    page: int
+    per_page: int
+
+
 class StockAlertsSummaryOut(BaseModel):
     low_stock: int = 0
     critical_stock: int = 0

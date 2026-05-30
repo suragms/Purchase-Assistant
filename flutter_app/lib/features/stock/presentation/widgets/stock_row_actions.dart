@@ -14,6 +14,8 @@ Future<void> showStockRowActions({
   required BuildContext context,
   required WidgetRef ref,
   required Map<String, dynamic> item,
+  VoidCallback? onBeforeNavigate,
+  VoidCallback? onAfterNavigateReturn,
 }) async {
   final id = item['id']?.toString() ?? '';
   if (id.isEmpty) return;
@@ -100,9 +102,11 @@ Future<void> showStockRowActions({
           _StockActionTile(
             icon: Icons.info_outline_rounded,
             label: 'View item activity',
-            onTap: () {
+            onTap: () async {
               Navigator.pop(ctx);
-              context.push('/catalog/item/$id');
+              onBeforeNavigate?.call();
+              await context.push('/catalog/item/$id');
+              onAfterNavigateReturn?.call();
             },
           ),
         ],

@@ -18,6 +18,9 @@ final shellCurrentBranchProvider = StateProvider<int>(
   (ref) => ShellBranch.home,
 );
 
+/// Branch to restore when user backs out of a cross-tab shell navigation (e.g. Home → Reports).
+final shellReturnBranchProvider = StateProvider<int?>((ref) => null);
+
 /// Whether [branch] is the active IndexedStack tab (off-screen branches stay mounted).
 bool shellBranchIsVisible(Ref ref, int branch) =>
     ref.watch(shellCurrentBranchProvider) == branch;

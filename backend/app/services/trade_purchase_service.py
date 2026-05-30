@@ -759,6 +759,37 @@ async def list_trade_purchases(
         rows = [r for r in rows if r.derived_status == "overdue"]
     elif sf == "paid":
         rows = [r for r in rows if r.derived_status == "paid"]
+    elif sf == "pending":
+        rows = [
+            r
+            for r in rows
+            if r.derived_status in ("confirmed", "saved", "partially_paid")
+        ]
+    elif sf == "delivered":
+        rows = [
+            r
+            for r in rows
+            if (r.delivery_status or "").lower() == "stock_committed" or r.is_delivered
+        ]
+    elif sf == "cancelled":
+        rows = [
+            r
+            for r in rows
+            if (r.status or "").lower() == "cancelled"
+            or (r.delivery_status or "").lower() == "cancelled"
+        ]
+    elif sf in (
+        "in_transit",
+        "dispatched",
+        "arrived",
+        "staff_verifying",
+        "staff_verified",
+        "partial",
+        "stock_committed",
+    ):
+        rows = [
+            r for r in rows if (r.delivery_status or "pending").lower() == sf
+        ]
     needle = (q or "").strip().lower()
     if needle:
         out: list[TradePurchaseOut] = []
@@ -1250,6 +1281,7 @@ async def dispatch_trade_purchase(
             "human_id": tp.human_id,
             "delivery_status": tp.delivery_status,
             "truck_number": tp.truck_number,
+            "action_route": f"/purchase/detail/{purchase_id}",
         },
     )
     await db.commit()
@@ -1298,7 +1330,11 @@ async def arrive_trade_purchase(
         business_id=business_id,
         user=user,
         action_type="PURCHASE_ARRIVED",
-        details={"purchase_id": str(purchase_id), "human_id": tp.human_id},
+        details={
+            "purchase_id": str(purchase_id),
+            "human_id": tp.human_id,
+            "action_route": f"/purchase/detail/{purchase_id}",
+        },
     )
     await db.commit()
     bump_trade_read_caches_for_business(business_id)
@@ -1367,6 +1403,7 @@ async def commit_trade_purchase_delivery(
             "purchase_id": str(purchase_id),
             "human_id": tp.human_id,
             "delivered_qty_committed": str(tp.delivered_qty_committed or 0),
+            "action_route": f"/purchase/detail/{purchase_id}",
         },
     )
     await db.commit()
@@ -1477,6 +1514,7 @@ async def patch_trade_purchase_delivery(
                 tp.user_id,
                 lines_snapshot,
                 purchase_human_id=tp.human_id,
+                purchase_id=purchase_id,
             )
     except ValueError:
         await db.rollback()
@@ -1664,6 +1702,7 @@ async def cancel_trade_purchase(
                 tp.user_id,
                 old_lines,
                 purchase_human_id=tp.human_id,
+                purchase_id=purchase_id,
             )
         except ValueError:
             await db.rollback()
@@ -1703,6 +1742,7 @@ async def delete_trade_purchase(
                 tp.user_id,
                 old_lines,
                 purchase_human_id=tp.human_id,
+                purchase_id=purchase_id,
             )
         except ValueError:
             await db.rollback()
@@ -2014,6 +2054,8 @@ def trade_purchase_to_out(
                 old_qty=dp.qty(u["old_qty"]),
                 new_qty=dp.qty(u["new_qty"]),
                 delta=dp.qty(u["delta"]),
+                needs_unit_setup=bool(u.get("needs_unit_setup")),
+                line_unit=u.get("line_unit"),
             )
             for u in (stock_updates or [])
         ],

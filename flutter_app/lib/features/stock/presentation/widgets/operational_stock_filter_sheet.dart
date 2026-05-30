@@ -51,20 +51,15 @@ Future<void> showOperationalStockFilter({
     );
     return;
   }
-  await showModalBottomSheet<void>(
+  await showHexaBottomSheet<void>(
     context: context,
-    isScrollControlled: true,
-    useSafeArea: true,
-    builder: (ctx) => DraggableScrollableSheet(
-      expand: false,
-      initialChildSize: 0.75,
-      minChildSize: 0.45,
-      maxChildSize: 0.95,
-      builder: (_, scrollCtrl) => _OperationalFilterBody(
+    compact: false,
+    child: SizedBox(
+      height: MediaQuery.sizeOf(context).height * 0.78,
+      child: _OperationalFilterBody(
         subcategoryCtrl: subcategoryCtrl,
         includeSupplier: includeSupplier,
         isStaffMode: isStaffMode,
-        scrollController: scrollCtrl,
         bottomNavInset: bottomNavInset,
       ),
     ),
@@ -76,14 +71,12 @@ class _OperationalFilterBody extends ConsumerStatefulWidget {
     this.subcategoryCtrl,
     this.includeSupplier = true,
     this.isStaffMode = false,
-    this.scrollController,
     this.bottomNavInset = 0,
   });
 
   final TextEditingController? subcategoryCtrl;
   final bool includeSupplier;
   final bool isStaffMode;
-  final ScrollController? scrollController;
   final double bottomNavInset;
 
   @override
@@ -215,16 +208,65 @@ class _OperationalFilterBodyState
     return GestureDetector(
       behavior: HitTestBehavior.translucent,
       onTap: () => FocusScope.of(context).unfocus(),
-      child: ListView(
-        controller: widget.scrollController,
-        padding: EdgeInsets.fromLTRB(
-          HexaOp.pageGutter,
-          12,
-          HexaOp.pageGutter,
-          24 + bottomInset + widget.bottomNavInset,
-        ),
-        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          Expanded(
+            child: ListView(
+              padding: EdgeInsets.fromLTRB(
+                HexaOp.pageGutter,
+                12,
+                HexaOp.pageGutter,
+                8,
+              ),
+              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+              children: _filterFields(
+                context,
+                suppliersAsync: suppliersAsync,
+                typesAsync: typesAsync,
+              ),
+            ),
+          ),
+          SafeArea(
+            top: false,
+            child: Padding(
+              padding: EdgeInsets.fromLTRB(
+                HexaOp.pageGutter,
+                8,
+                HexaOp.pageGutter,
+                12 + bottomInset + widget.bottomNavInset,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  FilledButton(onPressed: _apply, child: const Text('Apply')),
+                  TextButton(onPressed: _clear, child: const Text('Clear advanced')),
+                  if (!widget.isStaffMode) ...[
+                    const SizedBox(height: 8),
+                    OutlinedButton.icon(
+                      onPressed: () {
+                        Navigator.pop(context);
+                        showStockBulkActionsSheet(context: context, ref: ref);
+                      },
+                      icon: const Icon(Icons.layers_outlined, size: 18),
+                      label: const Text('Barcode bulk print'),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  List<Widget> _filterFields(
+    BuildContext context, {
+    required AsyncValue<List<Map<String, dynamic>>> suppliersAsync,
+    required AsyncValue<List<Map<String, dynamic>>> typesAsync,
+  }) {
+    return [
         Text(
           'Filters',
           style: Theme.of(context).textTheme.titleMedium?.copyWith(
@@ -445,23 +487,7 @@ class _OperationalFilterBodyState
           ],
           onChanged: (v) => setState(() => _sort = v ?? 'name'),
         ),
-        const SizedBox(height: 16),
-        FilledButton(onPressed: _apply, child: const Text('Apply')),
-        TextButton(onPressed: _clear, child: const Text('Clear advanced')),
-        if (!widget.isStaffMode) ...[
-          const Divider(height: 24),
-          OutlinedButton.icon(
-            onPressed: () {
-              Navigator.pop(context);
-              showStockBulkActionsSheet(context: context, ref: ref);
-            },
-            icon: const Icon(Icons.layers_outlined, size: 18),
-            label: const Text('Barcode bulk print'),
-          ),
-        ],
-        ],
-      ),
-    );
+    ];
   }
 }
 

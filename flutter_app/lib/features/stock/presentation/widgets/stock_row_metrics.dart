@@ -25,22 +25,29 @@ abstract final class StockRowMetrics {
   static double purchasedLifetimeQty(Map<String, dynamic> item) =>
       coerceToDoubleNullable(item['total_delivered_qty']) ?? 0;
 
-  /// Opening + committed deliveries (spec system column; not raw current_stock).
-  static double systemQty(Map<String, dynamic> item) {
+  /// Authoritative ledger on-hand — primary display metric for warehouse lists.
+  static double ledgerQty(Map<String, dynamic> item) =>
+      coerceToDouble(item['current_stock']);
+
+  /// Opening + committed inbound movements (audit/reconciliation only).
+  static double expectedSystemQty(Map<String, dynamic> item) {
     final expected = coerceToDoubleNullable(item['expected_system_qty']);
     if (expected != null && expected.isFinite) return expected;
     final opening = openingQty(item) ?? 0;
-    return opening + purchasedLifetimeQty(item);
+    final quick = coerceToDoubleNullable(item['total_quick_purchase_qty']) ?? 0;
+    return opening + purchasedLifetimeQty(item) + quick;
   }
 
-  /// Ledger on-hand (internal movements); shown only when out of sync.
-  static double ledgerStockQty(Map<String, dynamic> item) =>
-      coerceToDouble(item['current_stock']);
+  /// Display SSOT for operational stock rows (ledger on-hand).
+  static double systemQty(Map<String, dynamic> item) => ledgerQty(item);
+
+  /// Ledger on-hand alias for clarity in owner analytics.
+  static double ledgerStockQty(Map<String, dynamic> item) => ledgerQty(item);
 
   static double diffQty(Map<String, dynamic> item) {
     final phys = physicalQty(item);
     if (phys != null && phys.isFinite) {
-      return phys - systemQty(item);
+      return phys - ledgerQty(item);
     }
     final pd = coerceToDoubleNullable(item['physical_stock_difference_qty']);
     if (pd != null && pd.isFinite) return pd;
@@ -114,7 +121,6 @@ abstract final class StockRowMetrics {
     final pendingDel = pendingDeliveryQty(item) ?? 0;
     final hasPending = item['has_pending_order'] == true;
     final delivered = item['last_purchase_delivered'] == true;
-    final po = item['last_purchase_human_id']?.toString().trim();
     final days = (item['pending_order_days'] as num?)?.toInt();
 
     if (hasPending || pendingDel > 0.001) {
@@ -123,10 +129,9 @@ abstract final class StockRowMetrics {
         line += ' ${formatStockQtyNumber(pendingDel)}';
       }
       if (days != null && days > 0) line += ' · ${days}d';
-      if (po != null && po.isNotEmpty) line += ' · $po';
       parts.add(line);
     } else if (delivered) {
-      parts.add('Delivered${po != null && po.isNotEmpty ? ' · $po' : ''}');
+      parts.add('Delivered');
     }
     return parts.join(' · ');
   }
@@ -144,7 +149,7 @@ abstract final class StockRowMetrics {
     final hasPending = item['has_pending_order'] == true;
     final pendingDays = (item['pending_order_days'] as num?)?.toInt();
     return StockSummaryWidget(
-      qty: systemQty(item),
+      qty: ledgerQty(item),
       unit: unit(item),
       status: item['stock_status']?.toString(),
       hasPendingOrder: hasPending,
@@ -189,5 +194,19 @@ abstract final class StockRowMetrics {
   static Color inlineStatusColor(Map<String, dynamic> item) {
     final st = (item['stock_status']?.toString() ?? 'healthy').toLowerCase();
     return stockNumberColor(stockDisplayStatusFromApi(st));
+  }
+
+  /// Relative label for [last_stock_updated_at] (list row info line).
+  static String? relativeUpdatedLabel(Map<String, dynamic> item) {
+    final raw = item['last_stock_updated_at']?.toString();
+    if (raw == null || raw.isEmpty) return null;
+    final dt = DateTime.tryParse(raw)?.toLocal();
+    if (dt == null) return null;
+    final diff = DateTime.now().difference(dt);
+    if (diff.inMinutes < 1) return 'Updated just now';
+    if (diff.inMinutes < 60) return 'Updated ${diff.inMinutes}m ago';
+    if (diff.inHours < 24) return 'Updated ${diff.inHours}h ago';
+    if (diff.inDays < 7) return 'Updated ${diff.inDays}d ago';
+    return 'Updated ${dt.day}/${dt.month}';
   }
 }

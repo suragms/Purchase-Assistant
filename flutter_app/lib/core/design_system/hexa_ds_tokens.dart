@@ -195,6 +195,15 @@ abstract final class HexaDsType {
         color: color ?? HexaDsColors.textMuted,
       );
 
+  static TextStyle metricPrimary({Color? color}) =>
+      GoogleFonts.plusJakartaSans(
+        fontSize: 22,
+        fontWeight: FontWeight.w900,
+        letterSpacing: -0.4,
+        height: 1.1,
+        color: color ?? HexaDsColors.textPrimary,
+      );
+
   static TextStyle button({Color color = Colors.white}) =>
       GoogleFonts.plusJakartaSans(
         fontSize: 16,

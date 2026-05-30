@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../core/router/shell_navigation.dart';
+import '../../../../features/shell/shell_branch_provider.dart';
 import '../../../../core/design_system/hexa_ds_tokens.dart';
 import '../../../../core/providers/home_dashboard_provider.dart';
 import '../../../../core/theme/hexa_colors.dart';
@@ -41,25 +43,41 @@ class HomeKpiStrip extends StatelessWidget {
           label: 'Today spend',
           value: todayAsync.isLoading ? '…' : homeInr(today?.totalPurchase ?? 0),
           subtitle: todayAsync.isLoading ? null : homeDashboardUnitsLine(today),
-          onTap: () => context.go('/reports'),
+          onTap: () => goShellTabFromContext(
+                context,
+                branch: ShellBranch.reports,
+                location: '/reports',
+              ),
         ),
         _KpiTile(
           label: 'Month spend',
           value: monthAsync.isLoading ? '…' : homeInr(month?.totalPurchase ?? 0),
           subtitle: monthAsync.isLoading ? null : homeDashboardUnitsLine(month),
-          onTap: () => context.go('/reports'),
+          onTap: () => goShellTabFromContext(
+                context,
+                branch: ShellBranch.reports,
+                location: '/reports',
+              ),
         ),
         _KpiTile(
           label: 'Low stock',
           value: alertCountsAsync.isLoading ? '…' : '$low items',
           tint: low > 0 ? const Color(0xFFE65100) : null,
-          onTap: () => context.go('/stock'),
+          onTap: () => goShellTabFromContext(
+                context,
+                branch: ShellBranch.stock,
+                location: '/stock',
+              ),
         ),
         _KpiTile(
           label: 'Critical',
           value: alertCountsAsync.isLoading ? '…' : '$crit items',
           tint: crit > 0 ? const Color(0xFFC62828) : null,
-          onTap: () => context.go('/stock'),
+          onTap: () => goShellTabFromContext(
+                context,
+                branch: ShellBranch.stock,
+                location: '/stock',
+              ),
         ),
       ],
     );

@@ -8,6 +8,7 @@ import '../../../../core/json_coerce.dart';
 import '../../../../core/providers/home_dashboard_provider.dart';
 import '../../../../core/providers/stock_providers.dart';
 import '../../../../core/widgets/hexa_error_card.dart';
+import '../../../../shared/widgets/hexa_empty_state.dart';
 
 /// **Movement** tab on [StockPage]: audit events for the stock period.
 class StockMovementTab extends ConsumerStatefulWidget {
@@ -109,11 +110,13 @@ class _StockMovementTabState extends ConsumerState<StockMovementTab> {
       );
     }
     if (_rows.isEmpty) {
-      return Center(
-        child: Text(
-          'No stock events for ${period.label.toLowerCase()}',
-          style: const TextStyle(fontSize: 13, color: Colors.black54),
-        ),
+      return HexaEmptyState(
+        icon: Icons.swap_vert_rounded,
+        title: 'No stock movement',
+        subtitle:
+            'No audit events for ${period.label.toLowerCase()}. Try a wider period.',
+        primaryActionLabel: 'Refresh',
+        onPrimaryAction: _load,
       );
     }
 

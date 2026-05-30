@@ -39,10 +39,7 @@ String _stripKgSuffixForCatalogDisplay(String name) => name
     .trim();
 
 mixin PurchaseItemEntrySheetStateMixin {
-  String _fmtQty(double d) {
-    if ((d - d.roundToDouble()).abs() < 1e-9) return d.round().toString();
-    return d.toStringAsFixed(2).replaceAll(RegExp(r'\.?0+$'), '');
-  }
+  String _fmtQty(double d) => formatStockQtyNumber(d);
 
   String _fmtMoney(double d) {
     if (d <= 0) return '';
@@ -1533,7 +1530,7 @@ class _PurchaseItemEntrySheetState extends ConsumerState<PurchaseItemEntrySheet>
     if (!mounted) return;
     popImperativeOrGo(
       context,
-      fallbackGo: '/purchase/new',
+      fallbackGo: '/purchase',
       result: result,
     );
   }

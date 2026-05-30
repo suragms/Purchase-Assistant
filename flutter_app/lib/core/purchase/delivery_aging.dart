@@ -106,3 +106,33 @@ UndeliveredAgingBand? undeliveredAgingBandForPurchase(TradePurchase p) {
   final d = undeliveredDaysSincePurchase(p);
   return undeliveredAgingBandFromDays(d);
 }
+
+/// Left stripe for delivery pipeline status (takes precedence over undelivered aging).
+Color? deliveryStatusLeftStripeColor(DeliveryStatus status) {
+  return switch (status) {
+    DeliveryStatus.pending => const Color(0xFFF97316),
+    DeliveryStatus.dispatched || DeliveryStatus.inTransit => const Color(0xFF2563EB),
+    DeliveryStatus.arrived || DeliveryStatus.staffVerifying => const Color(0xFF7C3AED),
+    DeliveryStatus.staffVerified || DeliveryStatus.partial => const Color(0xFF0D9488),
+    DeliveryStatus.stockCommitted => const Color(0xFF16A34A),
+    DeliveryStatus.cancelled => const Color(0xFF9CA3AF),
+  };
+}
+
+/// Row decoration with delivery-status left stripe when applicable.
+BoxDecoration deliveryStatusRowDecoration({
+  required DeliveryStatus deliveryStatus,
+  required Color background,
+  UndeliveredAgingBand? undeliveredBand,
+  Border? border,
+}) {
+  final stripe = deliveryStatusLeftStripeColor(deliveryStatus) ??
+      (undeliveredBand == null ? null : undeliveredLeftStripeColor(undeliveredBand));
+  return BoxDecoration(
+    color: background,
+    border: border ??
+        (stripe != null
+            ? Border(left: BorderSide(color: stripe, width: 4))
+            : null),
+  );
+}

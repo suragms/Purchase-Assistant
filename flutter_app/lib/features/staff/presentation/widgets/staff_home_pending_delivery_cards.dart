@@ -69,8 +69,12 @@ class _DeliveryCardState extends ConsumerState<_DeliveryCard> {
       final queued = result.queued;
       invalidatePurchaseWorkspace(ref);
       ref.invalidate(tradePurchasesListProvider);
+      ref.invalidate(tradePurchaseDetailProvider(widget.purchase.id));
       ref.invalidate(staffPendingDeliveriesProvider);
       ref.invalidate(stockOfflinePendingCountProvider);
+      if (!queued) {
+        invalidateWarehouseSurfacesLight(ref);
+      }
       if (!queued) {
         unawaited(ref.read(stockOfflineSyncProvider.notifier).syncNow());
       }
@@ -96,19 +100,20 @@ class _DeliveryCardState extends ConsumerState<_DeliveryCard> {
     final lines = widget.purchase.lines
         .map(
           (l) => {
-            'line_id': l.id,
+            'id': l.id,
             'item_name': l.itemName,
             'qty': l.qty,
             'unit': l.unit,
           },
         )
         .toList();
-    await showStaffVerificationSheet(
+    final changed = await showStaffVerificationSheet(
       context: context,
       ref: ref,
       purchaseId: widget.purchase.id,
       lines: lines,
     );
+    invalidateAfterDeliveryVerify(ref, purchaseId: widget.purchase.id);
     ref.invalidate(staffPendingDeliveriesProvider);
   }
 

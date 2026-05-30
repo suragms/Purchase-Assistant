@@ -22,8 +22,6 @@ class StockWarehouseTableHeader extends StatelessWidget {
       height: 1.15,
     );
 
-    const metrics = ['SYSTEM', 'PHYS', 'DIFF'];
-
     return Padding(
       padding: EdgeInsets.symmetric(
         horizontal: HexaResponsive.pageGutter(context, operational: true),
@@ -49,7 +47,18 @@ class StockWarehouseTableHeader extends StatelessWidget {
                   child: Text('ITEM', style: hdr),
                 ),
               ),
-              for (final label in metrics) _metricHeader(label, hdr),
+              if (isStaffMode)
+                _metricHeader('PHYS', hdr)
+              else ...[
+                _metricHeader('STOCK', hdr),
+                Container(
+                  width: StockTableLayout.statusColWidth,
+                  decoration: StockTableLayout.cellDecoration(),
+                  alignment: Alignment.center,
+                  padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 2),
+                  child: Text('STATUS', style: hdr, textAlign: TextAlign.center),
+                ),
+              ],
             ],
           ),
         ),

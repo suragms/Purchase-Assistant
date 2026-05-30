@@ -50,7 +50,29 @@ from app.services.realtime_events import publish_business_event
 router = APIRouter(prefix="/v1/businesses/{business_id}/trade-purchases", tags=["trade-purchases"])
 _log = logging.getLogger(__name__)
 
-_ALLOWED_TRADE_LIST_STATUSES = frozenset({"draft", "due_soon", "overdue", "paid"})
+_ALLOWED_TRADE_LIST_STATUSES = frozenset({
+    "draft",
+    "due_soon",
+    "overdue",
+    "paid",
+    "pending",
+    "delivered",
+    "cancelled",
+    "in_transit",
+    "dispatched",
+    "arrived",
+    "staff_verifying",
+    "staff_verified",
+    "partial",
+    "stock_committed",
+})
+_LEGACY_TRADE_LIST_STATUS_INT = {
+    "0": "pending",
+    "1": "paid",
+    "2": "overdue",
+    "3": "draft",
+    "4": "due_soon",
+}
 
 
 def _purchase_list_response(
@@ -128,6 +150,12 @@ def _publish_purchase_changed(
     if len(ids) == 1:
         payload["item_id"] = ids[0]
     publish_business_event(business_id, "purchase.changed", payload)
+    for iid in ids:
+        publish_business_event(
+            business_id,
+            "stock.changed",
+            {"item_id": iid, "purchase_id": str(out.id)},
+        )
 
 
 def _normalize_trade_list_status(status: str | None) -> str | None:
@@ -137,6 +165,8 @@ def _normalize_trade_list_status(status: str | None) -> str | None:
     s = status.strip().lower()
     if not s or s in ("all", "undefined", "null"):
         return None
+    if s.isdigit() and s in _LEGACY_TRADE_LIST_STATUS_INT:
+        s = _LEGACY_TRADE_LIST_STATUS_INT[s]
     if s in _ALLOWED_TRADE_LIST_STATUSES:
         return s
     return None
@@ -242,7 +272,10 @@ async def list_trade_purchases(
     offset: int = Query(0, ge=0, le=10_000),
     status: str | None = Query(
         None,
-        description="draft|due_soon|overdue|paid; omit or 'all' / unknown = no status filter",
+        description=(
+            "Payment: draft|pending|due_soon|overdue|paid; delivery: dispatched|arrived|"
+            "staff_verifying|stock_committed|…; omit or 'all' = no filter"
+        ),
     ),
     q: str | None = Query(None, max_length=200),
     supplier_id: uuid.UUID | None = Query(None),

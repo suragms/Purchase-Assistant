@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../../core/json_coerce.dart';
+import '../../../../shared/widgets/hexa_empty_state.dart';
 import 'low_stock_compact_item_row.dart';
 import 'low_stock_tree_counts.dart';
 
@@ -282,15 +283,10 @@ class _LowStockCategoryTreeState extends State<LowStockCategoryTree> {
     );
 
     if (filtered.isEmpty) {
-      return const Center(
-        child: Padding(
-          padding: EdgeInsets.all(24),
-          child: Text(
-            'No items in this view',
-            textAlign: TextAlign.center,
-            style: TextStyle(color: Colors.black54, fontWeight: FontWeight.w700),
-          ),
-        ),
+      return const HexaEmptyState(
+        icon: Icons.inventory_2_outlined,
+        title: 'No low-stock items here',
+        subtitle: 'Try another tab or clear filters.',
       );
     }
 

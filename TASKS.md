@@ -1,6 +1,90 @@
 # Purchase Assistant — Living task board
 
-**Last updated:** 2026-05-29 (owner dashboard num coercion + stock UX)
+**Last updated:** 2026-05-30 (Master repair verification)
+
+## Master repair verification (2026-05-30)
+
+FIX-1–FIX-12: already shipped (invalidation hub, sheets, navigation, backend filters, undo, disputed_cnt, delivery verify banner, commit dialog). Verified by pytest + targeted flutter tests.
+
+- [x] **FIX-13** `HexaEmptyState` on stock Changes/Movement tabs + reports movement tab; home activity feed already had empty state
+- [x] **FIX-14** Dense warehouse row — `rowMinHeight` 72; ledger `current_stock` SSOT; removed PUR/human-id from `deliveryMetaLine`
+- [x] **FIX-15** Reports uses horizontal scroll `ChoiceChip` row (no `TabBar`); stock operational `TabBar` already `isScrollable: true`
+- [x] Tests: backend 10 passed; flutter `delivery_invalidation`, `navigation_ext`, `sheet_compact_height`, `stock_row_metrics`
+- [ ] **Deploy:** Alembic **044** on Render Postgres before API deploy
+- [ ] Manual: commit delivery → stock SYSTEM column refreshes without pull-to-refresh
+
+## FIX_TODO_MASTER (2026-05-30)
+
+Wave 1 (shipped):
+
+- [x] **P0-003** Undo guard — `opening_stock` + `opening_stock_setup` adjustment types blocked for non-owner/admin
+- [x] **P0-006** Trade list `status` filter — payment + delivery statuses (`dispatched`, `arrived`, `stock_committed`, …)
+- [x] **P0-011** Desktop stock detail empty state — icon + subtitle
+- [x] **P1-016** Delivery deep links — `filter=` chips + `?delivery_status=` alias on purchase history
+- [x] **P1-017** Stock page realtime — `realtimeInvalidationProvider` → reset merged list + warehouse invalidation
+- [x] **P1-018** Low-stock cron fetch — single `shortage` sweep (was 3× low/critical/out)
+- [x] **P1-011** Activity `action_route` on dispatch / arrive / commit staff activity
+- [x] Tests: `test_stock_undo`, `test_low_stock_operations`, `test_trade_purchase_delivery_pipeline`
+
+Already done (prior sprints — do not redo): P0-001, 002, 004, 005, 007–010; P1-002–004, 010, 013–014, 020–021; P1-006 badge from merged feed.
+
+Wave 2 (partial / backlog):
+
+- [x] **P1-005** Home KPI tiles capped ~100px (`childAspectRatio` / 100)
+- [x] **P1-008** Stock `TabBar` `isScrollable: true` (already in `stock_operational_top_bar`)
+- [x] **P1-012 / P1-019** `formatPurchaseHumanDate` on purchase history rows
+- [x] **P1-001** Stock warehouse row dense spec — 72px row, ledger qty, no PUR in meta line
+- [x] **P1-007** `HexaEmptyState` on stock changes/movement + reports movement tab
+- [x] **P1-009** Reports 4 primary chips + More sheet (`ReportsBiTabX.primaryRow` / `moreSheet`)
+- [x] **P1-015** Idempotency documented in `backend/alembic/versions/README.md` (037 unique)
+- [x] **P1-022 / P2-018** Alembic 026/027 gap documented in `backend/alembic/versions/README.md`
+- [ ] Manual QA matrix (from `docs/harisree/TODO_MASTER_LIST.md`)
+
+### P2 backlog (implement when QA flags)
+
+P2-001 … P2-018 — owner tasks sheet, reports export polish, admin_web SQL PIN (separate app), stale cache TTLs, duplicate purchase guard UX, stock PDF column order, etc. See `docs/harisree/TODO_MASTER_LIST.md`.
+
+### P3 polish backlog
+
+P3-001 … P3-015 — animations, haptics, desktop column resize, pricing table doc-only, etc.
+
+## Navigation fix (2026-05-30)
+
+- [x] **NAV-005** Item entry / catalog quick-add pop fallback → `/purchase` (not `/purchase/new`)
+- [x] **NAV-003** Verify delivery sheet close always invalidates purchase detail + delivery pipeline
+- [x] **NAV-006** `ReportsPage.didChangeDependencies` syncs `?tab=` query; smoke test `reports_tab_deep_link_test.dart`
+- [x] **NAV-002** `shellReturnBranchProvider` + `goShellTab` / `popShellTabOrGoHome`; home dashboard cards use cross-tab helper (not root `push`); Reports `PopScope` + contextual back; bottom nav clears return branch
+- [x] **NAV-004** Stock scroll persist before item navigate + restore on return from catalog item
+- [x] Tests: `navigation_ext_test.dart`, `reports_tab_deep_link_test.dart`
+- [ ] Manual QA matrix below
+
+| Flow | Pass |
+|------|------|
+| Purchase wizard → Add item → back (no blank / web error) | [ ] |
+| Empty-stack back from item entry → purchase list (not blank new form) | [ ] |
+| Home KPI → Reports → system back → Home | [ ] |
+| Home → Reports → bottom nav Stock (no stuck Reports body) | [ ] |
+| `/reports?tab=items` cold URL selects Items tab | [ ] |
+| Purchase detail → Verify → dismiss sheet → status refreshes | [ ] |
+| Stock list scroll → View item → back restores scroll | [ ] |
+
+## Stock engine rebuild (2026-05-30)
+
+- [x] **STOCK-001** Delivery commit invalidation — `invalidateAfterDeliveryCommit` busts stock list, home dashboard, delivery pipeline, **`homeStockAttentionCountProvider`**
+- [x] **STOCK-002** Undo last change via `apply_stock_movement` + `stock.changed` event (prior sprint)
+- [x] **STOCK-003** `compute_expected_system_qty` includes quick purchases (prior sprint)
+- [x] **STOCK-004** Idempotency — `UNIQUE (business_id, idempotency_key)` on `stock_movements` (037 migration; no new 043 needed)
+- [x] **STOCK-005** Supplier N+1 — bulk fetch in `list_stock`, opening-stock setup, low-stock slice, reorder list, opening-missing
+- [x] **STOCK-006** Migration **044** — clamp negative `current_stock` + `CHECK (current_stock >= 0)`
+- [x] **STOCK-007** Physical count `difference_qty = counted - system_at_count` (prior sprint + tests)
+- [x] **STOCK-008** PATCH delivery rejects `is_delivered=True`; commit idempotency (prior sprint)
+- [x] **STOCK-009** Opening stock locked — staff blocked on PATCH (prior sprint)
+- [x] **UI display** Owner list **STOCK** column = `current_stock` (ledger); staff **PHYS** + truck badge; expected/reconciliation owner-only in item snapshot expansion tile
+- [x] Tests: `test_physical_count_diff_sign`, `test_stock_undo`, `test_warehouse_logic_fixes`, `test_purchase_stock_increment`; Flutter `stock_row_metrics_test`, `stock_dense_row_test`, `delivery_invalidation_test`
+- [ ] **Deploy:** apply migration **044** on Render Postgres before API deploy
+- [ ] Manual QA: commit delivery → stock list + home attention badge refresh; owner row shows ledger qty not expected formula
+
+**Backlog (out of scope):** available/reserved stock, returned stock, damaged stock in list UI.
 
 ## Owner home UX rebuild (2026-05-29)
 
@@ -344,6 +428,35 @@
 - [x] Supabase MCP: 2 unread notifications in DB
 - [ ] Render MCP logs (workspace auth required)
 - [ ] Manual QA owner + staff post-deploy
+
+### Audit remediation (2026-05-30 plan)
+
+| Phase | Status | Notes |
+|-------|--------|-------|
+| Sprint 1 — stock truth (backend movement, diff, idempotency, disputed slice) | [x] | `undo_last` → `apply_stock_movement`; `shortage` single-fetch; bulk suppliers in `list_stock` |
+| Sprint 1 — Flutter invalidation (delivery paths, staff verify, realtime) | [x] | Staff home verify/arrive; `purchase.changed` already fans out via warehouse signal |
+| Sprint 1 — tests | [x] | `test_physical_count_diff_sign.py`; `test_stock_undo` movement assert; `trade_list_api_status_test` |
+| Sprint 2 — nav, filters, verify UX | [x] | Shell `PopScope`; API `pending` + legacy int; verify banner uses `needsStaffAction` |
+| Sprint 2 — overlays + item tracking | [x] | `PartyInlineSuggestField` overlay default; item detail tracking strip |
+| Sprint 3 — perf / DB | [x] | `list/compact`; Alembic `043` indexes; low-stock single `shortage` query |
+| Sprint 4 — UX backlog | [x] | 72px stock rows; home resume 5m throttle; scroll restore; stock empty `FriendlyLoadError`; camera pause |
+| Sprint 5 — security | [x] | `opening_stock_locked` enforced on `patch_stock_item`; admin SQL console N/A (removed) |
+
+**Deploy:** `alembic upgrade head` through `043_audit_perf_indexes` on Render/Supabase before soak.
+
+### Warehouse logic audit remediation (2026-05-29 plan)
+
+| Bug / phase | Status | Notes |
+|-------------|--------|-------|
+| LOGIC-001 invalidation gaps | [x] | `invalidateAfterDeliveryCommit` / `invalidateAfterDeliveryVerify`; low-stock ops in `invalidateWarehouseSurfacesLight`; realtime throttle bypass when `affectedItemIds` set; backend publishes `stock.changed` per item on commit |
+| LOGIC-002 verify vs commit UX | [x] | Quick action **COMMIT STOCK** (owner-only, `readyForOwnerCommit`); banner/snackbar copy: verify = counts submitted, commit = stock added |
+| LOGIC-003 unit conversion flag | [x] | `needs_unit_setup` on `StockUpdateOut` + commit response when bag/kg conversion missing |
+| LOGIC-004 expected qty + quick purchase | [x] | `compute_expected_system_qty` + stock list/public item include `quick_purchase` movements |
+| LOGIC-005 near-zero reorder fallback | [x] | `stock_status`: `0 < cur < 1` + `reorder <= 0` → `low` |
+| LOGIC-006 revert hardening | [x] | `revert_confirmed_purchase_stock` → `apply_stock_movement(delivery_revoke)` + idempotency keys; delivery PATCH revert unblocked |
+| Tests | [x] | `test_warehouse_logic_fixes.py`; `delivery_invalidation_test.dart` |
+
+**Manual smoke:** commit from purchase detail + history quick action; staff verify (no stock delta); second device stock tab within one realtime poll; item with staff quick purchase shows expected = opening + deliveries + quick.
 
 ### STOCK_LOGIC_DEEP_AUDIT closure (2026-05-28)
 
@@ -1496,6 +1609,28 @@ Run on **physical** iOS 16+ and Android API 29+ before release:
 | Barcode scan | Yellow (web = manual) |
 | Staff home / activity | Green |
 | Notifications / Settings | Green |
+
+---
+
+## UI/UX audit remediation (May 30)
+
+| ID | Status | Summary |
+|----|--------|---------|
+| UX-001 | Done | Migrated remaining sheets off `DraggableScrollableSheet` → `showHexaBottomSheet` / bounded `Column` |
+| UX-002 | Done | Dense stock row: owner STOCK+status; staff PHYS only; 72px max |
+| UX-003 | Done | `keyboard_aware_suggestion_overlay` uses root overlay |
+| UX-004 | Done | Stock TabBar visible (List / Changes / Movement / Today) |
+| UX-005 | Done | `stockListScrollOffsetProvider` + `PageStorageKey` scroll restore |
+| UX-006 | Done | Reports primary chips: Overview · Items · Purchase · Activity |
+| UX-007 | Done | Delivery status stripe helpers + purchase history tiles |
+| UX-008 | Done | Shared `formatStockQtyNumber` in feeds/reports/purchase entry |
+| UX-009 | Done | `HexaEmptyState` on stock, low-stock, purchase, reports, home activity, notifications |
+| UX-010 | Done | Owner home compact: alert strip, 2×2 KPI grid (96px), lists capped |
+| UX-011 | Done | Activity feed parses "Purchase received" → delivery committed + purchase route |
+| UX-012 | Done | Confirm dialog before commit-stock; revert already confirmed |
+| UX-013 | Done | Barcode scan debounce 300ms; camera stops on inactive |
+| UX-014 | Done | Low-stock filter sheet sticky Apply + viewInsets |
+| UX-015 | Done | Purchase history filters sticky Apply |
 
 ---
 

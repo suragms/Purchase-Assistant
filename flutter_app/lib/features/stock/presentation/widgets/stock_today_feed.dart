@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../../../core/json_coerce.dart';
+import '../../../../core/utils/unit_utils.dart';
 
 /// Dense timeline row for stock adjustment audit entries.
 class StockTodayFeed extends StatelessWidget {
@@ -21,9 +22,7 @@ class StockTodayFeed extends StatelessWidget {
 
   static String fmtQty(dynamic v) {
     if (v == null) return '—';
-    if (v is num) {
-      return v == v.roundToDouble() ? v.toInt().toString() : v.toString();
-    }
+    if (v is num) return formatStockQtyNumber(v.toDouble());
     return '$v';
   }
 

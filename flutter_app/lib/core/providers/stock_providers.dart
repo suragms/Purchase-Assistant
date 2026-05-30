@@ -164,6 +164,9 @@ final stockPagePeriodProvider =
 /// Tablet/desktop split pane selection.
 final stockSelectedItemIdProvider = StateProvider<String?>((ref) => null);
 
+/// Saved scroll offset for stock list — restored when returning from detail.
+final stockListScrollOffsetProvider = StateProvider<double>((ref) => 0);
+
 enum StockDeliveryFilter { all, pending, delivered }
 
 /// Client-side delivery truck filter on stock list.

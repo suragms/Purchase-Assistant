@@ -52,22 +52,15 @@ Future<void> showUpdateStockSheet({
   required String itemName,
   Map<String, dynamic>? stockRow,
 }) async {
-  await showModalBottomSheet<void>(
+  await showHexaBottomSheet<void>(
     context: context,
-    isScrollControlled: true,
-    useSafeArea: true,
-    shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-    ),
-    builder: (ctx) => HexaResponsiveSheetViewport(
-      compact: true,
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-      child: _UpdateStockSheetBody(
+    compact: true,
+    padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+    child: _UpdateStockSheetBody(
         itemId: itemId,
         itemName: itemName,
         seedStock: stockRow,
         parentRef: ref,
-      ),
     ),
   );
 }

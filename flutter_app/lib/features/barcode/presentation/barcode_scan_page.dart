@@ -32,7 +32,7 @@ import 'barcode_scan_web_stub.dart'
     if (dart.library.html) 'barcode_scan_web.dart';
 
 const _kMaxRecent = 10;
-const _kDebounceMs = 900;
+const _kDebounceMs = 300;
 const _kManualSearchDebounceMs = 400;
 /// Retail + warehouse linear formats (fewer = faster camera decode).
 const _kWarehouseBarcodeFormats = <BarcodeFormat>[
@@ -54,7 +54,7 @@ class BarcodeScanPage extends ConsumerStatefulWidget {
 }
 
 class _BarcodeScanPageState extends ConsumerState<BarcodeScanPage>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   MobileScannerController? _camera;
   final _manualCtrl = TextEditingController();
   final _manualFocus = FocusNode();
@@ -74,6 +74,7 @@ class _BarcodeScanPageState extends ConsumerState<BarcodeScanPage>
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _scanLineCtrl = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 2),
@@ -554,7 +555,21 @@ class _BarcodeScanPageState extends ConsumerState<BarcodeScanPage>
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    final cam = _camera;
+    if (cam == null) return;
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.hidden) {
+      unawaited(cam.stop());
+    } else if (state == AppLifecycleState.resumed) {
+      unawaited(cam.start());
+    }
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _manualSearchDebounce?.cancel();
     _scanLineCtrl.dispose();
     _manualCtrl.removeListener(_onManualChanged);

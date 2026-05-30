@@ -104,6 +104,7 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
 
     void go(int branch) {
       HapticFeedback.selectionClick();
+      ref.read(shellReturnBranchProvider.notifier).state = null;
       _syncShellBranch(branch);
       navigationShell.goBranch(branch);
     }
@@ -188,14 +189,25 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
       ],
     );
 
-    return ShellRealtimeListener(
-      child: SizedBox.expand(
-        child: Material(
-          key: const ValueKey<String>('main_shell'),
-          color: Theme.of(context).scaffoldBackgroundColor,
-          child: ResponsiveShellLayout(
-            rail: hideShellChrome && !showsRail ? const SizedBox.shrink() : rail,
-            body: shellBody,
+    return PopScope(
+      canPop: idx == ShellBranch.home,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+        if (idx == ShellBranch.reports || idx == ShellBranch.stock) {
+          go(ShellBranch.home);
+        } else if (idx != ShellBranch.home) {
+          go(ShellBranch.home);
+        }
+      },
+      child: ShellRealtimeListener(
+        child: SizedBox.expand(
+          child: Material(
+            key: const ValueKey<String>('main_shell'),
+            color: Theme.of(context).scaffoldBackgroundColor,
+            child: ResponsiveShellLayout(
+              rail: hideShellChrome && !showsRail ? const SizedBox.shrink() : rail,
+              body: shellBody,
+            ),
           ),
         ),
       ),

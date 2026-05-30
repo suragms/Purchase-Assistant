@@ -2,24 +2,42 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../core/router/shell_navigation.dart';
+import '../../../../features/shell/shell_branch_provider.dart';
+
+import '../../../../core/design_system/hexa_ds_tokens.dart';
 import '../../../../core/design_system/hexa_responsive.dart';
+import '../../../../core/json_coerce.dart';
+import '../../../../core/providers/delivery_pipeline_provider.dart';
+import '../../../../core/providers/home_dashboard_provider.dart';
+import '../../../../core/providers/home_owner_dashboard_providers.dart';
 import '../../../../core/providers/stock_providers.dart'
-    show lowStockByCategoryProvider;
+    show lowStockByCategoryProvider, openingStockMissingProvider, stockStatusCountsProvider;
 import '../../../stock/presentation/widgets/low_stock_category_tree.dart'
     show countLowStockForTab, LowStockTreeTab;
-import 'home_owner_compact_alerts.dart';
 import 'home_owner_quick_actions.dart';
 import 'home_purchase_control_center.dart';
 import 'home_warehouse_activity_feed.dart';
-import 'home_warehouse_snapshot_card.dart';
 
-/// Owner dashboard: alerts → purchases → warehouse → tools → recent activity.
+/// Owner dashboard: alert strip → KPI grid → purchases → activity (compact).
 class HomeOwnerDashboardBody extends ConsumerWidget {
   const HomeOwnerDashboardBody({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final gap = HexaResponsive.sectionGap(context);
+    final status = ref.watch(stockStatusCountsProvider).valueOrNull ?? const {};
+    final low = coerceToInt(status['low']) + coerceToInt(status['critical']);
+    final out = coerceToInt(status['out']);
+    final openingN =
+        coerceToInt(ref.watch(openingStockMissingProvider).valueOrNull?['missing_count']);
+    final pipeline = ref.watch(deliveryPipelineProvider).valueOrNull;
+    var pending = deliveryPipelinePendingCount(pipeline);
+    if (pending == 0) {
+      pending = ref.watch(homeDashboardDataProvider).snapshot.data.pendingDeliveryCount;
+    }
+    final dash = ref.watch(homeDashboardDataProvider).snapshot.data;
+    final inv = ref.watch(homeInventorySummaryProvider).valueOrNull;
     final lowCount = ref.watch(lowStockByCategoryProvider).maybeWhen(
           data: (g) => countLowStockForTab(g, LowStockTreeTab.allLow),
           orElse: () => 0,
@@ -28,26 +46,213 @@ class HomeOwnerDashboardBody extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const HomeOwnerCompactAlerts(),
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: [
+              if (low > 0)
+                _AlertChip(
+                  label: 'Low stock · $low',
+                  color: const Color(0xFFF59E0B),
+                  onTap: () => context.push('/stock/low-stock'),
+                ),
+              if (pending > 0) ...[
+                if (low > 0) const SizedBox(width: 8),
+                _AlertChip(
+                  label: 'Pending delivery · $pending',
+                  color: const Color(0xFFDC2626),
+                  filled: true,
+                  onTap: () => context.go('/purchase'),
+                ),
+              ],
+              if (openingN > 0) ...[
+                if (low > 0 || pending > 0) const SizedBox(width: 8),
+                _AlertChip(
+                  label: 'Opening stock · $openingN',
+                  color: const Color(0xFFCA8A04),
+                  onTap: () => context.push('/stock/opening-setup'),
+                ),
+              ],
+              if (out > 0) ...[
+                if (low > 0 || pending > 0 || openingN > 0)
+                  const SizedBox(width: 8),
+                _AlertChip(
+                  label: 'Out of stock · $out',
+                  color: const Color(0xFFDC2626),
+                  onTap: () => goShellTab(
+                        context,
+                        ref,
+                        branch: ShellBranch.stock,
+                        location: '/stock?status=out',
+                      ),
+                ),
+              ],
+            ],
+          ),
+        ),
+        SizedBox(height: gap),
+        GridView.count(
+          crossAxisCount: 2,
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          mainAxisSpacing: 8,
+          crossAxisSpacing: 8,
+          childAspectRatio: MediaQuery.sizeOf(context).width / 2 / 100,
+          children: [
+            _KpiTile(
+              label: 'Purchases',
+              value: '${dash.purchaseCount}',
+              subtitle: dash.period.label,
+              onTap: () => context.go('/purchase'),
+            ),
+            _KpiTile(
+              label: 'Pending delivery',
+              value: '$pending',
+              subtitle: pending > 0 ? 'Needs action' : 'Clear',
+              accent: pending > 0 ? const Color(0xFFDC2626) : null,
+              onTap: () => context.go('/purchase'),
+            ),
+            _KpiTile(
+              label: 'Low stock',
+              value: '$lowCount',
+              subtitle: 'Items below reorder',
+              onTap: () => context.push('/stock/low-stock'),
+            ),
+            _KpiTile(
+              label: 'Warehouse',
+              value: '${inv?.itemCount ?? dash.itemSlices.length}',
+              subtitle: 'Active items',
+              onTap: () => goShellTab(
+                    context,
+                    ref,
+                    branch: ShellBranch.stock,
+                    location: '/stock',
+                  ),
+            ),
+          ],
+        ),
         SizedBox(height: gap),
         const HomePurchaseControlCenter(),
-        SizedBox(height: gap),
-        const HomeWarehouseSnapshotCard(),
         SizedBox(height: gap),
         HomeOwnerQuickActions(
           lowStockCount: lowCount,
           onPurchase: () => context.push('/purchase/new'),
-          onStock: () => context.go('/stock'),
+          onStock: () => goShellTab(
+                context,
+                ref,
+                branch: ShellBranch.stock,
+                location: '/stock',
+              ),
           onLowStock: () => context.push('/stock/low-stock'),
           onDelivered: () => context.go('/purchase?filter=received'),
-          onReports: () => context.go('/reports'),
+          onReports: () => goShellTab(
+                context,
+                ref,
+                branch: ShellBranch.reports,
+                location: '/reports',
+              ),
           onUsers: () => context.push('/settings/users'),
           onBarcode: () => context.push('/barcode/bulk-print'),
           onReorder: () => context.push('/stock/reorder'),
         ),
         SizedBox(height: gap),
-        const HomeWarehouseActivityFeed(),
+        const HomeWarehouseActivityFeed(maxRows: 3),
       ],
+    );
+  }
+}
+
+class _AlertChip extends StatelessWidget {
+  const _AlertChip({
+    required this.label,
+    required this.color,
+    required this.onTap,
+    this.filled = false,
+  });
+
+  final String label;
+  final Color color;
+  final VoidCallback onTap;
+  final bool filled;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: filled ? color : color.withValues(alpha: 0.12),
+      borderRadius: BorderRadius.circular(999),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(999),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w800,
+              color: filled ? Colors.white : color,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _KpiTile extends StatelessWidget {
+  const _KpiTile({
+    required this.label,
+    required this.value,
+    required this.subtitle,
+    required this.onTap,
+    this.accent,
+  });
+
+  final String label;
+  final String value;
+  final String subtitle;
+  final VoidCallback onTap;
+  final Color? accent;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      margin: EdgeInsets.zero,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: SizedBox(
+          height: 96,
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: HexaDsType.label(11, color: HexaDsColors.textMuted),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  value,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: HexaDsType.metricPrimary(color: accent),
+                ),
+                Text(
+                  subtitle,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: HexaDsType.label(10, color: HexaDsColors.textMuted),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

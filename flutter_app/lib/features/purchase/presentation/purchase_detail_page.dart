@@ -557,19 +557,11 @@ class PurchaseDetailBodyState extends ConsumerState<PurchaseDetailBody> {
     TradePurchase purchase,
     String message,
   ) async {
-    invalidatePurchaseWorkspace(ref, affectedItemIds: _purchaseItemIds(purchase));
-    ref.invalidate(deliveryPipelineProvider);
-    ref.invalidate(tradePurchaseDetailProvider(purchase.id));
-    ref.invalidate(stockListProvider);
-    ref.invalidate(stockStatusCountsProvider);
-    ref.invalidate(homeInventorySummaryProvider);
-    for (final line in purchase.lines) {
-      final itemId = line.catalogItemId?.trim();
-      if (itemId != null && itemId.isNotEmpty) {
-        ref.invalidate(stockItemDetailProvider(itemId));
-      }
-    }
-    ref.read(businessDataWriteRevisionProvider.notifier).state++;
+    invalidateAfterDeliveryCommit(
+      ref,
+      purchaseId: purchase.id,
+      affectedItemIds: _purchaseItemIds(purchase),
+    );
     if (context.mounted) showTopSnack(context, message);
   }
 
@@ -679,6 +671,12 @@ class PurchaseDetailBodyState extends ConsumerState<PurchaseDetailBody> {
         purchaseId: p.id,
       );
       if (result.queued) {
+        invalidatePurchaseWorkspace(
+          ref,
+          affectedItemIds: _purchaseItemIds(p),
+        );
+        ref.invalidate(deliveryPipelineProvider);
+        ref.invalidate(tradePurchaseDetailProvider(p.id));
         ref.invalidate(stockOfflinePendingCountProvider);
         if (context.mounted) {
           showTopSnack(
@@ -722,13 +720,35 @@ class PurchaseDetailBodyState extends ConsumerState<PurchaseDetailBody> {
       purchaseId: p.id,
       lines: lineMaps,
     );
+    invalidateAfterDeliveryVerify(ref, purchaseId: p.id);
     if (changed && context.mounted) {
-      ref.invalidate(tradePurchaseDetailProvider(p.id));
-      showTopSnack(context, 'Submitted for owner approval');
+      showTopSnack(context, 'Counts submitted — owner can commit to stock');
     }
   }
 
   Future<void> _commitStock(BuildContext context, TradePurchase p) async {
+    final ok = await showDialog<bool>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            title: const Text('Commit stock to warehouse?'),
+            content: Text(
+              'This will add stock for ${p.lines.length} line(s) from ${p.humanId}. '
+              'This cannot be undone without reverting delivery.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(false),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(dialogContext).pop(true),
+                child: const Text('Commit stock'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+    if (!ok) return;
     final session = ref.read(sessionProvider);
     if (session == null) return;
     try {
@@ -737,16 +757,27 @@ class PurchaseDetailBodyState extends ConsumerState<PurchaseDetailBody> {
             purchaseId: p.id,
           );
       final purchase = TradePurchase.fromJson(updated);
-      final n = purchase.stockUpdatesCount > 0
-          ? purchase.stockUpdatesCount
-          : p.lines.length;
-      await _afterDeliveryMutation(
-        context,
-        purchase,
-        n == 1
-            ? 'Stock committed · 1 item added'
-            : 'Stock committed · $n items added',
-      );
+      final applied = (updated['stock_updates'] is List)
+          ? (updated['stock_updates'] as List).where((row) {
+              if (row is! Map) return false;
+              if (row['needs_unit_setup'] == true) return false;
+              return true;
+            }).length
+          : purchase.stockUpdatesCount;
+      final needsSetup = (updated['stock_updates'] is List)
+          ? (updated['stock_updates'] as List)
+              .where((row) => row is Map && row['needs_unit_setup'] == true)
+              .length
+          : 0;
+      final n = applied > 0 ? applied : p.lines.length;
+      var message = n == 1
+          ? 'Stock added to warehouse · 1 item'
+          : 'Stock added to warehouse · $n items';
+      if (needsSetup > 0) {
+        message =
+            '$message · $needsSetup item${needsSetup == 1 ? '' : 's'} need unit setup in catalog';
+      }
+      await _afterDeliveryMutation(context, purchase, message);
     } catch (e) {
       if (context.mounted) {
         showTopSnack(

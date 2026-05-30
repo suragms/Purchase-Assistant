@@ -229,3 +229,20 @@ def test_dispatch_and_pipeline_counts():
     )
     assert pipe.status_code == 200, pipe.text
     assert pipe.json()["dispatched"] >= 1
+
+    listed = client.get(
+        f"/v1/businesses/{bid}/trade-purchases",
+        headers=h,
+        params={"status": "dispatched", "limit": 50},
+    )
+    assert listed.status_code == 200, listed.text
+    ids = {row["id"] for row in listed.json()}
+    assert pid in ids
+
+    other = client.get(
+        f"/v1/businesses/{bid}/trade-purchases",
+        headers=h,
+        params={"status": "arrived", "limit": 50},
+    )
+    assert other.status_code == 200, other.text
+    assert pid not in {row["id"] for row in other.json()}

@@ -30,12 +30,11 @@ Future<bool> showQuickStockActionSheet({
   required Map<String, dynamic> item,
   StockUpdateMode initialMode = StockUpdateMode.physical,
 }) async {
-  final result = await showModalBottomSheet<bool>(
+  final result = await showHexaBottomSheet<bool>(
     context: context,
-    isScrollControlled: true,
-    useSafeArea: true,
-    showDragHandle: true,
-    builder: (ctx) => _QuickStockActionBody(
+    compact: true,
+    padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+    child: _QuickStockActionBody(
       item: item,
       parentRef: ref,
       initialMode: initialMode,
@@ -188,13 +187,10 @@ class _QuickStockActionBodyState extends ConsumerState<_QuickStockActionBody> {
     final stockLabel = stockDisplayPrimary(_current, _unit);
     final lastPhysical = _lastPhysicalLabel;
 
-    return HexaResponsiveSheetViewport(
-      compact: true,
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
           Row(
             children: [
               Expanded(
@@ -341,7 +337,6 @@ class _QuickStockActionBodyState extends ConsumerState<_QuickStockActionBody> {
             ),
           ),
         ],
-      ),
-    );
+      );
   }
 }

@@ -140,7 +140,7 @@ class PurchaseDetailDeliveryBanner extends StatelessWidget {
       out.add(_btn('Mark arrived at warehouse', onArrive!, outlined: false));
     }
     if ((isStaff || isOwnerOrManager) && ds.needsStaffAction && onVerify != null) {
-      out.add(_btn('Verify warehouse receipt', onVerify!));
+      out.add(_btn('Submit warehouse counts', onVerify!));
     }
     if (isOwnerOrManager && ds.readyForOwnerCommit && onCommit != null) {
       out.add(_btn('Commit to stock', onCommit!, outlined: false));

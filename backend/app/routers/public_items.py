@@ -9,6 +9,7 @@ from app.models import CatalogItem, ItemCategory
 from app.services.stock_inventory import (
     compute_expected_system_qty,
     movement_delivered_qty_map,
+    movement_quick_purchase_qty_map,
     stock_status,
 )
 
@@ -20,16 +21,19 @@ async def _safe_item_payload(
     category_name: str | None,
     *,
     delivered_qty: float | None = None,
+    quick_purchase_qty: float | None = None,
 ) -> dict:
     current = float(item.current_stock or 0)
     reorder = float(item.reorder_level or 0)
     unit = item.stock_unit or item.default_unit or item.selling_unit or "unit"
     opening = float(getattr(item, "opening_stock_qty", None) or 0)
     delivered = delivered_qty if delivered_qty is not None else 0.0
+    quick = quick_purchase_qty if quick_purchase_qty is not None else 0.0
     expected = float(
         compute_expected_system_qty(
             getattr(item, "opening_stock_qty", None),
             delivered,
+            total_quick_purchase_qty=quick,
         )
     )
     return {
@@ -50,7 +54,7 @@ async def _safe_item_payload(
     }
 
 
-async def _load_public_item(token: str) -> tuple[CatalogItem, str | None, float]:
+async def _load_public_item(token: str) -> tuple[CatalogItem, str | None, float, float]:
     clean = token.strip()
     if not clean or len(clean) > 64:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Item not found")
@@ -85,20 +89,28 @@ async def _load_public_item(token: str) -> tuple[CatalogItem, str | None, float]
         delivered_map = await movement_delivered_qty_map(
             db, item.business_id, [item.id]
         )
+        quick_map = await movement_quick_purchase_qty_map(
+            db, item.business_id, [item.id]
+        )
         delivered = float(delivered_map.get(item.id, 0))
-        return item, category_name, delivered
+        quick = float(quick_map.get(item.id, 0))
+        return item, category_name, delivered, quick
 
 
 @router.get("/{token}.json")
 async def public_item_json(token: str) -> dict:
-    item, category_name, delivered = await _load_public_item(token)
-    return _safe_item_payload(item, category_name, delivered_qty=delivered)
+    item, category_name, delivered, quick = await _load_public_item(token)
+    return _safe_item_payload(
+        item, category_name, delivered_qty=delivered, quick_purchase_qty=quick
+    )
 
 
 @router.get("/{token}", response_class=HTMLResponse)
 async def public_item_page(token: str) -> HTMLResponse:
-    item, category_name, delivered = await _load_public_item(token)
-    payload = _safe_item_payload(item, category_name, delivered_qty=delivered)
+    item, category_name, delivered, quick = await _load_public_item(token)
+    payload = _safe_item_payload(
+        item, category_name, delivered_qty=delivered, quick_purchase_qty=quick
+    )
     status_label = str(payload["status"]).replace("_", " ").title()
     stock_qty = payload["expected_system_qty"]
     body = f"""

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/design_system/hexa_ds_tokens.dart';
+import '../../../../core/design_system/hexa_responsive.dart';
 import '../../../../core/json_coerce.dart';
 import '../../../../core/providers/catalog_providers.dart';
 import '../../../../core/providers/stock_providers.dart';
@@ -19,20 +20,14 @@ Future<void> showItemQuickView({
   required String itemId,
   required String itemName,
 }) async {
-  await showModalBottomSheet<void>(
+  await showHexaBottomSheet<void>(
     context: context,
-    isScrollControlled: true,
-    useSafeArea: true,
-    showDragHandle: true,
-    builder: (ctx) => DraggableScrollableSheet(
-      initialChildSize: 0.92,
-      minChildSize: 0.5,
-      maxChildSize: 1.0,
-      expand: false,
-      builder: (sheetCtx, scrollCtrl) => _ItemQuickViewBody(
+    compact: false,
+    child: SizedBox(
+      height: MediaQuery.sizeOf(context).height * 0.88,
+      child: _ItemQuickViewBody(
         itemId: itemId,
         itemName: itemName,
-        scrollController: scrollCtrl,
       ),
     ),
   );
@@ -42,12 +37,10 @@ class _ItemQuickViewBody extends ConsumerStatefulWidget {
   const _ItemQuickViewBody({
     required this.itemId,
     required this.itemName,
-    required this.scrollController,
   });
 
   final String itemId;
   final String itemName;
-  final ScrollController scrollController;
 
   @override
   ConsumerState<_ItemQuickViewBody> createState() => _ItemQuickViewBodyState();
@@ -127,7 +120,6 @@ class _ItemQuickViewBodyState extends ConsumerState<_ItemQuickViewBody> {
               ].whereType<String>().where((s) => s.trim().isNotEmpty).join(' · ');
 
               return ListView(
-                controller: widget.scrollController,
                 padding: const EdgeInsets.all(16),
                 children: [
                   TextField(

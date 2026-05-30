@@ -497,19 +497,18 @@ class _LowStockDashboardPageState extends ConsumerState<LowStockDashboardPage>
       showDragHandle: true,
       isScrollControlled: true,
       builder: (ctx) {
-        final bottom = MediaQuery.paddingOf(ctx).bottom;
-        return Padding(
-          padding: EdgeInsets.only(bottom: bottom),
+        final viewInsets = MediaQuery.viewInsetsOf(ctx).bottom;
+        final bottomSafe = MediaQuery.paddingOf(ctx).bottom;
+        return SizedBox(
+          height: MediaQuery.sizeOf(ctx).height * 0.55,
           child: StatefulBuilder(
             builder: (ctx, setSheetState) {
               return Column(
-                mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                  Expanded(
+                    child: ListView(
+                      padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
                       children: [
                         Text(
                           'Filters',
@@ -591,42 +590,49 @@ class _LowStockDashboardPageState extends ConsumerState<LowStockDashboardPage>
                             onChanged: (v) => setSheetState(() => sub = v),
                           ),
                         ],
-                        const SizedBox(height: 12),
                       ],
                     ),
                   ),
                   const Divider(height: 1),
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        FilledButton(
-                          style: FilledButton.styleFrom(
-                            backgroundColor: const Color(0xFF065F46),
-                            minimumSize: const Size.fromHeight(48),
-                          ),
-                          onPressed: () {
-                            setState(() {
-                              _searchScope = scope;
-                              _subcategoryFilter = sub;
-                            });
-                            Navigator.pop(ctx);
-                          },
-                          child: const Text('Apply filters'),
-                        ),
-                        if (_filtersActive)
-                          TextButton(
+                  SafeArea(
+                    top: false,
+                    child: Padding(
+                      padding: EdgeInsets.fromLTRB(
+                        16,
+                        12,
+                        16,
+                        12 + viewInsets + bottomSafe,
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          FilledButton(
+                            style: FilledButton.styleFrom(
+                              backgroundColor: const Color(0xFF065F46),
+                              minimumSize: const Size.fromHeight(48),
+                            ),
                             onPressed: () {
                               setState(() {
-                                _searchScope = LowStockSearchScope.all;
-                                _subcategoryFilter = null;
+                                _searchScope = scope;
+                                _subcategoryFilter = sub;
                               });
                               Navigator.pop(ctx);
                             },
-                            child: const Text('Clear filters'),
+                            child: const Text('Apply filters'),
                           ),
-                      ],
+                          if (_filtersActive)
+                            TextButton(
+                              onPressed: () {
+                                setState(() {
+                                  _searchScope = LowStockSearchScope.all;
+                                  _subcategoryFilter = null;
+                                });
+                                Navigator.pop(ctx);
+                              },
+                              child: const Text('Clear filters'),
+                            ),
+                        ],
+                      ),
                     ),
                   ),
                 ],

@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/json_coerce.dart';
 import '../../../../core/providers/reports_bi_providers.dart';
 import '../../../../core/widgets/friendly_load_error.dart';
+import '../../../../shared/widgets/hexa_empty_state.dart';
 import 'reports_nested_scroll.dart';
 
 /// Stock movement summary from adjustment logs.
@@ -22,11 +23,13 @@ class ReportsMovementTab extends ConsumerWidget {
       data: (m) {
         final byType = m['by_type'];
         if (byType is! Map || byType.isEmpty) {
-          return const Center(
-            child: Text(
-              'No stock movements in selected period.',
-              style: TextStyle(fontSize: 13, color: Colors.black54),
-            ),
+          return HexaEmptyState(
+            icon: Icons.swap_vert_rounded,
+            title: 'No stock movements',
+            subtitle: 'Nothing in the selected period. Try changing the date range.',
+            primaryActionLabel: 'Refresh',
+            onPrimaryAction: () =>
+                ref.invalidate(reportsMovementSummaryProvider),
           );
         }
         final chips = <Widget>[];

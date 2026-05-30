@@ -3,10 +3,10 @@ import 'package:harisree_warehouse/features/stock/presentation/widgets/stock_row
 
 void main() {
   group('StockRowMetrics.diffQty', () {
-    test('uses physical minus expected system when both present', () {
+    test('uses physical minus ledger on-hand when both present', () {
       final item = {
         'current_stock': 100,
-        'expected_system_qty': 100,
+        'expected_system_qty': 120,
         'physical_stock_qty': 80,
       };
       expect(StockRowMetrics.diffQty(item), -20);
@@ -19,6 +19,18 @@ void main() {
         'physical_stock_difference_qty': 5,
       };
       expect(StockRowMetrics.diffQty(item), 5);
+    });
+
+    test('ledgerQty reads current_stock not expected formula', () {
+      final item = {
+        'current_stock': 42,
+        'expected_system_qty': 99,
+        'opening_stock_qty': 10,
+        'total_delivered_qty': 50,
+      };
+      expect(StockRowMetrics.ledgerQty(item), 42);
+      expect(StockRowMetrics.systemQty(item), 42);
+      expect(StockRowMetrics.expectedSystemQty(item), 99);
     });
 
     test('does not subtract purchased qty', () {

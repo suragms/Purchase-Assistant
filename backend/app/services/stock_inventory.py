@@ -2,6 +2,7 @@ import uuid
 from collections import defaultdict
 from datetime import datetime, timezone
 from decimal import Decimal
+from typing import Any
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -9,7 +10,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models import CatalogItem, User
 from app.models.stock_adjustment import StockAdjustmentLog
 from app.models.stock_movement import StockMovement
-from app.services.unit_normalization import fetch_catalog_items_map, line_qty_in_stock_unit
+from app.services.unit_normalization import (
+    catalog_stock_unit,
+    fetch_catalog_items_map,
+    line_qty_in_stock_unit,
+)
 
 
 def stock_status(current: Decimal | None, reorder: Decimal | None) -> str:
@@ -17,6 +22,8 @@ def stock_status(current: Decimal | None, reorder: Decimal | None) -> str:
     ro = Decimal(reorder or 0)
     if cur <= 0:
         return "out"
+    if ro <= 0 and Decimal("0") < cur < Decimal("1"):
+        return "low"
     if ro > 0:
         if cur <= ro * Decimal("0.5"):
             return "critical"
@@ -46,9 +53,14 @@ def catalog_landing_rate(item: CatalogItem) -> Decimal:
 def compute_expected_system_qty(
     opening_stock_qty: Decimal | None,
     total_delivered_qty: Decimal | None,
+    *,
+    total_quick_purchase_qty: Decimal | None = None,
 ) -> Decimal:
-    """Opening + lifetime verified deliveries (audit stock formula)."""
-    return Decimal(opening_stock_qty or 0) + Decimal(total_delivered_qty or 0)
+    """Opening + lifetime inbound movements used for audit reconciliation."""
+    opening = Decimal(opening_stock_qty or 0)
+    delivered = Decimal(total_delivered_qty or 0)
+    quick = Decimal(total_quick_purchase_qty or 0)
+    return opening + delivered + quick
 
 
 def catalog_unit_key(item: CatalogItem) -> str:
@@ -71,7 +83,35 @@ async def movement_delivered_qty_map(
     item_ids: list[uuid.UUID],
 ) -> dict[uuid.UUID, Decimal]:
     """Lifetime qty added via committed PO deliveries (stock_movements.delivery_receive)."""
-    if not item_ids:
+    return await movement_qty_map_by_kind(
+        db,
+        business_id,
+        item_ids,
+        kinds=("delivery_receive",),
+    )
+
+
+async def movement_quick_purchase_qty_map(
+    db: AsyncSession,
+    business_id: uuid.UUID,
+    item_ids: list[uuid.UUID],
+) -> dict[uuid.UUID, Decimal]:
+    return await movement_qty_map_by_kind(
+        db,
+        business_id,
+        item_ids,
+        kinds=("quick_purchase",),
+    )
+
+
+async def movement_qty_map_by_kind(
+    db: AsyncSession,
+    business_id: uuid.UUID,
+    item_ids: list[uuid.UUID],
+    *,
+    kinds: tuple[str, ...],
+) -> dict[uuid.UUID, Decimal]:
+    if not item_ids or not kinds:
         return {}
     r = await db.execute(
         select(
@@ -81,7 +121,7 @@ async def movement_delivered_qty_map(
         .where(
             StockMovement.business_id == business_id,
             StockMovement.item_id.in_(item_ids),
-            StockMovement.movement_kind == "delivery_receive",
+            StockMovement.movement_kind.in_(kinds),
         )
         .group_by(StockMovement.item_id)
     )
@@ -137,7 +177,17 @@ async def _qty_by_catalog_item(
     lines: list,
 ) -> dict[uuid.UUID, Decimal]:
     """Sum normalized line qty per catalog_item_id (stock unit)."""
+    totals, _ = await _qty_by_catalog_item_with_skips(db, business_id, lines)
+    return totals
+
+
+async def _qty_by_catalog_item_with_skips(
+    db: AsyncSession,
+    business_id: uuid.UUID,
+    lines: list,
+) -> tuple[dict[uuid.UUID, Decimal], list[dict[str, Any]]]:
     totals: dict[uuid.UUID, Decimal] = defaultdict(lambda: Decimal(0))
+    skipped: list[dict[str, Any]] = []
     item_ids: set[uuid.UUID] = set()
     for li in lines:
         cid = getattr(li, "catalog_item_id", None)
@@ -152,11 +202,26 @@ async def _qty_by_catalog_item(
         item = items.get(cid_u)
         if not item:
             continue
+        raw_qty = Decimal(getattr(li, "qty", 0) or 0)
         qty = line_qty_in_stock_unit(li, item)
+        if raw_qty > 0 and qty <= 0:
+            skipped.append(
+                {
+                    "catalog_item_id": cid_u,
+                    "name": item.name,
+                    "unit": catalog_stock_unit(item),
+                    "line_unit": getattr(li, "unit", None),
+                    "needs_unit_setup": True,
+                    "old_qty": catalog_stock_qty(item),
+                    "new_qty": catalog_stock_qty(item),
+                    "delta": Decimal(0),
+                }
+            )
+            continue
         if qty <= 0:
             continue
         totals[cid_u] += qty
-    return dict(totals)
+    return dict(totals), skipped
 
 
 async def _apply_catalog_stock_deltas(
@@ -234,20 +299,9 @@ async def purchase_delivery_stock_already_applied(
 ) -> bool:
     """True if stock was already incremented for this purchase (idempotent delivery).
 
-    Checks legacy adjustment-log marker and stock_movements idempotency keys.
+    Uses stock_movements idempotency keys only (authoritative ledger).
     """
     marker = f"trade_purchase:{purchase_id}"
-    r = await db.execute(
-        select(func.count())
-        .select_from(StockAdjustmentLog)
-        .where(
-            StockAdjustmentLog.business_id == business_id,
-            StockAdjustmentLog.adjustment_type == "purchase",
-            StockAdjustmentLog.reason.contains(marker),
-        )
-    )
-    if int(r.scalar_one() or 0) > 0:
-        return True
     r2 = await db.execute(
         select(func.count())
         .select_from(StockMovement)
@@ -269,75 +323,59 @@ async def apply_confirmed_purchase_stock(
     purchase_id: uuid.UUID | None = None,
     actor: User | None = None,
 ) -> list[dict]:
-    """Increment catalog stock when a purchase delivery is committed.
+    """Increment catalog stock when a purchase delivery is committed."""
+    if purchase_id is None or actor is None:
+        raise ValueError("purchase_id and actor are required for delivery commit")
 
-    When [purchase_id] and [actor] are set, uses stock_movements (delivery_receive)
-    with idempotency_key trade_purchase:{purchase_id}:{catalog_item_id} so quick_purchase
-    cannot double-apply the same PO line.
-    """
-    if purchase_id is not None and await purchase_delivery_stock_already_applied(
-        db, business_id, purchase_id
-    ):
+    if await purchase_delivery_stock_already_applied(db, business_id, purchase_id):
         return []
 
-    by_item = await _qty_by_catalog_item(db, business_id, lines)
-    if not by_item:
-        return []
+    by_item, skipped = await _qty_by_catalog_item_with_skips(db, business_id, lines)
+    if not by_item and not skipped:
+        return list(skipped)
 
-    label = purchase_human_id or (str(purchase_id) if purchase_id else "")
+    label = purchase_human_id or str(purchase_id)
     reason = f"Purchase received ({label})".strip()
 
-    if purchase_id is not None and actor is not None:
-        from app.services.stock_movement_service import apply_stock_movement
+    from app.services.stock_movement_service import apply_stock_movement
 
-        updates: list[dict] = []
-        for cid, delta in by_item.items():
-            if delta <= 0:
-                continue
-            idem = f"trade_purchase:{purchase_id}:{cid}"
-            result = await apply_stock_movement(
-                db,
-                business_id=business_id,
-                item_id=cid,
-                user=actor,
-                movement_kind="delivery_receive",
-                mode="delta",
-                qty=delta,
-                reason=reason,
-                source_type="trade_purchase",
-                source_id=purchase_id,
-                idempotency_key=idem,
-                metadata={"purchase_id": str(purchase_id), "human_id": label},
-            )
-            item = result.item
-            unit = item.stock_unit or item.default_unit or item.selling_unit
-            if result.duplicate:
-                continue
-            if delta > 0:
-                item.last_purchase_at = datetime.now(timezone.utc)
-            updates.append(
-                {
-                    "catalog_item_id": item.id,
-                    "name": item.name,
-                    "unit": unit,
-                    "old_qty": result.movement.qty_before,
-                    "new_qty": result.movement.qty_after,
-                    "delta": delta,
-                }
-            )
-        return updates
-
-    marker = f" trade_purchase:{purchase_id}" if purchase_id else ""
-    reason_legacy = f"{reason}{marker}".strip()
-    return await _apply_catalog_stock_deltas(
-        db,
-        business_id,
-        user_id,
-        by_item,
-        reason=reason_legacy,
-        adjustment_type="purchase",
-        touch_last_purchase_at=True,
-    )
+    updates: list[dict] = list(skipped)
+    for cid, delta in by_item.items():
+        if delta <= 0:
+            continue
+        idem = f"trade_purchase:{purchase_id}:{cid}"
+        result = await apply_stock_movement(
+            db,
+            business_id=business_id,
+            item_id=cid,
+            user=actor,
+            movement_kind="delivery_receive",
+            mode="delta",
+            qty=delta,
+            reason=reason,
+            source_type="trade_purchase",
+            source_id=purchase_id,
+            idempotency_key=idem,
+            metadata={"purchase_id": str(purchase_id), "human_id": label},
+        )
+        item = result.item
+        unit = item.stock_unit or item.default_unit or item.selling_unit
+        if result.duplicate:
+            continue
+        if delta > 0:
+            item.last_purchase_at = datetime.now(timezone.utc)
+        updates.append(
+            {
+                "catalog_item_id": item.id,
+                "name": item.name,
+                "unit": unit,
+                "old_qty": result.movement.qty_before,
+                "new_qty": result.movement.qty_after,
+                "delta": delta,
+                "needs_unit_setup": False,
+            }
+        )
+    return updates
 
 
 async def revert_confirmed_purchase_stock(
@@ -347,22 +385,60 @@ async def revert_confirmed_purchase_stock(
     lines: list,
     *,
     purchase_human_id: str | None = None,
+    purchase_id: uuid.UUID | None = None,
+    actor: User | None = None,
 ) -> list[dict]:
-    """Decrement stock for a previously delivered purchase."""
+    """Decrement stock for a previously delivered purchase via movement ledger."""
+    if purchase_id is None:
+        raise ValueError("purchase_id is required for stock reversal")
+    if actor is None:
+        ur = await db.execute(select(User).where(User.id == user_id))
+        actor = ur.scalar_one_or_none()
+    if actor is None:
+        raise ValueError("actor user not found for stock reversal")
+
     by_item = await _qty_by_catalog_item(db, business_id, lines)
     if not by_item:
         return []
-    deltas = {cid: -qty for cid, qty in by_item.items()}
-    reason = f"Purchase reversed{f' ({purchase_human_id})' if purchase_human_id else ''}"
-    return await _apply_catalog_stock_deltas(
-        db,
-        business_id,
-        user_id,
-        deltas,
-        reason=reason,
-        adjustment_type="purchase_reversal",
-        touch_last_purchase_at=False,
-    )
+
+    from app.services.stock_movement_service import apply_stock_movement
+
+    label = purchase_human_id or str(purchase_id)
+    reason = f"Purchase reversed ({label})".strip()
+    updates: list[dict] = []
+    for cid, qty in by_item.items():
+        if qty <= 0:
+            continue
+        idem = f"revert:trade_purchase:{purchase_id}:{cid}"
+        result = await apply_stock_movement(
+            db,
+            business_id=business_id,
+            item_id=cid,
+            user=actor,
+            movement_kind="delivery_revoke",
+            mode="delta",
+            qty=-qty,
+            reason=reason,
+            source_type="trade_purchase",
+            source_id=purchase_id,
+            idempotency_key=idem,
+            metadata={"purchase_id": str(purchase_id), "human_id": label},
+        )
+        if result.duplicate:
+            continue
+        item = result.item
+        unit = item.stock_unit or item.default_unit or item.selling_unit
+        updates.append(
+            {
+                "catalog_item_id": item.id,
+                "name": item.name,
+                "unit": unit,
+                "old_qty": result.movement.qty_before,
+                "new_qty": result.movement.qty_after,
+                "delta": -qty,
+            }
+        )
+    return updates
 
 
 async def sync_confirmed_purchase_stock_diff(

@@ -38,13 +38,16 @@ class _ShellRealtimeListenerState extends ConsumerState<ShellRealtimeListener> {
       if (signal.notifications) {
         invalidateNotificationSurfaces(ref);
       }
-      if (signal.warehouse && !_throttleWarehouse()) {
-        final ids = signal.affectedItemIds;
-        if (ids.isEmpty) {
-          invalidateWarehouseSurfacesLight(ref);
-        } else {
-          for (final id in ids) {
-            invalidateWarehouseSurfacesLight(ref, itemId: id);
+      if (signal.warehouse) {
+        final urgent = signal.affectedItemIds.isNotEmpty;
+        if (urgent || !_throttleWarehouse()) {
+          final ids = signal.affectedItemIds;
+          if (ids.isEmpty) {
+            invalidateWarehouseSurfacesLight(ref);
+          } else {
+            for (final id in ids) {
+              invalidateWarehouseSurfacesLight(ref, itemId: id);
+            }
           }
         }
       }

@@ -410,6 +410,24 @@ String _activityTitleFromAdjustment(String? adjustmentType, String itemName) {
   return itemName;
 }
 
+/// Parses audit reason `Purchase received ({human_id})` from delivery commit.
+({String humanId, String? purchaseId})? _parsePurchaseReceivedReason(
+  Map<String, dynamic> audit,
+) {
+  final reason = audit['reason']?.toString().trim() ?? '';
+  final match = RegExp(r'^Purchase received \((.+)\)$').firstMatch(reason);
+  if (match == null) return null;
+  final humanId = match.group(1)?.trim() ?? '';
+  if (humanId.isEmpty) return null;
+  final meta = audit['metadata'];
+  String? purchaseId;
+  if (meta is Map) {
+    purchaseId = meta['purchase_id']?.toString();
+  }
+  purchaseId ??= audit['source_id']?.toString() ?? audit['purchase_id']?.toString();
+  return (humanId: humanId, purchaseId: purchaseId);
+}
+
 final homeRecentActivityFeedProvider =
     FutureProvider.autoDispose<List<HomeActivityItem>>((ref) async {
   _providerKeepAlive(ref, const Duration(minutes: 3));
@@ -501,17 +519,24 @@ final homeRecentActivityFeedProvider =
     if (local.isBefore(range.start) || !local.isBefore(range.end)) continue;
     final itemName = a['item_name']?.toString() ?? 'Item';
     final adjType = a['adjustment_type']?.toString();
-    final kind = _activityKindFromAdjustment(adjType);
+    final received = _parsePurchaseReceivedReason(a);
+    final kind = received != null
+        ? 'delivery_verified'
+        : _activityKindFromAdjustment(adjType);
     final oldQ = coerceToDouble(a['old_qty']);
     final newQ = coerceToDouble(a['new_qty']);
     final delta = a['delta_qty'] ?? a['qty_change'] ?? a['change'] ?? (newQ - oldQ);
     items.add(
       HomeActivityItem(
         kind: kind,
-        title: _activityTitleFromAdjustment(adjType, itemName),
+        title: received != null
+            ? 'Delivery committed — ${received.humanId}'
+            : _activityTitleFromAdjustment(adjType, itemName),
         subtitle: itemName,
         at: local,
-        routeId: a['item_id']?.toString(),
+        routeId: received?.purchaseId?.isNotEmpty == true
+            ? received!.purchaseId
+            : a['item_id']?.toString(),
         actor: a['updated_by']?.toString() ??
             a['updated_by_name']?.toString() ??
             a['user_name']?.toString(),

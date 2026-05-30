@@ -277,73 +277,66 @@ class _SearchPickerBodyState<T> extends State<_SearchPickerBody<T>> {
     final naturalSheetH = _kSearchPickerHeaderBlockH + listContentH;
     final sheetH =
         math.min(maxByFraction, naturalSheetH).clamp(200.0, mq.size.height * 0.55);
-    final initialSize = (sheetH / mq.size.height).clamp(0.38, 0.55);
 
-    return DraggableScrollableSheet(
-      expand: false,
-      initialChildSize: initialSize,
-      minChildSize: 0.32,
-      maxChildSize: 0.55,
-      builder: (ctx, scrollController) {
-        final inset = MediaQuery.viewInsetsOf(ctx).bottom;
-        return SafeArea(
-          child: Padding(
-            padding: EdgeInsets.only(bottom: inset + 8),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
-                  child: Text(
-                    widget.title,
-                    style: Theme.of(context)
-                        .textTheme
-                        .titleMedium
-                        ?.copyWith(fontWeight: FontWeight.w800),
+    return SafeArea(
+      child: AnimatedPadding(
+        duration: const Duration(milliseconds: 180),
+        padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom + 8),
+        child: SizedBox(
+          height: sheetH,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+                child: Text(
+                  widget.title,
+                  style: Theme.of(context)
+                      .textTheme
+                      .titleMedium
+                      ?.copyWith(fontWeight: FontWeight.w800),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: TextField(
+                  controller: _q,
+                  autofocus: true,
+                  decoration: const InputDecoration(
+                    hintText: 'Type to search…',
+                    prefixIcon: Icon(Icons.search_rounded),
+                    border: OutlineInputBorder(),
+                    isDense: true,
                   ),
                 ),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: TextField(
-                    controller: _q,
-                    autofocus: true,
-                    decoration: const InputDecoration(
-                      hintText: 'Type to search…',
-                      prefixIcon: Icon(Icons.search_rounded),
-                      border: OutlineInputBorder(),
-                      isDense: true,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                if (widget.footerBuilder != null) ...widget.footerBuilder!(ctx),
-                Expanded(
-                  child: rowsToShow.isEmpty
-                      ? Center(
-                          child: Padding(
-                            padding: const EdgeInsets.all(24),
-                            child: Text(
-                              q.isEmpty
-                                  ? 'Nothing to show.'
-                                  : 'No matches for "$q".',
-                              textAlign: TextAlign.center,
-                            ),
+              ),
+              const SizedBox(height: 8),
+              if (widget.footerBuilder != null) ...widget.footerBuilder!(context),
+              Expanded(
+                child: rowsToShow.isEmpty
+                    ? Center(
+                        child: Padding(
+                          padding: const EdgeInsets.all(24),
+                          child: Text(
+                            q.isEmpty
+                                ? 'Nothing to show.'
+                                : 'No matches for "$q".',
+                            textAlign: TextAlign.center,
                           ),
-                        )
-                      : ListView(
-                          controller: scrollController,
-                          keyboardDismissBehavior:
-                              ScrollViewKeyboardDismissBehavior.onDrag,
-                          physics: const ClampingScrollPhysics(),
-                          padding: const EdgeInsets.fromLTRB(8, 0, 8, 16),
-                          children: _buildListTiles(context, rowsToShow),
                         ),
-                ),
-              ],
-            ),
+                      )
+                    : ListView(
+                        keyboardDismissBehavior:
+                            ScrollViewKeyboardDismissBehavior.onDrag,
+                        physics: const ClampingScrollPhysics(),
+                        padding: const EdgeInsets.fromLTRB(8, 0, 8, 16),
+                        children: _buildListTiles(context, rowsToShow),
+                      ),
+              ),
+            ],
           ),
-        );
-      },
+        ),
+      ),
     );
   }
 }

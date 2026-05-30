@@ -4,6 +4,7 @@ enum ReportsBiTab {
   categories,
   subcategories,
   items,
+  purchases,
   suppliers,
   brokers,
   slowMoving,
@@ -18,6 +19,7 @@ extension ReportsBiTabX on ReportsBiTab {
         ReportsBiTab.categories => 'categories',
         ReportsBiTab.subcategories => 'subcategories',
         ReportsBiTab.items => 'items',
+        ReportsBiTab.purchases => 'purchase',
         ReportsBiTab.suppliers => 'suppliers',
         ReportsBiTab.brokers => 'brokers',
         ReportsBiTab.slowMoving => 'slow',
@@ -31,12 +33,13 @@ extension ReportsBiTabX on ReportsBiTab {
         ReportsBiTab.categories => 'Categories',
         ReportsBiTab.subcategories => 'Subcat',
         ReportsBiTab.items => 'Items',
+        ReportsBiTab.purchases => 'Purchase',
         ReportsBiTab.suppliers => 'Suppliers',
         ReportsBiTab.brokers => 'Brokers',
         ReportsBiTab.slowMoving => 'Stock intel',
         ReportsBiTab.deadStock => 'Dead',
         ReportsBiTab.usage => 'Usage',
-        ReportsBiTab.stockMovement => 'Stock mvmt',
+        ReportsBiTab.stockMovement => 'Activity',
       };
 
   static ReportsBiTab? fromQuery(String? raw) {
@@ -47,12 +50,13 @@ extension ReportsBiTabX on ReportsBiTab {
       'categories' || 'category' => ReportsBiTab.categories,
       'subcategories' || 'subcategory' || 'types' => ReportsBiTab.subcategories,
       'items' || 'item' => ReportsBiTab.items,
+      'purchase' || 'purchases' => ReportsBiTab.purchases,
       'suppliers' || 'supplier' || 'supp' => ReportsBiTab.suppliers,
       'brokers' || 'broker' => ReportsBiTab.brokers,
       'slow' || 'slow_moving' || 'slowmoving' => ReportsBiTab.slowMoving,
       'dead' || 'dead_stock' || 'deadstock' => ReportsBiTab.deadStock,
       'usage' => ReportsBiTab.usage,
-      'movement' || 'stock_movement' => ReportsBiTab.stockMovement,
+      'movement' || 'stock_movement' || 'activity' => ReportsBiTab.stockMovement,
       _ => null,
     };
   }
@@ -60,17 +64,18 @@ extension ReportsBiTabX on ReportsBiTab {
   /// Primary row on phone (4 chips max); rest open via More sheet.
   static const primaryRow = [
     ReportsBiTab.overview,
-    ReportsBiTab.categories,
     ReportsBiTab.items,
-    ReportsBiTab.suppliers,
+    ReportsBiTab.purchases,
+    ReportsBiTab.stockMovement,
   ];
 
   static const moreSheet = [
     ReportsBiTab.slowMoving,
+    ReportsBiTab.categories,
     ReportsBiTab.subcategories,
+    ReportsBiTab.suppliers,
     ReportsBiTab.brokers,
     ReportsBiTab.deadStock,
     ReportsBiTab.usage,
-    ReportsBiTab.stockMovement,
   ];
 }

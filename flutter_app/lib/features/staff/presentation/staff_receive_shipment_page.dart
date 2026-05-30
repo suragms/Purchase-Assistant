@@ -95,11 +95,10 @@ class _StaffReceiveShipmentPageState
         purchaseId: p.id,
         lines: lineMaps,
       );
+      invalidateAfterDeliveryVerify(ref, purchaseId: p.id);
+      ref.invalidate(tradePurchasesListProvider);
       if (verified) {
         invalidateWarehouseSurfaces(ref);
-        ref.invalidate(tradePurchasesListProvider);
-        ref.invalidate(staffPendingDeliveriesProvider);
-        ref.invalidate(tradePurchaseDetailProvider(p.id));
         if (mounted) {
           showTopSnack(
             context,

@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/router/shell_navigation.dart';
+import '../../../features/shell/shell_branch_provider.dart';
 import '../../../core/auth/dashboard_role.dart';
 import '../../../core/auth/auth_failure_policy.dart';
 import '../../../core/auth/session_notifier.dart'
@@ -244,6 +246,10 @@ class _HomePageState extends ConsumerState<HomePage>
     }
     if (s != AppLifecycleState.resumed) return;
     if (ref.read(shellCurrentBranchProvider) != ShellBranch.home) return;
+    final last = _homeLastRefreshedAt;
+    if (last != null && DateTime.now().difference(last).inMinutes < 5) {
+      return;
+    }
     _resumeRefreshDebounce?.cancel();
     _resumeRefreshDebounce = Timer(const Duration(milliseconds: 320), () {
       if (!mounted) {
@@ -420,9 +426,19 @@ class _HomePageState extends ConsumerState<HomePage>
                           HomeQuickActionsGrid(
                             isOwner: false,
                             onScan: () => context.push('/barcode/scan'),
-                            onStock: () => context.go('/stock'),
+                            onStock: () => goShellTab(
+                                  context,
+                                  ref,
+                                  branch: ShellBranch.stock,
+                                  location: '/stock',
+                                ),
                             onPurchase: () => context.push('/purchase/new'),
-                            onReports: () => context.go('/reports'),
+                            onReports: () => goShellTab(
+                                  context,
+                                  ref,
+                                  branch: ShellBranch.reports,
+                                  location: '/reports',
+                                ),
                             onBarcode: () => context.push('/barcode/bulk-print'),
                             onUsers: () => context.push('/settings/users'),
                           ),

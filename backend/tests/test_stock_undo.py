@@ -82,14 +82,41 @@ def test_undo_last_stock_change():
     )
     assert undo.status_code == 200, undo.text
     assert Decimal(str(undo.json()["current_stock"])) == old_qty
+    version_after = int(undo.json().get("stock_version") or 0)
+    assert version_after >= int(before.json().get("stock_version") or 0) + 1
 
-    audit = client.get(
-        f"/v1/businesses/{bid}/stock/audit/{iid}",
+    activity = client.get(
+        f"/v1/businesses/{bid}/stock/{iid}/activity",
         headers=h,
-        params={"limit": 5},
+        params={"limit": 10},
     )
-    assert audit.status_code == 200
-    assert len(audit.json()) >= 2
+    assert activity.status_code == 200
+    kinds = [e.get("kind") for e in activity.json().get("activity", [])]
+    assert "undo" in kinds or any("undo" in str(k) for k in kinds)
+
+
+def test_owner_can_undo_after_opening_stock_set():
+    """Opening-stock movements use adjustment_type opening_stock; owners may revert."""
+    h, bid = _owner_headers()
+    iid = _catalog_item_id(h, bid)
+    before = client.get(f"/v1/businesses/{bid}/stock/{iid}", headers=h)
+    assert before.status_code == 200
+    old_qty = Decimal(str(before.json()["current_stock"]))
+
+    set_r = client.post(
+        f"/v1/businesses/{bid}/stock/{iid}/opening-stock",
+        headers=h,
+        json={"qty": 22, "reason": "opening test"},
+    )
+    assert set_r.status_code == 200, set_r.text
+    assert Decimal(str(set_r.json()["current_stock"])) == Decimal("22")
+
+    undo = client.post(
+        f"/v1/businesses/{bid}/stock/{iid}/undo-last",
+        headers=h,
+    )
+    assert undo.status_code == 200, undo.text
+    assert Decimal(str(undo.json()["current_stock"])) == old_qty
 
 
 def test_undo_last_not_found_without_prior_change():

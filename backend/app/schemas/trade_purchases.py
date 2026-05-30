@@ -282,6 +282,8 @@ class StockUpdateOut(DecimalModel):
     old_qty: Decimal
     new_qty: Decimal
     delta: Decimal
+    needs_unit_setup: bool = False
+    line_unit: str | None = None
 
 
 class TradePurchaseOut(DecimalModel):

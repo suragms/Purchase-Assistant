@@ -20,8 +20,11 @@ import 'reports_prior_period_provider.dart';
 import 'suppliers_list_provider.dart';
 import 'trade_purchases_provider.dart';
 import 'business_users_provider.dart';
+import 'delivery_pipeline_provider.dart';
+import 'low_stock_providers.dart';
 import 'staff_home_providers.dart';
 import 'stock_providers.dart';
+import '../../features/purchase/providers/trade_purchase_detail_provider.dart';
 import 'server_notifications_provider.dart';
 import 'warehouse_alerts_provider.dart';
 
@@ -143,6 +146,8 @@ void invalidateWarehouseSurfacesLight(dynamic ref, {String? itemId}) {
   ref.invalidate(stockLowTopHomeProvider);
   ref.invalidate(stockVariancesTodayProvider);
   ref.invalidate(homeInventorySummaryProvider);
+  ref.invalidate(lowStockOperationsSummaryProvider);
+  ref.invalidate(lowStockOperationsPageProvider);
   if (itemId != null && itemId.isNotEmpty) {
     ref.invalidate(stockItemDetailProvider(itemId));
     ref.invalidate(stockItemIntelligenceProvider(itemId));
@@ -155,4 +160,29 @@ void invalidateWarehouseSurfacesLight(dynamic ref, {String? itemId}) {
 void invalidateNotificationSurfaces(dynamic ref) {
   ref.invalidate(appNotificationsListProvider);
   ref.invalidate(appNotificationUnreadCountProvider);
+}
+
+/// Staff submitted warehouse counts — purchase/delivery status only (no stock delta).
+void invalidateAfterDeliveryVerify(
+  dynamic ref, {
+  required String purchaseId,
+}) {
+  ref.invalidate(tradePurchaseDetailProvider(purchaseId));
+  ref.invalidate(deliveryPipelineProvider);
+  ref.invalidate(staffPendingDeliveriesProvider);
+  invalidateTradePurchaseCaches(ref);
+}
+
+/// Owner committed delivery to stock — bust warehouse, reports, and delivery pipeline.
+void invalidateAfterDeliveryCommit(
+  dynamic ref, {
+  required String purchaseId,
+  Set<String>? affectedItemIds,
+}) {
+  invalidatePurchaseWorkspace(ref, affectedItemIds: affectedItemIds);
+  ref.invalidate(deliveryPipelineProvider);
+  ref.invalidate(tradePurchaseDetailProvider(purchaseId));
+  ref.invalidate(staffPendingDeliveriesProvider);
+  ref.invalidate(homeStockAttentionCountProvider);
+  bumpBusinessDataWriteRevision(ref);
 }

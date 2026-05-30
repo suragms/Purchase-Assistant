@@ -24,8 +24,7 @@ import '../../../core/utils/line_display.dart';
 import '../../../core/utils/snack.dart';
 import '../../../core/providers/business_profile_provider.dart';
 import '../../../core/providers/business_aggregates_invalidation.dart'
-    show invalidatePurchaseWorkspace;
-import '../../../core/providers/delivery_pipeline_provider.dart';
+    show invalidateAfterDeliveryCommit, invalidatePurchaseWorkspace;
 import '../../../core/providers/trade_purchases_provider.dart';
 import '../../shell/shell_branch_provider.dart';
 import '../providers/trade_purchase_detail_provider.dart';
@@ -37,6 +36,7 @@ import '../../../core/widgets/friendly_load_error.dart'
 import '../../../core/widgets/list_skeleton.dart';
 import '../../../core/widgets/focused_search_chrome.dart';
 import '../../../shared/widgets/fullscreen_date_range_picker.dart';
+import '../../../shared/widgets/hexa_empty_state.dart';
 import '../../../shared/widgets/operational_ui.dart';
 import 'widgets/purchase_desktop_detail_pane.dart';
 import 'widgets/purchase_history_grouping.dart';
@@ -239,6 +239,39 @@ const _routePrimaryPurchaseFilters = {
   'delivery_arrived',
   'delivery_commit',
 };
+
+/// Maps API `delivery_status` query values to history `filter=` chips.
+String? _purchaseFilterFromDeliveryStatus(String? raw) {
+  if (raw == null || raw.isEmpty) return null;
+  switch (raw.trim().toLowerCase()) {
+    case 'dispatched':
+    case 'in_transit':
+      return 'delivery_dispatched';
+    case 'arrived':
+    case 'staff_verifying':
+      return 'delivery_arrived';
+    case 'staff_verified':
+    case 'partial':
+      return 'delivery_commit';
+    case 'stock_committed':
+      return 'received';
+    case 'pending':
+      return 'pending_delivery';
+    default:
+      return null;
+  }
+}
+
+/// Human-readable purchase bill date (Today / Yesterday / d MMM yyyy).
+String formatPurchaseHumanDate(DateTime date) {
+  final local = DateTime(date.year, date.month, date.day);
+  final today = DateTime.now();
+  final todayDate = DateTime(today.year, today.month, today.day);
+  final diff = todayDate.difference(local).inDays;
+  if (diff == 0) return 'Today';
+  if (diff == 1) return 'Yesterday';
+  return DateFormat('d MMM yyyy').format(date);
+}
 
 String _purchaseSearchHaystack(TradePurchase p) {
   final df = DateFormat('dd MMM yyyy');
@@ -682,8 +715,12 @@ class _PurchaseHomePageState extends ConsumerState<PurchaseHomePage> {
   }
 
   void _syncFilterFromRoute() {
-    final q = GoRouterState.of(context).uri.queryParameters['filter'];
-    final f = (q == null || q.isEmpty) ? 'all' : q.toLowerCase();
+    final params = GoRouterState.of(context).uri.queryParameters;
+    final mapped = _purchaseFilterFromDeliveryStatus(
+      params['delivery_status'],
+    );
+    final q = params['filter'];
+    final f = (mapped ?? (q == null || q.isEmpty ? 'all' : q)).toLowerCase();
     if (f == 'pending' || f == 'overdue') {
       ref.read(purchaseHistoryPrimaryFilterProvider.notifier).state = 'all';
       ref.read(purchaseHistorySecondaryFilterProvider.notifier).state = f;
@@ -943,30 +980,30 @@ class _PurchaseHomePageState extends ConsumerState<PurchaseHomePage> {
   }
 
   Future<void> _markDeliveredQuick(TradePurchase p) async {
+    if (!p.deliveryStatusEnum.readyForOwnerCommit) return;
     final session = ref.read(sessionProvider);
     if (session == null) return;
     HapticFeedback.mediumImpact();
     try {
-      await ref.read(hexaApiProvider).commitPurchaseDelivery(
+      final updated = await ref.read(hexaApiProvider).commitPurchaseDelivery(
             businessId: session.primaryBusiness.id,
             purchaseId: p.id,
           );
-      invalidatePurchaseWorkspace(
+      TradePurchase.fromJson(updated);
+      invalidateAfterDeliveryCommit(
         ref,
+        purchaseId: p.id,
         affectedItemIds: p.lines
             .map((l) => l.catalogItemId?.trim())
             .whereType<String>()
             .where((id) => id.isNotEmpty)
             .toSet(),
       );
-      ref.invalidate(deliveryPipelineProvider);
       try {
         await ref.read(tradePurchasesListProvider.future);
       } catch (_) {}
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Stock committed')),
-        );
+        showTopSnack(context, 'Stock added to warehouse');
       }
     } catch (e) {
       if (mounted) {
@@ -1916,67 +1953,63 @@ class _PurchaseHistoryFiltersSheetState
     final dateFrom = ref.watch(purchaseHistoryDateFromProvider);
     final dateTo = ref.watch(purchaseHistoryDateToProvider);
 
-    return SafeArea(
-      child: Padding(
-        padding: EdgeInsets.only(
-          bottom: MediaQuery.viewInsetsOf(context).bottom,
-          left: 16,
-          right: 16,
-          top: 4,
-        ),
-        child: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text(
-                'Filters & sort',
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
-              ),
-              const SizedBox(height: 8),
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                title: const Text('Latest first'),
-                value: newest,
-                onChanged: (v) {
-                  ref
-                      .read(purchaseHistorySortNewestFirstProvider.notifier)
-                      .state = v;
-                },
-              ),
-              const SizedBox(height: 4),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  'Amount sort',
-                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.w800,
-                        fontSize: 13,
-                      ),
+    return SizedBox(
+      height: MediaQuery.sizeOf(context).height * 0.78,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+              children: [
+                const Text(
+                  'Filters & sort',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
                 ),
-              ),
-              const SizedBox(height: 6),
-              Wrap(
-                spacing: 8,
-                runSpacing: 6,
-                children: [
-                  ChoiceChip(
-                    label: const Text('Off'),
-                    selected:
-                        ref.watch(purchaseHistoryValueSortProvider) == null,
-                    onSelected: (_) {
-                      ref
-                          .read(purchaseHistoryValueSortProvider.notifier)
-                          .state = null;
-                    },
-                    visualDensity: VisualDensity.compact,
-                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                const SizedBox(height: 8),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Latest first'),
+                  value: newest,
+                  onChanged: (v) {
+                    ref
+                        .read(purchaseHistorySortNewestFirstProvider.notifier)
+                        .state = v;
+                  },
+                ),
+                const SizedBox(height: 4),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    'Amount sort',
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w800,
+                          fontSize: 13,
+                        ),
                   ),
-                  ChoiceChip(
-                    label: const Text('₹ High→Low'),
-                    selected:
-                        ref.watch(purchaseHistoryValueSortProvider) == 'high',
+                ),
+                const SizedBox(height: 6),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 6,
+                  children: [
+                    ChoiceChip(
+                      label: const Text('Off'),
+                      selected:
+                          ref.watch(purchaseHistoryValueSortProvider) == null,
+                      onSelected: (_) {
+                        ref
+                            .read(purchaseHistoryValueSortProvider.notifier)
+                            .state = null;
+                      },
+                      visualDensity: VisualDensity.compact,
+                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    ChoiceChip(
+                      label: const Text('₹ High→Low'),
+                      selected:
+                          ref.watch(purchaseHistoryValueSortProvider) == 'high',
                     onSelected: (_) {
                       ref
                           .read(purchaseHistoryValueSortProvider.notifier)
@@ -2108,48 +2141,61 @@ class _PurchaseHistoryFiltersSheetState
                   border: OutlineInputBorder(),
                 ),
               ),
-              const SizedBox(height: 16),
-              FilledButton(
-                onPressed: () {
-                  ref
-                      .read(purchaseHistorySupplierContainsProvider.notifier)
-                      .state = _supplier.text
-                          .trim()
-                          .isEmpty
-                      ? null
-                      : _supplier.text.trim();
-                  ref
-                          .read(purchaseHistoryBrokerContainsProvider.notifier)
-                          .state =
-                      _broker.text.trim().isEmpty ? null : _broker.text.trim();
-                  Navigator.pop(context);
-                },
-                child: const Text('Apply name filters'),
-              ),
-              const SizedBox(height: 8),
-              TextButton(
-                onPressed: () {
-                  _supplier.clear();
-                  _broker.clear();
-                  ref
-                      .read(purchaseHistorySupplierContainsProvider.notifier)
-                      .state = null;
-                  ref
-                      .read(purchaseHistoryBrokerContainsProvider.notifier)
-                      .state = null;
-                  ref
-                      .read(purchaseHistoryPackKindFilterProvider.notifier)
-                      .state = null;
-                  ref.read(purchaseHistoryDateFromProvider.notifier).state =
-                      null;
-                  ref.read(purchaseHistoryDateToProvider.notifier).state = null;
-                },
-                child: const Text('Clear advanced filters'),
-              ),
-              const SizedBox(height: 8),
-            ],
+              ],
+            ),
           ),
-        ),
+          SafeArea(
+            top: false,
+            child: Padding(
+              padding: EdgeInsets.fromLTRB(
+                16,
+                8,
+                16,
+                12 + MediaQuery.viewInsetsOf(context).bottom,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  FilledButton(
+                    onPressed: () {
+                      ref
+                          .read(purchaseHistorySupplierContainsProvider.notifier)
+                          .state = _supplier.text.trim().isEmpty
+                          ? null
+                          : _supplier.text.trim();
+                      ref
+                              .read(purchaseHistoryBrokerContainsProvider.notifier)
+                              .state =
+                          _broker.text.trim().isEmpty ? null : _broker.text.trim();
+                      Navigator.pop(context);
+                    },
+                    child: const Text('Apply'),
+                  ),
+                  TextButton(
+                    onPressed: () {
+                      _supplier.clear();
+                      _broker.clear();
+                      ref
+                          .read(purchaseHistorySupplierContainsProvider.notifier)
+                          .state = null;
+                      ref
+                          .read(purchaseHistoryBrokerContainsProvider.notifier)
+                          .state = null;
+                      ref
+                          .read(purchaseHistoryPackKindFilterProvider.notifier)
+                          .state = null;
+                      ref.read(purchaseHistoryDateFromProvider.notifier).state =
+                          null;
+                      ref.read(purchaseHistoryDateToProvider.notifier).state =
+                          null;
+                    },
+                    child: const Text('Clear advanced filters'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -2422,22 +2468,30 @@ class _PurchaseHistoryFullscreenSearchPageState
   }
 
   Future<void> _markDelivered(TradePurchase p) async {
+    if (!p.deliveryStatusEnum.readyForOwnerCommit) return;
     final session = ref.read(sessionProvider);
     if (session == null) return;
     HapticFeedback.mediumImpact();
     try {
-      await ref.read(hexaApiProvider).commitPurchaseDelivery(
+      final updated = await ref.read(hexaApiProvider).commitPurchaseDelivery(
             businessId: session.primaryBusiness.id,
             purchaseId: p.id,
           );
-      invalidatePurchaseWorkspace(ref);
+      TradePurchase.fromJson(updated);
+      invalidateAfterDeliveryCommit(
+        ref,
+        purchaseId: p.id,
+        affectedItemIds: purchase.lines
+            .map((l) => l.catalogItemId?.trim())
+            .whereType<String>()
+            .where((id) => id.isNotEmpty)
+            .toSet(),
+      );
       try {
         await ref.read(tradePurchasesListProvider.future);
       } catch (_) {}
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Stock committed')),
-        );
+        showTopSnack(context, 'Stock added to warehouse');
       }
     } catch (e) {
       if (mounted) {
@@ -2743,13 +2797,12 @@ class _PurchaseRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final st = p.statusEnum;
     final supp = p.supplierName ?? p.supplierId?.toString() ?? '—';
-    final df = DateFormat('d MMM yyyy');
     final headline = purchaseHistoryItemHeadline(p);
     final pack = purchaseHistoryPackSummary(p);
     final daysChip = _purchaseHistoryDaysChip(p);
     final agingBand = undeliveredAgingBandForPurchase(p);
-    final stripe =
-        agingBand == null ? null : undeliveredLeftStripeColor(agingBand);
+    final ds = p.deliveryStatusEnum;
+    final cancelled = st == PurchaseStatus.cancelled || ds == DeliveryStatus.cancelled;
 
     final tileInk = InkWell(
       onTap: onTap,
@@ -2757,10 +2810,12 @@ class _PurchaseRow extends StatelessWidget {
       borderRadius: BorderRadius.circular(0),
       child: Container(
         constraints: const BoxConstraints(minHeight: 80),
-        decoration: BoxDecoration(
-          color: listHighlighted
+        decoration: deliveryStatusRowDecoration(
+          deliveryStatus: ds,
+          background: listHighlighted
               ? const Color(0xFFE8F4F2)
               : Colors.white,
+          undeliveredBand: agingBand,
         ),
         padding: const EdgeInsets.fromLTRB(10, 5, 10, 6),
         child: Row(
@@ -2777,24 +2832,30 @@ class _PurchaseRow extends StatelessWidget {
                           supp.toUpperCase(),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 13,
                             fontWeight: FontWeight.w900,
                             letterSpacing: 0.2,
-                            color: Color(0xFF0F172A),
+                            color: const Color(0xFF0F172A),
                             height: 1.1,
+                            decoration:
+                                cancelled ? TextDecoration.lineThrough : null,
+                            decorationColor: const Color(0xFF9CA3AF),
                           ),
                         ),
                       ),
                       const SizedBox(width: 8),
                       Text(
                         _inr(p.totalAmount.round()),
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 15,
                           fontWeight: FontWeight.w800,
-                          color: Color(0xFF111827),
+                          color: const Color(0xFF111827),
                           letterSpacing: -0.35,
                           height: 1.0,
+                          decoration:
+                              cancelled ? TextDecoration.lineThrough : null,
+                          decorationColor: const Color(0xFF9CA3AF),
                         ),
                       ),
                     ],
@@ -2823,7 +2884,9 @@ class _PurchaseRow extends StatelessWidget {
                         ),
                       ),
                       const _Dot(),
-                      _CompactDetailLabel(label: df.format(p.purchaseDate)),
+                      _CompactDetailLabel(
+                        label: formatPurchaseHumanDate(p.purchaseDate),
+                      ),
                       const _Dot(),
                       _CompactDetailLabel(label: p.humanId),
                     ],
@@ -2849,7 +2912,7 @@ class _PurchaseRow extends StatelessWidget {
                           children: [
                             if (_showQuickDeliverIcon(p))
                               _QuickActionBtn(
-                                label: 'COMMIT',
+                                label: 'COMMIT STOCK',
                                 color: Colors.orange.shade800,
                                 bg: Colors.orange.shade50,
                                 onTap: onMarkDelivered,
@@ -2875,14 +2938,11 @@ class _PurchaseRow extends StatelessWidget {
     );
 
     final card = Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border(
-          bottom: BorderSide(color: HexaColors.brandBorder),
-          left: stripe != null
-              ? BorderSide(color: stripe, width: 4)
-              : BorderSide.none,
-        ),
+      decoration: deliveryStatusRowDecoration(
+        deliveryStatus: ds,
+        background: Colors.white,
+        undeliveredBand: agingBand,
+        border: Border(bottom: BorderSide(color: HexaColors.brandBorder)),
       ),
       child: Material(
         color: Colors.transparent,
@@ -3113,40 +3173,13 @@ class _HistoryEmpty extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(36),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.receipt_long_outlined,
-              size: 56,
-              color: HexaColors.brandPrimary.withValues(alpha: 0.45),
-            ),
-            const SizedBox(height: 12),
-            const Text('No purchases yet',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w800,
-                    color: HexaColors.brandPrimary)),
-            const SizedBox(height: 8),
-            Text(
-              'Create a purchase to see it here. Search and filters apply once you have bills on file.',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 13,
-                height: 1.35,
-                color: Colors.grey.shade700,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            const SizedBox(height: 20),
-            FilledButton(onPressed: onAdd, child: const Text('New purchase')),
-          ],
-        ),
-      ),
+    return HexaEmptyState(
+      icon: Icons.receipt_long_outlined,
+      title: 'No purchases yet',
+      subtitle:
+          'Create a purchase to see it here. Search and filters apply once you have bills on file.',
+      primaryActionLabel: 'New purchase',
+      onPrimaryAction: onAdd,
     );
   }
 }

@@ -243,7 +243,7 @@ class _CatalogItemCreatePageState extends ConsumerState<CatalogItemCreatePage> {
     if (!mounted) return;
     popImperativeOrGo(
       context,
-      fallbackGo: widget.returnResultOnSave ? '/purchase/new' : '/catalog',
+      fallbackGo: widget.returnResultOnSave ? '/purchase' : '/catalog',
       result: result,
     );
   }

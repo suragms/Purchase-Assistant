@@ -9,13 +9,19 @@ import '../../../../core/providers/home_dashboard_provider.dart';
 import '../../../../core/providers/home_owner_dashboard_providers.dart';
 import '../../../../core/router/post_auth_route.dart' show sessionIsStaff;
 import '../../../../core/theme/hexa_colors.dart';
+import '../../../../shared/widgets/hexa_empty_state.dart';
 import '../../../../shared/widgets/operational_ui.dart';
 import 'home_formatters.dart';
 import 'home_recent_changes_section.dart' show HomeSectionSkeleton;
 
 /// Unified warehouse activity — collapsible on home (max 15 rows).
 class HomeWarehouseActivityFeed extends ConsumerStatefulWidget {
-  const HomeWarehouseActivityFeed({super.key});
+  const HomeWarehouseActivityFeed({
+    super.key,
+    this.maxRows = 5,
+  });
+
+  final int maxRows;
 
   @override
   ConsumerState<HomeWarehouseActivityFeed> createState() =>
@@ -68,16 +74,15 @@ class _HomeWarehouseActivityFeedState
           return OperationalSection(
             title: title,
             dense: true,
-            child: const Padding(
-              padding: EdgeInsets.fromLTRB(12, 8, 12, 12),
-              child: Text(
-                'No activity in this period',
-                style: TextStyle(fontSize: 12, color: Color(0xFF64748B)),
-              ),
+            child: HexaEmptyState(
+              icon: Icons.history_rounded,
+              title: 'No activity in this period',
+              subtitle: 'Stock updates and purchases will appear here.',
             ),
           );
         }
-        final preview = items.take(5).toList();
+        final cap = widget.maxRows.clamp(1, 15);
+        final preview = items.take(cap).toList();
         final visible = _expanded ? items.take(15).toList() : preview;
 
         return Card(
@@ -102,15 +107,16 @@ class _HomeWarehouseActivityFeedState
                       ),
                       child: const Text('View all', style: TextStyle(fontSize: 12)),
                     ),
-                    IconButton(
-                      icon: Icon(
-                        _expanded
-                            ? Icons.expand_less_rounded
-                            : Icons.expand_more_rounded,
+                    if (items.length > cap)
+                      IconButton(
+                        icon: Icon(
+                          _expanded
+                              ? Icons.expand_less_rounded
+                              : Icons.expand_more_rounded,
+                        ),
+                        onPressed: () =>
+                            setState(() => _expanded = !_expanded),
                       ),
-                      onPressed: () =>
-                          setState(() => _expanded = !_expanded),
-                    ),
                   ],
                 ),
               ),
@@ -120,10 +126,10 @@ class _HomeWarehouseActivityFeedState
                 if (i < visible.length - 1)
                   const Divider(height: 1, indent: 12, endIndent: 12),
               ],
-              if (!_expanded && items.length > 5)
+              if (!_expanded && items.length > cap)
                 TextButton(
                   onPressed: () => setState(() => _expanded = true),
-                  child: Text('Show ${items.length - 5} more'),
+                  child: Text('Show ${items.length - cap} more'),
                 ),
             ],
           ),
@@ -137,6 +143,18 @@ class _ActivityRow extends StatelessWidget {
   const _ActivityRow({required this.item});
 
   final HomeActivityItem item;
+
+  void _onTap(BuildContext context) {
+    final id = item.routeId;
+    if (id == null || id.isEmpty) return;
+    if (item.kind == 'purchase' ||
+        item.kind == 'delivery_verified' ||
+        item.title.startsWith('Delivery committed')) {
+      context.push('/purchase/detail/$id');
+      return;
+    }
+    context.push('/catalog/item/$id');
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -173,6 +191,9 @@ class _ActivityRow extends StatelessWidget {
 
     return ListTile(
       dense: true,
+      onTap: item.routeId != null && item.routeId!.isNotEmpty
+          ? () => _onTap(context)
+          : null,
       leading: Icon(icon, size: 20, color: color),
       title: Text(
         item.title,

@@ -63,12 +63,38 @@ class StockOperationalTopBar extends StatelessWidget implements PreferredSizeWid
         style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
       ),
       titleSpacing: 0,
-      bottom: isReloading
-          ? const PreferredSize(
-              preferredSize: Size.fromHeight(2),
-              child: LinearProgressIndicator(minHeight: 2),
-            )
-          : null,
+      bottom: PreferredSize(
+        preferredSize: Size.fromHeight(
+          (isReloading ? 2 : 0) + (tabController != null ? _tabBarHeight : 0),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (isReloading)
+              const LinearProgressIndicator(minHeight: 2),
+            if (tabController != null)
+              TabBar(
+                controller: tabController,
+                isScrollable: true,
+                tabAlignment: TabAlignment.start,
+                labelStyle: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w800,
+                ),
+                unselectedLabelStyle: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+                tabs: const [
+                  Tab(text: 'List'),
+                  Tab(text: 'Changes'),
+                  Tab(text: 'Movement'),
+                  Tab(text: 'Today'),
+                ],
+              ),
+          ],
+        ),
+      ),
       actions: [
         IconButton(
           icon: const Icon(Icons.history_rounded, size: 22),

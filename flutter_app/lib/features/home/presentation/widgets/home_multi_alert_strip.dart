@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../core/router/shell_navigation.dart';
+import '../../../../features/shell/shell_branch_provider.dart';
 import '../../../../core/design_system/hexa_operational_tokens.dart';
 import '../../../../core/providers/notification_center_provider.dart'
     show homeWarehouseAlertsProvider;
@@ -21,7 +23,12 @@ class HomeMultiAlertStrip extends ConsumerWidget {
       pills.add((
         label: '$lowTotal Reorder Needed',
         color: const Color(0xFFBA7517),
-        onTap: () => context.go('/stock'),
+        onTap: () => goShellTab(
+              context,
+              ref,
+              branch: ShellBranch.stock,
+              location: '/stock',
+            ),
       ));
     }
     if (a.missingUsageLogs > 0) {
@@ -42,14 +49,24 @@ class HomeMultiAlertStrip extends ConsumerWidget {
       pills.add((
         label: '${a.pendingVerifications} Stock Mismatch',
         color: const Color(0xFFA32D2D),
-        onTap: () => context.go('/reports'),
+        onTap: () => goShellTab(
+              context,
+              ref,
+              branch: ShellBranch.reports,
+              location: '/reports',
+            ),
       ));
     }
     if (a.evictionCount > 0) {
       pills.add((
         label: '${a.evictionCount} Eviction Needed',
         color: const Color(0xFFA32D2D),
-        onTap: () => context.go('/stock'),
+        onTap: () => goShellTab(
+              context,
+              ref,
+              branch: ShellBranch.stock,
+              location: '/stock',
+            ),
       ));
     }
     if (a.pendingDeliveries > 0) {

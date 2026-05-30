@@ -10,12 +10,17 @@ import '../../../core/auth/session_notifier.dart';
 import '../../../core/services/stock_list_pdf.dart';
 import '../../../core/services/pdf_actions.dart';
 import '../../../core/json_coerce.dart';
+import '../../../core/providers/business_aggregates_invalidation.dart';
 import '../../../core/providers/home_dashboard_provider.dart';
+import '../../../core/providers/realtime_events_provider.dart';
 import '../../../core/providers/stock_providers.dart';
 import '../../../core/design_system/hexa_responsive.dart';
 import '../../../core/router/post_auth_route.dart';
+import '../../../core/router/shell_navigation.dart';
+import '../../../features/shell/shell_branch_provider.dart';
 import '../../../core/widgets/friendly_load_error.dart';
 import '../../../core/widgets/list_skeleton.dart';
+import '../../../shared/widgets/hexa_empty_state.dart';
 import '../stock_list_merge.dart';
 import '../stock_period_utils.dart';
 import 'widgets/stock_pagination_bar.dart';
@@ -64,6 +69,7 @@ class _StockPageState extends ConsumerState<StockPage>
   bool _searchExpanded = false;
   String _instantSearch = '';
   Map<String, dynamic>? _mergedData;
+  double? _pendingScrollOffset;
 
   static int _tabIndex(String? tab) {
     switch (tab) {
@@ -95,6 +101,15 @@ class _StockPageState extends ConsumerState<StockPage>
 
     applyStockPagePeriod(ref, ref.read(stockPagePeriodProvider));
 
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_scroll.hasClients) return;
+      final saved = ref.read(stockListScrollOffsetProvider);
+      if (saved > 0) {
+        final max = _scroll.position.maxScrollExtent;
+        _scroll.jumpTo(saved.clamp(0.0, max));
+      }
+    });
+
     final q = ref.read(stockListQueryProvider);
     if (q.perPage != 50 || q.sort != 'recent') {
       ref.read(stockListQueryProvider.notifier).state =
@@ -104,6 +119,9 @@ class _StockPageState extends ConsumerState<StockPage>
 
   @override
   void dispose() {
+    if (_scroll.hasClients) {
+      ref.read(stockListScrollOffsetProvider.notifier).state = _scroll.offset;
+    }
     _tabs.dispose();
     _debounce?.cancel();
     _searchCtrl.dispose();
@@ -120,6 +138,23 @@ class _StockPageState extends ConsumerState<StockPage>
   }
 
   void _resetMerged() => _mergedData = null;
+
+  void _persistScrollOffset() {
+    if (_scroll.hasClients) {
+      ref.read(stockListScrollOffsetProvider.notifier).state = _scroll.offset;
+    }
+  }
+
+  void _restoreScrollOffset() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_scroll.hasClients) return;
+      final saved = ref.read(stockListScrollOffsetProvider);
+      if (saved > 0) {
+        final max = _scroll.position.maxScrollExtent;
+        _scroll.jumpTo(saved.clamp(0.0, max));
+      }
+    });
+  }
 
   void _clearSearch() {
     _searchCtrl.clear();
@@ -211,10 +246,13 @@ class _StockPageState extends ConsumerState<StockPage>
   }
 
   Future<void> _openRowActions(Map<String, dynamic> item) async {
+    _persistScrollOffset();
     await showStockRowActions(
       context: context,
       ref: ref,
       item: item,
+      onBeforeNavigate: _persistScrollOffset,
+      onAfterNavigateReturn: _restoreScrollOffset,
     );
   }
 
@@ -473,13 +511,16 @@ class _StockPageState extends ConsumerState<StockPage>
       if (items.isEmpty)
         SliverFillRemaining(
           hasScrollBody: false,
-          child: Center(
-            child: Text(
-              filterCount > 0 || listQ.q.isNotEmpty
-                  ? 'No items match filters'
-                  : 'No stock items yet',
-              style: const TextStyle(fontSize: 13, color: Colors.black54),
-            ),
+          child: HexaEmptyState(
+            icon: Icons.inventory_2_outlined,
+            title: filterCount > 0 || listQ.q.isNotEmpty
+                ? 'No items match filters'
+                : 'No stock items yet',
+            subtitle: filterCount > 0 || listQ.q.isNotEmpty
+                ? 'Try clearing filters or widening the period.'
+                : 'Add catalog items to start tracking warehouse stock.',
+            primaryActionLabel: 'Refresh',
+            onPrimaryAction: () => ref.invalidate(stockListProvider),
           ),
         ),
       SliverToBoxAdapter(child: SizedBox(height: bottomPad)),
@@ -492,6 +533,7 @@ class _StockPageState extends ConsumerState<StockPage>
         await ref.read(stockListProvider.future);
       },
       child: CustomScrollView(
+        key: const PageStorageKey<String>('stock_operational_list'),
         controller: _scroll,
         slivers: listSlivers,
       ),
@@ -514,6 +556,13 @@ class _StockPageState extends ConsumerState<StockPage>
 
   @override
   Widget build(BuildContext context) {
+    ref.listen(realtimeInvalidationProvider, (prev, next) {
+      final signal = next.valueOrNull;
+      if (signal == null || !signal.warehouse) return;
+      _resetMerged();
+      invalidateWarehouseSurfacesLight(ref);
+    });
+
     ref.listen(stockListQueryProvider, (prev, next) {
       if (prev == null) return;
       if (prev.page == 1 &&
@@ -528,8 +577,15 @@ class _StockPageState extends ConsumerState<StockPage>
     });
 
     ref.listen(stockListProvider, (prev, next) {
+      if (next.isLoading &&
+          prev?.hasValue == true &&
+          _scroll.hasClients &&
+          ref.read(stockListQueryProvider).page == 1) {
+        _pendingScrollOffset = _scroll.offset;
+      }
       if (next is! AsyncData<Map<String, dynamic>>) return;
       final q = ref.read(stockListQueryProvider);
+      final restoreOffset = _pendingScrollOffset;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
         setState(() {
@@ -540,6 +596,14 @@ class _StockPageState extends ConsumerState<StockPage>
             page: q.page,
           );
         });
+        if (restoreOffset != null && _scroll.hasClients) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!mounted || !_scroll.hasClients) return;
+            final max = _scroll.position.maxScrollExtent;
+            _scroll.jumpTo(restoreOffset.clamp(0.0, max));
+            _pendingScrollOffset = null;
+          });
+        }
       });
     });
 
@@ -575,7 +639,12 @@ class _StockPageState extends ConsumerState<StockPage>
       ],
     );
 
-    return Scaffold(
+    final session = ref.watch(sessionProvider);
+    final homePath =
+        session != null ? authenticatedHomePath(session) : '/home';
+    final returnBranch = ref.watch(shellReturnBranchProvider);
+
+    final scaffold = Scaffold(
       backgroundColor: const Color(0xFFF5F3EE),
       appBar: StockOperationalTopBar(
         isStaffMode: _isStaffMode,
@@ -602,6 +671,17 @@ class _StockPageState extends ConsumerState<StockPage>
           const StockTodayTab(),
         ],
       ),
+    );
+
+    if (_isStaffMode || returnBranch == null) return scaffold;
+
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+        popShellTabOrGoHome(context, ref, homePath: homePath);
+      },
+      child: scaffold,
     );
   }
 }

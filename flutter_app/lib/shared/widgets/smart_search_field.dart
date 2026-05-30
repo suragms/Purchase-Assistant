@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 
+import '../../core/design_system/hexa_responsive.dart';
 import 'inline_search_field.dart';
 
-/// Part 2: full-height draggable sheet for large suggestion sets (party + catalog).
+/// Part 2: bounded sheet for large suggestion sets (party + catalog).
 ///
 /// [PartyInlineSuggestField] uses this for "See all" so inline panels stay
 /// bounded and scroll-safe without duplicating sheet wiring.
@@ -20,19 +21,14 @@ Future<void> showSmartSearchResultsSheet({
   ) buildTile,
 }) async {
   final rootNav = Navigator.of(context, rootNavigator: true);
-  await showModalBottomSheet<void>(
+  await showHexaBottomSheet<void>(
     context: context,
-    isScrollControlled: true,
-    useSafeArea: true,
-    showDragHandle: true,
-    builder: (sheetCtx) {
-      final cs = Theme.of(sheetCtx).colorScheme;
-      return DraggableScrollableSheet(
-        expand: false,
-        initialChildSize: 0.55,
-        minChildSize: 0.28,
-        maxChildSize: 0.55,
-        builder: (dragCtx, scrollController) {
+    compact: false,
+    child: SizedBox(
+      height: MediaQuery.sizeOf(context).height * 0.55,
+      child: Builder(
+        builder: (sheetCtx) {
+          final cs = Theme.of(sheetCtx).colorScheme;
           return Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -70,7 +66,6 @@ Future<void> showSmartSearchResultsSheet({
               const Divider(height: 1),
               Expanded(
                 child: ListView.builder(
-                  controller: scrollController,
                   padding: const EdgeInsets.only(bottom: 16),
                   itemCount: items.length,
                   itemBuilder: (c, i) {
@@ -90,7 +85,7 @@ Future<void> showSmartSearchResultsSheet({
             ],
           );
         },
-      );
-    },
+      ),
+    ),
   );
 }

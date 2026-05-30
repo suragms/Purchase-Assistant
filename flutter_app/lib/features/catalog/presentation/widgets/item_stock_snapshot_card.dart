@@ -62,11 +62,30 @@ class ItemStockSnapshotCard extends ConsumerWidget {
     final openingLocked = stock['opening_stock_locked'] == true;
     final showOpeningCta = openingSetAt == null && !openingLocked;
 
+    final trackingRaw = stock['stock_tracking'];
+    String? trackingMode;
+    if (trackingRaw is Map) {
+      trackingMode = trackingRaw['mode']?.toString();
+    }
+    final barcode = stock['barcode']?.toString().trim() ?? '';
+    final itemCode = stock['item_code']?.toString().trim() ?? '';
+    final rack = stock['rack_location']?.toString().trim() ?? '';
+    final perishable = stock['is_perishable'] == true;
+    final trackingParts = <String>[
+      if (itemCode.isNotEmpty) 'Code $itemCode',
+      if (barcode.isNotEmpty) 'Barcode $barcode',
+      if (rack.isNotEmpty) 'Rack $rack',
+      if (trackingMode != null && trackingMode.isNotEmpty)
+        trackingMode.replaceAll('_', ' '),
+      if (perishable) 'Perishable',
+      if (openingQty > 0.001) 'Opening ${formatStockQtyNumber(openingQty)}',
+    ];
+
     final hasPhysicalCount = physicalQty > 0.001 ||
         stock['physical_stock_counted_at'] != null;
+    final ledgerQty = systemQty;
     final diff = (stock['physical_stock_difference_qty'] as num?)?.toDouble() ??
-        (stock['warehouse_diff_qty'] as num?)?.toDouble() ??
-        (hasPhysicalCount ? physicalQty - expectedSystemQty : 0.0);
+        (hasPhysicalCount ? physicalQty - ledgerQty : 0.0);
 
     final updatedAtRaw = stock['last_stock_updated_at']?.toString();
     final updatedAt = updatedAtRaw != null ? DateTime.tryParse(updatedAtRaw)?.toLocal() : null;
@@ -117,6 +136,17 @@ class ItemStockSnapshotCard extends ConsumerWidget {
                 ),
               ],
             ),
+            if (trackingParts.isNotEmpty) ...[
+              const SizedBox(height: 6),
+              Text(
+                trackingParts.join(' · '),
+                style: const TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFF64748B),
+                ),
+              ),
+            ],
             if (showOpeningCta) ...[
               const SizedBox(height: 8),
               Container(
@@ -179,7 +209,26 @@ class ItemStockSnapshotCard extends ConsumerWidget {
               ),
             ],
             const SizedBox(height: 10),
-            if (isOwner)
+            _summaryLine(
+              label: 'On-hand stock',
+              value: _qty(ledgerQty),
+              unitLabel: unitLabel,
+              emphasized: true,
+              subtitle: updatedAt != null
+                  ? (updatedBy != null
+                      ? 'By $updatedBy · ${_timeAgo(updatedAt)}'
+                      : _timeAgo(updatedAt))
+                  : null,
+            ),
+            if (!isStaff && hasPhysicalCount) ...[
+              const SizedBox(height: 6),
+              _summaryLine(
+                label: 'Physical count',
+                value: physicalQty > 0.001 ? _qty(physicalQty) : '—',
+                unitLabel: unitLabel,
+              ),
+            ],
+            if (isOwner) ...[
               Align(
                 alignment: Alignment.centerRight,
                 child: TextButton(
@@ -213,97 +262,132 @@ class ItemStockSnapshotCard extends ConsumerWidget {
                   child: const Text('Recompute'),
                 ),
               ),
-            if (isOwner) const SizedBox(height: 6),
-            if (systemOutOfSync) ...[
-              Container(
-                width: double.infinity,
-                margin: const EdgeInsets.only(bottom: 8),
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFFFF7ED),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: const Color(0xFFFDBA74)),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(
-                      Icons.sync_problem_rounded,
-                      size: 18,
-                      color: HexaColors.warning,
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        'System out of sync — commit pending deliveries or tap Recompute',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
-                          color: Colors.grey.shade800,
+              const SizedBox(height: 6),
+              if (systemOutOfSync)
+                Container(
+                  width: double.infinity,
+                  margin: const EdgeInsets.only(bottom: 8),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFFF7ED),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: const Color(0xFFFDBA74)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.sync_problem_rounded,
+                        size: 18,
+                        color: HexaColors.warning,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'System out of sync — commit pending deliveries or tap Recompute',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.grey.shade800,
+                          ),
                         ),
                       ),
-                    ),
-                    if (isOwner)
                       TextButton(
                         onPressed: () => context.go('/purchase'),
                         child: const Text('Purchases'),
                       ),
+                    ],
+                  ),
+                ),
+              Theme(
+                data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+                child: ExpansionTile(
+                  tilePadding: EdgeInsets.zero,
+                  childrenPadding: EdgeInsets.zero,
+                  title: Text(
+                    'Owner reconciliation',
+                    style: HexaOp.cardTitle(context).copyWith(fontSize: 14),
+                  ),
+                  subtitle: systemOutOfSync
+                      ? const Text(
+                          'Ledger differs from expected inbound total',
+                          style: TextStyle(fontSize: 11),
+                        )
+                      : null,
+                  children: [
+                    _summaryLine(
+                      label: 'Opening stock',
+                      value: _qty(openingQty),
+                      unitLabel: unitLabel,
+                    ),
+                    _summaryLine(
+                      label: '+ Purchased (committed)',
+                      value: _qty(purchasedQty),
+                      unitLabel: unitLabel,
+                      valueColor: const Color(0xFF2563EB),
+                    ),
+                    const Divider(height: 20),
+                    _summaryLine(
+                      label: '= Expected system total',
+                      value: _qty(expectedSystemQty),
+                      unitLabel: unitLabel,
+                      emphasized: true,
+                    ),
+                    if (systemOutOfSync) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        'Ledger on-hand ${_qty(ledgerQty)} $unitLabel — commit deliveries or recompute',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.grey.shade700,
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 6),
+                    _summaryLine(
+                      label: 'Physical count',
+                      value: physicalQty > 0.001 ? _qty(physicalQty) : '—',
+                      unitLabel: unitLabel,
+                      subtitle: [
+                        if (updatedAt != null)
+                          updatedBy != null
+                              ? 'By $updatedBy · ${_timeAgo(updatedAt)}'
+                              : _timeAgo(updatedAt),
+                      ].join(),
+                    ),
+                    _summaryLine(
+                      label: 'Difference',
+                      value: hasPhysicalCount
+                          ? '${diff > 0 ? '+' : ''}${_qty(diff)}'
+                          : '—',
+                      unitLabel: unitLabel,
+                      valueColor: hasPhysicalCount ? _diffColor(diff) : null,
+                      emphasized: hasPhysicalCount && diff.abs() > 0.001,
+                      subtitle: hasPhysicalCount
+                          ? null
+                          : 'Do a physical count to compare',
+                    ),
                   ],
                 ),
               ),
             ],
-            _summaryLine(
-              label: 'Opening stock',
-              value: _qty(openingQty),
-              unitLabel: unitLabel,
-            ),
-            _summaryLine(
-              label: '+ Purchased (committed)',
-              value: _qty(purchasedQty),
-              unitLabel: unitLabel,
-              valueColor: const Color(0xFF2563EB),
-            ),
-            const Divider(height: 20),
-            _summaryLine(
-              label: '= System total',
-              value: _qty(expectedSystemQty),
-              unitLabel: unitLabel,
-              emphasized: true,
-            ),
-            if (systemOutOfSync) ...[
-              const SizedBox(height: 4),
-              Text(
-                'Ledger on-hand ${_qty(systemQty)} $unitLabel — commit deliveries or recompute',
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.grey.shade700,
-                ),
+            if (!isOwner && !isStaff) ...[
+              const SizedBox(height: 6),
+              _summaryLine(
+                label: 'Physical count',
+                value: physicalQty > 0.001 ? _qty(physicalQty) : '—',
+                unitLabel: unitLabel,
               ),
             ],
-            const SizedBox(height: 6),
-            _summaryLine(
-              label: 'Physical count',
-              value: physicalQty > 0.001 ? _qty(physicalQty) : '—',
-              unitLabel: unitLabel,
-              subtitle: [
-                if (updatedAt != null)
-                  updatedBy != null
-                      ? 'By $updatedBy · ${_timeAgo(updatedAt)}'
-                      : _timeAgo(updatedAt),
-              ].join(),
-            ),
-            _summaryLine(
-              label: 'Difference',
-              value: hasPhysicalCount
-                  ? '${diff > 0 ? '+' : ''}${_qty(diff)}'
-                  : '—',
-              unitLabel: unitLabel,
-              valueColor: hasPhysicalCount ? _diffColor(diff) : null,
-              emphasized: hasPhysicalCount && diff.abs() > 0.001,
-              subtitle: hasPhysicalCount
-                  ? null
-                  : 'Do a physical count to compare',
-            ),
+            if (isStaff && hasPhysicalCount) ...[
+              const SizedBox(height: 6),
+              _summaryLine(
+                label: 'Difference',
+                value: '${diff > 0 ? '+' : ''}${_qty(diff)}',
+                unitLabel: unitLabel,
+                valueColor: _diffColor(diff),
+              ),
+            ],
             const SizedBox(height: 8),
             Container(
               width: double.infinity,

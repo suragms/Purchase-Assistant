@@ -99,22 +99,19 @@ async def run_low_stock_notification_scan(db: AsyncSession) -> int:
             mems[0],
         )
 
-        merged: dict[uuid.UUID, object] = {}
-        for status in ("low", "critical", "out"):
-            _, chunk = await _fetch_low_stock_candidates(
-                business_id=business_id,
-                db=db,
-                membership=membership,
-                q="",
-                category="",
-                subcategory="",
-                status=status,  # type: ignore[arg-type]
-                period_start=None,
-                period_end=None,
-                fetch_per_page=120,
-                max_pages=6,
-            )
-            merged.update(chunk)
+        _, merged = await _fetch_low_stock_candidates(
+            business_id=business_id,
+            db=db,
+            membership=membership,
+            q="",
+            category="",
+            subcategory="",
+            status="shortage",  # type: ignore[arg-type]
+            period_start=None,
+            period_end=None,
+            fetch_per_page=120,
+            max_pages=6,
+        )
 
         for it in merged.values():
             pr = compute_low_stock_priority(it)

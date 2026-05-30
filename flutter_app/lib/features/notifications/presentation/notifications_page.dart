@@ -19,6 +19,7 @@ import '../../../core/providers/stock_providers.dart';
 import '../../../core/providers/business_aggregates_invalidation.dart';
 import '../../../core/router/navigation_ext.dart';
 import '../../../core/router/post_auth_route.dart' show sessionIsStaff;
+import '../../../shared/widgets/hexa_empty_state.dart';
 import '../../../core/errors/load_state_error.dart';
 import '../../../core/design_system/hexa_responsive.dart';
 import '../../../core/theme/hexa_colors.dart';
@@ -219,77 +220,40 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
                       physics: const AlwaysScrollableScrollPhysics(),
                       children: [
                         SizedBox(
-                          height: 160,
-                          child: Center(
-                            child: Padding(
-                              padding:
-                                  const EdgeInsets.symmetric(horizontal: 32),
-                              child: Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Icon(
-                                    Icons.notifications_none_outlined,
-                                    size: 40,
-                                    color: Colors.grey.shade300,
+                          height: 280,
+                          child: HexaEmptyState(
+                            icon: Icons.notifications_none_outlined,
+                            title: q.isNotEmpty
+                                ? 'No matches'
+                                : _emptyTitleForFilter(_filter),
+                            subtitle: q.isNotEmpty
+                                ? 'Try a different search or clear the search box.'
+                                : filterEmptyButHasItems
+                                    ? 'Switch to All or another tab — alerts are hidden by the current filter.'
+                                    : _emptySubtitleForFilter(_filter),
+                            action: Column(
+                              children: [
+                                if (filterEmptyButHasItems)
+                                  FilledButton(
+                                    onPressed: () => setState(
+                                      () => _filter =
+                                          NotificationCategoryFilter.all,
+                                    ),
+                                    child: const Text('Show all alerts'),
                                   ),
-                                  const SizedBox(height: 10),
-                                  Text(
-                                    q.isNotEmpty
-                                        ? 'No matches'
-                                        : _emptyTitleForFilter(_filter),
-                                    textAlign: TextAlign.center,
-                                    style: tt.titleMedium?.copyWith(
-                                      fontWeight: FontWeight.w800,
-                                      fontSize: 16,
-                                      color: onSurf,
+                                if (items.isEmpty)
+                                  FilledButton.icon(
+                                    onPressed: () => context.push(
+                                      _isStaff
+                                          ? '/staff/receive'
+                                          : '/purchase/new',
                                     ),
+                                    icon: const Icon(Icons.add_rounded, size: 18),
+                                    label: Text(_isStaff
+                                        ? 'Receive shipment'
+                                        : 'New purchase'),
                                   ),
-                                  const SizedBox(height: 6),
-                                  Text(
-                                    q.isNotEmpty
-                                        ? 'Try a different search or clear the search box.'
-                                        : filterEmptyButHasItems
-                                            ? 'Switch to All or another tab — alerts are hidden by the current filter.'
-                                            : _emptySubtitleForFilter(_filter),
-                                    textAlign: TextAlign.center,
-                                    style: tt.bodySmall?.copyWith(
-                                      color: Theme.of(context)
-                                          .colorScheme
-                                          .onSurfaceVariant,
-                                      height: 1.35,
-                                    ),
-                                  ),
-                                  if (filterEmptyButHasItems) ...[
-                                    const SizedBox(height: 12),
-                                    FilledButton(
-                                      onPressed: () => setState(
-                                        () => _filter =
-                                            NotificationCategoryFilter.all,
-                                      ),
-                                      child: const Text('Show all alerts'),
-                                    ),
-                                  ],
-                                  if (items.isEmpty) ...[
-                                    const SizedBox(height: 12),
-                                    FilledButton.icon(
-                                      onPressed: () => context.push(
-                                        _isStaff
-                                            ? '/staff/receive'
-                                            : '/purchase/new',
-                                      ),
-                                      icon: Icon(
-                                        _isStaff
-                                            ? Icons.local_shipping_outlined
-                                            : Icons.add_shopping_cart_rounded,
-                                        size: 20,
-                                      ),
-                                      label: Text(_isStaff
-                                          ? 'Open receive'
-                                          : 'Record a purchase'),
-                                    ),
-                                  ],
-                                ],
-                              ),
+                              ],
                             ),
                           ),
                         ),

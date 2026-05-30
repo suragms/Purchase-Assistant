@@ -25,14 +25,11 @@ Future<bool> showReorderLevelSheet({
   final ctrl = TextEditingController(
     text: currentReorder > 0 ? currentReorder.toString() : '',
   );
-  final saved = await showModalBottomSheet<bool>(
+  final saved = await showHexaBottomSheet<bool>(
     context: context,
-    isScrollControlled: true,
-    showDragHandle: true,
-    builder: (ctx) => HexaResponsiveSheetViewport(
-      compact: true,
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-      child: Column(
+    compact: true,
+    padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+    child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -59,12 +56,11 @@ Future<bool> showReorderLevelSheet({
           ),
           const SizedBox(height: 16),
           FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
+            onPressed: () => Navigator.pop(context, true),
             child: const Text('Save'),
           ),
         ],
       ),
-    ),
   );
   final text = ctrl.text.trim();
   ctrl.dispose();

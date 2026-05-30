@@ -8,6 +8,7 @@ import '../../../../core/json_coerce.dart';
 import '../../../../core/providers/home_dashboard_provider.dart';
 import '../../../../core/providers/stock_providers.dart';
 import '../../../../core/widgets/hexa_error_card.dart';
+import '../../../../shared/widgets/hexa_empty_state.dart';
 import '../quick_stock_action_sheet.dart';
 
 /// **Changes** tab: recent stock audit events for [stockPagePeriodProvider].
@@ -33,15 +34,13 @@ class StockChangesTab extends ConsumerWidget {
       ),
       data: (rows) {
         if (rows.isEmpty) {
-          return Center(
-            child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: Text(
-                'No stock changes for ${period.label.toLowerCase()}',
-                textAlign: TextAlign.center,
-                style: const TextStyle(fontSize: 14, color: Colors.black54),
-              ),
-            ),
+          return HexaEmptyState(
+            icon: Icons.history_rounded,
+            title: 'No stock changes',
+            subtitle:
+                'Nothing logged for ${period.label.toLowerCase()}. Try a wider period.',
+            primaryActionLabel: 'Refresh',
+            onPrimaryAction: () => ref.invalidate(stockChangesFeedProvider),
           );
         }
         return RefreshIndicator(
