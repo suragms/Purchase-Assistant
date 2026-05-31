@@ -23,6 +23,7 @@ import '../../../core/providers/stock_providers.dart';
 import '../../../core/theme/hexa_colors.dart';
 import '../../../core/widgets/hexa_count_badge.dart';
 import '../../shell/app_shell.dart';
+import '../../shell/business_write_stock_listener.dart';
 import '../../shell/shell_realtime_listener.dart';
 import '../staff_shell_branch_provider.dart';
 
@@ -95,8 +96,9 @@ class _StaffShellScreenState extends ConsumerState<StaffShellScreen> {
       navigationShell.goBranch(branch);
     }
 
-    return ShellRealtimeListener(
-      child: SizedBox.expand(
+    return BusinessWriteStockListener(
+      child: ShellRealtimeListener(
+        child: SizedBox.expand(
         child: Material(
           key: const ValueKey<String>('staff_shell'),
           color: Theme.of(context).scaffoldBackgroundColor,
@@ -237,6 +239,7 @@ class _StaffShellScreenState extends ConsumerState<StaffShellScreen> {
           ],
         ),
       ),
+        ),
       ),
     );
   }

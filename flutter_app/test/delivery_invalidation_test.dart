@@ -69,4 +69,58 @@ void main() {
     await container.read(homeStockAttentionCountProvider.future);
     expect(attentionReads, 2);
   });
+
+  test('syncPurchaseStockAfterVerify commits bust stock when stock_committed',
+      () async {
+    var stockReads = 0;
+
+    final container = ProviderContainer(
+      overrides: [
+        stockListProvider.overrideWith((ref) async {
+          stockReads++;
+          return <String, dynamic>{'items': <Map<String, dynamic>>[], 'total': 0};
+        }),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    await container.read(stockListProvider.future);
+    syncPurchaseStockAfterVerify(
+      container,
+      purchaseId: 'p1',
+      verifyResponse: {
+        'delivery_status': 'stock_committed',
+        'lines': [
+          {'catalog_item_id': 'item-a'},
+        ],
+      },
+    );
+    await Future<void>.delayed(const Duration(milliseconds: 200));
+    await container.read(stockListProvider.future);
+    expect(stockReads, 2);
+  });
+
+  test('invalidateAfterPurchaseDelete refreshes stockListProvider', () async {
+    var stockReads = 0;
+
+    final container = ProviderContainer(
+      overrides: [
+        stockListProvider.overrideWith((ref) async {
+          stockReads++;
+          return <String, dynamic>{'items': <Map<String, dynamic>>[], 'total': 0};
+        }),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    await container.read(stockListProvider.future);
+    invalidateAfterPurchaseDelete(
+      container,
+      purchaseId: 'deleted-po',
+      extraItemIds: {'item-x'},
+    );
+    await Future<void>.delayed(const Duration(milliseconds: 200));
+    await container.read(stockListProvider.future);
+    expect(stockReads, 2);
+  });
 }

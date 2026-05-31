@@ -1277,6 +1277,13 @@ async def list_stock(
         meta = trade_meta.get(item.id, (None, None))
         pend = pending_meta.get(item.id, (False, None, None))
         valid_last_trade = meta[0] is not None
+        last_delivered = meta[1] if valid_last_trade else False
+        last_lq = (
+            getattr(item, "last_line_qty", None) if valid_last_trade else None
+        )
+        last_pur_at = (
+            getattr(item, "last_purchase_at", None) if valid_last_trade else None
+        )
         phys = physical_meta.get(item.id)
         purchased = period_map.get(item.id) if include_period else None
         usage = period_usage_map.get(item.id) if include_period else None
@@ -1316,14 +1323,10 @@ async def list_stock(
                 purchased_today_qty=today_purchased.get(item.id),
                 usage_today_qty=today_usage.get(item.id),
                 is_perishable=perishable,
-                last_purchase_human_id=meta[0],
-                last_purchase_delivered=meta[1],
-                last_line_qty=getattr(item, "last_line_qty", None)
-                if valid_last_trade
-                else None,
-                last_purchase_at=getattr(item, "last_purchase_at", None)
-                if valid_last_trade
-                else None,
+                last_purchase_human_id=meta[0] if valid_last_trade else None,
+                last_purchase_delivered=last_delivered,
+                last_line_qty=last_lq,
+                last_purchase_at=last_pur_at,
                 has_pending_order=pend[0],
                 pending_order_days=pend[1],
                 pending_delivery_qty=pend[2],

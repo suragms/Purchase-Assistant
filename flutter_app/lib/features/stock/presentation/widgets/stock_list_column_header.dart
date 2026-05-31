@@ -37,9 +37,21 @@ class StockListColumnHeader extends StatelessWidget {
                   child: Text('ITEM', style: hdr),
                 ),
               ),
-              _metricHeader('SYS', hdr),
-              _metricHeader('PHYS', hdr),
-              _metricHeader('DIFF', hdr),
+              _metricHeader(
+                'SYS',
+                hdr,
+                tooltip: 'System — ERP digital on-hand (ledger)',
+              ),
+              _metricHeader(
+                'PHYS',
+                hdr,
+                tooltip: 'Physical — last warehouse count',
+              ),
+              _metricHeader(
+                'DIFF',
+                hdr,
+                tooltip: 'Physical minus system',
+              ),
             ],
           ),
         ),
@@ -47,13 +59,15 @@ class StockListColumnHeader extends StatelessWidget {
     );
   }
 
-  Widget _metricHeader(String label, TextStyle style) {
-    return Container(
+  Widget _metricHeader(String label, TextStyle style, {String? tooltip}) {
+    final cell = Container(
       width: StockTableLayout.metricColWidth,
       decoration: StockTableLayout.cellDecoration(),
       alignment: Alignment.center,
       padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 2),
       child: Text(label, style: style, textAlign: TextAlign.center),
     );
+    if (tooltip == null || tooltip.isEmpty) return cell;
+    return Tooltip(message: tooltip, child: cell);
   }
 }

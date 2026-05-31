@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/design_system/hexa_responsive.dart';
 import '../../../core/providers/business_write_event.dart';
 import '../../../core/providers/item_detail_providers.dart';
+import '../../../core/providers/stock_providers.dart' show stockItemDetailProvider;
 import '../../../core/providers/trade_purchases_provider.dart';
 import '../../../core/theme/hexa_colors.dart';
 import '../../../core/widgets/friendly_load_error.dart';
@@ -34,9 +35,13 @@ class ItemDetailPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     ref.listen<BusinessWriteEvent>(businessWriteEventProvider, (prev, next) {
       if (next.revision <= (prev?.revision ?? -1)) return;
-      if (next.affectsItem(itemId)) {
+      final purchaseOrStock =
+          next.kind == 'purchase' || next.kind == 'stock';
+      if (purchaseOrStock &&
+          (next.affectsItem(itemId) || next.isGlobal)) {
         ref.invalidate(itemDetailBundleProvider(itemId));
         ref.invalidate(tradePurchasesForItemProvider(itemId));
+        ref.invalidate(stockItemDetailProvider(itemId));
       }
     });
 

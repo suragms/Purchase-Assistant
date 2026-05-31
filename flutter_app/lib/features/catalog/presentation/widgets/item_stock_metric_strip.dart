@@ -40,11 +40,13 @@ class ItemStockMetricStrip extends StatelessWidget {
         'Delivered',
         qtyOrDash(delivered),
         const Color(0xFF16A34A),
+        tooltip: 'Added to system stock (committed purchases)',
       ),
       _MetricCell(
         'Pending',
         qtyOrDash(pending),
         const Color(0xFFEA580C),
+        tooltip: 'On order — not in system stock yet',
       ),
       _MetricCell(
         'Diff',
@@ -65,10 +67,11 @@ class ItemStockMetricStrip extends StatelessWidget {
 }
 
 class _MetricCell {
-  const _MetricCell(this.label, this.value, this.color);
+  const _MetricCell(this.label, this.value, this.color, {this.tooltip});
   final String label;
   final String value;
   final Color color;
+  final String? tooltip;
 }
 
 class _MiniMetricCard extends StatelessWidget {
@@ -78,7 +81,7 @@ class _MiniMetricCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    final card = Container(
       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
       decoration: BoxDecoration(
         color: cell.color.withValues(alpha: 0.07),
@@ -116,5 +119,8 @@ class _MiniMetricCard extends StatelessWidget {
         ],
       ),
     );
+    final tip = cell.tooltip;
+    if (tip == null || tip.isEmpty) return card;
+    return Tooltip(message: tip, child: card);
   }
 }

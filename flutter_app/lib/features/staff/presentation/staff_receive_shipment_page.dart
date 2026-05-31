@@ -94,14 +94,12 @@ class _StaffReceiveShipmentPageState
         purchaseId: p.id,
         lines: lineMaps,
       );
-      invalidateAfterDeliveryVerify(ref, purchaseId: p.id);
       ref.invalidate(tradePurchasesListProvider);
       if (verified) {
-        invalidateWarehouseSurfaces(ref);
         if (mounted) {
           showTopSnack(
             context,
-            'Submitted for owner approval — stock updates after commit',
+            'Received — system stock updated for verified quantities',
           );
           context.pop();
         }

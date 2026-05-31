@@ -7,6 +7,6 @@ import 'session_notifier.dart' show activeSessionProvider;
 /// Accepts provider [Ref] and widget [WidgetRef] (different types in Riverpod 2.6).
 bool providerSkipApi(dynamic ref) {
   if (ref.read(authSessionExpiredProvider)) return true;
-  if (ref.read(auth401CircuitOpenProvider)) return true;
+  if (ref.read(authApiGateProvider).blockApi) return true;
   return ref.read(activeSessionProvider) == null;
 }

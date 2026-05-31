@@ -114,7 +114,7 @@ void main() {
       expect(cell.secondary, 'today');
     });
 
-    test('delivered truck uses last_line_qty not period total', () {
+    test('delivered state hides truck pill (SYS is SSOT)', () {
       final cell = StockRowMetrics.pendingCellDisplay({
         'current_stock': 101,
         'period_purchased_qty': 711,
@@ -127,8 +127,7 @@ void main() {
         'total_delivered_qty': 100,
         'stock_unit': 'bag',
       });
-      expect(cell.primary, '100');
-      expect(cell.secondary, '4d');
+      expect(cell.primary, '—');
     });
 
     test('hides delivered truck after 5 days', () {
@@ -146,17 +145,30 @@ void main() {
       expect(cell.primary, '—');
     });
 
-    test('shows sync cue when committed qty missing from ledger', () {
+    test('no sync cue without active purchase id', () {
+      expect(
+        StockRowMetrics.needsStockSync({
+          'current_stock': 0,
+          'last_line_qty': 100,
+          'last_purchase_delivered': true,
+          'total_delivered_qty': 0,
+          'stock_unit': 'bag',
+        }),
+        isFalse,
+      );
+    });
+
+    test('shows add-stock cue when committed qty missing from ledger', () {
       final cell = StockRowMetrics.pendingCellDisplay({
         'current_stock': 0,
         'last_line_qty': 5000,
-        'last_purchase_human_id': 'PUR-1',
+        'last_purchase_human_id': 'PUR-2026-0009',
         'last_purchase_delivered': true,
         'total_delivered_qty': 0,
         'stock_unit': 'kg',
       });
-      expect(cell.primary, '5000.0');
-      expect(cell.secondary, 'sync');
+      expect(cell.primary, '5,000');
+      expect(cell.secondary, 'add stock');
     });
   });
 

@@ -483,7 +483,10 @@ async def sync_confirmed_purchase_stock_diff(
     *,
     purchase_human_id: str | None = None,
 ) -> list[dict]:
-    """Apply qty delta when editing an already-delivered purchase."""
+    """Apply qty delta when editing a stock-committed purchase.
+
+    Uses ``line_qty_for_stock_commit`` (staff ``received_qty`` when set) per line.
+    """
     old_map = await _qty_by_catalog_item(db, business_id, old_lines)
     new_map = await _qty_by_catalog_item(db, business_id, new_lines)
     all_ids = set(old_map) | set(new_map)

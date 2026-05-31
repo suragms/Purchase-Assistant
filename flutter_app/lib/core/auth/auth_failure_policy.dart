@@ -16,53 +16,77 @@ class AuthSessionExpiredNotifier extends Notifier<bool> {
   void clear() => state = false;
 }
 
-/// Trips after several business API 401s in a short window — stops refetch storms
-/// before refresh/logout async work finishes.
-class Auth401BurstGuard {
-  Auth401BurstGuard({
-    this.threshold = 4,
-    this.window = const Duration(seconds: 10),
+/// Reactive gate: pauses business API on 401 burst / refresh (Riverpod notifies).
+class AuthApiGateState {
+  const AuthApiGateState({
+    this.suspended = false,
+    this.circuitOpen = false,
   });
 
-  final int threshold;
-  final Duration window;
+  final bool suspended;
+  final bool circuitOpen;
+
+  bool get blockApi => suspended || circuitOpen;
+}
+
+class AuthApiGateNotifier extends Notifier<AuthApiGateState> {
+  static const _threshold = 2;
+  static const _window = Duration(seconds: 12);
+
   int _count = 0;
   DateTime? _since;
-  bool _tripped = false;
 
-  bool get tripped => _tripped;
+  @override
+  AuthApiGateState build() => const AuthApiGateState();
 
-  /// Returns true when the circuit opens (threshold reached).
+  /// Called synchronously on every business 401 — stops parallel refetch storms.
+  void suspendFor401() {
+    if (state.suspended && state.circuitOpen) return;
+    state = AuthApiGateState(
+      suspended: true,
+      circuitOpen: state.circuitOpen,
+    );
+  }
+
+  /// Returns true when the circuit opens (force logout).
   bool record401() {
-    if (_tripped) return true;
+    suspendFor401();
+    if (state.circuitOpen) return true;
+
     final now = DateTime.now();
-    if (_since == null || now.difference(_since!) > window) {
+    if (_since == null || now.difference(_since!) > _window) {
       _since = now;
       _count = 0;
     }
     _count++;
-    if (_count >= threshold) {
-      _tripped = true;
+    if (_count >= _threshold) {
+      state = const AuthApiGateState(suspended: true, circuitOpen: true);
       return true;
     }
     return false;
   }
 
+  void clearSuspend() {
+    if (!state.suspended || state.circuitOpen) return;
+    state = AuthApiGateState(circuitOpen: state.circuitOpen);
+  }
+
   void reset() {
     _count = 0;
     _since = null;
-    _tripped = false;
+    state = const AuthApiGateState();
   }
 }
 
-final auth401BurstGuardProvider = Provider<Auth401BurstGuard>(
-  (_) => Auth401BurstGuard(),
+final authApiGateProvider =
+    NotifierProvider<AuthApiGateNotifier, AuthApiGateState>(
+  AuthApiGateNotifier.new,
 );
 
 /// True after a burst of 401s — providers must skip API until sign-in again.
 final auth401CircuitOpenProvider = Provider<bool>((ref) {
   if (ref.watch(authSessionExpiredProvider)) return true;
-  return ref.watch(auth401BurstGuardProvider).tripped;
+  return ref.watch(authApiGateProvider).circuitOpen;
 });
 
 /// Tracks refresh failures to avoid infinite 401 polling on stale tokens.

@@ -80,7 +80,7 @@ final realtimeInvalidationProvider =
     } on DioException catch (e) {
       final sc = e.response?.statusCode;
       if (sc == 401 || sc == 403) {
-        ref.read(authSessionExpiredProvider.notifier).markExpired();
+        ref.read(authApiGateProvider.notifier).record401();
       }
       return RealtimeInvalidationSignal(tick: tick);
     }

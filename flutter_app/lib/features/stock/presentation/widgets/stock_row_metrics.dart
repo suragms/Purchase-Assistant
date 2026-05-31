@@ -6,7 +6,13 @@ import '../../../../core/utils/unit_utils.dart';
 import '../../../../shared/widgets/stock_number_display.dart';
 import '../../../../shared/widgets/stock_summary_widget.dart';
 
-/// Warehouse table metric formatting (system / purchased / physical / diff / pending).
+/// Warehouse table metrics: **System** = ERP ledger (`current_stock`);
+/// **Physical** = floor count; **Diff** = physical − system.
+///
+/// Truck badges (under item name):
+/// - Orange truck = active pending PO (not in system stock yet).
+/// - Orange "sync" = committed but system qty short — owner should commit/adjust.
+/// - Never shown for deleted/cancelled purchases (API filters snapshots).
 enum StockDeliveryIndicator { none, pending, delivered }
 
 abstract final class StockRowMetrics {
@@ -49,9 +55,10 @@ abstract final class StockRowMetrics {
     return DateTime.now().difference(dt).inDays;
   }
 
-  /// Committed purchase qty not reflected in ledger movements / on-hand.
+  /// Committed purchase qty not reflected in ledger (active PO only — not after delete).
   static bool needsStockSync(Map<String, dynamic> item) {
-    if (item['system_stock_out_of_sync'] == true) return true;
+    final po = item['last_purchase_human_id']?.toString().trim() ?? '';
+    if (po.isEmpty) return false;
     if (item['last_purchase_delivered'] != true) return false;
     final lastLine = lastDeliveryLineQty(item) ?? 0;
     if (lastLine <= 0.001) return false;
@@ -225,11 +232,11 @@ abstract final class StockRowMetrics {
     final days = (item['pending_order_days'] as num?)?.toInt();
     final kind = deliveryIndicator(item);
 
-    if (needsStockSync(item)) {
-      final qty = lastDeliveryLineQty(item) ?? pending;
+    if (needsStockSync(item) && pending <= 0.001) {
+      final qty = lastDeliveryLineQty(item) ?? 0;
       return (
         primary: qty > 0.001 ? formatStockQtyForUnit(u, qty) : '!',
-        secondary: 'sync',
+        secondary: 'add stock',
         color: pendingColor,
       );
     }
@@ -242,14 +249,7 @@ abstract final class StockRowMetrics {
         color: pendingColor,
       );
     }
-    if (kind == StockDeliveryIndicator.delivered && _showDeliveredTruck(item)) {
-      final qty = lastDeliveryLineQty(item) ?? 0;
-      return (
-        primary: qty > 0.001 ? formatStockQtyForUnit(u, qty) : '✓',
-        secondary: deliveryVerifiedAgeLabel(item),
-        color: deliveredColor,
-      );
-    }
+    // Delivered qty is already in SYS — only show trucks for pending / sync.
     return (primary: '—', secondary: null, color: muted);
   }
 

@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/auth/session_notifier.dart';
 import '../../../../core/design_system/hexa_responsive.dart';
 import '../../../../core/json_coerce.dart';
+import '../../../../core/providers/business_aggregates_invalidation.dart'
+    show syncPurchaseStockAfterVerify;
 import '../../../../core/utils/unit_utils.dart';
 
 Future<bool> showStaffVerificationSheet({
@@ -99,12 +101,17 @@ class _StaffVerificationSheetState extends ConsumerState<_StaffVerificationSheet
     }
     setState(() => _saving = true);
     try {
-      await ref.read(hexaApiProvider).verifyPurchaseDelivery(
+      final body = await ref.read(hexaApiProvider).verifyPurchaseDelivery(
             businessId: session.primaryBusiness.id,
             purchaseId: widget.purchaseId,
             lines: payload,
             notes: _notesCtrl.text,
           );
+      syncPurchaseStockAfterVerify(
+        ref,
+        purchaseId: widget.purchaseId,
+        verifyResponse: body,
+      );
       if (mounted) Navigator.pop(context, true);
     } finally {
       if (mounted) setState(() => _saving = false);

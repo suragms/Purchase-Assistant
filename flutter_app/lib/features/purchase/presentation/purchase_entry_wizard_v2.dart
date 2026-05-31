@@ -22,7 +22,12 @@ import '../../../core/providers/brokers_list_provider.dart';
 import '../../../core/utils/currency_utils.dart';
 import '../../../core/utils/snack.dart';
 import '../../../core/providers/business_aggregates_invalidation.dart'
-    show invalidatePurchaseWorkspace, invalidateWorkspaceSeedData;
+    show
+        catalogItemIdsFromTradeJson,
+        invalidateAfterDeliveryCommit,
+        invalidatePurchaseWorkspace,
+        invalidateWorkspaceSeedData,
+        syncPurchaseStockFromPurchaseJson;
 import '../../../core/providers/catalog_providers.dart';
 import '../../../core/providers/home_owner_dashboard_providers.dart';
 import '../../../core/providers/prefs_provider.dart';
@@ -1702,9 +1707,30 @@ class _PurchaseEntryWizardV2State extends ConsumerState<PurchaseEntryWizardV2>
             );
       }
       final draftSnap = ref.read(purchaseDraftProvider);
-      invalidatePurchaseWorkspace(ref);
-      ref.invalidate(stockListProvider);
+      final savedItemIds = catalogItemIdsFromTradeJson(saved);
+      invalidatePurchaseWorkspace(ref, affectedItemIds: savedItemIds);
       ref.invalidate(stockAuditPeriodProvider);
+      final committed =
+          (saved['delivery_status']?.toString() ?? '').toLowerCase() ==
+              'stock_committed';
+      final stockUpdates = saved['stock_updates'] as List? ?? const [];
+      final pidForStock = saved['id']?.toString() ?? '';
+      if (pidForStock.isNotEmpty &&
+          (committed || stockUpdates.isNotEmpty)) {
+        if (committed) {
+          invalidateAfterDeliveryCommit(
+            ref,
+            purchaseId: pidForStock,
+            affectedItemIds: savedItemIds,
+          );
+        } else {
+          syncPurchaseStockFromPurchaseJson(
+            ref,
+            purchaseId: pidForStock,
+            body: saved,
+          );
+        }
+      }
       for (final line in draftSnap.lines) {
         final itemId = line.catalogItemId?.trim();
         if (itemId == null || itemId.isEmpty) continue;

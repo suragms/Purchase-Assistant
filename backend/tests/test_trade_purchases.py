@@ -1003,3 +1003,49 @@ def test_stock_period_purchased_counts_only_delivered_purchase_lines():
     assert abs(float(rows[0]["period_purchased_qty"]) - 10.0) < 0.001
     assert rows[0]["has_pending_order"] is True
     assert abs(float(rows[0]["pending_delivery_qty"]) - 10.0) < 0.001
+
+
+def test_edit_committed_purchase_adjusts_system_stock():
+    """Editing a stock-committed PO line qty updates catalog current_stock by the delta."""
+    h, bid = _register_and_business()
+    sid = _supplier_id(h, bid)
+    iid = _catalog_item_id(h, bid)
+    cr = client.post(
+        f"/v1/businesses/{bid}/trade-purchases",
+        headers=h,
+        json={
+            "purchase_date": date.today().isoformat(),
+            "status": "confirmed",
+            "supplier_id": sid,
+            "lines": [_line_body(iid)],
+        },
+    )
+    assert cr.status_code == 201, cr.text
+    purchase = cr.json()
+    committed = _arrive_verify_commit(h, bid, purchase)
+    assert committed["delivery_status"] == "stock_committed"
+
+    stock_before = client.get(f"/v1/businesses/{bid}/stock/{iid}", headers=h)
+    assert stock_before.status_code == 200, stock_before.text
+    assert abs(float(stock_before.json()["current_stock"]) - 10.0) < 0.001
+
+    line = _line_body(iid)
+    line["qty"] = 8
+    upd = client.put(
+        f"/v1/businesses/{bid}/trade-purchases/{purchase['id']}",
+        headers=h,
+        json={
+            "purchase_date": purchase["purchase_date"],
+            "status": "confirmed",
+            "supplier_id": sid,
+            "lines": [line],
+        },
+    )
+    assert upd.status_code == 200, upd.text
+    updates = upd.json().get("stock_updates") or []
+    assert len(updates) >= 1
+    assert any(abs(float(u.get("delta", 0)) + 2.0) < 0.01 for u in updates)
+
+    stock_after = client.get(f"/v1/businesses/{bid}/stock/{iid}", headers=h)
+    assert stock_after.status_code == 200, stock_after.text
+    assert abs(float(stock_after.json()["current_stock"]) - 8.0) < 0.001

@@ -26,8 +26,8 @@ import '../../../core/providers/business_profile_provider.dart';
 import '../../../core/providers/business_aggregates_invalidation.dart'
     show
         catalogItemIdsFromPurchase,
-        invalidateAfterDeliveryCommit,
         invalidateAfterPurchaseDelete,
+        syncPurchaseStockFromPurchaseJson,
         invalidatePurchaseWorkspace;
 import '../../../core/providers/delivery_pipeline_provider.dart';
 import '../../../core/providers/staff_home_providers.dart';
@@ -924,9 +924,10 @@ class _PurchaseHomePageState extends ConsumerState<PurchaseHomePage> {
         }
       }
     }
-    invalidatePurchaseWorkspace(ref, affectedItemIds: catalogIds);
-    ref.invalidate(deliveryPipelineProvider);
-    ref.invalidate(staffPendingDeliveriesProvider);
+    invalidateAfterPurchaseDelete(
+      ref,
+      extraItemIds: catalogIds,
+    );
     for (final id in ids) {
       ref.invalidate(tradePurchaseDetailProvider(id));
     }
@@ -1023,15 +1024,10 @@ class _PurchaseHomePageState extends ConsumerState<PurchaseHomePage> {
             businessId: session.primaryBusiness.id,
             purchaseId: p.id,
           );
-      TradePurchase.fromJson(updated);
-      invalidateAfterDeliveryCommit(
+      syncPurchaseStockFromPurchaseJson(
         ref,
         purchaseId: p.id,
-        affectedItemIds: p.lines
-            .map((l) => l.catalogItemId?.trim())
-            .whereType<String>()
-            .where((id) => id.isNotEmpty)
-            .toSet(),
+        body: updated,
       );
       try {
         await ref.read(tradePurchasesListProvider.future);
@@ -2481,15 +2477,10 @@ class _PurchaseHistoryFullscreenSearchPageState
             businessId: session.primaryBusiness.id,
             purchaseId: p.id,
           );
-      TradePurchase.fromJson(updated);
-      invalidateAfterDeliveryCommit(
+      syncPurchaseStockFromPurchaseJson(
         ref,
         purchaseId: p.id,
-        affectedItemIds: p.lines
-            .map((l) => l.catalogItemId?.trim())
-            .whereType<String>()
-            .where((id) => id.isNotEmpty)
-            .toSet(),
+        body: updated,
       );
       try {
         await ref.read(tradePurchasesListProvider.future);

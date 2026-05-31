@@ -21,6 +21,7 @@ import '../../core/theme/hexa_colors.dart';
 import 'app_shell.dart';
 import 'responsive_shell_layout.dart';
 import 'shell_branch_provider.dart';
+import 'business_write_stock_listener.dart';
 import 'shell_realtime_listener.dart';
 
 /// Shell: Home | Stock | Reports | History | Search in one row, then [+] (no overlap).
@@ -73,6 +74,14 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
       ref.read(shellCurrentBranchProvider.notifier).state = idx;
     }
     final routePath = GoRouterState.of(context).uri.path;
+    // Browser back can leave URL on /home while IndexedStack index is stale.
+    if (routePath == '/home' && idx != ShellBranch.home) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        ref.read(shellCurrentBranchProvider.notifier).state = ShellBranch.home;
+        navigationShell.goBranch(ShellBranch.home);
+      });
+    }
     final stockAlertN = ref.watch(notificationsUnreadCountProvider);
     final width = MediaQuery.sizeOf(context).width;
     final showsRail = width >= kNavigationRailMin;
@@ -182,8 +191,9 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
           go(ShellBranch.home);
         }
       },
-      child: ShellRealtimeListener(
-        child: SizedBox.expand(
+      child: BusinessWriteStockListener(
+        child: ShellRealtimeListener(
+          child: SizedBox.expand(
           child: Material(
             key: const ValueKey<String>('main_shell'),
             color: Theme.of(context).scaffoldBackgroundColor,
@@ -192,6 +202,7 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
               body: shellBody,
             ),
           ),
+        ),
         ),
       ),
     );

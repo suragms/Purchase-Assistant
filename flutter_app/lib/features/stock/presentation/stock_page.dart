@@ -11,6 +11,7 @@ import '../../../core/services/stock_list_pdf.dart';
 import '../../../core/services/pdf_actions.dart';
 import '../../../core/json_coerce.dart';
 import '../../../core/providers/business_aggregates_invalidation.dart';
+import '../../../core/providers/business_write_event.dart';
 import '../../../core/providers/home_dashboard_provider.dart';
 import '../../../core/providers/realtime_events_provider.dart';
 import '../../../core/providers/stock_providers.dart';
@@ -555,6 +556,12 @@ class _StockPageState extends ConsumerState<StockPage>
 
   @override
   Widget build(BuildContext context) {
+    ref.listen(businessWriteEventProvider, (prev, next) {
+      if (prev == null || prev.revision != next.revision) {
+        _resetMerged();
+      }
+    });
+
     ref.listen(realtimeInvalidationProvider, (prev, next) {
       final signal = next.valueOrNull;
       if (signal == null || !signal.warehouse) return;
@@ -578,9 +585,11 @@ class _StockPageState extends ConsumerState<StockPage>
     ref.listen(stockListProvider, (prev, next) {
       if (next.isLoading &&
           prev?.hasValue == true &&
-          _scroll.hasClients &&
           ref.read(stockListQueryProvider).page == 1) {
-        _pendingScrollOffset = _scroll.offset;
+        _resetMerged();
+        if (_scroll.hasClients) {
+          _pendingScrollOffset = _scroll.offset;
+        }
       }
       if (next is! AsyncData<Map<String, dynamic>>) return;
       final q = ref.read(stockListQueryProvider);

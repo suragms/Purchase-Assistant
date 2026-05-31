@@ -61,7 +61,11 @@ import 'widgets/home_sticky_period_header.dart';
 bool _homeShellTabVisible(WidgetRef ref, BuildContext context) {
   final branch = ref.watch(shellCurrentBranchProvider);
   if (branch == ShellBranch.home) return true;
-  // Fallback when shell index and GoRouter location desync (common on web tab switch).
+  try {
+    final shell = StatefulNavigationShell.maybeOf(context);
+    if (shell?.currentIndex == ShellBranch.home) return true;
+  } catch (_) {}
+  // Fallback when shell index and GoRouter location desync (common on web back).
   final path = GoRouterState.of(context).uri.path;
   return path == '/home' || path.startsWith('/home/');
 }
@@ -386,7 +390,9 @@ class _HomePageState extends ConsumerState<HomePage>
 
     final session = ref.watch(sessionProvider);
     final authExpired = ref.watch(authSessionExpiredProvider);
-    final authCircuit = ref.watch(auth401CircuitOpenProvider);
+    final authGate = ref.watch(authApiGateProvider);
+    final authCircuit = authGate.circuitOpen;
+    final authRestoring = authGate.suspended && !authExpired && !authCircuit;
     final degraded = ref.watch(apiDegradedProvider);
     final authBlocked = authExpired ||
         authCircuit ||
@@ -398,6 +404,27 @@ class _HomePageState extends ConsumerState<HomePage>
     final offline =
         conn.valueOrNull != null && isOfflineResult(conn.valueOrNull!);
     final gutter = HexaResponsive.pageGutter(context, operational: true);
+
+    if (authRestoring) {
+      return Scaffold(
+        backgroundColor: HexaColors.brandBackground,
+        body: SafeArea(
+          child: Padding(
+            padding: EdgeInsets.all(gutter),
+            child: const Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  CircularProgressIndicator(),
+                  SizedBox(height: 16),
+                  Text('Restoring your session…'),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    }
 
     if (authBlocked) {
       return Scaffold(

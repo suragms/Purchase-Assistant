@@ -1,6 +1,6 @@
 # Purchase Assistant — Living task board
 
-**Last updated:** 2026-05-29 (Wave 5 decimal sweep + live DB verify)
+**Last updated:** 2026-05-29 (Stock SSOT alignment — system vs physical)
 
 ## Live DB (Supabase MCP 2026-05-29)
 
@@ -14,6 +14,23 @@
 - [x] **Prod 401 request storm + blank Home (2026-05-31):** `providerSkipApi` on home refresh/poll + notifications; stock list only when Home OOS strip or Stock tab visible; HexaApi skips refresh when session already expired; Home shows session-expired card instead of empty gray body
 - [x] **401 storm v2 (2026-05-31):** 401 burst circuit breaker (4 in 10s → stop all API); single-flight terminal logout; no off-tab Reports `/trade-purchases` fetch; shell tab switch syncs URL; Home visibility uses route fallback
 - [x] **Stock SYS column + delivery commit (2026-05-31):** Staff verify auto-commits received qty to system stock; line `received_qty` columns (047); kg/bag qty display without `.0`; violet pending qty under item row
+- [x] **Stock sync everywhere (2026-06-01):** `syncPurchaseStockAfterVerify` busts Stock/Home/Item on verify+commit; delete reverses stock + clears truck snapshot (by name); no ghost truck without active PO; Stock list cache bust on write; migrations **045** + **047** required on Render
+- [x] **Stock SSOT alignment (code):** edit committed PO adjusts `current_stock` when `stock_committed`/movement applied; preserves `received_qty` on line edit; catalog snapshot refresh; SYS/PHYS tooltips; wizard busts stock on `stock_updates`; pytest + `delivery_invalidation_test` extended
+
+## Pre-client deploy checklist (stock + auth)
+
+- [ ] Render API: `alembic upgrade head` through **047_purchase_line_received_qty** (+ **045** delete integrity)
+- [ ] Run `python -m scripts.backfill_purchase_stock_commit` once for old verified POs
+- [ ] `GET /health/ready` → `stock_sync_ready: true`, `received_qty_column: true`
+- [ ] Vercel Flutter web: latest build (401 gate + stock invalidation + SYS/PHYS labels)
+- [ ] **Manual QA matrix** (block release):
+  1. Staff verify item (e.g. 100 bags) → **SYS** +100 on Stock + Item without pull-to-refresh
+  2. Delete that PO → **SYS** −100, truck badge gone, `last_trade_purchase_id` cleared
+  3. Edit committed PO qty 100→80 → **SYS** −20 (no refresh)
+  4. Physical count only → **PHYS** changes, **SYS** unchanged
+  5. Duplicate purchase warning → `force_duplicate` save works
+  6. Web: back from Reports → Home not blank; expired session → sign-in card (no 401 storm)
+- [ ] QA: sign-in fresh after deploy (clear site data if 401 loop)
 
 ## Master prompt FIX-1–15 (2026-05-29)
 

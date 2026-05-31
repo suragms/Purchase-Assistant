@@ -85,6 +85,15 @@ class HomeDeliveryPipelineCard extends ConsumerWidget {
                       const Icon(Icons.chevron_right_rounded, size: 22),
                     ],
                   ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Not yet in system stock until staff verify and commit',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: HexaColors.brandPrimary.withValues(alpha: 0.7),
+                    ),
+                  ),
                   const SizedBox(height: 10),
                   if (dispatched > 0)
                     _line(

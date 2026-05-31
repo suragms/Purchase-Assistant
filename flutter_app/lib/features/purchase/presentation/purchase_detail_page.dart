@@ -13,9 +13,8 @@ import '../../../core/calc_engine.dart';
 import '../../../core/models/trade_purchase_models.dart';
 import '../../../core/providers/business_aggregates_invalidation.dart'
     show
-        invalidateAfterDeliveryCommit,
-        invalidateAfterDeliveryVerify,
         invalidateAfterPurchaseDelete,
+        syncPurchaseStockFromPurchaseJson,
         invalidatePurchaseWorkspace;
 import '../../../core/providers/delivery_pipeline_provider.dart';
 import '../../../core/providers/business_profile_provider.dart';
@@ -560,14 +559,15 @@ class PurchaseDetailBodyState extends ConsumerState<PurchaseDetailBody> {
   }
 
   Future<void> _afterDeliveryMutation(
-    BuildContext context,
-    TradePurchase purchase,
-    String message,
-  ) async {
-    invalidateAfterDeliveryCommit(
+    BuildContext context, {
+    required TradePurchase purchase,
+    required Map<String, dynamic> apiBody,
+    required String message,
+  }) async {
+    syncPurchaseStockFromPurchaseJson(
       ref,
       purchaseId: purchase.id,
-      affectedItemIds: _purchaseItemIds(purchase),
+      body: apiBody,
     );
     if (context.mounted) showTopSnack(context, message);
   }
@@ -648,8 +648,9 @@ class PurchaseDetailBodyState extends ConsumerState<PurchaseDetailBody> {
           );
       await _afterDeliveryMutation(
         context,
-        TradePurchase.fromJson(updated),
-        'Marked as dispatched',
+        purchase: TradePurchase.fromJson(updated),
+        apiBody: updated,
+        message: 'Marked as dispatched',
       );
     } catch (e) {
       if (context.mounted) {
@@ -695,8 +696,9 @@ class PurchaseDetailBodyState extends ConsumerState<PurchaseDetailBody> {
       }
       await _afterDeliveryMutation(
         context,
-        TradePurchase.fromJson(result.body!),
-        'Marked arrived at warehouse',
+        purchase: TradePurchase.fromJson(result.body!),
+        apiBody: result.body!,
+        message: 'Marked arrived at warehouse',
       );
     } catch (e) {
       if (context.mounted) {
@@ -727,9 +729,8 @@ class PurchaseDetailBodyState extends ConsumerState<PurchaseDetailBody> {
       purchaseId: p.id,
       lines: lineMaps,
     );
-    invalidateAfterDeliveryVerify(ref, purchaseId: p.id);
     if (changed && context.mounted) {
-      showTopSnack(context, 'Counts submitted — owner can commit to stock');
+      showTopSnack(context, 'Verified — system stock updated where units are set');
     }
   }
 
@@ -784,7 +785,12 @@ class PurchaseDetailBodyState extends ConsumerState<PurchaseDetailBody> {
         message =
             '$message · $needsSetup item${needsSetup == 1 ? '' : 's'} need unit setup in catalog';
       }
-      await _afterDeliveryMutation(context, purchase, message);
+      await _afterDeliveryMutation(
+        context,
+        purchase: purchase,
+        apiBody: updated,
+        message: message,
+      );
     } catch (e) {
       if (context.mounted) {
         showTopSnack(
@@ -831,8 +837,9 @@ class PurchaseDetailBodyState extends ConsumerState<PurchaseDetailBody> {
       final purchase = TradePurchase.fromJson(updated);
       await _afterDeliveryMutation(
         context,
-        purchase,
-        'Delivery reverted · stock reversed',
+        purchase: purchase,
+        apiBody: updated,
+        message: 'Delivery reverted · stock reversed',
       );
     } catch (e) {
       if (context.mounted) {

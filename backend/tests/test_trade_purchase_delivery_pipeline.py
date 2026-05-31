@@ -205,6 +205,37 @@ def test_staff_cannot_commit_stock_before_verify():
     assert r.status_code in (400, 403), r.text
 
 
+def test_verify_uses_received_qty_for_system_stock():
+    """Staff verify with partial received_qty commits only received amount to ledger."""
+    h, bid = _register_owner()
+    iid, sup = _setup_item(h, bid)
+    p = _create_purchase(h, bid, iid, sup, qty="10")
+    pid, line_id = p["id"], p["lines"][0]["id"]
+    client.post(
+        f"/v1/businesses/{bid}/trade-purchases/{pid}/arrive",
+        headers=h,
+        json={},
+    )
+    ver = client.post(
+        f"/v1/businesses/{bid}/trade-purchases/{pid}/verify",
+        headers=h,
+        json={
+            "lines": [
+                {
+                    "line_id": line_id,
+                    "received_qty": "7",
+                    "damaged_qty": "0",
+                    "return_qty": "0",
+                }
+            ]
+        },
+    )
+    assert ver.status_code == 200, ver.text
+    assert ver.json()["delivery_status"] in ("partial", "stock_committed")
+    stock = client.get(f"/v1/businesses/{bid}/stock/{iid}", headers=h)
+    assert Decimal(str(stock.json()["current_stock"])) == Decimal("7")
+
+
 def test_staff_verify_commits_system_stock():
     owner_h, bid = _register_owner()
     staff_h = _staff_headers(owner_h, bid)

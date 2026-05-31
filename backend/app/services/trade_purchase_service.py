@@ -1108,6 +1108,20 @@ async def update_trade_purchase(
         raise ValueError("Cannot edit a cancelled purchase")
     old_lines_snapshot = list(tp.lines)
     was_delivered = bool(getattr(tp, "is_delivered", False))
+    was_committed = _delivery_status(tp) == "stock_committed"
+    stock_applied = await purchase_delivery_stock_already_applied(
+        db, business_id, purchase_id
+    )
+    old_received_by_catalog: dict[uuid.UUID, Decimal] = {}
+    old_qty_by_catalog: dict[uuid.UUID, Decimal] = {}
+    for ol in old_lines_snapshot:
+        cid = getattr(ol, "catalog_item_id", None)
+        if cid is None:
+            continue
+        old_qty_by_catalog[cid] = _dec(getattr(ol, "qty", 0) or 0)
+        recv = getattr(ol, "received_qty", None)
+        if recv is not None and _dec(recv) > 0:
+            old_received_by_catalog[cid] = dp.qty(recv)
     qty_sum, amt_sum = compute_totals(body)
     land_s, sell_s, prof = aggregate_landing_selling_profit(body)
     if not body.force_duplicate:
@@ -1158,12 +1172,22 @@ async def update_trade_purchase(
         line_profit = _line_profit(li, body)
         cat_item = catalog_by_id.get(li.catalog_item_id)
         qty_su = line_qty_in_stock_unit(li, cat_item) if cat_item else dp.qty(li.qty)
+        preserved_recv = None
+        if (was_committed or stock_applied) and li.catalog_item_id is not None:
+            cid = li.catalog_item_id
+            new_q = _dec(li.qty)
+            old_q = old_qty_by_catalog.get(cid, Decimal(0))
+            if new_q != old_q:
+                preserved_recv = dp.qty(new_q)
+            else:
+                preserved_recv = old_received_by_catalog.get(cid)
         db.add(
             TradePurchaseLine(
                 trade_purchase_id=tp.id,
                 catalog_item_id=li.catalog_item_id,
                 item_name=li.item_name,
                 qty=dp.qty(li.qty),
+                received_qty=preserved_recv,
                 unit=li.unit,
                 qty_in_stock_unit=qty_su,
                 unit_type=derive_trade_unit_type(li.unit),
@@ -1206,15 +1230,22 @@ async def update_trade_purchase(
     await _sync_purchase_memory(db, business_id, body, trade_purchase_id=tp.id)
     stock_updates: list[dict] = []
     try:
-        if was_delivered:
+        if was_committed or was_delivered or stock_applied:
+            await db.flush()
+            await db.refresh(tp, attribute_names=["lines"])
+            new_lines_snapshot = list(tp.lines)
             stock_updates = await sync_confirmed_purchase_stock_diff(
                 db,
                 business_id,
                 tp.user_id,
                 old_lines_snapshot,
-                body.lines,
+                new_lines_snapshot,
                 purchase_human_id=tp.human_id,
             )
+            catalog_ids = await catalog_ids_affected_by_purchase_lines(
+                db, business_id, old_lines_snapshot + new_lines_snapshot
+            )
+            await refresh_catalog_last_trade_snapshots(db, business_id, catalog_ids)
     except ValueError:
         await db.rollback()
         raise
@@ -1749,6 +1780,33 @@ async def mark_trade_purchase_paid(
     return await get_trade_purchase(db, business_id, purchase_id)
 
 
+async def catalog_ids_affected_by_purchase_lines(
+    db: AsyncSession,
+    business_id: uuid.UUID,
+    lines: list[TradePurchaseLine],
+) -> set[uuid.UUID]:
+    """Catalog items touched by a purchase — by line link or item name match."""
+    ids: set[uuid.UUID] = set()
+    names: set[str] = set()
+    for li in lines:
+        if li.catalog_item_id:
+            ids.add(li.catalog_item_id)
+            continue
+        n = (li.item_name or "").strip()
+        if n:
+            names.add(n.lower())
+    if names:
+        r = await db.execute(
+            select(CatalogItem.id).where(
+                CatalogItem.business_id == business_id,
+                CatalogItem.deleted_at.is_(None),
+                func.lower(CatalogItem.name).in_(names),
+            )
+        )
+        ids.update(row[0] for row in r.all())
+    return ids
+
+
 async def refresh_catalog_last_trade_snapshots(
     db: AsyncSession,
     business_id: uuid.UUID,
@@ -1791,6 +1849,7 @@ async def refresh_catalog_last_trade_snapshots(
             item.last_line_qty = None
             item.last_line_unit = None
             item.last_line_weight_kg = None
+            item.last_purchase_at = None
             continue
         tp, line = pair
         item.last_trade_purchase_id = tp.id
@@ -1821,9 +1880,16 @@ async def cancel_trade_purchase(
         return None
     if (tp.status or "").lower() == "deleted":
         return None
-    was_delivered = bool(getattr(tp, "is_delivered", False))
-    old_lines = list(tp.lines) if was_delivered else []
-    catalog_ids = {li.catalog_item_id for li in tp.lines if li.catalog_item_id}
+    old_lines = list(tp.lines)
+    catalog_ids = await catalog_ids_affected_by_purchase_lines(
+        db, business_id, old_lines
+    )
+    stock_applied = await purchase_delivery_stock_already_applied(
+        db, business_id, purchase_id
+    )
+    was_delivered = bool(getattr(tp, "is_delivered", False)) or _delivery_status(
+        tp
+    ) == "stock_committed"
     tp.status = "cancelled"
     tp.is_delivered = False
     tp.delivered_at = None
@@ -1864,15 +1930,22 @@ async def delete_trade_purchase(
         return False
     if (tp.status or "").lower() == "deleted":
         return False
-    was_delivered = bool(getattr(tp, "is_delivered", False))
-    old_lines = list(tp.lines) if was_delivered else []
-    catalog_ids = {li.catalog_item_id for li in tp.lines if li.catalog_item_id}
+    old_lines = list(tp.lines)
+    catalog_ids = await catalog_ids_affected_by_purchase_lines(
+        db, business_id, old_lines
+    )
+    stock_applied = await purchase_delivery_stock_already_applied(
+        db, business_id, purchase_id
+    )
+    was_delivered = bool(getattr(tp, "is_delivered", False)) or _delivery_status(
+        tp
+    ) == "stock_committed"
     tp.status = "deleted"
     tp.is_delivered = False
     tp.delivered_at = None
     tp.delivery_status = "cancelled"
     tp.updated_at = utcnow()
-    if was_delivered and old_lines:
+    if (was_delivered or stock_applied) and old_lines:
         try:
             await revert_confirmed_purchase_stock(
                 db,
@@ -1881,6 +1954,7 @@ async def delete_trade_purchase(
                 old_lines,
                 purchase_human_id=tp.human_id,
                 purchase_id=purchase_id,
+                actor=None,
             )
         except ValueError:
             await db.rollback()

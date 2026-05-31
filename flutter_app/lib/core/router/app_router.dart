@@ -185,8 +185,9 @@ final appRouterProvider = Provider<GoRouter>((ref) {
 
       final session = container.read(sessionProvider);
       final authExpired = container.read(authSessionExpiredProvider);
+      final authCircuit = container.read(auth401CircuitOpenProvider);
       // No session → only public auth/onboarding routes. (JWT may still be restoring in main(); splash handles that.)
-      if (session == null || authExpired) {
+      if (session == null || authExpired || authCircuit) {
         if (loc == '/signup') {
           return '/login?tab=signin&notice=owner_only';
         }

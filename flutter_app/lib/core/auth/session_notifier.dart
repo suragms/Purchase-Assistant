@@ -113,6 +113,9 @@ final hexaApiProvider = Provider<HexaApi>((ref) {
               } catch (_) {
                 // SessionNotifier torn down — token is still persisted + attached.
               }
+              if (!disposed) {
+                ref.read(authApiGateProvider.notifier).clearSuspend();
+              }
               return true;
             } on DioException catch (e) {
               final sc = e.response?.statusCode;
@@ -121,6 +124,7 @@ final hexaApiProvider = Provider<HexaApi>((ref) {
                 try {
                   ref.read(authRefreshFailureTrackerProvider).reset();
                   ref.read(authSessionExpiredProvider.notifier).markExpired();
+                  authRefresh.value++;
                   await ref.read(sessionProvider.notifier).logout();
                 } catch (_) {/* container disposed */}
               } else if (!disposed) {
@@ -130,6 +134,7 @@ final hexaApiProvider = Provider<HexaApi>((ref) {
                   try {
                     tracker.reset();
                     ref.read(authSessionExpiredProvider.notifier).markExpired();
+                    authRefresh.value++;
                     await ref.read(sessionProvider.notifier).logout();
                   } catch (_) {/* container disposed */}
                   return false;
@@ -159,6 +164,7 @@ final hexaApiProvider = Provider<HexaApi>((ref) {
                   try {
                     tracker.reset();
                     ref.read(authSessionExpiredProvider.notifier).markExpired();
+                    authRefresh.value++;
                     await ref.read(sessionProvider.notifier).logout();
                   } catch (_) {/* container disposed */}
                   return false;
@@ -180,17 +186,19 @@ final hexaApiProvider = Provider<HexaApi>((ref) {
       if (disposed) return;
       try {
         ref.read(authRefreshFailureTrackerProvider).reset();
-        ref.read(auth401BurstGuardProvider).reset();
+        ref.read(authApiGateProvider.notifier).reset();
         ref.read(authSessionExpiredProvider.notifier).markExpired();
+        authRefresh.value++;
         await ref.read(sessionProvider.notifier).logout();
       } catch (_) {/* container disposed */}
     }),
     onBusiness401: () {
       if (disposed) return true;
       try {
-        final tripped = ref.read(auth401BurstGuardProvider).record401();
+        final tripped = ref.read(authApiGateProvider.notifier).record401();
         if (tripped) {
           ref.read(authSessionExpiredProvider.notifier).markExpired();
+          authRefresh.value++;
         }
         return tripped;
       } catch (_) {
@@ -201,7 +209,7 @@ final hexaApiProvider = Provider<HexaApi>((ref) {
       if (disposed) return true;
       try {
         return ref.read(authSessionExpiredProvider) ||
-            ref.read(auth401CircuitOpenProvider);
+            ref.read(authApiGateProvider).circuitOpen;
       } catch (_) {
         return true;
       }
@@ -306,7 +314,7 @@ class SessionNotifier extends Notifier<Session?> {
     try {
       ref.read(authSessionExpiredProvider.notifier).clear();
       ref.read(authRefreshFailureTrackerProvider).reset();
-      ref.read(auth401BurstGuardProvider).reset();
+      ref.read(authApiGateProvider.notifier).reset();
     } catch (_) {}
   }
 
@@ -737,7 +745,7 @@ class SessionNotifier extends Notifier<Session?> {
       ref.read(apiDegradedProvider.notifier).clear();
       ref.read(authSessionExpiredProvider.notifier).clear();
       ref.read(authRefreshFailureTrackerProvider).reset();
-      ref.read(auth401BurstGuardProvider).reset();
+      ref.read(authApiGateProvider.notifier).reset();
     } catch (_) {}
     invalidateStaffHomeCaches(ref);
   }

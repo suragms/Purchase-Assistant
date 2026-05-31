@@ -114,7 +114,6 @@ class _DeliveryCardState extends ConsumerState<_DeliveryCard> {
       purchaseId: widget.purchase.id,
       lines: lines,
     );
-    invalidateAfterDeliveryVerify(ref, purchaseId: widget.purchase.id);
     ref.invalidate(staffPendingDeliveriesProvider);
   }
 

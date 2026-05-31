@@ -92,7 +92,45 @@ async def health_ready(db: AsyncSession = Depends(get_db)):
             },
         )
     ms = int((time.perf_counter() - t0) * 1000)
-    return {"status": "ok", "db": "ok", "db_ms": ms}
+    schema: dict[str, object] = {"delivery_pipeline": False, "received_qty_column": False}
+    try:
+        ver = await db.execute(text("SELECT version_num FROM alembic_version LIMIT 1"))
+        schema["alembic_version"] = ver.scalar()
+        col = await db.execute(
+            text(
+                """
+                SELECT 1 FROM information_schema.columns
+                WHERE table_schema = 'public'
+                  AND table_name = 'trade_purchase_lines'
+                  AND column_name = 'received_qty'
+                LIMIT 1
+                """
+            )
+        )
+        schema["received_qty_column"] = col.scalar() is not None
+        ds = await db.execute(
+            text(
+                """
+                SELECT 1 FROM information_schema.columns
+                WHERE table_schema = 'public'
+                  AND table_name = 'trade_purchases'
+                  AND column_name = 'delivery_status'
+                LIMIT 1
+                """
+            )
+        )
+        schema["delivery_pipeline"] = ds.scalar() is not None
+    except Exception:  # noqa: BLE001
+        logger.exception("health_ready: schema probe failed")
+    return {
+        "status": "ok",
+        "db": "ok",
+        "db_ms": ms,
+        "schema": schema,
+        "stock_sync_ready": bool(
+            schema.get("delivery_pipeline") and schema.get("received_qty_column")
+        ),
+    }
 
 
 @router.get("/health/db-check")

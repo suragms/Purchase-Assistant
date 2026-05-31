@@ -107,6 +107,53 @@ Set<String> catalogItemIdsFromPurchase(TradePurchase purchase) => {
         if ((ln.catalogItemId ?? '').trim().isNotEmpty) ln.catalogItemId!.trim(),
     };
 
+/// Catalog ids from API purchase JSON (`lines[].catalog_item_id`).
+Set<String> catalogItemIdsFromTradeJson(Map<String, dynamic> body) {
+  final ids = <String>{};
+  for (final raw in body['lines'] as List? ?? const []) {
+    if (raw is! Map) continue;
+    final line = Map<String, dynamic>.from(raw);
+    final cid = line['catalog_item_id']?.toString().trim() ?? '';
+    if (cid.isNotEmpty) ids.add(cid);
+  }
+  return ids;
+}
+
+/// After staff verify / owner commit — refresh SYS everywhere when stock landed.
+void syncPurchaseStockAfterVerify(
+  dynamic ref, {
+  required String purchaseId,
+  required Map<String, dynamic> verifyResponse,
+}) {
+  final ids = catalogItemIdsFromTradeJson(verifyResponse);
+  final status = (verifyResponse['delivery_status']?.toString() ?? '')
+      .trim()
+      .toLowerCase();
+  if (status == 'stock_committed') {
+    invalidateAfterDeliveryCommit(
+      ref,
+      purchaseId: purchaseId,
+      affectedItemIds: ids,
+    );
+  } else {
+    invalidateAfterDeliveryVerify(
+      ref,
+      purchaseId: purchaseId,
+      affectedItemIds: ids,
+    );
+  }
+}
+
+/// Any purchase API mutation (verify, commit, revert) — single entry for UI refresh.
+void syncPurchaseStockFromPurchaseJson(
+  dynamic ref, {
+  required String purchaseId,
+  required Map<String, dynamic> body,
+}) {
+  syncPurchaseStockAfterVerify(ref, purchaseId: purchaseId, verifyResponse: body);
+  ref.invalidate(tradePurchaseDetailProvider(purchaseId));
+}
+
 /// After soft-delete: bust stock, item detail, delivery pipeline, and aggregates.
 void invalidateAfterPurchaseDelete(
   dynamic ref, {
@@ -130,7 +177,9 @@ void invalidateAfterPurchaseDelete(
   }
   ref.invalidate(deliveryPipelineProvider);
   ref.invalidate(staffPendingDeliveriesProvider);
+  ref.invalidate(homeStockAttentionCountProvider);
   invalidateTradePurchaseCaches(ref);
+  bumpBusinessDataWriteRevision(ref);
 }
 
 /// Purchase mutations: warehouse lists + financial aggregates (debounced).
@@ -196,11 +245,18 @@ void invalidateNotificationSurfaces(dynamic ref) {
 void invalidateAfterDeliveryVerify(
   dynamic ref, {
   required String purchaseId,
+  Set<String>? affectedItemIds,
 }) {
   ref.invalidate(tradePurchaseDetailProvider(purchaseId));
   ref.invalidate(deliveryPipelineProvider);
   ref.invalidate(staffPendingDeliveriesProvider);
+  invalidateWarehouseSurfacesLight(ref);
+  for (final id in affectedItemIds ?? const <String>{}) {
+    if (id.isEmpty) continue;
+    invalidateWarehouseSurfacesLight(ref, itemId: id);
+  }
   invalidateTradePurchaseCaches(ref);
+  bumpBusinessDataWriteRevision(ref);
 }
 
 /// Owner committed delivery to stock — bust warehouse, reports, and delivery pipeline.
