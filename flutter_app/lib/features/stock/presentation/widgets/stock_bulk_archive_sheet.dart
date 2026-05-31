@@ -26,8 +26,11 @@ Future<void> showStockBulkArchiveSheet({
   await showHexaBottomSheet<void>(
     context: context,
     compact: false,
-    child: SizedBox(
-      height: MediaQuery.sizeOf(context).height * 0.72,
+    padding: EdgeInsets.zero,
+    child: ConstrainedBox(
+      constraints: BoxConstraints(
+        maxHeight: HexaResponsive.adaptiveSheetMaxHeight(context) * 0.85,
+      ),
       child: StatefulBuilder(
         builder: (ctx, setLocal) {
           return Column(

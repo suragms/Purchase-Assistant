@@ -30,6 +30,13 @@ Errors / cloud failed:
 - Note: 401 `/v1/me/businesses` = expired session → sign in again (not a bug)
 
 Still pending (Wave 4):
+- [x] Low-stock detail sheet → compact `showHexaBottomSheet` + `ItemStockMetricStrip`
+- [x] `formatStockQtyDisplay` helper — integers for bag/box/tin; KG suffix only
+- [x] Low-stock rows + compact row decimal cleanup
+- [x] Bulk archive sheet — drop fixed 72% height blank gap
+- [x] User profile Activity/Stock/Purchases/Items — compact separated lists
+
+Still pending (Wave 5):
 - [ ] Full white-space audit on remaining bottom sheets (purchase wizard output, barcode, contacts pickers)
 - [ ] Reports drill-down back navigation polish (PopScope already wired)
 - [ ] User profile tab content typography pass (Activity/Stock/Purchases rows)

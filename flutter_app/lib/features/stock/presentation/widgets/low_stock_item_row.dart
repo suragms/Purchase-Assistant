@@ -176,14 +176,14 @@ class LowStockItemRow extends ConsumerWidget {
                 children: [
                   Expanded(
                     child: Text(
-                      'System: ${formatStockQtyNumber(snap.systemQty)} $unitDisplay',
+                      'System: ${formatStockQtyDisplay(unitDisplay, snap.systemQty)}',
                       style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: Color(0xFF111827)),
                     ),
                   ),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
-                      'Physical: ${formatStockQtyNumber(snap.physicalQty)} $unitDisplay',
+                      'Physical: ${formatStockQtyDisplay(unitDisplay, snap.physicalQty)}',
                       style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: Color(0xFF0F766E)),
                     ),
                   ),
@@ -200,7 +200,7 @@ class LowStockItemRow extends ConsumerWidget {
               ),
               const SizedBox(height: 6),
               Text(
-                'Reorder: ${formatStockQtyNumber(snap.reorderLevel)} • Usage/day: ${usagePerDay.isFinite ? formatStockQtyNumber(usagePerDay) : '—'}',
+                'Reorder: ${formatStockQtyDisplay(unitDisplay, snap.reorderLevel)} • Usage/day: ${usagePerDay.isFinite ? formatStockQtyDisplay(unitDisplay, usagePerDay) : '—'}',
                 style: const TextStyle(fontSize: 11, color: Color(0xFF64748B), fontWeight: FontWeight.w700),
               ),
               const SizedBox(height: 6),

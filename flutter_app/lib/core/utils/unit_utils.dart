@@ -46,6 +46,15 @@ String formatStockQtyForUnit(String? unit, double n) {
   return formatStockQtyNumber(n);
 }
 
+/// Warehouse qty with unit suffix for KG only (bag/box/tin show number alone).
+String formatStockQtyDisplay(String? unit, double n) {
+  final q = formatStockQtyForUnit(unit, n);
+  if (isKgStockUnit(unit) && (unit ?? '').trim().isNotEmpty) {
+    return '$q ${unit!.trim().toUpperCase()}';
+  }
+  return q;
+}
+
 /// Warehouse list qty: no trailing `.000`, comma thousands for ints.
 String formatStockQtyNumber(double n) {
   final rounded = n.roundToDouble();

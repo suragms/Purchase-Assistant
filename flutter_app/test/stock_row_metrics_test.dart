@@ -105,6 +105,15 @@ void main() {
     });
   });
 
+  group('formatStockQtyDisplay', () {
+    test('bag omits unit suffix', () {
+      expect(formatStockQtyDisplay('bag', 101), '101');
+    });
+    test('kg keeps decimals and unit', () {
+      expect(formatStockQtyDisplay('kg', 23.22), '23.22 KG');
+    });
+  });
+
   group('StockRowMetrics.deliveryMetaLine', () {
     test('pending truck with qty and days', () {
       final line = StockRowMetrics.deliveryMetaLine({

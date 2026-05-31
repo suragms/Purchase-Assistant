@@ -133,7 +133,7 @@ class LowStockCompactItemRow extends ConsumerWidget {
                       ),
                     const SizedBox(height: 2),
                     Text(
-                      'Stock: ${formatStockQtyNumber(system)} $unit',
+                      'Stock: ${formatStockQtyDisplay(unit, system)}',
                       style: const TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w500,

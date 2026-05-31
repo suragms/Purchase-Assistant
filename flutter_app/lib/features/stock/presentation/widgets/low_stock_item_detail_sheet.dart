@@ -2,9 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../core/design_system/hexa_responsive.dart';
 import '../../../../core/json_coerce.dart';
-import '../../../../core/theme/hexa_colors.dart';
 import '../../../../core/utils/unit_utils.dart';
+import '../../../catalog/presentation/widgets/item_stock_metric_strip.dart';
 import 'low_stock_category_tree.dart';
 import 'stock_row_metrics.dart';
 
@@ -22,11 +23,11 @@ Future<void> showLowStockItemDetailSheet({
   void Function(Map<String, dynamic> item)? onSystemStockUpdate,
   void Function(Map<String, dynamic> item)? onReceive,
 }) {
-  return showModalBottomSheet<void>(
+  return showHexaBottomSheet<void>(
     context: context,
-    showDragHandle: true,
-    isScrollControlled: true,
-    builder: (ctx) => _LowStockItemDetailSheet(
+    compact: true,
+    padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+    child: _LowStockItemDetailSheet(
       item: item,
       staffMode: staffMode,
       ownerInformed: ownerInformed,
@@ -73,9 +74,7 @@ class _LowStockItemDetailSheet extends StatelessWidget {
     final name = item['name']?.toString() ?? 'Item';
     final unit = StockRowMetrics.unit(item);
     final system = StockRowMetrics.systemQty(item);
-    final physical = StockRowMetrics.physicalQty(item);
     final reorder = coerceToDouble(item['reorder_level']);
-    final bought = coerceToDouble(item['period_purchased_qty']);
     final supplier = item['supplier_name']?.toString().trim() ?? '';
     final pendingDelivery = lowStockItemPendingDelivery(item);
     final out = system <= 0;
@@ -87,56 +86,55 @@ class _LowStockItemDetailSheet extends StatelessWidget {
             : 'NEEDS ATTENTION';
     final statusColor = out ? _critical : (system <= reorder ? _warn : _ok);
 
-    return Padding(
-      padding: EdgeInsets.fromLTRB(
-        20,
-        4,
-        20,
-        16 + MediaQuery.paddingOf(context).bottom,
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text(
-            name,
-            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          name,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w800,
+            height: 1.15,
           ),
-          const SizedBox(height: 4),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          statusLabel,
+          style: TextStyle(
+            fontSize: 10,
+            fontWeight: FontWeight.w800,
+            color: statusColor,
+            letterSpacing: 0.3,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Stock in hand · ${formatStockQtyDisplay(unit, system)}',
+          style: const TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+            color: Color(0xFF2563EB),
+          ),
+        ),
+        const SizedBox(height: 8),
+        ItemStockMetricStrip(stock: item),
+        if (supplier.isNotEmpty) ...[
+          const SizedBox(height: 8),
           Text(
-            statusLabel,
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w700,
-              color: statusColor,
-              letterSpacing: 0.4,
+            'Supplier: $supplier',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: Color(0xFF64748B),
             ),
           ),
-          const SizedBox(height: 16),
-          _DetailRow(
-            label: 'Current stock',
-            value: '${formatStockQtyNumber(system)} $unit',
-          ),
-          _DetailRow(
-            label: 'Physical count',
-            value: physical != null && physical.isFinite
-                ? '${formatStockQtyNumber(physical)} $unit'
-                : '—',
-          ),
-          _DetailRow(
-            label: 'Reorder level',
-            value: reorder > 0
-                ? '${formatStockQtyNumber(reorder)} $unit'
-                : 'Not set',
-          ),
-          if (bought > 0)
-            _DetailRow(
-              label: 'Last purchase (period)',
-              value: '${formatStockQtyNumber(bought)} $unit',
-            ),
-          if (supplier.isNotEmpty)
-            _DetailRow(label: 'Supplier', value: supplier),
-          const SizedBox(height: 16),
+        ],
+        const SizedBox(height: 10),
           if (onStockUpdate != null)
             FilledButton(
               style: FilledButton.styleFrom(
@@ -234,47 +232,6 @@ class _LowStockItemDetailSheet extends StatelessWidget {
             ],
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _DetailRow extends StatelessWidget {
-  const _DetailRow({required this.label, required this.value});
-
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 120,
-            child: Text(
-              label,
-              style: const TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w500,
-                color: Color(0xFF64748B),
-              ),
-            ),
-          ),
-          Expanded(
-            child: Text(
-              value,
-              style: const TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-                color: HexaColors.textBody,
-              ),
-            ),
-          ),
-        ],
-      ),
     );
   }
 }

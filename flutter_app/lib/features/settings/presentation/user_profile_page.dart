@@ -502,9 +502,10 @@ class _FeedTab extends StatelessWidget {
         if (rows.isEmpty) {
           return Center(child: Text(empty, style: HexaDsType.body(14)));
         }
-        return ListView.builder(
-          padding: const EdgeInsets.all(16),
+        return ListView.separated(
+          padding: const EdgeInsets.fromLTRB(12, 4, 12, 16),
           itemCount: rows.length,
+          separatorBuilder: (_, __) => const Divider(height: 1),
           itemBuilder: (_, i) => _activityRow(rows[i]),
         );
       },
@@ -532,18 +533,18 @@ Widget _activityRow(Map<String, dynamic> row) {
       if (o != null && n != null) delta = '$o → $n';
     }
   }
-  return Card(
-    margin: const EdgeInsets.only(bottom: 8),
-    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-    child: ListTile(
-      dense: true,
-      title: Text(action, style: HexaDsType.body(14, weight: FontWeight.w600)),
-      subtitle: Text(
-        [if (item != null && item.isNotEmpty) item, if (delta != null) delta, time]
-            .where((s) => s.isNotEmpty)
-            .join(' · '),
-        style: HexaDsType.body(12),
-      ),
+  return Padding(
+    padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(action, style: HexaDsType.body(13, weight: FontWeight.w700)),
+        if (item != null && item.isNotEmpty)
+          Text(item, style: HexaDsType.body(12, color: HexaColors.textSecondary)),
+        if (delta != null)
+          Text(delta, style: HexaDsType.body(11, color: HexaColors.textSecondary)),
+        Text(time, style: HexaDsType.body(10, color: HexaColors.textSecondary)),
+      ],
     ),
   );
 }
@@ -564,9 +565,10 @@ class _StockTab extends ConsumerWidget {
         if (rows.isEmpty) {
           return const Center(child: Text('No stock adjustments yet.'));
         }
-        return ListView.builder(
-          padding: const EdgeInsets.all(16),
+        return ListView.separated(
+          padding: const EdgeInsets.fromLTRB(12, 4, 12, 16),
           itemCount: rows.length,
+          separatorBuilder: (_, __) => const Divider(height: 1),
           itemBuilder: (_, i) {
             final r = rows[i];
             return _denseTile(
@@ -596,9 +598,10 @@ class _PurchasesTab extends ConsumerWidget {
         if (rows.isEmpty) {
           return const Center(child: Text('No purchases recorded.'));
         }
-        return ListView.builder(
-          padding: const EdgeInsets.all(16),
+        return ListView.separated(
+          padding: const EdgeInsets.fromLTRB(12, 4, 12, 16),
           itemCount: rows.length,
+          separatorBuilder: (_, __) => const Divider(height: 1),
           itemBuilder: (_, i) {
             final p = rows[i];
             return _denseTile(
@@ -628,9 +631,10 @@ class _ItemsTab extends ConsumerWidget {
         if (rows.isEmpty) {
           return const Center(child: Text('No items created yet.'));
         }
-        return ListView.builder(
-          padding: const EdgeInsets.all(16),
+        return ListView.separated(
+          padding: const EdgeInsets.fromLTRB(12, 4, 12, 16),
           itemCount: rows.length,
+          separatorBuilder: (_, __) => const Divider(height: 1),
           itemBuilder: (_, i) {
             final it = rows[i];
             return _denseTile(
