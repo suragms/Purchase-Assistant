@@ -13,6 +13,8 @@ import '../../core/providers/notifications_provider.dart'
 import '../../core/design_system/hexa_ds_tokens.dart';
 import '../../core/design_system/hexa_operational_tokens.dart';
 import '../../core/auth/session_notifier.dart';
+import '../../core/auth/provider_api_guard.dart';
+import '../../core/router/shell_navigation.dart';
 import '../../core/design_system/hexa_desktop_layout.dart';
 import '../../core/design_system/hexa_responsive.dart';
 import '../../core/theme/hexa_colors.dart';
@@ -60,7 +62,9 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
 
   @override
   Widget build(BuildContext context) {
-    ref.watch(notificationCenterCoordinatorProvider);
+    if (!providerSkipApi(ref)) {
+      ref.watch(notificationCenterCoordinatorProvider);
+    }
     final navigationShell = widget.navigationShell;
     final idx = navigationShell.currentIndex;
     // Keep provider aligned with IndexedStack index in the same frame (post-frame
@@ -81,6 +85,11 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
       ref.read(shellReturnBranchProvider.notifier).state = null;
       ref.read(shellCurrentBranchProvider.notifier).state = branch;
       navigationShell.goBranch(branch);
+      final target = shellLocationForBranch(branch);
+      final current = GoRouterState.of(context).uri.path;
+      if (current != target && !current.startsWith('$target/')) {
+        context.go(target);
+      }
     }
 
     final loc = routePath;

@@ -59,12 +59,11 @@ import 'widgets/home_sticky_period_header.dart';
 
 /// True when the Home IndexedStack tab is the active shell branch.
 bool _homeShellTabVisible(WidgetRef ref, BuildContext context) {
-  final shell = StatefulNavigationShell.maybeOf(context);
-  if (shell != null) {
-    // Trust the shell index (source of truth for which tab is painted).
-    return shell.currentIndex == ShellBranch.home;
-  }
-  return ref.watch(shellCurrentBranchProvider) == ShellBranch.home;
+  final branch = ref.watch(shellCurrentBranchProvider);
+  if (branch == ShellBranch.home) return true;
+  // Fallback when shell index and GoRouter location desync (common on web tab switch).
+  final path = GoRouterState.of(context).uri.path;
+  return path == '/home' || path.startsWith('/home/');
 }
 
 /// Harisree owner/admin home — purchase-first warehouse control center.
@@ -158,7 +157,8 @@ class _HomePageState extends ConsumerState<HomePage>
     _rtPollHome = Timer.periodic(const Duration(seconds: 60), (_) {
       if (!mounted) return;
       if (ref.read(sessionProvider) == null ||
-          ref.read(authSessionExpiredProvider)) {
+          ref.read(authSessionExpiredProvider) ||
+          ref.read(auth401CircuitOpenProvider)) {
         _setHomePollingActive(false);
         return;
       }
@@ -386,8 +386,10 @@ class _HomePageState extends ConsumerState<HomePage>
 
     final session = ref.watch(sessionProvider);
     final authExpired = ref.watch(authSessionExpiredProvider);
+    final authCircuit = ref.watch(auth401CircuitOpenProvider);
     final degraded = ref.watch(apiDegradedProvider);
     final authBlocked = authExpired ||
+        authCircuit ||
         (degraded != null &&
             (degraded.toLowerCase().contains('session') ||
                 degraded.toLowerCase().contains('sign in')));

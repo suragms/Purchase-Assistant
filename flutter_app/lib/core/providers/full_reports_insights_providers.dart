@@ -3,7 +3,9 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
-import '../auth/session_notifier.dart';
+import '../auth/provider_api_guard.dart';
+import '../auth/session_notifier.dart' show activeSessionProvider, hexaApiProvider;
+import '../../features/shell/shell_branch_provider.dart';
 import 'analytics_kpi_provider.dart';
 
 /// Insights copy block for the full Reports screen (invalidated with other analytics).
@@ -12,7 +14,9 @@ final fullReportsInsightsProvider =
   final link = ref.keepAlive();
   final timer = Timer(const Duration(minutes: 5), link.close);
   ref.onDispose(timer.cancel);
-  final session = ref.watch(sessionProvider);
+  if (providerSkipApi(ref)) return {};
+  if (!shellBranchIsVisible(ref, ShellBranch.reports)) return {};
+  final session = ref.watch(activeSessionProvider);
   if (session == null) return {};
   final range = ref.watch(analyticsDateRangeProvider);
   final fmt = DateFormat('yyyy-MM-dd');
@@ -29,7 +33,9 @@ final fullReportsGoalsProvider =
   final link = ref.keepAlive();
   final timer = Timer(const Duration(minutes: 5), link.close);
   ref.onDispose(timer.cancel);
-  final session = ref.watch(sessionProvider);
+  if (providerSkipApi(ref)) return null;
+  if (!shellBranchIsVisible(ref, ShellBranch.reports)) return null;
+  final session = ref.watch(activeSessionProvider);
   if (session == null) return null;
   final n = DateTime.now();
   final period =

@@ -4,9 +4,10 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../auth/auth_failure_policy.dart';
-import '../auth/session_notifier.dart';
-import '../models/trade_purchase_models.dart';
+import '../auth/session_notifier.dart' show activeSessionProvider, hexaApiProvider, sessionProvider;
 import '../../features/shell/shell_branch_provider.dart';
+import '../models/trade_purchase_models.dart';
+import '../auth/provider_api_guard.dart';
 import 'analytics_kpi_provider.dart' show analyticsDateRangeProvider;
 import '../utils/line_display.dart';
 
@@ -127,8 +128,12 @@ final tradePurchasesForAlertsProvider =
   final link = ref.keepAlive();
   final t = Timer(const Duration(minutes: 8), link.close);
   ref.onDispose(t.cancel);
-  if (ref.watch(authSessionExpiredProvider)) return [];
-  final session = ref.watch(sessionProvider);
+  if (providerSkipApi(ref)) return [];
+  final branch = ref.watch(shellCurrentBranchProvider);
+  if (branch != ShellBranch.home && branch != ShellBranch.history) {
+    return [];
+  }
+  final session = ref.watch(activeSessionProvider);
   if (session == null) return [];
   return ref.read(hexaApiProvider).listTradePurchases(
         businessId: session.primaryBusiness.id,

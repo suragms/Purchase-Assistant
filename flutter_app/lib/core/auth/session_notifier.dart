@@ -30,6 +30,19 @@ final authRefresh = ValueNotifier<int>(0);
 /// refresh use, and provider storms that complete after Riverpod has disposed
 /// [FutureProvider] elements (defunct + markNeedsBuild crashes on web).
 Future<bool>? _unauthorizedRefreshInFlight;
+Future<void>? _terminalAuthFailureInFlight;
+
+Future<void> _singleFlightTerminalAuthFailure(
+  Future<void> Function() fn,
+) {
+  if (_terminalAuthFailureInFlight != null) {
+    return _terminalAuthFailureInFlight!;
+  }
+  _terminalAuthFailureInFlight = fn().whenComplete(() {
+    _terminalAuthFailureInFlight = null;
+  });
+  return _terminalAuthFailureInFlight!;
+}
 
 Future<bool> _singleFlightUnauthorizedRefresh(
   bool Function() isDisposed,
@@ -163,18 +176,32 @@ final hexaApiProvider = Provider<HexaApi>((ref) {
             }
           },
         ),
-    onTerminalAuthFailure: (reason) async {
+    onTerminalAuthFailure: (reason) => _singleFlightTerminalAuthFailure(() async {
       if (disposed) return;
       try {
         ref.read(authRefreshFailureTrackerProvider).reset();
+        ref.read(auth401BurstGuardProvider).reset();
         ref.read(authSessionExpiredProvider.notifier).markExpired();
         await ref.read(sessionProvider.notifier).logout();
       } catch (_) {/* container disposed */}
+    }),
+    onBusiness401: () {
+      if (disposed) return true;
+      try {
+        final tripped = ref.read(auth401BurstGuardProvider).record401();
+        if (tripped) {
+          ref.read(authSessionExpiredProvider.notifier).markExpired();
+        }
+        return tripped;
+      } catch (_) {
+        return true;
+      }
     },
     authSessionExpired: () {
       if (disposed) return true;
       try {
-        return ref.read(authSessionExpiredProvider);
+        return ref.read(authSessionExpiredProvider) ||
+            ref.read(auth401CircuitOpenProvider);
       } catch (_) {
         return true;
       }
@@ -279,6 +306,7 @@ class SessionNotifier extends Notifier<Session?> {
     try {
       ref.read(authSessionExpiredProvider.notifier).clear();
       ref.read(authRefreshFailureTrackerProvider).reset();
+      ref.read(auth401BurstGuardProvider).reset();
     } catch (_) {}
   }
 
@@ -709,6 +737,7 @@ class SessionNotifier extends Notifier<Session?> {
       ref.read(apiDegradedProvider.notifier).clear();
       ref.read(authSessionExpiredProvider.notifier).clear();
       ref.read(authRefreshFailureTrackerProvider).reset();
+      ref.read(auth401BurstGuardProvider).reset();
     } catch (_) {}
     invalidateStaffHomeCaches(ref);
   }

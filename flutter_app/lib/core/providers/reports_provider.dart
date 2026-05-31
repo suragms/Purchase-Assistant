@@ -9,6 +9,7 @@ import 'package:intl/intl.dart';
 
 import '../api/hexa_api.dart';
 import '../auth/session_notifier.dart' show activeSessionProvider, hexaApiProvider;
+import '../auth/provider_api_guard.dart';
 import '../errors/user_facing_errors.dart';
 import '../models/trade_purchase_models.dart';
 import '../reporting/trade_report_aggregate.dart';
@@ -21,11 +22,7 @@ import 'connectivity_provider.dart' show isOfflineResult;
 final Map<String, Future<List<TradePurchase>>> _reportsPurchasesInflight = {};
 DateTime? _reportsInflightLastBustAt;
 
-/// Throttle silent `/trade-purchases` refresh when the Reports tab is not active
-/// (avoids a refetch loop when [reportsPurchasesHiveCacheProvider] invalidates).
-const int _reportsSilentRefreshMinIntervalMs = 8000;
 const int _reportsInflightBustCooldownMs = 3000;
-final Map<String, int> _reportsSilentRefreshAt = {};
 
 void bustReportsPurchasesInflight() {
   final now = DateTime.now();
@@ -36,7 +33,6 @@ void bustReportsPurchasesInflight() {
   }
   _reportsInflightLastBustAt = now;
   _reportsPurchasesInflight.clear();
-  _reportsSilentRefreshAt.clear();
 }
 
 bool _isNonRetryableNetworkError(Object e) {
@@ -358,46 +354,17 @@ final reportsPurchasesPayloadProvider =
   final link = ref.keepAlive();
   final t = Timer(const Duration(minutes: 5), link.close);
   ref.onDispose(t.cancel);
+  if (providerSkipApi(ref)) return ReportsPurchasePayload.empty();
   final session = ref.watch(activeSessionProvider);
   ref.watch(analyticsDateRangeProvider);
   final branch = ref.watch(shellCurrentBranchProvider);
   if (session == null) return ReportsPurchasePayload.empty();
 
-  // IndexedStack mounts Reports off-screen; still **background-refresh** so Hive
-  // (and merged aggregates) update after writes without forcing the user onto
-  // the Reports tab first. Throttled + shares [_loadReportsPurchases] inflight.
+  // IndexedStack mounts Reports off-screen; use Hive only until the user opens Reports.
   if (branch != ShellBranch.reports) {
     final hive = ref.watch(reportsPurchasesHiveCacheProvider);
-    final range = ref.read(analyticsDateRangeProvider);
-    final df = DateFormat('yyyy-MM-dd');
-    final fromStr = df.format(range.from);
-    final toStr = df.format(range.to);
-    final key = '${session.primaryBusiness.id}|$fromStr|$toStr';
-    final now = DateTime.now().millisecondsSinceEpoch;
-    final last = _reportsSilentRefreshAt[key] ?? 0;
-    // After a write we bust Hive keys — [hive] is null until a fetch repopulates.
-    // Returning [] here made Reports/Home aggregates look empty until the user
-    // opened Reports or the 8s throttle fired; await once when cache is missing.
-    if (hive == null) {
-      try {
-        final items = await _loadReportsPurchases(ref);
-        ref.invalidate(reportsPurchasesHiveCacheProvider);
-        return ReportsPurchasePayload(items: items, fromLiveFetch: true);
-      } catch (_) {
-        return ReportsPurchasePayload.empty();
-      }
-    }
-    if (now - last >= _reportsSilentRefreshMinIntervalMs) {
-      _reportsSilentRefreshAt[key] = now;
-      unawaited(() async {
-        try {
-          await _loadReportsPurchases(ref);
-          ref.invalidate(reportsPurchasesHiveCacheProvider);
-        } catch (_) {}
-      }());
-    }
     return ReportsPurchasePayload(
-      items: hive,
+      items: hive ?? const [],
       fromLiveFetch: false,
     );
   }
