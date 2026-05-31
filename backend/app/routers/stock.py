@@ -256,6 +256,15 @@ def _item_to_list_row(
         (opening > 0 or delivered_lifetime > 0 or quick_lifetime > 0)
         and abs(cur - expected) > Decimal("0.001")
     )
+    if (
+        not out_of_sync
+        and last_purchase_delivered
+        and last_line_qty is not None
+        and last_line_qty > 0
+        and cur + Decimal("0.001") < last_line_qty
+        and delivered_lifetime + Decimal("0.001") < last_line_qty
+    ):
+        out_of_sync = True
     return StockListItemOut(
         id=item.id,
         item_code=item.item_code,
@@ -926,7 +935,7 @@ async def recompute_item_stock(
         .where(
             TradePurchase.business_id == business_id,
             TradePurchase.status.notin_(("cancelled", "deleted")),
-            TradePurchase.is_delivered.is_(True),
+            TradePurchase.delivery_status == "stock_committed",
             TradePurchaseLine.catalog_item_id == item_id,
             CatalogItem.business_id == business_id,
             CatalogItem.deleted_at.is_(None),

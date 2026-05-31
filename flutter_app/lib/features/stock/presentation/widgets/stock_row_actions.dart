@@ -2,7 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../core/api/hexa_api.dart';
+import '../../../../core/auth/session_notifier.dart';
 import '../../../../core/design_system/hexa_responsive.dart';
+import '../../../../core/errors/user_facing_errors.dart';
+import '../../../../core/providers/business_aggregates_invalidation.dart';
+import '../../../../core/providers/stock_providers.dart';
 import '../../../../core/utils/unit_utils.dart';
 import '../../../catalog/presentation/widgets/item_stock_metric_strip.dart';
 import '../quick_stock_action_sheet.dart';
@@ -79,6 +84,39 @@ Future<void> showStockRowActions({
             );
           },
         ),
+        if (StockRowMetrics.needsStockSync(item))
+          _StockActionTile(
+            icon: Icons.sync_rounded,
+            label: 'Sync system stock from purchases',
+            onTap: () async {
+              Navigator.pop(context);
+              final session = ref.read(sessionProvider);
+              if (session == null) return;
+              try {
+                await ref.read(hexaApiProvider).recomputeItemStock(
+                      businessId: session.primaryBusiness.id,
+                      itemId: id,
+                    );
+                invalidateWarehouseSurfaces(ref, itemId: id);
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('System stock synced from deliveries'),
+                    ),
+                  );
+                }
+              } catch (e) {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(friendlyApiError(e)),
+                      backgroundColor: Colors.red.shade700,
+                    ),
+                  );
+                }
+              }
+            },
+          ),
         _StockActionTile(
           icon: Icons.add_shopping_cart_outlined,
           label: 'Add purchase quantity',

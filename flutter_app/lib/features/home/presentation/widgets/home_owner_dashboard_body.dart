@@ -15,9 +15,11 @@ import '../../../../core/providers/stock_providers.dart'
     show lowStockByCategoryProvider, openingStockMissingProvider, stockStatusCountsProvider;
 import '../../../stock/presentation/widgets/low_stock_category_tree.dart'
     show countLowStockForTab, LowStockTreeTab;
+import 'home_analytics_helpers.dart';
 import 'home_owner_quick_actions.dart';
 import 'home_purchase_control_center.dart';
 import 'home_warehouse_activity_feed.dart';
+import '../../../../shared/widgets/warehouse_units_breakdown_line.dart';
 
 /// Owner dashboard: alert strip → KPI grid → purchases → activity (compact).
 class HomeOwnerDashboardBody extends ConsumerWidget {
@@ -120,8 +122,12 @@ class HomeOwnerDashboardBody extends ConsumerWidget {
             ),
             _KpiTile(
               label: 'Warehouse',
-              value: '${inv?.itemCount ?? dash.itemSlices.length}',
-              subtitle: 'Active items',
+              value: inv != null && inventoryUnitsLine(inv).isNotEmpty
+                  ? inventoryUnitsLine(inv)
+                  : '${inv?.itemCount ?? dash.itemSlices.length}',
+              subtitle: inv != null && inventoryUnitsLine(inv).isNotEmpty
+                  ? '${inv.itemCount} items on hand'
+                  : 'Active items',
               onTap: () => goShellTab(
                     context,
                     ref,
@@ -236,12 +242,19 @@ class _KpiTile extends StatelessWidget {
                   style: HexaDsType.label(11, color: HexaDsColors.textMuted),
                 ),
                 const SizedBox(height: 4),
-                Text(
-                  value,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: HexaDsType.metricPrimary(color: accent),
-                ),
+                if (value.contains(' · '))
+                  WarehouseUnitsSubtitleText(
+                    subtitle: value,
+                    fontSize: 13,
+                    fallbackStyle: HexaDsType.metricPrimary(color: accent),
+                  )
+                else
+                  Text(
+                    value,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: HexaDsType.metricPrimary(color: accent),
+                  ),
                 Text(
                   subtitle,
                   maxLines: 1,

@@ -42,7 +42,9 @@ class PurchaseDetailDeliveryBanner extends StatelessWidget {
                 ? 'Committed on ${DateFormat('d MMM yyyy').format(purchase.deliveredAt!)}'
                 : 'Stock updated in warehouse',
       DeliveryStatus.staffVerified || DeliveryStatus.partial =>
-        'Staff verified — owner must commit to stock',
+        isStaff && onCommit != null
+            ? 'Verified — tap Commit to add qty to system stock'
+            : 'Staff verified — commit to system stock when ready',
       DeliveryStatus.arrived || DeliveryStatus.staffVerifying =>
         'Count items and submit verification',
       DeliveryStatus.dispatched || DeliveryStatus.inTransit =>

@@ -124,10 +124,39 @@ void main() {
             .toIso8601String(),
         'last_purchase_human_id': 'PUR-1',
         'last_purchase_delivered': true,
+        'total_delivered_qty': 100,
         'stock_unit': 'bag',
       });
       expect(cell.primary, '100');
       expect(cell.secondary, '4d');
+    });
+
+    test('hides delivered truck after 5 days', () {
+      final cell = StockRowMetrics.pendingCellDisplay({
+        'current_stock': 50,
+        'last_line_qty': 10,
+        'last_purchase_at': DateTime.now()
+            .subtract(const Duration(days: 14))
+            .toIso8601String(),
+        'last_purchase_human_id': 'PUR-1',
+        'last_purchase_delivered': true,
+        'total_delivered_qty': 10,
+        'stock_unit': 'bag',
+      });
+      expect(cell.primary, '—');
+    });
+
+    test('shows sync cue when committed qty missing from ledger', () {
+      final cell = StockRowMetrics.pendingCellDisplay({
+        'current_stock': 0,
+        'last_line_qty': 5000,
+        'last_purchase_human_id': 'PUR-1',
+        'last_purchase_delivered': true,
+        'total_delivered_qty': 0,
+        'stock_unit': 'kg',
+      });
+      expect(cell.primary, '5000.0');
+      expect(cell.secondary, 'sync');
     });
   });
 

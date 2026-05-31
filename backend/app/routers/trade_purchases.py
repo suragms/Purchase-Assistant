@@ -469,7 +469,7 @@ async def commit_trade_purchase_delivery(
     purchase_id: uuid.UUID,
     user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
-    _m: Annotated[Membership, Depends(require_role("owner", "manager", "super_admin"))],
+    _m: Annotated[Membership, Depends(require_permission("stock_edit"))],
 ):
     try:
         out = await tps.commit_trade_purchase_delivery(

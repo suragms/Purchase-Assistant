@@ -10,6 +10,8 @@ import '../../../../shared/widgets/stock_summary_widget.dart';
 enum StockDeliveryIndicator { none, pending, delivered }
 
 abstract final class StockRowMetrics {
+  /// Show green delivered truck at most this many days after last purchase commit.
+  static const int deliveredTruckMaxDays = 5;
   static double? purchasedQty(Map<String, dynamic> item) =>
       coerceToDoubleNullable(item['period_purchased_qty']);
 
@@ -35,7 +37,28 @@ abstract final class StockRowMetrics {
   }
 
   static String? deliveryVerifiedAgeLabel(Map<String, dynamic> item) =>
-      deliveryAgeLabel(item['last_purchase_at']?.toString());
+      deliveryAgeLabel(
+        item['last_purchase_at']?.toString(),
+        compactCapDays: deliveredTruckMaxDays,
+      );
+
+  static int? _daysSinceIso(String? iso) {
+    if (iso == null || iso.isEmpty) return null;
+    final dt = DateTime.tryParse(iso)?.toLocal();
+    if (dt == null) return null;
+    return DateTime.now().difference(dt).inDays;
+  }
+
+  /// Committed purchase qty not reflected in ledger movements / on-hand.
+  static bool needsStockSync(Map<String, dynamic> item) {
+    if (item['system_stock_out_of_sync'] == true) return true;
+    if (item['last_purchase_delivered'] != true) return false;
+    final lastLine = lastDeliveryLineQty(item) ?? 0;
+    if (lastLine <= 0.001) return false;
+    final lifetime = purchasedLifetimeQty(item);
+    final sys = ledgerQty(item);
+    return lifetime + 0.001 < lastLine && sys + 0.001 < lastLine;
+  }
 
   static double? openingQty(Map<String, dynamic> item) =>
       coerceToDoubleNullable(item['opening_stock_qty']);
@@ -202,6 +225,15 @@ abstract final class StockRowMetrics {
     final days = (item['pending_order_days'] as num?)?.toInt();
     final kind = deliveryIndicator(item);
 
+    if (needsStockSync(item)) {
+      final qty = lastDeliveryLineQty(item) ?? pending;
+      return (
+        primary: qty > 0.001 ? formatStockQtyForUnit(u, qty) : '!',
+        secondary: 'sync',
+        color: pendingColor,
+      );
+    }
+
     if (pending > 0.001 || kind == StockDeliveryIndicator.pending) {
       final qty = pending > 0.001 ? pending : 0.0;
       return (
@@ -210,7 +242,7 @@ abstract final class StockRowMetrics {
         color: pendingColor,
       );
     }
-    if (kind == StockDeliveryIndicator.delivered) {
+    if (kind == StockDeliveryIndicator.delivered && _showDeliveredTruck(item)) {
       final qty = lastDeliveryLineQty(item) ?? 0;
       return (
         primary: qty > 0.001 ? formatStockQtyForUnit(u, qty) : '✓',
@@ -221,6 +253,12 @@ abstract final class StockRowMetrics {
     return (primary: '—', secondary: null, color: muted);
   }
 
+  static bool _showDeliveredTruck(Map<String, dynamic> item) {
+    final age = _daysSinceIso(item['last_purchase_at']?.toString());
+    if (age == null) return true;
+    return age <= deliveredTruckMaxDays;
+  }
+
   static String openingLabel(Map<String, dynamic> item) {
     final opening = coerceToDoubleNullable(item['opening_stock_qty']);
     if (opening == null) return '';
@@ -229,6 +267,8 @@ abstract final class StockRowMetrics {
   }
 
   static StockDeliveryIndicator deliveryIndicator(Map<String, dynamic> item) {
+    if (needsStockSync(item)) return StockDeliveryIndicator.pending;
+
     final pendingDel = pendingDeliveryQty(item) ?? 0;
     final hasPending = item['has_pending_order'] == true;
     final po = item['last_purchase_human_id']?.toString().trim() ?? '';
@@ -238,7 +278,7 @@ abstract final class StockRowMetrics {
     if (hasPending || pendingDel > 0.001) {
       return StockDeliveryIndicator.pending;
     }
-    if (po.isNotEmpty && deliveredFlag) {
+    if (po.isNotEmpty && deliveredFlag && _showDeliveredTruck(item)) {
       return StockDeliveryIndicator.delivered;
     }
     if (po.isNotEmpty && undeliveredFlag) {

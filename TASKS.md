@@ -9,6 +9,7 @@
 - [x] **Stock constraint:** `chk_current_stock_non_negative` on `catalog_items`; **0** negative rows
 - [x] **Sort index:** `ix_catalog_items_business_active_updated` present
 - [ ] Manual: commit delivery → stock SYSTEM column refreshes without pull-to-refresh
+- [x] **Stock commit fix (2026-05-31):** reject empty commit; staff `stock_edit` can commit; truck hides after 5d; orange sync cue; home warehouse unit breakdown; recompute uses `stock_committed`
 
 ## Master prompt FIX-1–15 (2026-05-29)
 
@@ -17,6 +18,7 @@ All 15 fixes verified in codebase; pytest 10 passed; flutter repair tests 13 pas
 - [x] FIX-1–12 — shipped (see sections below)
 - [x] FIX-13–15 — empty states, dense rows, scrollable stock tabs / reports chips
 - [ ] Manual: commit delivery → stock SYSTEM column refreshes without pull-to-refresh
+- [x] **Stock commit fix (2026-05-31):** reject empty commit; staff `stock_edit` can commit; truck hides after 5d; orange sync cue; home warehouse unit breakdown; recompute uses `stock_committed`
 - [ ] Deploy Vercel after reports chart fix
 
 ## Reports module redesign (2026-05-29)
@@ -144,6 +146,7 @@ FIX-1–FIX-12: already shipped (invalidation hub, sheets, navigation, backend f
 - [x] Tests: backend 10 passed; flutter `delivery_invalidation`, `navigation_ext`, `sheet_compact_height`, `stock_row_metrics`
 - [x] **Deploy:** Alembic **044** on Render Postgres — verified live via Supabase MCP (`alembic_version`, CHECK, indexes)
 - [ ] Manual: commit delivery → stock SYSTEM column refreshes without pull-to-refresh
+- [x] **Stock commit fix (2026-05-31):** reject empty commit; staff `stock_edit` can commit; truck hides after 5d; orange sync cue; home warehouse unit breakdown; recompute uses `stock_committed`
 
 ## FIX_TODO_MASTER (2026-05-30)
 

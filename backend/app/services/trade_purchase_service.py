@@ -38,6 +38,7 @@ from app.read_cache_generation import bump_trade_read_caches_for_business
 from app.services import decimal_precision as dp
 from app.services.stock_inventory import (
     apply_confirmed_purchase_stock,
+    purchase_delivery_stock_already_applied,
     revert_confirmed_purchase_stock,
     sync_confirmed_purchase_stock_diff,
 )
@@ -1405,7 +1406,29 @@ async def commit_trade_purchase_delivery(
     except ValueError:
         await db.rollback()
         raise
-    committed_qty = sum(_dec(u.get("delta", 0)) for u in stock_updates)
+    applied_delta = sum(
+        _dec(u.get("delta", 0))
+        for u in stock_updates
+        if _dec(u.get("delta", 0)) > 0
+    )
+    skipped_setup = [
+        u for u in stock_updates if u.get("needs_unit_setup") is True
+    ]
+    if applied_delta <= 0:
+        if await purchase_delivery_stock_already_applied(
+            db, business_id, purchase_id
+        ):
+            return trade_purchase_to_out(tp, stock_updates=[])
+        detail = (
+            "No stock was added. Link each line to a catalog item and set stock "
+            "units, then commit again."
+        )
+        if skipped_setup:
+            detail = (
+                f"{detail} ({len(skipped_setup)} line(s) need unit setup.)"
+            )
+        raise ValueError(detail)
+    committed_qty = applied_delta
     if committed_qty <= 0 and tp.staff_verified_qty is not None:
         committed_qty = _dec(tp.staff_verified_qty)
     tp.delivery_status = "stock_committed"

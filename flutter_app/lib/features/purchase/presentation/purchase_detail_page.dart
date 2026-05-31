@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import '../../../core/auth/auth_error_messages.dart';
 import '../../../core/auth/session_notifier.dart';
+import '../../../core/auth/session_permissions.dart';
 import '../../../core/catalog/item_trade_history.dart' show tradeLineToCalc;
 import '../../../core/calc_engine.dart';
 import '../../../core/models/trade_purchase_models.dart';
@@ -538,6 +539,12 @@ class PurchaseDetailBodyState extends ConsumerState<PurchaseDetailBody> {
         role == 'admin';
   }
 
+  bool _canCommitStock() {
+    final session = ref.read(sessionProvider);
+    if (session == null) return false;
+    return _isOwnerOrManager() || sessionCanStockEdit(session);
+  }
+
   bool _isStaff() {
     final session = ref.read(sessionProvider);
     if (session == null) return false;
@@ -937,9 +944,8 @@ class PurchaseDetailBodyState extends ConsumerState<PurchaseDetailBody> {
           onVerify: (_isStaff() || _isOwnerOrManager())
               ? () => _verify(context, p)
               : null,
-          onCommit: _isOwnerOrManager()
-              ? () => _commitStock(context, p)
-              : null,
+          onCommit:
+              _canCommitStock() ? () => _commitStock(context, p) : null,
           onRevert: _isOwnerOrManager()
               ? () => _revertDelivery(context, p)
               : null,
