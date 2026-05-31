@@ -1,16 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:dio/dio.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/auth/dashboard_role.dart';
+import '../../../../core/api/hexa_api.dart';
 import '../../../../core/auth/session_notifier.dart';
 import '../../../../core/design_system/hexa_operational_tokens.dart';
 import '../../../../core/design_system/hexa_responsive.dart';
 import '../../../../core/json_coerce.dart';
 import '../../../../core/providers/item_detail_providers.dart';
 import '../../../../core/theme/hexa_colors.dart';
+import '../../../../core/errors/user_facing_errors.dart';
+import '../../../../core/providers/business_aggregates_invalidation.dart';
 import '../../../../core/utils/unit_utils.dart';
+import '../../../stock/presentation/widgets/stock_row_metrics.dart';
 import 'item_stock_metric_strip.dart';
 import '../../domain/item_stock_snapshot.dart';
 
@@ -213,75 +216,105 @@ class ItemStockSnapshotCard extends ConsumerWidget {
               ),
             ],
             if (isOwner) ...[
-              Align(
-                alignment: Alignment.centerRight,
-                child: TextButton(
-                  onPressed: () async {
-                    try {
-                      await ref.read(hexaApiProvider).recomputeItemStock(
-                            businessId: session.primaryBusiness.id,
-                            itemId: itemId,
-                          );
-                      ref.invalidate(itemDetailBundleProvider(itemId));
-                      if (context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('System stock recomputed')),
-                        );
-                      }
-                    } on DioException catch (e) {
-                      if (context.mounted) {
-                        final isConflict = e.response?.statusCode == 409;
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text(
-                              isConflict
-                                  ? 'Recompute already in progress. Please wait and refresh.'
-                                  : 'Could not recompute stock',
-                            ),
-                          ),
-                        );
-                      }
-                    }
-                  },
-                  child: const Text('Recompute'),
-                ),
-              ),
-              const SizedBox(height: 6),
-              if (systemOutOfSync)
+              if (systemOutOfSync) ...[
                 Container(
                   width: double.infinity,
                   margin: const EdgeInsets.only(bottom: 8),
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
                   decoration: BoxDecoration(
                     color: const Color(0xFFFFF7ED),
                     borderRadius: BorderRadius.circular(8),
                     border: Border.all(color: const Color(0xFFFDBA74)),
                   ),
-                  child: Row(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      const Icon(
-                        Icons.sync_problem_rounded,
-                        size: 18,
-                        color: HexaColors.warning,
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          'System out of sync — commit pending deliveries or tap Recompute',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w700,
-                            color: Colors.grey.shade800,
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Icon(
+                            Icons.sync_problem_rounded,
+                            size: 18,
+                            color: HexaColors.warning,
                           ),
-                        ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'System shows ${_qty(systemQty, unit)} $unitLabel but verified purchases need ${_qty(expectedSystemQty, unit)} $unitLabel',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w800,
+                                    color: Colors.grey.shade900,
+                                  ),
+                                ),
+                                if (StockRowMetrics
+                                    .expectedSystemFormulaLine(stock)
+                                    .isNotEmpty) ...[
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    StockRowMetrics.expectedSystemFormulaLine(
+                                      stock,
+                                    ),
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w600,
+                                      color: Colors.grey.shade700,
+                                    ),
+                                  ),
+                                ],
+                                if (showOpeningCta && systemQty > 0.001) ...[
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    'If ${_qty(systemQty, unit)} $unitLabel was stock before purchases, set opening stock first.',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w600,
+                                      color: Colors.grey.shade700,
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                        ],
                       ),
-                      TextButton(
-                        onPressed: () => context.go('/purchase'),
-                        child: const Text('Purchases'),
+                      const SizedBox(height: 8),
+                      FilledButton.icon(
+                        onPressed: session == null
+                            ? null
+                            : () => _recomputeSystemStock(
+                                  context,
+                                  ref,
+                                  session.primaryBusiness.id,
+                                  itemId,
+                                ),
+                        icon: const Icon(Icons.sync_rounded, size: 18),
+                        label: Text(
+                          'Sync system stock to ${_qty(expectedSystemQty, unit)} $unitLabel',
+                        ),
                       ),
                     ],
                   ),
                 ),
+              ] else
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton(
+                    onPressed: session == null
+                        ? null
+                        : () => _recomputeSystemStock(
+                              context,
+                              ref,
+                              session.primaryBusiness.id,
+                              itemId,
+                            ),
+                    child: const Text('Recompute'),
+                  ),
+                ),
+              const SizedBox(height: 6),
               Theme(
                 data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
                 child: ExpansionTile(
@@ -610,6 +643,43 @@ class ItemStockSnapshotCard extends ConsumerWidget {
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
       child: _ReorderLevelSheet(itemId: itemId, current: current),
     );
+  }
+}
+
+Future<void> _recomputeSystemStock(
+  BuildContext context,
+  WidgetRef ref,
+  String businessId,
+  String itemId,
+) async {
+  try {
+    final out = await ref.read(hexaApiProvider).recomputeItemStock(
+          businessId: businessId,
+          itemId: itemId,
+        );
+    invalidateWarehouseSurfaces(ref, itemId: itemId);
+    ref.invalidate(itemDetailBundleProvider(itemId));
+    if (context.mounted) {
+      final qty = out['recomputed_qty'];
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            qty != null
+                ? 'System stock now ${formatStockQtyNumber(coerceToDouble(qty))}'
+                : 'System stock synced from verified purchases',
+          ),
+        ),
+      );
+    }
+  } catch (e) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(userFacingError(e)),
+          backgroundColor: Colors.red.shade700,
+        ),
+      );
+    }
   }
 }
 

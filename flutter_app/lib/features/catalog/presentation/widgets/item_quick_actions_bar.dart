@@ -8,8 +8,9 @@ import '../../../../core/router/post_auth_route.dart';
 import '../../../../core/theme/hexa_colors.dart';
 import '../../../../core/providers/item_detail_providers.dart';
 import '../../../../core/services/item_export_service.dart';
+import '../../../stock/presentation/quick_stock_action_sheet.dart';
 import '../../../stock/presentation/stock_quick_purchase_sheet.dart';
-import '../../../stock/presentation/update_stock_sheet.dart';
+import '../../../stock/presentation/widgets/stock_update_mode_toggle.dart';
 
 class ItemQuickActionsBar extends ConsumerWidget {
   const ItemQuickActionsBar({
@@ -31,18 +32,36 @@ class ItemQuickActionsBar extends ConsumerWidget {
 
     final actions = <_ActionSpec>[
       _ActionSpec(
-        label: 'Update physical',
+        label: 'Physical count',
         icon: Icons.fact_check_outlined,
         color: HexaColors.brandPrimary,
         onTap: () async {
           final row = ref.read(itemDetailStockProvider(itemId)).valueOrNull;
           if (!context.mounted) return;
-          await showUpdateStockSheet(
+          await showQuickStockActionSheet(
             context: context,
             ref: ref,
-            itemId: itemId,
-            itemName: itemName,
-            stockRow: row == null || row.isEmpty ? null : row,
+            item: row == null || row.isEmpty
+                ? {'id': itemId, 'name': itemName}
+                : row,
+            initialMode: StockUpdateMode.physical,
+          );
+        },
+      ),
+      _ActionSpec(
+        label: 'System stock',
+        icon: Icons.memory_outlined,
+        color: const Color(0xFF2563EB),
+        onTap: () async {
+          final row = ref.read(itemDetailStockProvider(itemId)).valueOrNull;
+          if (!context.mounted) return;
+          await showQuickStockActionSheet(
+            context: context,
+            ref: ref,
+            item: row == null || row.isEmpty
+                ? {'id': itemId, 'name': itemName}
+                : row,
+            initialMode: StockUpdateMode.system,
           );
         },
       ),

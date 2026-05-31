@@ -23,6 +23,7 @@
 - [ ] Run `python -m scripts.backfill_purchase_stock_commit` once for old verified POs
 - [ ] `GET /health/ready` → `stock_sync_ready: true`, `received_qty_column: true`
 - [ ] Vercel Flutter web: latest build (401 gate + stock invalidation + SYS/PHYS labels)
+- [ ] **Legacy stock repair (per business, owner runs):** `python -m scripts.backfill_purchase_stock_commit` then item **Recompute** for items with orange “commit to SYS” — do not hardcode client IDs in repo
 - [ ] **Manual QA matrix** (block release):
   1. Staff verify item (e.g. 100 bags) → **SYS** +100 on Stock + Item without pull-to-refresh
   2. Delete that PO → **SYS** −100, truck badge gone, `last_trade_purchase_id` cleared

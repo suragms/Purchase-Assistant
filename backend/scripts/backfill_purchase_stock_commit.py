@@ -32,7 +32,11 @@ async def run(*, business_id: uuid.UUID | None, dry_run: bool) -> None:
         fixed = 0
         skipped = 0
         for tp in rows:
-            if await purchase_delivery_stock_already_applied(db, tp.business_id, tp.id):
+            if tp.delivery_status == "stock_committed":
+                if await purchase_delivery_stock_already_applied(db, tp.business_id, tp.id):
+                    skipped += 1
+                    continue
+            elif await purchase_delivery_stock_already_applied(db, tp.business_id, tp.id):
                 skipped += 1
                 continue
             if tp.delivery_status not in ("staff_verified", "partial", "stock_committed"):

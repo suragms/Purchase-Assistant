@@ -8,6 +8,7 @@ import '../../../core/json_coerce.dart';
 import '../../../core/providers/business_aggregates_invalidation.dart';
 import '../../../core/notifications/local_notifications_service.dart';
 import '../../../core/providers/home_owner_dashboard_providers.dart';
+import '../../../core/providers/staff_home_providers.dart';
 import '../../../core/providers/stock_providers.dart';
 import '../../../core/providers/notification_center_provider.dart';
 import '../../../core/providers/server_notifications_provider.dart';
@@ -66,21 +67,41 @@ class _QuickStockActionBodyState extends ConsumerState<_QuickStockActionBody> {
   late double _current;
   String? _reasonType = 'verification';
   String _reasonLabel = 'Physical count';
-  late final String _idempotencyKey;
   late StockUpdateMode _mode;
 
   @override
   void initState() {
     super.initState();
     _mode = widget.initialMode;
-    _current = coerceToDouble(widget.item['current_stock']);
-    if (!_current.isFinite) _current = 0;
+    _current = _seedQtyForMode(_mode);
     _qtyCtrl = TextEditingController(
       text: formatStockQtyForUnit(_unit, _current),
     );
     _notesCtrl = TextEditingController();
-    _idempotencyKey =
-        'physical:${widget.item['id']}:${DateTime.now().microsecondsSinceEpoch}';
+  }
+
+  double _seedQtyForMode(StockUpdateMode mode) {
+    if (mode == StockUpdateMode.physical) {
+      final phys = coerceToDoubleNullable(widget.item['physical_stock_qty']);
+      if (phys != null && phys.isFinite && phys >= 0) return phys;
+    }
+    final sys = coerceToDouble(widget.item['current_stock']);
+    return sys.isFinite ? sys : 0;
+  }
+
+  void _onModeChanged(StockUpdateMode mode) {
+    setState(() {
+      _mode = mode;
+      _current = _seedQtyForMode(mode);
+      _qtyCtrl.text = formatStockQtyForUnit(_unit, _current);
+      if (mode == StockUpdateMode.physical) {
+        _reasonType = 'verification';
+        _reasonLabel = 'Physical count';
+      } else {
+        _reasonType = 'correction';
+        _reasonLabel = 'Correction';
+      }
+    });
   }
 
   @override
@@ -112,7 +133,7 @@ class _QuickStockActionBodyState extends ConsumerState<_QuickStockActionBody> {
   }
 
   Future<void> _save() async {
-    if (_reasonType == null) {
+    if (_mode == StockUpdateMode.system && _reasonType == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Select a reason')),
       );
@@ -143,18 +164,12 @@ class _QuickStockActionBodyState extends ConsumerState<_QuickStockActionBody> {
         ref.invalidate(appNotificationsListProvider);
         ref.invalidate(notificationCenterCoordinatorProvider);
       } else {
-        final version =
-            int.tryParse(widget.item['stock_version']?.toString() ?? '');
         final listQ = ref.read(stockListQueryProvider);
-        await ref.read(hexaApiProvider).updatePhysicalStock(
+        await ref.read(hexaApiProvider).recordPhysicalStockCount(
               businessId: session.primaryBusiness.id,
               itemId: _itemId,
               countedQty: parsed,
-              adjustmentType: _reasonType!,
-              reason: reasonLabel,
-              notes: note,
-              lastSeenStockVersion: version,
-              idempotencyKey: _idempotencyKey,
+              notes: note.isNotEmpty ? '$reasonLabel — $note' : reasonLabel,
               periodStart: listQ.periodStart,
               periodEnd: listQ.periodEnd,
             );
@@ -162,6 +177,8 @@ class _QuickStockActionBodyState extends ConsumerState<_QuickStockActionBody> {
       invalidateWarehouseSurfaces(ref, itemId: _itemId);
       ref.invalidate(stockAuditPeriodProvider);
       ref.invalidate(stockChangesFeedProvider);
+      ref.invalidate(staffTodayActivityProvider);
+      ref.invalidate(staffTodaySummaryProvider);
       final reorder = coerceToDouble(widget.item['reorder_level']);
       if (reorder > 0 && parsed <= reorder) {
         final unitLabel = _unit.isNotEmpty ? _unit.toUpperCase() : '';
@@ -185,9 +202,11 @@ class _QuickStockActionBodyState extends ConsumerState<_QuickStockActionBody> {
 
   @override
   Widget build(BuildContext context) {
-    final canSave = !_saving && _reasonType != null;
+    final canSave = !_saving &&
+        (_mode == StockUpdateMode.physical || _reasonType != null);
     final stockLabel = stockDisplayPrimary(_current, _unit);
     final lastPhysical = _lastPhysicalLabel;
+    final systemQty = coerceToDouble(widget.item['current_stock']);
 
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -220,18 +239,35 @@ class _QuickStockActionBodyState extends ConsumerState<_QuickStockActionBody> {
                 color: Color(0xFF64748B),
               ),
               children: [
-                const TextSpan(text: 'Current: '),
+                TextSpan(
+                  text: _mode == StockUpdateMode.physical
+                      ? 'Editing: '
+                      : 'System now: ',
+                ),
                 TextSpan(
                   text: stockLabel,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontWeight: FontWeight.w900,
-                    color: Color(0xFF2563EB),
+                    color: _mode == StockUpdateMode.physical
+                        ? const Color(0xFF0F766E)
+                        : const Color(0xFF2563EB),
                     fontSize: 15,
                   ),
                 ),
               ],
             ),
           ),
+          if (_mode == StockUpdateMode.physical) ...[
+            const SizedBox(height: 3),
+            Text(
+              'System ledger: ${formatStockQtyForUnit(_unit, systemQty)} $_unitLabel (unchanged until owner syncs)',
+              style: const TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFF64748B),
+              ),
+            ),
+          ],
           if (lastPhysical != null)
             Padding(
               padding: const EdgeInsets.only(top: 3),
@@ -258,7 +294,7 @@ class _QuickStockActionBodyState extends ConsumerState<_QuickStockActionBody> {
           const SizedBox(height: 10),
           StockUpdateModeToggle(
             mode: _mode,
-            onChanged: (m) => setState(() => _mode = m),
+            onChanged: _onModeChanged,
           ),
           const SizedBox(height: 4),
           Text(
@@ -282,28 +318,30 @@ class _QuickStockActionBodyState extends ConsumerState<_QuickStockActionBody> {
               border: OutlineInputBorder(),
             ),
           ),
-          const SizedBox(height: 14),
-          const Text(
-            'Reason',
-            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
-          ),
-          const SizedBox(height: 6),
-          Wrap(
-            spacing: 6,
-            runSpacing: 6,
-            children: [
-              for (final chip in _kReasonChips)
-                HexaAccessibleFilterChip(
-                  label: chip.$1,
-                  selected: _reasonLabel == chip.$1,
-                  onSelected: (_) => setState(() {
-                    _reasonType = chip.$2;
-                    _reasonLabel = chip.$1;
-                  }),
-                  compact: true,
-                ),
-            ],
-          ),
+          if (_mode == StockUpdateMode.system) ...[
+            const SizedBox(height: 14),
+            const Text(
+              'Reason',
+              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 6),
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: [
+                for (final chip in _kReasonChips)
+                  HexaAccessibleFilterChip(
+                    label: chip.$1,
+                    selected: _reasonLabel == chip.$1,
+                    onSelected: (_) => setState(() {
+                      _reasonType = chip.$2;
+                      _reasonLabel = chip.$1;
+                    }),
+                    compact: true,
+                  ),
+              ],
+            ),
+          ],
           const SizedBox(height: 14),
           const Text(
             'Notes (optional)',
@@ -332,7 +370,7 @@ class _QuickStockActionBodyState extends ConsumerState<_QuickStockActionBody> {
                   : Text(
                       _mode == StockUpdateMode.system
                           ? 'SAVE SYSTEM STOCK'
-                          : 'UPDATE STOCK',
+                          : 'SAVE PHYSICAL COUNT',
                       style: const TextStyle(fontWeight: FontWeight.w900),
                     ),
             ),

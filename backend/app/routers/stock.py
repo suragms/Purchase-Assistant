@@ -15,6 +15,7 @@ from app.services.staff_audit import log_staff_activity
 from app.services.notification_emitter import CATEGORY_STAFF
 from app.services.stock_inventory import (
     compute_expected_system_qty,
+    line_qty_for_stock_commit,
     movement_delivered_qty_map,
     movement_quick_purchase_qty_map,
 )
@@ -943,7 +944,9 @@ async def recompute_item_stock(
     )
     delivered_total = Decimal("0")
     for line, line_item in delivered_r.all():
-        delivered_total += line_qty_in_stock_unit(line, line_item)
+        delivered_total += line_qty_for_stock_commit(line, line_item)
+
+    opening = Decimal(getattr(item, "opening_stock_qty", None) or 0)
 
     non_purchase_delta_r = await db.execute(
         select(func.coalesce(func.sum(StockMovement.delta_qty), 0)).where(
@@ -959,7 +962,7 @@ async def recompute_item_stock(
         )
     )
     non_purchase_delta = Decimal(non_purchase_delta_r.scalar_one() or 0)
-    recomputed_qty = delivered_total + non_purchase_delta
+    recomputed_qty = opening + delivered_total + non_purchase_delta
     if recomputed_qty < 0:
         recomputed_qty = Decimal("0")
 
@@ -2172,6 +2175,55 @@ async def audit_for_item(
     return await _adjustments_to_out(db, business_id, list(r.scalars().all()))
 
 
+async def _membership_role_map(
+    db: AsyncSession,
+    business_id: uuid.UUID,
+    user_ids: set[uuid.UUID],
+) -> dict[uuid.UUID, str]:
+    if not user_ids:
+        return {}
+    r = await db.execute(
+        select(Membership.user_id, Membership.role).where(
+            Membership.business_id == business_id,
+            Membership.user_id.in_(user_ids),
+        )
+    )
+    return {uid: (role or "staff") for uid, role in r.all()}
+
+
+def _staff_activity_event(ev: StaffActivityLog, *, actor_role: str | None) -> StockActivityEventOut:
+    details = ev.details if isinstance(ev.details, dict) else {}
+    before = details.get("before") if isinstance(details.get("before"), dict) else {}
+    after = details.get("after") if isinstance(details.get("after"), dict) else {}
+    qty_before = before.get("system_qty")
+    qty_after = after.get("counted_qty")
+    delta = None
+    if qty_before is not None and qty_after is not None:
+        try:
+            delta = Decimal(str(qty_after)) - Decimal(str(qty_before))
+        except Exception:
+            delta = None
+    title = ev.action_type.replace("_", " ").title()
+    if ev.action_type == "PHYSICAL_STOCK_COUNT":
+        title = "Physical count recorded"
+    elif ev.action_type == "STOCK_UPDATE":
+        title = "Stock updated"
+    return StockActivityEventOut(
+        id=str(ev.id),
+        kind=ev.action_type,
+        title=title,
+        qty_before=Decimal(str(qty_before)) if qty_before is not None else None,
+        qty_after=Decimal(str(qty_after)) if qty_after is not None else None,
+        delta_qty=delta,
+        actor_name=ev.user_name,
+        actor_role=actor_role,
+        notes=details.get("notes") if isinstance(details.get("notes"), str) else None,
+        created_at=ev.created_at,
+        source_type="staff_activity_log",
+        source_id=str(ev.id),
+    )
+
+
 @router.get("/{item_id}/activity", response_model=StockItemActivityOut)
 async def stock_item_activity(
     business_id: uuid.UUID,
@@ -2229,13 +2281,17 @@ async def stock_item_activity(
             staff_q = staff_q.where(literal(False))
     staff_r = await db.execute(staff_q)
     staff_events = list(staff_r.scalars().all())
+    actor_ids: set[uuid.UUID] = {m.actor_id for m in movements if m.actor_id}
+    actor_ids |= {ev.user_id for ev in staff_events if ev.user_id}
+    role_map = await _membership_role_map(db, business_id, actor_ids)
     events: list[StockActivityEventOut] = []
     for m in movements:
         title = {
             "quick_purchase": "Purchase quantity added",
             "physical_count": "Physical stock updated",
+            "delivery_receive": "Purchase delivered to system",
             "damage": "Damage recorded",
-            "correction": "Stock corrected",
+            "correction": "System stock corrected",
             "sale": "Sale adjustment",
         }.get(m.movement_kind, m.movement_kind.replace("_", " ").title())
         events.append(
@@ -2250,6 +2306,7 @@ async def stock_item_activity(
                 reason=m.reason,
                 notes=m.notes,
                 actor_name=m.actor_name,
+                actor_role=role_map.get(m.actor_id) if m.actor_id else None,
                 created_at=m.created_at,
                 source_type=m.source_type,
                 source_id=str(m.source_id) if m.source_id else None,
@@ -2274,15 +2331,9 @@ async def stock_item_activity(
         )
     for ev in staff_events:
         events.append(
-            StockActivityEventOut(
-                id=str(ev.id),
-                kind=ev.action_type,
-                title=ev.action_type.replace("_", " ").title(),
-                actor_name=ev.user_name,
-                notes=None,
-                created_at=ev.created_at,
-                source_type="staff_activity_log",
-                source_id=str(ev.id),
+            _staff_activity_event(
+                ev,
+                actor_role=role_map.get(ev.user_id) if ev.user_id else None,
             )
         )
     events.sort(key=lambda e: e.created_at, reverse=True)
@@ -3015,10 +3066,19 @@ async def get_stock_item(
     item, cat_name, type_name = row
     sup = await _supplier_name(db, item)
     phys = (await _latest_physical_count_map(db, business_id, [item_id])).get(item_id)
-    delivered_map, pending_lifetime_map = await _lifetime_purchase_qty_maps(
+    trade_meta = await _last_trade_meta_map(db, [item])
+    meta = trade_meta.get(item_id, (None, None))
+    valid_last_trade = meta[0] is not None
+    last_delivered = meta[1] if valid_last_trade else False
+    last_lq = getattr(item, "last_line_qty", None) if valid_last_trade else None
+    last_pur_at = getattr(item, "last_purchase_at", None) if valid_last_trade else None
+    movement_delivered = await movement_delivered_qty_map(db, business_id, [item_id])
+    movement_quick = await movement_quick_purchase_qty_map(db, business_id, [item_id])
+    total_delivered = movement_delivered.get(item_id, Decimal(0))
+    total_quick = movement_quick.get(item_id, Decimal(0))
+    _, pending_lifetime_map = await _lifetime_purchase_qty_maps(
         db, business_id, [item_id]
     )
-    total_delivered = delivered_map.get(item_id)
     total_pending_lifetime = pending_lifetime_map.get(item_id)
     pend = (await _pending_order_meta_map(db, business_id, [item_id])).get(
         item_id, (False, None, None)
@@ -3050,6 +3110,10 @@ async def get_stock_item(
         ledger_variance_qty=ledger_var,
         stock_unit=catalog_stock_unit(item),
         needs_verification=verify,
+        last_purchase_human_id=meta[0] if valid_last_trade else None,
+        last_purchase_delivered=last_delivered,
+        last_line_qty=last_lq,
+        last_purchase_at=last_pur_at,
         has_pending_order=pend[0],
         pending_order_days=pend[1],
         pending_delivery_qty=pend[2],
@@ -3058,6 +3122,7 @@ async def get_stock_item(
         physical_stock_counted_at=phys.counted_at if phys else None,
         physical_stock_counted_by=phys.counted_by_name if phys else None,
         total_delivered_qty=total_delivered,
+        total_quick_purchase_qty=total_quick,
         total_pending_delivery_qty=total_pending_lifetime or pend[2],
     )
     purchases = await _recent_purchases(db, item)

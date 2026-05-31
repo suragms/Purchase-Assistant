@@ -8,7 +8,9 @@ import '../units/dynamic_unit_label_engine.dart' as unit_lbl;
 /// Purchase rows that are not meaningful for catalog / trade intel.
 bool purchaseCountsForCatalogIntel(TradePurchase p) {
   final s = p.statusEnum;
-  return s != PurchaseStatus.draft && s != PurchaseStatus.cancelled;
+  return s != PurchaseStatus.draft &&
+      s != PurchaseStatus.cancelled &&
+      s != PurchaseStatus.deleted;
 }
 
 TradeCalcLine tradeLineToCalc(TradePurchaseLine ln) {
@@ -231,7 +233,15 @@ List<ItemSupplierIntel> itemSupplierIntel(List<ItemTradeHistoryRow> rows) {
   return out;
 }
 
-/// Human-readable purchase qty totals for a filtered history list.
+/// Qty from purchases already committed to system stock (same unit buckets as totals).
+String itemTradeHistoryCommittedTotalsLine(List<ItemTradeHistoryRow> rows) {
+  final committed =
+      rows.where((r) => r.isStockCommitted).toList(growable: false);
+  if (committed.isEmpty) return '';
+  return itemTradeHistoryTotalsLine(committed);
+}
+
+/// Human-readable purchase qty totals for a filtered history list (bills bought — not SYS).
 String itemTradeHistoryTotalsLine(List<ItemTradeHistoryRow> rows) {
   if (rows.isEmpty) return '';
   var bags = 0.0;

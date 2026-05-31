@@ -49,12 +49,27 @@ Future<void> showStockRowActions({
         const SizedBox(height: 6),
         Text(
           'Stock in hand · ${formatStockQtyForUnit(unit, system)}',
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 11,
             fontWeight: FontWeight.w700,
-            color: Color(0xFF2563EB),
+            color: StockRowMetrics.isSystemOutOfSync(item)
+                ? const Color(0xFFEA580C)
+                : const Color(0xFF2563EB),
           ),
         ),
+        if (StockRowMetrics.isSystemOutOfSync(item)) ...[
+          const SizedBox(height: 2),
+          Text(
+            StockRowMetrics.expectedSystemFormulaLine(item).isNotEmpty
+                ? '${StockRowMetrics.expectedSystemFormulaLine(item)} · tap Sync below'
+                : 'Should be ${formatStockQtyForUnit(unit, StockRowMetrics.expectedSystemQty(item))} $unit',
+            style: const TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w600,
+              color: Color(0xFF64748B),
+            ),
+          ),
+        ],
         const SizedBox(height: 8),
         ItemStockMetricStrip(stock: item),
         const SizedBox(height: 6),

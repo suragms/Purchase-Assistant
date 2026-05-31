@@ -332,6 +332,13 @@ class _LedgerRow extends StatelessWidget {
     final kind = (event['kind'] ?? '').toString();
     final title = (event['title'] ?? kind).toString();
     final actor = (event['actor_name'] ?? '').toString().trim();
+    final role = (event['actor_role'] ?? '').toString().trim().toLowerCase();
+    final roleLabel = switch (role) {
+      'owner' || 'admin' || 'super_admin' => 'Owner',
+      'manager' => 'Manager',
+      'staff' => 'Staff',
+      _ => role.isNotEmpty ? role[0].toUpperCase() + role.substring(1) : '',
+    };
     final atRaw = event['created_at']?.toString();
     final at = atRaw != null ? DateTime.tryParse(atRaw)?.toLocal() : null;
     final delta = coerceToDouble(event['delta_qty']);
@@ -378,6 +385,7 @@ class _LedgerRow extends StatelessWidget {
               [
                 if (at != null) DateFormat('dd MMM yyyy • h:mm a').format(at),
                 if (actor.isNotEmpty) actor,
+                if (roleLabel.isNotEmpty) roleLabel,
                 '$beforeLabel → $afterLabel',
               ].join('  ·  '),
               maxLines: expanded ? 3 : 1,

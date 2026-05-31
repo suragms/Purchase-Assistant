@@ -55,8 +55,23 @@ abstract final class StockRowMetrics {
     return DateTime.now().difference(dt).inDays;
   }
 
+  /// Ledger differs from opening + committed inbound (API flag or local check).
+  static bool isSystemOutOfSync(Map<String, dynamic> item) {
+    if (item['system_stock_out_of_sync'] == true) return true;
+    final expected = coerceToDoubleNullable(item['expected_system_qty']);
+    if (expected == null || !expected.isFinite) return false;
+    return (ledgerQty(item) - expected).abs() > 0.001;
+  }
+
+  /// How much SYS is short vs opening + committed purchases (stock unit).
+  static double systemSyncGap(Map<String, dynamic> item) {
+    if (!isSystemOutOfSync(item)) return 0;
+    return expectedSystemQty(item) - ledgerQty(item);
+  }
+
   /// Committed purchase qty not reflected in ledger (active PO only — not after delete).
   static bool needsStockSync(Map<String, dynamic> item) {
+    if (isSystemOutOfSync(item)) return true;
     final po = item['last_purchase_human_id']?.toString().trim() ?? '';
     if (po.isEmpty) return false;
     if (item['last_purchase_delivered'] != true) return false;
@@ -64,6 +79,12 @@ abstract final class StockRowMetrics {
     if (lastLine <= 0.001) return false;
     final lifetime = purchasedLifetimeQty(item);
     final sys = ledgerQty(item);
+    final expected = coerceToDoubleNullable(item['expected_system_qty']);
+    if (expected != null &&
+        expected.isFinite &&
+        (sys - expected).abs() > 0.001) {
+      return true;
+    }
     return lifetime + 0.001 < lastLine && sys + 0.001 < lastLine;
   }
 
@@ -120,6 +141,18 @@ abstract final class StockRowMetrics {
   /// Compact warehouse table cell — ledger on-hand.
   static String systemCellLabel(Map<String, dynamic> item) =>
       formatStockQtyForUnit(unit(item), ledgerQty(item));
+
+  /// Target SYS after sync (opening + committed) when ledger is behind.
+  static String? systemCellTargetLabel(Map<String, dynamic> item) {
+    if (!isSystemOutOfSync(item)) return null;
+    final u = unit(item);
+    return '→${formatStockQtyForUnit(u, expectedSystemQty(item))}';
+  }
+
+  static Color systemCellColor(Map<String, dynamic> item) {
+    if (isSystemOutOfSync(item)) return const Color(0xFFEA580C);
+    return inlineStatusColor(item);
+  }
 
   /// Compact warehouse table cell — physical qty or em dash.
   static String physicalCellLabel(Map<String, dynamic> item) {
@@ -233,10 +266,11 @@ abstract final class StockRowMetrics {
     final kind = deliveryIndicator(item);
 
     if (needsStockSync(item) && pending <= 0.001) {
-      final qty = lastDeliveryLineQty(item) ?? 0;
+      final gap = systemSyncGap(item);
+      final qty = gap > 0.001 ? gap : (lastDeliveryLineQty(item) ?? 0);
       return (
         primary: qty > 0.001 ? formatStockQtyForUnit(u, qty) : '!',
-        secondary: 'add stock',
+        secondary: 'sync SYS',
         color: pendingColor,
       );
     }
@@ -264,6 +298,27 @@ abstract final class StockRowMetrics {
     if (opening == null) return '';
     final u = unit(item);
     return 'Open ${formatStockQtyForUnit(u, opening)}${u.isNotEmpty ? ' $u' : ''}';
+  }
+
+  /// Owner hint: opening + committed = target system qty.
+  static String expectedSystemFormulaLine(Map<String, dynamic> item) {
+    final u = unit(item);
+    final opening = openingQty(item) ?? 0;
+    final committed = purchasedLifetimeQty(item);
+    final quick = coerceToDoubleNullable(item['total_quick_purchase_qty']) ?? 0;
+    final expected = expectedSystemQty(item);
+    final parts = <String>[];
+    if (opening > 0.001) {
+      parts.add('Open ${formatStockQtyForUnit(u, opening)}');
+    }
+    if (committed > 0.001) {
+      parts.add('Purch ${formatStockQtyForUnit(u, committed)}');
+    }
+    if (quick > 0.001) {
+      parts.add('Quick ${formatStockQtyForUnit(u, quick)}');
+    }
+    if (parts.isEmpty) return '';
+    return '${parts.join(' + ')} = ${formatStockQtyForUnit(u, expected)} $u';
   }
 
   static StockDeliveryIndicator deliveryIndicator(Map<String, dynamic> item) {

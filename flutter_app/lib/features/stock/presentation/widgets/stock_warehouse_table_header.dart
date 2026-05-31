@@ -45,7 +45,8 @@ class StockWarehouseTableHeader extends StatelessWidget {
               _metricHeader(
                 'SYS',
                 hdr,
-                tooltip: 'System — ERP digital on-hand (ledger)',
+                tooltip:
+                    'System — ledger on-hand. Orange →N = target after sync (opening + verified purchases)',
               ),
               _metricHeader(
                 'PHYS',

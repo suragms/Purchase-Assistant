@@ -14,6 +14,7 @@ import '../../../core/auth/session_notifier.dart' show sessionProvider;
 import '../../../core/router/post_auth_route.dart' show sessionIsStaff;
 import '../../stock/presentation/stock_quick_purchase_sheet.dart';
 import '../../stock/presentation/update_stock_sheet.dart';
+import '../../stock/presentation/widgets/stock_update_mode_toggle.dart';
 import 'widgets/item_detail_header.dart';
 import 'widgets/item_quick_actions_bar.dart';
 import 'widgets/item_analytics_section.dart';
@@ -207,14 +208,34 @@ class _ItemStickyActions extends ConsumerWidget {
                     itemId: itemId,
                     itemName: name,
                     stockRow: row == null || row.isEmpty ? null : row,
+                    initialMode: StockUpdateMode.physical,
                   );
                 },
                 icon: const Icon(Icons.fact_check_outlined),
-                label: const Text('Update physical'),
+                label: const Text('Physical count'),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: () async {
+                  final row = ref.read(itemDetailStockProvider(itemId)).valueOrNull;
+                  if (!context.mounted) return;
+                  await showUpdateStockSheet(
+                    context: context,
+                    ref: ref,
+                    itemId: itemId,
+                    itemName: name,
+                    stockRow: row == null || row.isEmpty ? null : row,
+                    initialMode: StockUpdateMode.system,
+                  );
+                },
+                icon: const Icon(Icons.memory_outlined),
+                label: const Text('System stock'),
               ),
             ),
             if (!isStaff) ...[
-              const SizedBox(width: 10),
+              const SizedBox(width: 8),
               Expanded(
                 child: OutlinedButton.icon(
                   onPressed: () async {

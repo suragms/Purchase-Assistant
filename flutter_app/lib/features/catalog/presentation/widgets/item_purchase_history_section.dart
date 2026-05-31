@@ -5,12 +5,15 @@ import 'package:intl/intl.dart';
 
 import '../../../../core/catalog/item_trade_history.dart';
 import '../../../../core/models/trade_purchase_models.dart';
+import '../../../../core/providers/item_detail_providers.dart';
 import '../../../../core/providers/trade_purchases_provider.dart';
 import '../../../../core/router/post_auth_route.dart';
 import '../../../../core/auth/session_notifier.dart';
 import '../../../../core/widgets/friendly_load_error.dart';
 import '../../../../core/design_system/hexa_operational_tokens.dart';
+import '../../../../core/json_coerce.dart';
 import '../../../../core/utils/unit_utils.dart';
+import '../../../stock/presentation/widgets/stock_row_metrics.dart';
 
 enum ItemPurchaseRange { d7, d30, d90, d365, all }
 
@@ -41,6 +44,9 @@ class _ItemPurchaseHistorySectionState
 
     final purchasesAsync =
         ref.watch(tradePurchasesForItemParsedProvider(widget.itemId));
+    final stock =
+        ref.watch(itemDetailStockProvider(widget.itemId)).valueOrNull ??
+            const <String, dynamic>{};
 
     return Card(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -93,6 +99,13 @@ class _ItemPurchaseHistorySectionState
                   );
                 }
                 final totalsLine = itemTradeHistoryTotalsLine(filtered);
+                final committedLine =
+                    itemTradeHistoryCommittedTotalsLine(filtered);
+                final stockUnit = (stock['stock_unit'] ?? stock['unit'] ?? 'piece')
+                    .toString();
+                final expectedSys = coerceToDouble(stock['expected_system_qty']);
+                final sysNow = coerceToDouble(stock['current_stock']);
+                final outOfSync = StockRowMetrics.isSystemOutOfSync(stock);
                 final take = filtered.take(12).toList();
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -105,17 +118,35 @@ class _ItemPurchaseHistorySectionState
                           vertical: 8,
                         ),
                         decoration: BoxDecoration(
-                          color: const Color(0xFFF0FDF4),
+                          color: const Color(0xFFF8FAFC),
                           borderRadius: BorderRadius.circular(10),
-                          border: Border.all(color: const Color(0xFFBBF7D0)),
+                          border: Border.all(color: const Color(0xFFE2E8F0)),
                         ),
-                        child: Text(
-                          '${filtered.length} purchase(s) · Total $totalsLine',
-                          style: const TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w800,
-                            color: Color(0xFF166534),
-                          ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              '${filtered.length} bill(s) · Bought $totalsLine',
+                              style: const TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w800,
+                                color: Color(0xFF334155),
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              committedLine.isNotEmpty
+                                  ? outOfSync && expectedSys > 0.001
+                                      ? 'Committed in stock unit: ${formatStockQtyForUnit(stockUnit, expectedSys)} $stockUnit (SYS now ${formatStockQtyForUnit(stockUnit, sysNow)} — tap Sync system stock on summary)'
+                                      : 'In system stock (committed): $committedLine · compare to System chip above'
+                                  : 'Not in system stock yet — verify delivery to update SYS',
+                              style: const TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                                color: Color(0xFF64748B),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                       const SizedBox(height: 8),
@@ -222,10 +253,13 @@ class _PurchaseCard extends StatelessWidget {
                   if (row.isStockCommitted)
                     Padding(
                       padding: const EdgeInsets.only(right: 6),
-                      child: Icon(
-                        Icons.local_shipping_rounded,
-                        size: 14,
-                        color: const Color(0xFF16A34A),
+                      child: Tooltip(
+                        message: 'Committed to system stock',
+                        child: Icon(
+                          Icons.inventory_2_outlined,
+                          size: 14,
+                          color: const Color(0xFF16A34A),
+                        ),
                       ),
                     )
                   else if (row.deliveryStatus != DeliveryStatus.cancelled)

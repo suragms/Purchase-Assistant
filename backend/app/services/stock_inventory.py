@@ -77,18 +77,59 @@ def catalog_unit_key(item: CatalogItem) -> str:
     return "kg"
 
 
+async def committed_purchase_delivered_qty_map(
+    db: AsyncSession,
+    business_id: uuid.UUID,
+    item_ids: list[uuid.UUID],
+) -> dict[uuid.UUID, Decimal]:
+    """Sum qty from stock_committed purchase lines (stock unit), for legacy DBs without movements."""
+    if not item_ids:
+        return {}
+    from app.models.trade_purchase import TradePurchase, TradePurchaseLine
+
+    r = await db.execute(
+        select(TradePurchaseLine, CatalogItem)
+        .join(TradePurchase, TradePurchaseLine.trade_purchase_id == TradePurchase.id)
+        .join(CatalogItem, TradePurchaseLine.catalog_item_id == CatalogItem.id)
+        .where(
+            TradePurchase.business_id == business_id,
+            TradePurchase.status.notin_(("cancelled", "deleted")),
+            TradePurchase.delivery_status == "stock_committed",
+            TradePurchaseLine.catalog_item_id.in_(item_ids),
+            CatalogItem.business_id == business_id,
+            CatalogItem.deleted_at.is_(None),
+        )
+    )
+    totals: dict[uuid.UUID, Decimal] = defaultdict(lambda: Decimal(0))
+    for line, cat_item in r.all():
+        cid = line.catalog_item_id
+        if cid is None:
+            continue
+        qty = line_qty_for_stock_commit(line, cat_item)
+        if qty > 0:
+            totals[cid] += qty
+    return dict(totals)
+
+
 async def movement_delivered_qty_map(
     db: AsyncSession,
     business_id: uuid.UUID,
     item_ids: list[uuid.UUID],
 ) -> dict[uuid.UUID, Decimal]:
-    """Lifetime qty added via committed PO deliveries (stock_movements.delivery_receive)."""
-    return await movement_qty_map_by_kind(
+    """Lifetime qty added via committed PO deliveries (movements + legacy committed lines)."""
+    movement = await movement_qty_map_by_kind(
         db,
         business_id,
         item_ids,
         kinds=("delivery_receive",),
     )
+    committed = await committed_purchase_delivered_qty_map(db, business_id, item_ids)
+    out: dict[uuid.UUID, Decimal] = {}
+    for cid in set(movement) | set(committed):
+        m = movement.get(cid, Decimal(0))
+        c = committed.get(cid, Decimal(0))
+        out[cid] = m if m >= c else c
+    return out
 
 
 async def movement_quick_purchase_qty_map(
@@ -332,7 +373,7 @@ async def purchase_delivery_stock_already_applied(
 ) -> bool:
     """True if stock was already incremented for this purchase (idempotent delivery).
 
-    Uses stock_movements idempotency keys only (authoritative ledger).
+    Checks stock_movements first; falls back to legacy adjustment_log rows.
     """
     marker = f"trade_purchase:{purchase_id}"
     r2 = await db.execute(
@@ -343,7 +384,30 @@ async def purchase_delivery_stock_already_applied(
             StockMovement.idempotency_key.like(f"{marker}:%"),
         )
     )
-    return int(r2.scalar_one() or 0) > 0
+    if int(r2.scalar_one() or 0) > 0:
+        return True
+    from app.models.trade_purchase import TradePurchase
+
+    tp_r = await db.execute(
+        select(TradePurchase.human_id).where(
+            TradePurchase.id == purchase_id,
+            TradePurchase.business_id == business_id,
+        )
+    )
+    human = tp_r.scalar_one_or_none()
+    if not human:
+        return False
+    label = str(human).strip()
+    r3 = await db.execute(
+        select(func.count())
+        .select_from(StockAdjustmentLog)
+        .where(
+            StockAdjustmentLog.business_id == business_id,
+            StockAdjustmentLog.adjustment_type == "purchase",
+            StockAdjustmentLog.reason.ilike(f"%{label}%"),
+        )
+    )
+    return int(r3.scalar_one() or 0) > 0
 
 
 async def apply_confirmed_purchase_stock(

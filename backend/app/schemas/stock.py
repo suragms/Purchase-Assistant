@@ -82,6 +82,7 @@ class StockActivityEventOut(BaseModel):
     reason: str | None = None
     notes: str | None = None
     actor_name: str | None = None
+    actor_role: str | None = None
     supplier_name: str | None = None
     broker_name: str | None = None
     created_at: datetime

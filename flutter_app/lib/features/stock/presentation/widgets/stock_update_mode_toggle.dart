@@ -53,7 +53,7 @@ class StockUpdateModeToggle extends StatelessWidget {
 
 String stockUpdateModeHint(StockUpdateMode mode) => switch (mode) {
       StockUpdateMode.physical =>
-        'Physical count — warehouse floor qty (may differ from system).',
+        'Physical count — warehouse floor qty. Does not change system ledger.',
       StockUpdateMode.system =>
-        'System stock — ledger qty. Owner is notified when staff changes this.',
+        'System stock — ERP ledger qty. Owner gets notified when staff edits this.',
     };

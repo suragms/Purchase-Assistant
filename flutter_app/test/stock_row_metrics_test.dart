@@ -158,6 +158,17 @@ void main() {
       );
     });
 
+    test('shows sync cue when expected system exceeds ledger', () {
+      final cell = StockRowMetrics.pendingCellDisplay({
+        'current_stock': 101,
+        'expected_system_qty': 711,
+        'system_stock_out_of_sync': true,
+        'stock_unit': 'bag',
+      });
+      expect(cell.primary, '610');
+      expect(cell.secondary, 'sync SYS');
+    });
+
     test('shows add-stock cue when committed qty missing from ledger', () {
       final cell = StockRowMetrics.pendingCellDisplay({
         'current_stock': 0,
@@ -168,7 +179,7 @@ void main() {
         'stock_unit': 'kg',
       });
       expect(cell.primary, '5,000');
-      expect(cell.secondary, 'add stock');
+      expect(cell.secondary, 'sync SYS');
     });
   });
 
