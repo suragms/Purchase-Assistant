@@ -9,6 +9,7 @@ import '../../../core/auth/session_notifier.dart';
 import '../../../core/json_coerce.dart';
 import '../../../core/providers/catalog_providers.dart';
 import '../../../core/providers/item_detail_providers.dart';
+import '../../../core/design_system/hexa_responsive.dart';
 import '../../../core/router/navigation_ext.dart';
 import '../../../core/utils/unit_utils.dart';
 import '../../../core/widgets/friendly_load_error.dart';
@@ -164,12 +165,10 @@ class _ItemEditPageState extends ConsumerState<ItemEditPage> {
   }
 
   void _showOpeningStockSheet(double current) {
-    showModalBottomSheet<void>(
+    showHexaBottomSheet<void>(
       context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      showDragHandle: true,
-      builder: (_) => _EditOpeningStockSheet(
+      compact: true,
+      child: _EditOpeningStockSheet(
         itemId: widget.itemId,
         currentStock: current,
       ),

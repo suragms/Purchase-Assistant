@@ -377,11 +377,10 @@ class _StockPageState extends ConsumerState<StockPage>
 
   void _showPeriodPicker() {
     final current = ref.read(stockPagePeriodProvider);
-    showModalBottomSheet<void>(
+    showHexaBottomSheet<void>(
       context: context,
-      useRootNavigator: true,
-      showDragHandle: true,
-      builder: (_) => _StockPeriodSheet(
+      compact: true,
+      child: _StockPeriodSheet(
         current: current,
         onPick: (p) {
           Navigator.pop(context);

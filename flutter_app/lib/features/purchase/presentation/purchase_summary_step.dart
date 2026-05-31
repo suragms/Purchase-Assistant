@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/calc_engine.dart';
 import '../../../core/design_system/hexa_ds_tokens.dart';
 import '../../../core/theme/hexa_colors.dart';
+import '../../../core/utils/unit_utils.dart';
 import '../domain/purchase_draft.dart';
 import '../state/purchase_draft_provider.dart';
 import '../state/purchase_trade_preview_provider.dart';
@@ -38,8 +39,7 @@ class PurchaseSummaryStep extends ConsumerWidget {
 
   static String _rs(double x) => 'Rs. ${x.toStringAsFixed(2)}';
 
-  static String _fmtQty(double n) =>
-      n == n.roundToDouble() ? n.toInt().toString() : n.toStringAsFixed(3);
+  static String _fmtQty(double n, String unit) => formatStockQtyForUnit(unit, n);
 
   static String _fmtWt(double kg) {
     if (kg <= 0) return '—';
@@ -147,7 +147,7 @@ class PurchaseSummaryStep extends ConsumerWidget {
                           ),
                         ),
                       ),
-                      _NumCell(flex: 1, text: _fmtQty(it.qty), fontSize: 11),
+                      _NumCell(flex: 1, text: _fmtQty(it.qty, it.unit), fontSize: 11),
                       _NumCell(flex: 1, text: it.unit.trim(), fontSize: 10),
                       _NumCell(
                         flex: 1,
@@ -272,7 +272,7 @@ class PurchaseSummaryStep extends ConsumerWidget {
                 ),
               ),
               Text(
-                'Total bags: ${bags > 0 ? '${_fmtQty(bags)} bags' : '0 bags'}',
+                'Total bags: ${bags > 0 ? '${_fmtQty(bags, 'bag')} bags' : '0 bags'}',
                 style: const TextStyle(
                   fontWeight: FontWeight.w600,
                   fontSize: 13,

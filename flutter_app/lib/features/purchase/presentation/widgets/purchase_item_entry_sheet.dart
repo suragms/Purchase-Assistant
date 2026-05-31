@@ -9,6 +9,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../../../core/design_system/hexa_responsive.dart';
 import '../../../../core/router/navigation_ext.dart';
 import '../../../../core/calc_engine.dart';
 import '../../../../core/pricing/tax_mode.dart';
@@ -2320,20 +2321,11 @@ class _PurchaseItemEntrySheetState extends ConsumerState<PurchaseItemEntrySheet>
 
     final kgCtrl = TextEditingController();
     try {
-      final kgOut = await showModalBottomSheet<double>(
+      final kgOut = await showHexaBottomSheet<double>(
         context: context,
-        isScrollControlled: true,
-        showDragHandle: true,
-        backgroundColor: Colors.white,
-        builder: (ctx) {
-          return Padding(
-            padding: EdgeInsets.only(
-              left: 24,
-              right: 24,
-              top: 8,
-              bottom: 24 + MediaQuery.viewInsetsOf(ctx).bottom,
-            ),
-            child: StatefulBuilder(
+        compact: true,
+        padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+        child: StatefulBuilder(
               builder: (ctx2, setModal) {
                 return SingleChildScrollView(
                   keyboardDismissBehavior:
@@ -2404,7 +2396,7 @@ class _PurchaseItemEntrySheetState extends ConsumerState<PurchaseItemEntrySheet>
                         children: [
                           Expanded(
                             child: OutlinedButton(
-                              onPressed: () => Navigator.pop(ctx),
+                              onPressed: () => Navigator.pop(context),
                               child: const Text('Skip'),
                             ),
                           ),
@@ -2414,7 +2406,7 @@ class _PurchaseItemEntrySheetState extends ConsumerState<PurchaseItemEntrySheet>
                               onPressed: () {
                                 final kg = double.tryParse(kgCtrl.text.trim());
                                 if (kg != null && kg > 0) {
-                                  Navigator.pop(ctx, kg);
+                                  Navigator.pop(context, kg);
                                 }
                               },
                               child: const Text('DONE +'),
@@ -2427,8 +2419,6 @@ class _PurchaseItemEntrySheetState extends ConsumerState<PurchaseItemEntrySheet>
                 );
               },
             ),
-          );
-        },
       );
       if (!mounted || kgOut == null || kgOut <= 0) return;
 

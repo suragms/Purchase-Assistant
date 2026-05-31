@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/design_system/hexa_ds_tokens.dart';
+import '../../../../core/design_system/hexa_responsive.dart';
 import '../../../../core/providers/delivery_pipeline_provider.dart';
 import '../../../../core/providers/home_owner_dashboard_providers.dart';
 import '../../../../core/providers/notification_center_provider.dart'
@@ -131,11 +132,10 @@ class HomeLiveStatusBar extends ConsumerWidget {
   }
 
   void _showHealthCenter(BuildContext context) {
-    showModalBottomSheet<void>(
+    showHexaBottomSheet<void>(
       context: context,
-      showDragHandle: true,
-      isScrollControlled: true,
-      builder: (ctx) => const _HomeStockStatusSheet(),
+      compact: true,
+      child: const _HomeStockStatusSheet(),
     );
   }
 }
@@ -156,14 +156,11 @@ class _HomeStockStatusSheet extends ConsumerWidget {
     final lowAsync = ref.watch(lowStockByCategoryProvider);
     final warehouseAsync = ref.watch(warehouseAlertsProvider);
 
-    return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
               children: [
                 Expanded(
                   child: Text(
@@ -222,8 +219,6 @@ class _HomeStockStatusSheet extends ConsumerWidget {
               route: '/reports',
             ),
           ],
-        ),
-      ),
     );
   }
 }

@@ -4,10 +4,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
-import '../../../../core/strict_decimal.dart';
 import '../../../../core/theme/hexa_colors.dart';
 import '../../../../core/units/dynamic_unit_label_engine.dart' as unit_lbl;
 import '../../../../core/utils/trade_purchase_rate_display.dart';
+import '../../../../core/utils/unit_utils.dart';
 import '../../domain/purchase_draft.dart';
 import '../../mapping/purchase_line_display_adapter.dart';
 import '../../state/purchase_draft_provider.dart';
@@ -90,13 +90,13 @@ class _PurchaseFastItemsStepState extends ConsumerState<PurchaseFastItemsStep> {
 
   String _qtyHuman(PurchaseLineDraft l) {
     final u = l.unit.trim();
-    final q = StrictDecimal.fromObject(l.qty).format(3, trim: true);
+    final q = formatStockQtyForUnit(u, l.qty);
     final ul = u.toLowerCase();
     if (l.kgPerUnit != null &&
         l.kgPerUnit! > 0 &&
         (ul == 'bag' || ul == 'sack')) {
       final kg = l.qty * l.kgPerUnit!;
-      return '$q $u • ${StrictDecimal.fromObject(kg).format(3, trim: true)} kg';
+      return '$q $u • ${formatStockQtyForUnit('kg', kg)} kg';
     }
     return '$q $u';
   }
@@ -160,7 +160,7 @@ class _PurchaseFastItemsStepState extends ConsumerState<PurchaseFastItemsStep> {
             final qt = rf.watch(purchaseQuantityTotalsProvider);
             final unitBits = <String>[];
             if (qt.totalKg > 1e-6) {
-              unitBits.add('${qt.totalKg.toStringAsFixed(0)} KG');
+              unitBits.add('${formatStockQtyForUnit('kg', qt.totalKg)} KG');
             }
             qt.qtyByUnit.forEach((k, v) {
               if (v > 1e-9) {
@@ -169,7 +169,7 @@ class _PurchaseFastItemsStepState extends ConsumerState<PurchaseFastItemsStep> {
                   return;
                 }
                 unitBits.add(
-                  '${StrictDecimal.fromObject(v).format(3, trim: true)} ${k.toUpperCase()}',
+                  '${formatStockQtyForUnit(k, v)} ${k.toUpperCase()}',
                 );
               }
             });

@@ -16,12 +16,10 @@ Future<bool> showOpeningStockSetSheet({
   required WidgetRef ref,
   required Map<String, dynamic> item,
 }) async {
-  final result = await showModalBottomSheet<bool>(
+  final result = await showHexaBottomSheet<bool>(
     context: context,
-    isScrollControlled: true,
-    useSafeArea: true,
-    showDragHandle: true,
-    builder: (ctx) => _OpeningStockSetBody(item: item),
+    compact: true,
+    child: _OpeningStockSetBody(item: item),
   );
   return result == true;
 }
@@ -131,12 +129,11 @@ class _OpeningStockSetBodyState extends ConsumerState<_OpeningStockSetBody> {
   @override
   Widget build(BuildContext context) {
     final displayCurrent = formatStockQtyNumber(_currentOpening);
-    return HexaResponsiveSheetViewport(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
             children: [
               Expanded(
                 child: Text(
@@ -220,7 +217,6 @@ class _OpeningStockSetBodyState extends ConsumerState<_OpeningStockSetBody> {
             ),
           ),
         ],
-      ),
     );
   }
 }

@@ -1313,40 +1313,33 @@ class PurchaseDetailBodyState extends ConsumerState<PurchaseDetailBody> {
   Future<void> _markPaidSheet(
       BuildContext context, WidgetRef ref, TradePurchase p) async {
     final ctrl = TextEditingController(text: p.remaining.toStringAsFixed(2));
-    final ok = await showModalBottomSheet<bool>(
+    final ok = await showHexaBottomSheet<bool>(
       context: context,
-      isScrollControlled: true,
-      builder: (ctx) => Padding(
-        padding: EdgeInsets.only(
-          left: 20,
-          right: 20,
-          top: 16,
-          bottom: 16 + MediaQuery.of(ctx).viewInsets.bottom,
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const Text(
-              'Record payment',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
+      compact: true,
+      padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Text(
+            'Record payment',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: ctrl,
+            keyboardType: TextInputType.number,
+            decoration: const InputDecoration(
+              labelText: 'Amount paid (total on purchase)',
+              border: OutlineInputBorder(),
             ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: ctrl,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(
-                labelText: 'Amount paid (total on purchase)',
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 12),
-            FilledButton(
-              onPressed: () => ctx.pop(true),
-              child: const Text('Save'),
-            ),
-          ],
-        ),
+          ),
+          const SizedBox(height: 12),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Save'),
+          ),
+        ],
       ),
     );
     if (ok != true || !context.mounted) return;

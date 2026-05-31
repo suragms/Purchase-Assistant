@@ -546,21 +546,18 @@ class _BulkBarcodePrintPageState extends ConsumerState<BulkBarcodePrintPage> {
         );
         return;
       }
-      await showModalBottomSheet<void>(
+      await showHexaBottomSheet<void>(
         context: context,
-        isScrollControlled: true,
-        showDragHandle: true,
-        builder: (ctx) => SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text(
-                  forPrint ? '$n PDFs to print' : '$n PDF files ready',
-                  style: Theme.of(ctx).textTheme.titleMedium,
-                ),
+        compact: true,
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              forPrint ? '$n PDFs to print' : '$n PDF files ready',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
                 const SizedBox(height: 8),
                 Text(
                   forPrint
@@ -574,7 +571,7 @@ class _BulkBarcodePrintPageState extends ConsumerState<BulkBarcodePrintPage> {
                     padding: const EdgeInsets.only(bottom: 8),
                     child: FilledButton.icon(
                       onPressed: () async {
-                        Navigator.pop(ctx);
+                        Navigator.pop(context);
                         if (!mounted) return;
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
@@ -625,8 +622,6 @@ class _BulkBarcodePrintPageState extends ConsumerState<BulkBarcodePrintPage> {
                     ),
                   ),
               ],
-            ),
-          ),
         ),
       );
       return;
@@ -1262,29 +1257,21 @@ class _BulkBarcodePrintPageState extends ConsumerState<BulkBarcodePrintPage> {
                     : () {
                         ref.read(bulkPreviewItemIdProvider.notifier).state = id;
                         if (!desktop) {
-                          showModalBottomSheet<void>(
+                          showHexaBottomSheet<void>(
                             context: context,
-                            isScrollControlled: true,
-                            showDragHandle: true,
-                            builder: (sheetCtx) => Padding(
-                              padding: EdgeInsets.only(
-                                bottom:
-                                    MediaQuery.viewInsetsOf(sheetCtx).bottom,
-                              ),
-                              child: SingleChildScrollView(
-                                child: SizedBox(
-                                  height: 280,
-                                  child: BulkBarcodePrintPreviewPanel(
-                                    denseA4: _denseA4,
-                                    useQr: _useQr,
-                                    copies: _copies,
-                                    selectedCount: selected.length,
-                                    onPreviewAll: () {
-                                      Navigator.pop(context);
-                                      unawaited(_preview());
-                                    },
-                                  ),
-                                ),
+                            compact: false,
+                            padding: EdgeInsets.zero,
+                            child: SizedBox(
+                              height: 280,
+                              child: BulkBarcodePrintPreviewPanel(
+                                denseA4: _denseA4,
+                                useQr: _useQr,
+                                copies: _copies,
+                                selectedCount: selected.length,
+                                onPreviewAll: () {
+                                  Navigator.pop(context);
+                                  unawaited(_preview());
+                                },
                               ),
                             ),
                           );

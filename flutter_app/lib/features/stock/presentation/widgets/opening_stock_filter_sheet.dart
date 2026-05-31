@@ -12,12 +12,10 @@ Future<void> showOpeningStockFilters({
   required BuildContext context,
   required WidgetRef ref,
 }) async {
-  await showModalBottomSheet<void>(
+  await showHexaBottomSheet<void>(
     context: context,
-    isScrollControlled: true,
-    useSafeArea: true,
-    showDragHandle: true,
-    builder: (ctx) => const _OpeningStockFilterBody(),
+    compact: true,
+    child: const _OpeningStockFilterBody(),
   );
 }
 
@@ -78,12 +76,11 @@ class _OpeningStockFilterBodyState
 
     final units = const ['bag', 'kg', 'piece', 'box', 'tin'];
 
-    return HexaResponsiveSheetViewport(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
             children: [
               Expanded(
                 child: Text(
@@ -217,9 +214,8 @@ class _OpeningStockFilterBodyState
               Navigator.of(context).pop();
             },
             child: const Text('Clear all'),
-          )
-        ],
-      ),
+        )
+      ],
     );
   }
 }

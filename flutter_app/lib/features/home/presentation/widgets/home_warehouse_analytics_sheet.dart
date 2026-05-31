@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/design_system/hexa_responsive.dart';
 import '../../../../core/providers/home_breakdown_tab_providers.dart';
 import '../../../../core/providers/home_dashboard_provider.dart';
 import '../../../../core/widgets/list_skeleton.dart';
@@ -13,12 +14,14 @@ Future<void> showWarehouseAnalyticsSheet({
   required BuildContext context,
   required WidgetRef ref,
 }) {
-  return showModalBottomSheet<void>(
+  return showHexaBottomSheet<void>(
     context: context,
-    isScrollControlled: true,
-    useSafeArea: true,
-    showDragHandle: true,
-    builder: (_) => const _WarehouseAnalyticsSheet(),
+    compact: false,
+    padding: EdgeInsets.zero,
+    child: SizedBox(
+      height: HexaResponsive.adaptiveSheetMaxHeight(context),
+      child: const _WarehouseAnalyticsSheet(),
+    ),
   );
 }
 
@@ -32,26 +35,22 @@ class _WarehouseAnalyticsSheet extends ConsumerWidget {
     final tab = ref.watch(homeBreakdownTabProvider);
     final mq = MediaQuery.sizeOf(context);
 
-    return SafeArea(
-      child: Padding(
-        padding: EdgeInsets.only(
-          left: 14,
-          right: 14,
-          bottom: 14 + MediaQuery.viewInsetsOf(context).bottom,
-        ),
-        child: SizedBox(
-          height: mq.height * 0.82,
-          child: dashState.refreshing && dashState.snapshot.data.isEmpty
-              ? const ListSkeleton(rowCount: 5, rowHeight: 56)
-              : _WarehouseAnalyticsBody(
-                  dash: dashState.snapshot.data,
-                  shell: shellAsync.valueOrNull,
-                  tab: tab,
-                  width: mq.width,
-                  height: mq.height,
-                ),
-        ),
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+        14,
+        4,
+        14,
+        14 + MediaQuery.viewInsetsOf(context).bottom,
       ),
+      child: dashState.refreshing && dashState.snapshot.data.isEmpty
+          ? const ListSkeleton(rowCount: 5, rowHeight: 56)
+          : _WarehouseAnalyticsBody(
+              dash: dashState.snapshot.data,
+              shell: shellAsync.valueOrNull,
+              tab: tab,
+              width: mq.width,
+              height: mq.height,
+            ),
     );
   }
 }

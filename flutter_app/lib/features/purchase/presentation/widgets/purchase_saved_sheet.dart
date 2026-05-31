@@ -1,7 +1,6 @@
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -9,6 +8,7 @@ import '../../../../core/models/trade_purchase_models.dart';
 import '../../../../core/providers/business_profile_provider.dart';
 import '../../../../core/services/purchase_pdf.dart';
 import '../../../../core/theme/hexa_colors.dart';
+import '../../../../core/design_system/hexa_responsive.dart';
 
 String _inr(num n) =>
     NumberFormat.currency(locale: 'en_IN', symbol: '₹', decimalDigits: 0)
@@ -87,58 +87,50 @@ Future<String?> showPurchaseSavedSheet(
   final biz = ref.read(invoiceBusinessProfileProvider);
 
   if (!context.mounted) return null;
-  return showModalBottomSheet<String?>(
+  return showHexaBottomSheet<String?>(
     context: context,
-    showDragHandle: true,
-    isScrollControlled: true,
-    builder: (ctx) => SafeArea(
-      child: Padding(
-        padding: EdgeInsets.fromLTRB(
-          16,
-          0,
-          16,
-          MediaQuery.viewInsetsOf(ctx).bottom + 20,
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
+    compact: true,
+    padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
+    child: Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
           children: [
-            Row(
-              children: [
-                const Icon(Icons.check_circle_rounded,
-                    color: HexaColors.brandAccent, size: 32),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    wasEdit ? 'Purchase updated' : 'Purchase saved',
-                    style: const TextStyle(
-                        fontSize: 18, fontWeight: FontWeight.w800),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 6),
-            Text(
-              p.humanId,
-              style: const TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.w700,
-                color: HexaColors.brandPrimary,
+            const Icon(Icons.check_circle_rounded,
+                color: HexaColors.brandAccent, size: 32),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                wasEdit ? 'Purchase updated' : 'Purchase saved',
+                style: const TextStyle(
+                    fontSize: 18, fontWeight: FontWeight.w800),
               ),
             ),
-            Text(
-              '${DateFormat('dd MMM yyyy').format(p.purchaseDate)} · '
-              '${(p.supplierName ?? '').trim().isNotEmpty ? p.supplierName!.trim() : 'Supplier —'} · '
-              '${_inr(p.totalAmount)} · ${p.lines.length} line(s)',
-              style: const TextStyle(color: HexaColors.neutral, fontSize: 13),
-            ),
-            const Divider(height: 24),
-            ListTile(
-              leading: const Icon(Icons.add_shopping_cart_rounded),
-              title: const Text('Add more items'),
-              subtitle: const Text('Continue adding items to a new purchase'),
-              onTap: () => ctx.pop('add_more'),
-            ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        Text(
+          p.humanId,
+          style: const TextStyle(
+            fontSize: 15,
+            fontWeight: FontWeight.w700,
+            color: HexaColors.brandPrimary,
+          ),
+        ),
+        Text(
+          '${DateFormat('dd MMM yyyy').format(p.purchaseDate)} · '
+          '${(p.supplierName ?? '').trim().isNotEmpty ? p.supplierName!.trim() : 'Supplier —'} · '
+          '${_inr(p.totalAmount)} · ${p.lines.length} line(s)',
+          style: const TextStyle(color: HexaColors.neutral, fontSize: 13),
+        ),
+        const Divider(height: 24),
+        ListTile(
+          leading: const Icon(Icons.add_shopping_cart_rounded),
+          title: const Text('Add more items'),
+          subtitle: const Text('Continue adding items to a new purchase'),
+          onTap: () => Navigator.pop(context, 'add_more'),
+        ),
             if (savedJson['stock_updates'] is List &&
                 (savedJson['stock_updates'] as List).isNotEmpty) ...[
               Padding(
@@ -215,14 +207,14 @@ Future<String?> showPurchaseSavedSheet(
                           children: [
                             Expanded(
                               child: OutlinedButton(
-                                onPressed: () => ctx.pop('later_missing'),
+                                onPressed: () => Navigator.pop(context, 'later_missing'),
                                 child: const Text('Later'),
                               ),
                             ),
                             const SizedBox(width: 8),
                             Expanded(
                               child: FilledButton(
-                                onPressed: () => ctx.pop('edit_missing'),
+                                onPressed: () => Navigator.pop(context, 'edit_missing'),
                                 child: const Text('Edit now'),
                               ),
                             ),
@@ -237,19 +229,19 @@ Future<String?> showPurchaseSavedSheet(
               leading: const Icon(Icons.home_outlined),
               title: const Text('Home dashboard'),
               subtitle: const Text('Close entry and go to overview'),
-              onTap: () => ctx.pop('home'),
+              onTap: () => Navigator.pop(context, 'home'),
             ),
             ListTile(
               leading: const Icon(Icons.visibility_rounded),
               title: const Text('View purchase'),
-              onTap: () => ctx.pop('detail'),
+              onTap: () => Navigator.pop(context, 'detail'),
             ),
             ListTile(
               leading: const Icon(Icons.share_rounded),
               title: const Text('Share PDF'),
               onTap: () async {
                 final messenger = ScaffoldMessenger.of(context);
-                ctx.pop('home');
+                Navigator.pop(context, 'home');
                 Future<void> doShare() async {
                   final result = await sharePurchasePdf(p, biz);
                   if (!context.mounted) return;
@@ -278,7 +270,7 @@ Future<String?> showPurchaseSavedSheet(
               title: const Text('Print'),
               onTap: () async {
                 final messenger = ScaffoldMessenger.of(context);
-                ctx.pop('home');
+                Navigator.pop(context, 'home');
                 Future<void> doPrint() async {
                   final result = await printPurchasePdf(p, biz);
                   if (!context.mounted) return;
@@ -308,7 +300,7 @@ Future<String?> showPurchaseSavedSheet(
                 'Opens WhatsApp with a text summary — use Share PDF to send the actual bill file',
               ),
               onTap: () async {
-                ctx.pop('home');
+                Navigator.pop(context, 'home');
                 await _openWhatsAppSummary(p);
               },
             ),
@@ -319,7 +311,7 @@ Future<String?> showPurchaseSavedSheet(
                 'Prefills subject and details — attach the PDF from Share PDF',
               ),
               onTap: () async {
-                ctx.pop('home');
+                Navigator.pop(context, 'home');
                 final dateStr =
                     DateFormat('dd MMM yyyy').format(p.purchaseDate);
                 final sup = (p.supplierName ?? '').trim().isNotEmpty
@@ -349,9 +341,7 @@ Future<String?> showPurchaseSavedSheet(
                   style: TextStyle(fontSize: 11, color: HexaColors.neutral),
                 ),
               ),
-          ],
-        ),
-      ),
+      ],
     ),
   );
 }

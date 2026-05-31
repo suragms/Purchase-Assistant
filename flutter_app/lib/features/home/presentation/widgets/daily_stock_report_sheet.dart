@@ -16,8 +16,9 @@ class DailyStockReportSheet extends ConsumerWidget {
     return showHexaBottomSheet<void>(
       context: context,
       compact: false,
+      padding: EdgeInsets.zero,
       child: SizedBox(
-        height: MediaQuery.sizeOf(context).height * 0.85,
+        height: HexaResponsive.adaptiveSheetMaxHeight(context),
         child: const DailyStockReportSheet(),
       ),
     );

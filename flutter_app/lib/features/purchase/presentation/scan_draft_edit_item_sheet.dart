@@ -4,6 +4,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/design_system/hexa_responsive.dart';
 import '../../../core/auth/session_notifier.dart';
 
 /// Holds catalog item id chosen from live search (same sheet session).
@@ -43,31 +44,19 @@ Future<void> editScanDraftItemRow(
   final unitNv = ValueNotifier<String>(unit);
   final pickHolder = ScanDraftCatalogPickHolder();
 
-  final saved = await showModalBottomSheet<bool>(
+  final saved = await showHexaBottomSheet<bool>(
     context: context,
-    isScrollControlled: true,
-    useSafeArea: true,
-    showDragHandle: true,
-    builder: (ctx) {
-      final padBottom = MediaQuery.of(ctx).viewInsets.bottom;
-      return Padding(
-        padding: EdgeInsets.only(
-          left: 12,
-          right: 12,
-          top: 8,
-          bottom: padBottom + 16,
-        ),
-        child: _ScanDraftItemSheetBody(
-          pickHolder: pickHolder,
-          supplierMatchedId: supplierMatchedId,
-          nameCtrl: nameCtrl,
-          qtyCtrl: qtyCtrl,
-          pCtrl: pCtrl,
-          sCtrl: sCtrl,
-          unitNv: unitNv,
-        ),
-      );
-    },
+    compact: true,
+    padding: const EdgeInsets.fromLTRB(12, 0, 12, 16),
+    child: _ScanDraftItemSheetBody(
+      pickHolder: pickHolder,
+      supplierMatchedId: supplierMatchedId,
+      nameCtrl: nameCtrl,
+      qtyCtrl: qtyCtrl,
+      pCtrl: pCtrl,
+      sCtrl: sCtrl,
+      unitNv: unitNv,
+    ),
   );
 
   final unitFinal = unitNv.value;

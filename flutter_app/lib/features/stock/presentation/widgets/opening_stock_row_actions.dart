@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../core/design_system/hexa_responsive.dart';
 import '../../../../core/providers/stock_providers.dart';
 import 'opening_stock_set_sheet.dart';
 
@@ -14,20 +15,15 @@ Future<void> showOpeningStockRowActions({
   if (id.isEmpty) return;
   final name = item['name']?.toString() ?? 'Item';
 
-  await showModalBottomSheet<void>(
+  await showHexaBottomSheet<void>(
     context: context,
-    useSafeArea: true,
-    showDragHandle: true,
-    builder: (ctx) => SafeArea(
-      top: false,
-      child: Padding(
-        padding:
-            EdgeInsets.fromLTRB(16, 8, 16, 16 + MediaQuery.paddingOf(ctx).bottom),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-          Text(
+    compact: true,
+    padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+    child: Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
             name,
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
@@ -38,7 +34,7 @@ Future<void> showOpeningStockRowActions({
             icon: Icons.inventory_2_outlined,
             label: 'Set Opening Stock',
             onTap: () async {
-              Navigator.pop(ctx);
+              Navigator.pop(context);
               final ok = await showOpeningStockSetSheet(
                 context: context,
                 ref: ref,
@@ -53,7 +49,7 @@ Future<void> showOpeningStockRowActions({
             icon: Icons.info_outline_rounded,
             label: 'View Item Detail',
             onTap: () {
-              Navigator.pop(ctx);
+              Navigator.pop(context);
               context.push('/catalog/item/$id');
             },
           ),
@@ -61,7 +57,7 @@ Future<void> showOpeningStockRowActions({
             icon: Icons.history_rounded,
             label: 'View Activity',
             onTap: () {
-              Navigator.pop(ctx);
+              Navigator.pop(context);
               context.push(
                 '/catalog/item/$id?tab=history&name=${Uri.encodeComponent(name)}',
               );
@@ -71,13 +67,11 @@ Future<void> showOpeningStockRowActions({
             icon: Icons.receipt_long_rounded,
             label: 'View Ledger',
             onTap: () {
-              Navigator.pop(ctx);
+              Navigator.pop(context);
               context.push('/catalog/item/$id/ledger');
             },
           ),
-          ],
-        ),
-      ),
+        ],
     ),
   );
 }

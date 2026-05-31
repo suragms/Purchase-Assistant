@@ -11,6 +11,7 @@ import '../utils/trade_purchase_commission.dart';
 import '../utils/trade_purchase_rate_display.dart';
 import 'purchase_invoice_amount_words.dart';
 import 'pdf_text_safe.dart';
+import '../utils/unit_utils.dart';
 
 final _num2 = NumberFormat('#,##,##0.00', 'en_IN');
 final _num0 = NumberFormat('#,##,##0.##', 'en_IN');
@@ -334,7 +335,7 @@ pw.Widget _lineItemsTable(TradePurchase p) {
       pw.TableRow(
         children: [
           _tCell(safePdfText(l.itemName), fs: 6.2, maxLines: 3),
-          _tCell(_num0.format(l.qty), align: pw.TextAlign.right, fs: 6.2),
+          _tCell(formatStockQtyForUnit(l.unit, l.qty.toDouble()), align: pw.TextAlign.right, fs: 6.2),
           _tCell(safePdfText(l.unit.trim()), align: pw.TextAlign.center, fs: 6.2),
           _tCell(_pdfPurchaseRateStr(l), align: pw.TextAlign.right, fs: 5.9),
           _tCell(_pdfSellingRateStr(l), align: pw.TextAlign.right, fs: 5.9),

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/providers/stock_providers.dart';
+import '../../../../core/design_system/hexa_responsive.dart';
 
 int countWarehouseActiveFilters(StockListQuery q, StockOperationalFilters op) {
   var n = 0;
@@ -20,12 +21,10 @@ Future<void> showStockWarehouseFilterSheet({
   required TextEditingController subcategoryCtrl,
   VoidCallback? onApplied,
 }) {
-  return showModalBottomSheet<void>(
+  return showHexaBottomSheet<void>(
     context: context,
-    isScrollControlled: true,
-    useSafeArea: true,
-    showDragHandle: true,
-    builder: (ctx) => _StockWarehouseFilterBody(
+    compact: true,
+    child: _StockWarehouseFilterBody(
       parentRef: ref,
       subcategoryCtrl: subcategoryCtrl,
       onApplied: onApplied,
@@ -120,19 +119,12 @@ class _StockWarehouseFilterBodyState
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: EdgeInsets.only(
-        left: 16,
-        right: 16,
-        top: 8,
-        bottom: 16 + MediaQuery.viewInsetsOf(context).bottom,
-      ),
-      child: SingleChildScrollView(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Row(
+    return SingleChildScrollView(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
               children: [
                 const Expanded(
                   child: Text(
@@ -242,7 +234,6 @@ class _StockWarehouseFilterBodyState
             ),
           ],
         ),
-      ),
     );
   }
 

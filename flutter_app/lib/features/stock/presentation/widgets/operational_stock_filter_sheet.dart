@@ -54,11 +54,15 @@ Future<void> showOperationalStockFilter({
   await showHexaBottomSheet<void>(
     context: context,
     compact: false,
-    child: _OperationalFilterBody(
-      subcategoryCtrl: subcategoryCtrl,
-      includeSupplier: includeSupplier,
-      isStaffMode: isStaffMode,
-      bottomNavInset: bottomNavInset,
+    padding: EdgeInsets.zero,
+    child: SizedBox(
+      height: HexaResponsive.adaptiveSheetMaxHeight(context) * 0.78,
+      child: _OperationalFilterBody(
+        subcategoryCtrl: subcategoryCtrl,
+        includeSupplier: includeSupplier,
+        isStaffMode: isStaffMode,
+        bottomNavInset: bottomNavInset,
+      ),
     ),
   );
 }

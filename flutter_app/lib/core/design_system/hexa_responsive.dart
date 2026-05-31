@@ -186,7 +186,7 @@ class HexaResponsiveSheetViewport extends StatelessWidget {
     final effectivePadding = padding ??
         EdgeInsets.fromLTRB(
           HexaResponsive.pageGutter(context, operational: true),
-          8,
+          compact ? 8 : 4,
           HexaResponsive.pageGutter(context, operational: true),
           bottomExtra + bottomSafe,
         );
@@ -220,6 +220,7 @@ class HexaResponsiveSheetViewport extends StatelessWidget {
         top: false,
         child: Align(
           alignment: Alignment.bottomCenter,
+          heightFactor: 1,
           child: ConstrainedBox(
             constraints: BoxConstraints(
               maxWidth: maxWidth,

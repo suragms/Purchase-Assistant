@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 
 import '../../../core/auth/session_notifier.dart';
 import '../../../core/providers/reorder_list_provider.dart';
+import '../../../core/design_system/hexa_responsive.dart';
 import '../../../core/theme/hexa_colors.dart';
 import '../../../core/utils/unit_utils.dart';
 import '../../../core/widgets/friendly_load_error.dart';
@@ -263,32 +264,30 @@ class _ReorderTab extends ConsumerWidget {
                       ? null
                       : () => context.push('/catalog/item/$itemId'),
                   onLongPress: () async {
-                    final action = await showModalBottomSheet<String>(
+                    final action = await showHexaBottomSheet<String>(
                       context: context,
-                      showDragHandle: true,
-                      builder: (c) => SafeArea(
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            if (status == 'pending')
-                              ListTile(
-                                leading: const Icon(Icons.local_shipping_outlined),
-                                title: const Text('Mark ordered'),
-                                onTap: () => Navigator.pop(c, 'ordered'),
-                              ),
-                            if (status == 'ordered')
-                              ListTile(
-                                leading: const Icon(Icons.check_rounded),
-                                title: const Text('Mark done'),
-                                onTap: () => Navigator.pop(c, 'done'),
-                              ),
+                      compact: true,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (status == 'pending')
                             ListTile(
-                              leading: const Icon(Icons.delete_outline),
-                              title: const Text('Remove from list'),
-                              onTap: () => Navigator.pop(c, 'remove'),
+                              leading: const Icon(Icons.local_shipping_outlined),
+                              title: const Text('Mark ordered'),
+                              onTap: () => Navigator.pop(context, 'ordered'),
                             ),
-                          ],
-                        ),
+                          if (status == 'ordered')
+                            ListTile(
+                              leading: const Icon(Icons.check_rounded),
+                              title: const Text('Mark done'),
+                              onTap: () => Navigator.pop(context, 'done'),
+                            ),
+                          ListTile(
+                            leading: const Icon(Icons.delete_outline),
+                            title: const Text('Remove from list'),
+                            onTap: () => Navigator.pop(context, 'remove'),
+                          ),
+                        ],
                       ),
                     );
                     if (action == 'ordered') await onSetStatus(r, 'ordered');

@@ -119,36 +119,34 @@ class ItemDetailPage extends ConsumerWidget {
     Map<String, dynamic> item,
   ) async {
     final itemName = (item['name']?.toString() ?? 'Item').trim();
-    final v = await showModalBottomSheet<String>(
+    final v = await showHexaBottomSheet<String>(
       context: context,
-      showDragHandle: true,
-      builder: (ctx) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.receipt_long_outlined),
-              title: const Text('Ledger & statement'),
-              onTap: () => Navigator.pop(ctx, 'ledger'),
-            ),
-            ListTile(
-              leading: const Icon(Icons.shopping_cart_outlined),
-              title: const Text('Purchase history'),
-              onTap: () => Navigator.pop(ctx, 'history'),
-            ),
-            ListTile(
-              leading: const Icon(Icons.history_rounded),
-              title: const Text('Activity'),
-              onTap: () => Navigator.pop(ctx, 'activity'),
-            ),
-            ListTile(
-              leading: const Icon(Icons.copy_rounded),
-              title: const Text('Copy item name'),
-              subtitle: Text(itemName),
-              onTap: () => Navigator.pop(ctx, 'copy'),
-            ),
-          ],
-        ),
+      compact: true,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          ListTile(
+            leading: const Icon(Icons.receipt_long_outlined),
+            title: const Text('Ledger & statement'),
+            onTap: () => Navigator.pop(context, 'ledger'),
+          ),
+          ListTile(
+            leading: const Icon(Icons.shopping_cart_outlined),
+            title: const Text('Purchase history'),
+            onTap: () => Navigator.pop(context, 'history'),
+          ),
+          ListTile(
+            leading: const Icon(Icons.history_rounded),
+            title: const Text('Activity'),
+            onTap: () => Navigator.pop(context, 'activity'),
+          ),
+          ListTile(
+            leading: const Icon(Icons.copy_rounded),
+            title: const Text('Copy item name'),
+            subtitle: Text(itemName),
+            onTap: () => Navigator.pop(context, 'copy'),
+          ),
+        ],
       ),
     );
 

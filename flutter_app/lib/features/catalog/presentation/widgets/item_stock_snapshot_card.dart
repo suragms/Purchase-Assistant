@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/auth/dashboard_role.dart';
 import '../../../../core/auth/session_notifier.dart';
 import '../../../../core/design_system/hexa_operational_tokens.dart';
+import '../../../../core/design_system/hexa_responsive.dart';
 import '../../../../core/json_coerce.dart';
 import '../../../../core/providers/item_detail_providers.dart';
 import '../../../../core/theme/hexa_colors.dart';
@@ -629,12 +630,11 @@ class ItemStockSnapshotCard extends ConsumerWidget {
     String itemId,
     double current,
   ) {
-    showModalBottomSheet<void>(
+    showHexaBottomSheet<void>(
       context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      showDragHandle: true,
-      builder: (_) => _OpeningStockSheet(itemId: itemId, currentStock: current),
+      compact: true,
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+      child: _OpeningStockSheet(itemId: itemId, currentStock: current),
     );
   }
 
@@ -644,12 +644,11 @@ class ItemStockSnapshotCard extends ConsumerWidget {
     String itemId,
     double current,
   ) {
-    showModalBottomSheet<void>(
+    showHexaBottomSheet<void>(
       context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      showDragHandle: true,
-      builder: (_) => _ReorderLevelSheet(itemId: itemId, current: current),
+      compact: true,
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+      child: _ReorderLevelSheet(itemId: itemId, current: current),
     );
   }
 }
@@ -707,21 +706,14 @@ class _OpeningStockSheetState extends ConsumerState<_OpeningStockSheet> {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: EdgeInsets.fromLTRB(
-        16,
-        8,
-        16,
-        MediaQuery.viewInsetsOf(context).bottom + 16,
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text(
-            'Set Opening Stock',
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
-          ),
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          'Set Opening Stock',
+          style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+        ),
           const SizedBox(height: 12),
           TextField(
             controller: _ctrl,
@@ -739,7 +731,6 @@ class _OpeningStockSheetState extends ConsumerState<_OpeningStockSheet> {
             child: const Text('SET OPENING STOCK'),
           ),
         ],
-      ),
     );
   }
 }
@@ -795,39 +786,31 @@ class _ReorderLevelSheetState extends ConsumerState<_ReorderLevelSheet> {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: EdgeInsets.fromLTRB(
-        16,
-        8,
-        16,
-        MediaQuery.viewInsetsOf(context).bottom + 16,
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text(
-            'Set Reorder Level',
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          'Set Reorder Level',
+          style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+        ),
+        const SizedBox(height: 12),
+        TextField(
+          controller: _ctrl,
+          autofocus: true,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          decoration: const InputDecoration(
+            labelText: 'Reorder quantity',
+            border: OutlineInputBorder(),
           ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _ctrl,
-            autofocus: true,
-            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            decoration: const InputDecoration(
-              labelText: 'Reorder quantity',
-              border: OutlineInputBorder(),
-            ),
-            onSubmitted: (_) => _save(),
-          ),
-          const SizedBox(height: 12),
-          FilledButton(
-            onPressed: _saving ? null : _save,
-            child: const Text('SAVE REORDER LEVEL'),
-          ),
-        ],
-      ),
+          onSubmitted: (_) => _save(),
+        ),
+        const SizedBox(height: 12),
+        FilledButton(
+          onPressed: _saving ? null : _save,
+          child: const Text('SAVE REORDER LEVEL'),
+        ),
+      ],
     );
   }
 }

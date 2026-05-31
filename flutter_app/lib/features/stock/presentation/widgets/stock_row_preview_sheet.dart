@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
+import '../../../../core/design_system/hexa_responsive.dart';
 import '../../../../core/json_coerce.dart';
 import '../../../../core/providers/stock_providers.dart';
 import '../../../../core/utils/unit_utils.dart';
@@ -17,16 +18,14 @@ Future<void> showStockRowPreviewSheet({
   final id = item['id']?.toString() ?? '';
   if (id.isEmpty) return;
 
-  await showModalBottomSheet<void>(
+  await showHexaBottomSheet<void>(
     context: context,
-    showDragHandle: true,
-    builder: (ctx) {
-      return _StockRowPreviewBody(
-        itemId: id,
-        item: item,
-        isStaffMode: isStaffMode,
-      );
-    },
+    compact: true,
+    child: _StockRowPreviewBody(
+      itemId: id,
+      item: item,
+      isStaffMode: isStaffMode,
+    ),
   );
 }
 
@@ -64,15 +63,10 @@ class _StockRowPreviewBody extends ConsumerWidget {
     final delivered = item['last_purchase_delivered'];
     final pending = delivered == false && hid.isNotEmpty;
 
-    return SafeArea(
-      top: false,
-      child: Padding(
-        padding:
-            EdgeInsets.fromLTRB(16, 8, 16, 16 + MediaQuery.paddingOf(context).bottom),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
           Text(
             name,
             style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w900),
@@ -199,9 +193,7 @@ class _StockRowPreviewBody extends ConsumerWidget {
             },
             child: const Text('Full stock view'),
           ),
-          ],
-        ),
-      ),
+        ],
     );
   }
 

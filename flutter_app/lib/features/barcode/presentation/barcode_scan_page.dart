@@ -333,35 +333,33 @@ class _BarcodeScanPageState extends ConsumerState<BarcodeScanPage>
     final session = ref.read(sessionProvider);
     final canEdit =
         session != null && !sessionIsStockReadOnly(session);
-    await showModalBottomSheet<void>(
+    await showHexaBottomSheet<void>(
       context: context,
-      showDragHandle: true,
-      builder: (ctx) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text(
-                'Unknown barcode',
-                style: Theme.of(ctx).textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.w800,
-                    ),
-              ),
+      compact: true,
+      padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            'Unknown barcode',
+            style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.w800,
+                ),
+          ),
               const SizedBox(height: 6),
               Text(
                 'Scanned: $code\nNot linked to any item in this business.',
-                style: Theme.of(ctx).textTheme.bodyMedium?.copyWith(
-                      color: Theme.of(ctx).colorScheme.onSurfaceVariant,
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
                     ),
               ),
               if (!canEdit) ...[
                 const SizedBox(height: 12),
                 Text(
                   'Read-only account — ask owner/manager to assign this barcode.',
-                  style: Theme.of(ctx).textTheme.bodySmall?.copyWith(
-                        color: Theme.of(ctx).colorScheme.error,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Theme.of(context).colorScheme.error,
                         fontWeight: FontWeight.w600,
                       ),
                 ),
@@ -370,7 +368,7 @@ class _BarcodeScanPageState extends ConsumerState<BarcodeScanPage>
               if (canEdit) ...[
                 FilledButton.icon(
                   onPressed: () {
-                    Navigator.pop(ctx);
+                    Navigator.pop(context);
                     context.push(
                       '/catalog/quick-add-from-scan?barcode=${Uri.encodeComponent(code)}',
                     );
@@ -381,7 +379,7 @@ class _BarcodeScanPageState extends ConsumerState<BarcodeScanPage>
                 const SizedBox(height: 8),
                 OutlinedButton.icon(
                   onPressed: () {
-                    Navigator.pop(ctx);
+                    Navigator.pop(context);
                     unawaited(_assignBarcodeToExisting(code));
                   },
                   icon: const Icon(Icons.link),
@@ -392,7 +390,7 @@ class _BarcodeScanPageState extends ConsumerState<BarcodeScanPage>
               const SizedBox(height: 8),
               OutlinedButton.icon(
                 onPressed: () {
-                  Navigator.pop(ctx);
+                  Navigator.pop(context);
                   _manualFocus.requestFocus();
                 },
                 icon: const Icon(Icons.keyboard),
@@ -400,19 +398,17 @@ class _BarcodeScanPageState extends ConsumerState<BarcodeScanPage>
               ),
               OutlinedButton.icon(
                 onPressed: () {
-                  Navigator.pop(ctx);
+                  Navigator.pop(context);
                   unawaited(_resumeScan());
                 },
                 icon: const Icon(Icons.qr_code_scanner_rounded),
                 label: const Text('Scan again'),
               ),
               TextButton(
-                onPressed: () => Navigator.pop(ctx),
+                onPressed: () => Navigator.pop(context),
                 child: const Text('Close'),
               ),
             ],
-          ),
-        ),
       ),
     );
     await _resumeScan();

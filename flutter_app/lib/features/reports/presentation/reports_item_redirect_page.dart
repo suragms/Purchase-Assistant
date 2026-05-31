@@ -40,7 +40,7 @@ class _ReportsItemRedirectPageState extends ConsumerState<ReportsItemRedirectPag
     if (!mounted) return;
     _resolved = true;
     if (id != null && id.isNotEmpty) {
-      context.go('/catalog/item/$id?tab=purchases');
+      context.replace('/catalog/item/$id?tab=purchases&source=reports');
       return;
     }
     setState(() => _useFallback = true);

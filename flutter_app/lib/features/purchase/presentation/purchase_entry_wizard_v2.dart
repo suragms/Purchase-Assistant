@@ -14,6 +14,7 @@ import '../../../core/api/fastapi_error.dart';
 import '../../../core/auth/auth_error_messages.dart';
 import '../../../core/errors/user_facing_errors.dart';
 import '../../../core/auth/session_notifier.dart';
+import '../../../core/design_system/hexa_responsive.dart';
 import '../../../core/json_coerce.dart' show coerceToDoubleNullable;
 import '../../../core/models/trade_purchase_models.dart';
 import '../../../core/widgets/form_field_scroll.dart';
@@ -1414,51 +1415,46 @@ class _PurchaseEntryWizardV2State extends ConsumerState<PurchaseEntryWizardV2>
     if (session == null) return;
     // business id is already available from session; keep local only when needed
 
-    final delivered = await showModalBottomSheet<bool>(
+    final delivered = await showHexaBottomSheet<bool>(
       context: context,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) => Padding(
-        padding: const EdgeInsets.fromLTRB(24, 20, 24, 40),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const Icon(
-              Icons.local_shipping_outlined,
-              size: 40,
-              color: Colors.orange,
-            ),
-            const SizedBox(height: 12),
-            const Text(
-              'Has this shipment arrived at your warehouse?',
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-            ),
-            const SizedBox(height: 20),
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: () => popOverlay(ctx, false),
-                    child: const Text('Not Yet'),
-                  ),
+      compact: true,
+      padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Icon(
+            Icons.local_shipping_outlined,
+            size: 40,
+            color: Colors.orange,
+          ),
+          const SizedBox(height: 12),
+          const Text(
+            'Has this shipment arrived at your warehouse?',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 20),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: () => Navigator.pop(context, false),
+                  child: const Text('Not Yet'),
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: FilledButton.icon(
-                    icon: const Icon(Icons.check_circle_outline, size: 18),
-                    label: const Text('Yes, Received'),
-                    onPressed: () => popOverlay(ctx, true),
-                    style: FilledButton.styleFrom(backgroundColor: Colors.green),
-                  ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: FilledButton.icon(
+                  icon: const Icon(Icons.check_circle_outline, size: 18),
+                  label: const Text('Yes, Received'),
+                  onPressed: () => Navigator.pop(context, true),
+                  style: FilledButton.styleFrom(backgroundColor: Colors.green),
                 ),
-              ],
-            ),
-          ],
-        ),
+              ),
+            ],
+          ),
+        ],
       ),
     );
 

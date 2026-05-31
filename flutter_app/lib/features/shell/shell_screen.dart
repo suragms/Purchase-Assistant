@@ -431,79 +431,74 @@ class _FabButton extends StatelessWidget {
   const _FabButton();
 
   void _openQuickActions(BuildContext context) {
-    showModalBottomSheet<void>(
+    showHexaBottomSheet<void>(
       context: context,
-      showDragHandle: true,
-      builder: (ctx) {
-        return HexaResponsiveSheetViewport(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              ListTile(
-                leading: Icon(Icons.add_shopping_cart_outlined,
-                    color: HexaColors.brandPrimary),
-                title: Text('Add purchase',
-                    style: HexaDsType.body(16,
-                        color: HexaDsColors.textPrimary,
-                        weight: FontWeight.w700)),
-                onTap: () {
-                  Navigator.of(ctx).pop();
-                  context.push('/purchase/new');
-                },
-              ),
-              ListTile(
-                leading: Icon(Icons.inventory_outlined,
-                    color: HexaColors.brandPrimary),
-                title: Text('Add item',
-                    style: HexaDsType.body(16,
-                        color: HexaDsColors.textPrimary,
-                        weight: FontWeight.w700)),
-                onTap: () {
-                  Navigator.of(ctx).pop();
-                  context.push('/catalog/quick-add');
-                },
-              ),
-              ListTile(
-                leading: Icon(Icons.qr_code_scanner_rounded,
-                    color: HexaColors.brandPrimary),
-                title: Text('Scan barcode',
-                    style: HexaDsType.body(16,
-                        color: HexaDsColors.textPrimary,
-                        weight: FontWeight.w700)),
-                onTap: () {
-                  Navigator.of(ctx).pop();
-                  context.push('/barcode/scan');
-                },
-              ),
-              ListTile(
-                leading: Icon(Icons.qr_code_2_rounded,
-                    color: HexaColors.brandPrimary),
-                title: Text('Print labels',
-                    style: HexaDsType.body(16,
-                        color: HexaDsColors.textPrimary,
-                        weight: FontWeight.w700)),
-                onTap: () {
-                  Navigator.of(ctx).pop();
-                  context.push('/barcode/bulk-print');
-                },
-              ),
-              ListTile(
-                leading:
-                    Icon(Icons.tune_rounded, color: HexaColors.brandPrimary),
-                title: Text('Stock adjustment',
-                    style: HexaDsType.body(16,
-                        color: HexaDsColors.textPrimary,
-                        weight: FontWeight.w700)),
-                onTap: () {
-                  Navigator.of(ctx).pop();
-                  context.go('/stock');
-                },
-              ),
-            ],
+      compact: true,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          ListTile(
+            leading: Icon(Icons.add_shopping_cart_outlined,
+                color: HexaColors.brandPrimary),
+            title: Text('Add purchase',
+                style: HexaDsType.body(16,
+                    color: HexaDsColors.textPrimary,
+                    weight: FontWeight.w700)),
+            onTap: () {
+              Navigator.of(context).pop();
+              context.push('/purchase/new');
+            },
           ),
-        );
-      },
+          ListTile(
+            leading: Icon(Icons.inventory_outlined,
+                color: HexaColors.brandPrimary),
+            title: Text('Add item',
+                style: HexaDsType.body(16,
+                    color: HexaDsColors.textPrimary,
+                    weight: FontWeight.w700)),
+            onTap: () {
+              Navigator.of(context).pop();
+              context.push('/catalog/quick-add');
+            },
+          ),
+          ListTile(
+            leading: Icon(Icons.qr_code_scanner_rounded,
+                color: HexaColors.brandPrimary),
+            title: Text('Scan barcode',
+                style: HexaDsType.body(16,
+                    color: HexaDsColors.textPrimary,
+                    weight: FontWeight.w700)),
+            onTap: () {
+              Navigator.of(context).pop();
+              context.push('/barcode/scan');
+            },
+          ),
+          ListTile(
+            leading: Icon(Icons.qr_code_2_rounded,
+                color: HexaColors.brandPrimary),
+            title: Text('Print labels',
+                style: HexaDsType.body(16,
+                    color: HexaDsColors.textPrimary,
+                    weight: FontWeight.w700)),
+            onTap: () {
+              Navigator.of(context).pop();
+              context.push('/barcode/bulk-print');
+            },
+          ),
+          ListTile(
+            leading: Icon(Icons.tune_rounded, color: HexaColors.brandPrimary),
+            title: Text('Stock adjustment',
+                style: HexaDsType.body(16,
+                    color: HexaDsColors.textPrimary,
+                    weight: FontWeight.w700)),
+            onTap: () {
+              Navigator.of(context).pop();
+              context.go('/stock');
+            },
+          ),
+        ],
+      ),
     );
   }
 

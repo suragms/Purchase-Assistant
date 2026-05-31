@@ -17,12 +17,10 @@ Future<void> showLowStockApprovalSheet({
   required String itemId,
   required String itemName,
 }) async {
-  await showModalBottomSheet<void>(
+  await showHexaBottomSheet<void>(
     context: context,
-    isScrollControlled: true,
-    useSafeArea: true,
-    showDragHandle: true,
-    builder: (ctx) => _LowStockApprovalSheetBody(
+    compact: true,
+    child: _LowStockApprovalSheetBody(
       parentRef: ref,
       itemId: itemId,
       itemName: itemName,

@@ -27,13 +27,12 @@ class OpeningStockProgressSheet extends ConsumerWidget {
     final remaining = totalCount - completedCount;
     final pct = totalCount <= 0 ? 0.0 : (completedCount / totalCount) * 100.0;
 
-    return HexaResponsiveSheetViewport(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          const SizedBox(height: 8),
-          OpeningStockSummaryBar(
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const SizedBox(height: 8),
+        OpeningStockSummaryBar(
             pendingCount: pendingCount,
             completedCount: completedCount,
             totalCount: totalCount,
@@ -66,7 +65,6 @@ class OpeningStockProgressSheet extends ConsumerWidget {
             label: Text('View pending items ($remaining)'),
           ),
         ],
-      ),
     );
   }
 }
@@ -76,12 +74,10 @@ Future<void> showOpeningStockProgressSheet({
   required WidgetRef ref,
   required Map<String, dynamic> summary,
 }) async {
-  await showModalBottomSheet<void>(
+  await showHexaBottomSheet<void>(
     context: context,
-    isScrollControlled: true,
-    useSafeArea: true,
-    showDragHandle: true,
-    builder: (_) => OpeningStockProgressSheet(
+    compact: true,
+    child: OpeningStockProgressSheet(
       pendingCount: (summary['pending_count'] as num?)?.toInt() ?? 0,
       completedCount: (summary['completed_count'] as num?)?.toInt() ?? 0,
       totalCount: (summary['total_count'] as num?)?.toInt() ?? 0,

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/auth/session_notifier.dart';
+import '../../../../core/design_system/hexa_responsive.dart';
 import '../../../../core/json_coerce.dart';
 
 Future<bool> showStaffVerificationSheet({
@@ -10,14 +11,18 @@ Future<bool> showStaffVerificationSheet({
   required String purchaseId,
   required List<Map<String, dynamic>> lines,
 }) async {
-  final ok = await showModalBottomSheet<bool>(
+  final ok = await showHexaBottomSheet<bool>(
     context: context,
-    isScrollControlled: true,
-    useSafeArea: true,
-    showDragHandle: true,
-    builder: (_) => _StaffVerificationSheet(
-      purchaseId: purchaseId,
-      lines: lines,
+    compact: false,
+    padding: EdgeInsets.zero,
+    child: ConstrainedBox(
+      constraints: BoxConstraints(
+        maxHeight: HexaResponsive.adaptiveSheetMaxHeight(context),
+      ),
+      child: _StaffVerificationSheet(
+        purchaseId: purchaseId,
+        lines: lines,
+      ),
     ),
   );
   return ok == true;
@@ -105,12 +110,7 @@ class _StaffVerificationSheetState extends ConsumerState<_StaffVerificationSheet
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: EdgeInsets.fromLTRB(
-        16,
-        8,
-        16,
-        MediaQuery.viewInsetsOf(context).bottom + 16,
-      ),
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
       child: SingleChildScrollView(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,

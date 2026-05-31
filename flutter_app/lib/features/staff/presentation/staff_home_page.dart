@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import '../../../core/auth/session_notifier.dart';
 import '../../../core/design_system/hexa_ds_tokens.dart';
 import '../../../core/design_system/hexa_operational_tokens.dart';
+import '../../../core/design_system/hexa_responsive.dart';
 import '../../../core/providers/app_period_provider.dart';
 import '../../../core/providers/delivery_pipeline_provider.dart';
 import '../../../core/providers/notifications_provider.dart';
@@ -35,19 +36,16 @@ Future<void> _showStaffProfileSheet(BuildContext context, WidgetRef ref) async {
   final nameAsync = ref.read(staffDisplayNameProvider);
   final name = nameAsync.valueOrNull ?? 'Staff';
   final biz = session?.primaryBusiness.effectiveDisplayTitle ?? 'Workspace';
-  await showModalBottomSheet<void>(
+  await showHexaBottomSheet<void>(
     context: context,
-    showDragHandle: true,
-    isScrollControlled: true,
-    builder: (ctx) => Consumer(
+    compact: true,
+    padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+    child: Consumer(
       builder: (ctx, ref, _) {
         final currentFocus = ref.watch(staffHomeFocusProvider);
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Row(
                   children: [
@@ -157,8 +155,6 @@ Future<void> _showStaffProfileSheet(BuildContext context, WidgetRef ref) async {
                   child: const Text('Close'),
                 ),
               ],
-            ),
-          ),
         );
       },
     ),

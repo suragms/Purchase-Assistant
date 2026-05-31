@@ -8,6 +8,7 @@ import '../calc_engine.dart' show lineMoney;
 import '../models/business_profile.dart';
 import '../models/trade_purchase_models.dart';
 import '../utils/trade_purchase_rate_display.dart';
+import '../utils/unit_utils.dart';
 import '../units/dynamic_unit_label_engine.dart' as unit_lbl;
 import '../config/app_config.dart';
 import 'pdf_actions.dart';
@@ -145,7 +146,7 @@ Future<pw.Document> buildPurchaseReceiptDoc(
             style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold),
           ),
           pw.Text(
-            '  ${l.qty} ${l.unit}  ·  P ${_pdfReceiptPurchase(l)}  ·  S ${_pdfReceiptSelling(l)}  ·  ${_inrPdf(l.lineTotal ?? lineMoney(tradePurchaseLineToCalcLine(l)))}',
+            '  ${formatStockQtyForUnit(l.unit, l.qty.toDouble())} ${l.unit.trim()}  ·  P ${_pdfReceiptPurchase(l)}  ·  S ${_pdfReceiptSelling(l)}  ·  ${_inrPdf(l.lineTotal ?? lineMoney(tradePurchaseLineToCalcLine(l)))}',
             style: const pw.TextStyle(fontSize: 9, color: _muted),
           ),
           pw.SizedBox(height: 6),

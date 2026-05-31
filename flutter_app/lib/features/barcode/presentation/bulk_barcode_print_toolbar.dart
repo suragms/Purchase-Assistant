@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/design_system/hexa_operational_tokens.dart';
+import '../../../core/design_system/hexa_responsive.dart';
 import '../../../core/widgets/operational_async_button.dart';
 import '../services/bulk_pdf_chunks.dart';
 
@@ -55,22 +56,20 @@ class BulkBarcodePrintToolbar extends StatelessWidget {
   final String pdfButtonLabel;
 
   Future<void> _openSettings(BuildContext context) async {
-    await showModalBottomSheet<void>(
+    await showHexaBottomSheet<void>(
       context: context,
-      showDragHandle: true,
-      builder: (ctx) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text(
-                'Label settings',
-                style: Theme.of(ctx).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w900,
-                    ),
-              ),
+      compact: true,
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            'Label settings',
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w900,
+                ),
+          ),
               const SizedBox(height: 12),
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
@@ -150,11 +149,9 @@ class BulkBarcodePrintToolbar extends StatelessWidget {
               ),
               Text(
                 'Downloads one PDF up to $kMaxLabelsSinglePdf labels.',
-                style: Theme.of(ctx).textTheme.bodySmall,
+                style: Theme.of(context).textTheme.bodySmall,
               ),
             ],
-          ),
-        ),
       ),
     );
   }

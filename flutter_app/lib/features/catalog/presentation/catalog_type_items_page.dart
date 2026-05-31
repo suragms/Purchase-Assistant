@@ -9,6 +9,7 @@ import 'package:intl/intl.dart';
 
 import '../../../core/auth/auth_error_messages.dart';
 import '../../../core/auth/session_notifier.dart';
+import '../../../core/design_system/hexa_responsive.dart';
 import '../../../core/providers/business_aggregates_invalidation.dart';
 import '../../../core/providers/catalog_providers.dart';
 import '../../../core/search/catalog_fuzzy.dart';
@@ -184,14 +185,11 @@ class _CatalogTypeItemsPageState extends ConsumerState<CatalogTypeItemsPage> {
     if (!mounted) return;
     String? targetCat;
     String? targetType;
-    await showModalBottomSheet<void>(
+    await showHexaBottomSheet<void>(
       context: context,
-      isScrollControlled: true,
-      showDragHandle: true,
-      builder: (ctx) {
-        return Padding(
-          padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(ctx).bottom),
-          child: StatefulBuilder(
+      compact: false,
+      padding: EdgeInsets.zero,
+      child: StatefulBuilder(
             builder: (ctx, setSt) {
               return Consumer(
                 builder: (context, ref, _) {
@@ -371,57 +369,49 @@ class _CatalogTypeItemsPageState extends ConsumerState<CatalogTypeItemsPage> {
               );
             },
           ),
-        );
-      },
     );
   }
 
   void _onItemLongPress(Map<String, dynamic> it) {
     final id = it['id']?.toString() ?? '';
     final name = it['name']?.toString() ?? '';
-    showModalBottomSheet<void>(
+    showHexaBottomSheet<void>(
       context: context,
-      isScrollControlled: true,
-      showDragHandle: true,
-      builder: (ctx) => Padding(
-        padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(ctx).bottom),
-        child: SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ListTile(
-                leading: const Icon(Icons.edit_outlined),
-                title: const Text('Edit on detail'),
-                subtitle: const Text('Change defaults, see history'),
-                onTap: () {
-                  ctx.pop();
-                  context.push('/catalog/item/$id');
-                },
-              ),
-              ListTile(
-                leading: Icon(Icons.delete_outline, color: Colors.red.shade700),
-                title: Text('Delete', style: TextStyle(color: Colors.red.shade800)),
-                onTap: () async {
-                  ctx.pop();
-                  await _deleteItemById(id, name);
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.checklist_rounded),
-                title: const Text('Select multiple'),
-                onTap: () {
-                  ctx.pop();
-                  setState(() {
-                    _selectionMode = true;
-                    _selected
-                      ..clear()
-                      ..add(id);
-                  });
-                },
-              ),
-            ],
+      compact: true,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          ListTile(
+            leading: const Icon(Icons.edit_outlined),
+            title: const Text('Edit on detail'),
+            subtitle: const Text('Change defaults, see history'),
+            onTap: () {
+              Navigator.pop(context);
+              context.push('/catalog/item/$id');
+            },
           ),
-        ),
+          ListTile(
+            leading: Icon(Icons.delete_outline, color: Colors.red.shade700),
+            title: Text('Delete', style: TextStyle(color: Colors.red.shade800)),
+            onTap: () async {
+              Navigator.pop(context);
+              await _deleteItemById(id, name);
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.checklist_rounded),
+            title: const Text('Select multiple'),
+            onTap: () {
+              Navigator.pop(context);
+              setState(() {
+                _selectionMode = true;
+                _selected
+                  ..clear()
+                  ..add(id);
+              });
+            },
+          ),
+        ],
       ),
     );
   }

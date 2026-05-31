@@ -85,12 +85,10 @@ class _OpeningStockSetupPageState
     final businessId = session.primaryBusiness.id;
     final anyLocked = selectedItems.any((it) => it['opening_stock_locked'] == true);
 
-    final ok = await showModalBottomSheet<bool>(
+    final ok = await showHexaBottomSheet<bool>(
       context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      showDragHandle: true,
-      builder: (ctx) => _BulkOpeningSetSheetBody(
+      compact: true,
+      child: _BulkOpeningSetSheetBody(
         businessId: businessId,
         items: selectedItems,
         anyLocked: anyLocked,

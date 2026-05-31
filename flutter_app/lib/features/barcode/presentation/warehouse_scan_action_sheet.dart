@@ -24,16 +24,11 @@ Future<bool> showWarehouseScanActionSheet({
   required WidgetRef ref,
   required Map<String, dynamic> item,
 }) async {
-  final saved = await showModalBottomSheet<bool>(
+  final saved = await showHexaBottomSheet<bool>(
     context: context,
-    isScrollControlled: true,
-    useSafeArea: true,
-    showDragHandle: true,
-    builder: (ctx) => HexaResponsiveSheetViewport(
-      compact: true,
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-      child: _WarehouseScanActionBody(item: item),
-    ),
+    compact: true,
+    padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+    child: _WarehouseScanActionBody(item: item),
   );
   return saved == true;
 }

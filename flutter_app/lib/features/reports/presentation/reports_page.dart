@@ -583,27 +583,25 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
   }
 
   void _openMoreTabsSheet() {
-    showModalBottomSheet<void>(
+    showHexaBottomSheet<void>(
       context: context,
-      showDragHandle: true,
-      builder: (ctx) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            for (final t in ReportsBiTabX.moreSheet)
-              ListTile(
-                title: Text(t.shortLabel),
-                trailing: _biTab == t
-                    ? Icon(Icons.check_rounded, color: HexaColors.brandPrimary)
-                    : null,
-                selected: _biTab == t,
-                onTap: () {
-                  Navigator.pop(ctx);
-                  _selectBiTab(t);
-                },
-              ),
-          ],
-        ),
+      compact: true,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (final t in ReportsBiTabX.moreSheet)
+            ListTile(
+              title: Text(t.shortLabel),
+              trailing: _biTab == t
+                  ? Icon(Icons.check_rounded, color: HexaColors.brandPrimary)
+                  : null,
+              selected: _biTab == t,
+              onTap: () {
+                Navigator.pop(context);
+                _selectBiTab(t);
+              },
+            ),
+        ],
       ),
     );
   }
@@ -667,74 +665,72 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
   }
 
   void _openReportsPdfSheet(List<TradePurchase> merged) {
-    showModalBottomSheet<void>(
+    showHexaBottomSheet<void>(
       context: context,
-      showDragHandle: true,
-      builder: (ctx) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.picture_as_pdf_outlined),
-              title: const Text('Full report PDF'),
-              subtitle: const Text('Statement for current date range'),
-              onTap: () {
-                Navigator.pop(ctx);
-                unawaited(_shareStatementPdf(merged));
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.fullscreen_rounded),
-              title: const Text('View PDF full screen'),
-              subtitle: const Text('Open print preview in app'),
-              onTap: () {
-                Navigator.pop(ctx);
-                unawaited(_viewStatementPdfFullScreen(merged));
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.table_rows_rounded),
-              title: const Text('Export CSV'),
-              subtitle: const Text('Items, suppliers, or brokers'),
-              onTap: () {
-                Navigator.pop(ctx);
-                setState(() => _biTab = ReportsBiTab.items);
-                final range = ref.read(analyticsDateRangeProvider);
-                final mergedNow = ref.read(reportsPurchasesMergedProvider);
-                final aggList = ref.read(reportsAggregateProvider);
-                final aggForExport = _aggForList(aggList, aggList);
-                unawaited(_exportCsv(
-                  purchases: mergedNow,
-                  agg: aggForExport,
-                  range: range,
-                ));
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.store_mall_directory_outlined),
-              title: const Text('Supplier statement'),
-              subtitle: const Text('Open Contacts → pick a supplier'),
-              onTap: () {
-                Navigator.pop(ctx);
-                context.go('/contacts');
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.inventory_2_outlined),
-              title: const Text('Stock report'),
-              subtitle: const Text('View stock levels and filters'),
-              onTap: () {
-                Navigator.pop(ctx);
-                goShellTab(
-                  context,
-                  ref,
-                  branch: ShellBranch.stock,
-                  location: '/stock',
-                );
-              },
-            ),
-          ],
-        ),
+      compact: true,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          ListTile(
+            leading: const Icon(Icons.picture_as_pdf_outlined),
+            title: const Text('Full report PDF'),
+            subtitle: const Text('Statement for current date range'),
+            onTap: () {
+              Navigator.pop(context);
+              unawaited(_shareStatementPdf(merged));
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.fullscreen_rounded),
+            title: const Text('View PDF full screen'),
+            subtitle: const Text('Open print preview in app'),
+            onTap: () {
+              Navigator.pop(context);
+              unawaited(_viewStatementPdfFullScreen(merged));
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.table_rows_rounded),
+            title: const Text('Export CSV'),
+            subtitle: const Text('Items, suppliers, or brokers'),
+            onTap: () {
+              Navigator.pop(context);
+              setState(() => _biTab = ReportsBiTab.items);
+              final range = ref.read(analyticsDateRangeProvider);
+              final mergedNow = ref.read(reportsPurchasesMergedProvider);
+              final aggList = ref.read(reportsAggregateProvider);
+              final aggForExport = _aggForList(aggList, aggList);
+              unawaited(_exportCsv(
+                purchases: mergedNow,
+                agg: aggForExport,
+                range: range,
+              ));
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.store_mall_directory_outlined),
+            title: const Text('Supplier statement'),
+            subtitle: const Text('Open Contacts → pick a supplier'),
+            onTap: () {
+              Navigator.pop(context);
+              context.go('/contacts');
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.inventory_2_outlined),
+            title: const Text('Stock report'),
+            subtitle: const Text('View stock levels and filters'),
+            onTap: () {
+              Navigator.pop(context);
+              goShellTab(
+                context,
+                ref,
+                branch: ShellBranch.stock,
+                location: '/stock',
+              );
+            },
+          ),
+        ],
       ),
     );
   }

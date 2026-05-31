@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/calc_engine.dart';
-import '../../../../core/strict_decimal.dart';
 import '../../../../core/theme/hexa_colors.dart';
+import '../../../../core/utils/unit_utils.dart';
 import '../../domain/purchase_draft.dart';
 import '../../state/purchase_draft_provider.dart';
 import '../../state/purchase_trade_preview_provider.dart';
@@ -152,7 +152,7 @@ class _PurchaseItemsStepState extends ConsumerState<PurchaseItemsStep> {
     final rateUnit = (kpu != null && lck != null && kpu > 0 && lck > 0)
         ? (kpu * lck)
         : it.landingCost;
-    final qtyStr = StrictDecimal.fromObject(it.qty).format(3, trim: true);
+    final qtyStr = formatStockQtyForUnit(it.unit, it.qty);
     final lineText =
         '$qtyStr × ₹${rateUnit.toStringAsFixed(2)} = ₹${total.toStringAsFixed(2)} · ${it.unit.trim()}';
     const h = kPurchaseFieldHeight;

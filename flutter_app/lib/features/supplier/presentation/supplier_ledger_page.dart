@@ -7,6 +7,7 @@ import 'package:intl/intl.dart';
 import '../../../core/auth/auth_error_messages.dart';
 import '../../../core/auth/session_notifier.dart';
 import '../../../core/providers/business_aggregates_invalidation.dart';
+import '../../../core/design_system/hexa_responsive.dart';
 import '../../../core/router/navigation_ext.dart';
 import '../../../shared/widgets/trade_intel_cards.dart';
 import '../../purchase/providers/trade_purchase_detail_provider.dart';
@@ -55,29 +56,23 @@ class SupplierLedgerPage extends ConsumerWidget {
 
   Future<void> _openRowActions(BuildContext context, WidgetRef ref, LedgerLineRow row) async {
     if (!context.mounted) return;
-    final action = await showModalBottomSheet<String>(
+    final action = await showHexaBottomSheet<String>(
       context: context,
-      isScrollControlled: true,
-      showDragHandle: true,
-      builder: (ctx) => Padding(
-        padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(ctx).bottom),
-        child: SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ListTile(
-                leading: const Icon(Icons.edit_outlined),
-                title: const Text('Edit'),
-                onTap: () => ctx.pop('edit'),
-              ),
-              ListTile(
-                leading: Icon(Icons.delete_outline, color: Theme.of(ctx).colorScheme.error),
-                title: Text('Delete', style: TextStyle(color: Theme.of(ctx).colorScheme.error)),
-                onTap: () => ctx.pop('delete'),
-              ),
-            ],
+      compact: true,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          ListTile(
+            leading: const Icon(Icons.edit_outlined),
+            title: const Text('Edit'),
+            onTap: () => Navigator.pop(context, 'edit'),
           ),
-        ),
+          ListTile(
+            leading: Icon(Icons.delete_outline, color: Theme.of(context).colorScheme.error),
+            title: Text('Delete', style: TextStyle(color: Theme.of(context).colorScheme.error)),
+            onTap: () => Navigator.pop(context, 'delete'),
+          ),
+        ],
       ),
     );
     if (!context.mounted || action == null) return;

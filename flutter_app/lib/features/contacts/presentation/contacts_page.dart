@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/auth/auth_error_messages.dart';
+import '../../../core/design_system/hexa_responsive.dart';
 import '../../../core/theme/hexa_colors.dart';
 import '../../../core/widgets/friendly_load_error.dart';
 import '../../../core/widgets/focused_search_chrome.dart';
@@ -571,66 +572,55 @@ class _ContactsPageState extends ConsumerState<ContactsPage>
   Future<void> _addCategorySheet() async {
     final nameCtrl = TextEditingController();
     final emojiCtrl = TextEditingController();
-    final saved = await showModalBottomSheet<String>(
+    final saved = await showHexaBottomSheet<String>(
       context: context,
-      isScrollControlled: true,
-      showDragHandle: true,
-      backgroundColor: Colors.white,
-      builder: (ctx) {
-        return Padding(
-          padding: EdgeInsets.only(
-            left: 24,
-            right: 24,
-            top: 8,
-            bottom: 24 + MediaQuery.viewInsetsOf(ctx).bottom,
+      compact: true,
+      padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text('New category',
+              style: Theme.of(context)
+                  .textTheme
+                  .titleLarge
+                  ?.copyWith(fontWeight: FontWeight.w800)),
+          const SizedBox(height: 16),
+          TextField(
+            controller: emojiCtrl,
+            textAlign: TextAlign.center,
+            maxLength: 4,
+            decoration: const InputDecoration(
+              labelText: 'Icon (emoji, optional)',
+              hintText: '🌾',
+              counterText: '',
+            ),
           ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text('New category',
-                  style: Theme.of(context)
-                      .textTheme
-                      .titleLarge
-                      ?.copyWith(fontWeight: FontWeight.w800)),
-              const SizedBox(height: 16),
-              TextField(
-                controller: emojiCtrl,
-                textAlign: TextAlign.center,
-                maxLength: 4,
-                decoration: const InputDecoration(
-                  labelText: 'Icon (emoji, optional)',
-                  hintText: '🌾',
-                  counterText: '',
-                ),
-              ),
-              const SizedBox(height: 8),
-              TextField(
-                controller: nameCtrl,
-                autofocus: true,
-                textCapitalization: TextCapitalization.words,
-                decoration: const InputDecoration(labelText: 'Name *'),
-                onSubmitted: (_) {
-                  final n = nameCtrl.text.trim();
-                  if (n.isEmpty) return;
-                  final e = emojiCtrl.text.trim();
-                  ctx.pop(e.isEmpty ? n : '$e $n');
-                },
-              ),
-              const SizedBox(height: 20),
-              FilledButton(
-                onPressed: () {
-                  final n = nameCtrl.text.trim();
-                  if (n.isEmpty) return;
-                  final e = emojiCtrl.text.trim();
-                  ctx.pop(e.isEmpty ? n : '$e $n');
-                },
-                child: const Text('Save category'),
-              ),
-            ],
+          const SizedBox(height: 8),
+          TextField(
+            controller: nameCtrl,
+            autofocus: true,
+            textCapitalization: TextCapitalization.words,
+            decoration: const InputDecoration(labelText: 'Name *'),
+            onSubmitted: (_) {
+              final n = nameCtrl.text.trim();
+              if (n.isEmpty) return;
+              final e = emojiCtrl.text.trim();
+              Navigator.pop(context, e.isEmpty ? n : '$e $n');
+            },
           ),
-        );
-      },
+          const SizedBox(height: 20),
+          FilledButton(
+            onPressed: () {
+              final n = nameCtrl.text.trim();
+              if (n.isEmpty) return;
+              final e = emojiCtrl.text.trim();
+              Navigator.pop(context, e.isEmpty ? n : '$e $n');
+            },
+            child: const Text('Save category'),
+          ),
+        ],
+      ),
     );
     nameCtrl.dispose();
     emojiCtrl.dispose();

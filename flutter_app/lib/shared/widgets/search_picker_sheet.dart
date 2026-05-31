@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/search/catalog_fuzzy.dart';
 import '../../core/search/search_highlight.dart';
 import '../../core/theme/hexa_design_tokens.dart';
+import '../../core/design_system/hexa_responsive.dart';
 
 const int kSearchPickerMaxRows = 25;
 const double _kSearchPickerRowApproxH = 56.0;
@@ -26,11 +27,11 @@ Future<T?> showSearchPickerSheet<T>({
   double initialChildFraction = 0.72,
   Duration queryDebounce = const Duration(milliseconds: 150),
 }) {
-  return showModalBottomSheet<T>(
+  return showHexaBottomSheet<T>(
     context: context,
-    isScrollControlled: true,
-    showDragHandle: true,
-    builder: (ctx) => _SearchPickerBody<T>(
+    compact: false,
+    padding: EdgeInsets.zero,
+    child: _SearchPickerBody<T>(
       title: title,
       rows: rows,
       pinnedRows: pinnedRows,

@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../core/auth/session_notifier.dart';
 import '../../../../core/design_system/hexa_operational_tokens.dart';
+import '../../../../core/design_system/hexa_responsive.dart';
 import '../../../../core/json_coerce.dart';
 import '../../../../core/providers/business_aggregates_invalidation.dart';
 import '../../../../core/utils/unit_utils.dart';
@@ -16,11 +17,16 @@ Future<void> showScanStockResultSheet({
   required WidgetRef ref,
   required Map<String, dynamic> item,
 }) async {
-  await showModalBottomSheet<void>(
+  await showHexaBottomSheet<void>(
     context: context,
-    showDragHandle: true,
-    isScrollControlled: true,
-    builder: (ctx) => _ScanStockResultBody(
+    compact: true,
+    padding: EdgeInsets.fromLTRB(
+      HexaOp.pageGutter,
+      0,
+      HexaOp.pageGutter,
+      16,
+    ),
+    child: _ScanStockResultBody(
       item: item,
       parentContext: context,
       parentRef: ref,
@@ -104,18 +110,10 @@ class _ScanStockResultBodyState extends ConsumerState<_ScanStockResultBody> {
     final id = widget.item['id']?.toString() ?? '';
     final stockLine = stockDisplayPrimary(_current, unit);
 
-    return SafeArea(
-      child: Padding(
-        padding: EdgeInsets.fromLTRB(
-          HexaOp.pageGutter,
-          8,
-          HexaOp.pageGutter,
-          16 + MediaQuery.viewPaddingOf(context).bottom,
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
             Text(name, style: HexaOp.cardTitle(context)),
             const SizedBox(height: 4),
             Text(
@@ -172,8 +170,6 @@ class _ScanStockResultBodyState extends ConsumerState<_ScanStockResultBody> {
               child: const Text('Print label'),
             ),
           ],
-        ),
-      ),
     );
   }
 

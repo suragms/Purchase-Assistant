@@ -43,6 +43,22 @@ import 'widgets/purchase_history_grouping.dart';
 
 enum _HistPeriodPreset { today, week, month, year, allTime, custom }
 
+Widget _purchaseHistoryCenteredEmptyScroll({required Widget child}) {
+  return LayoutBuilder(
+    builder: (context, constraints) {
+      return SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(
+          parent: BouncingScrollPhysics(),
+        ),
+        child: ConstrainedBox(
+          constraints: BoxConstraints(minHeight: constraints.maxHeight),
+          child: Center(child: child),
+        ),
+      );
+    },
+  );
+}
+
 bool _purchaseHistSameDay(DateTime a, DateTime b) =>
     a.year == b.year && a.month == b.month && a.day == b.day;
 
@@ -638,47 +654,42 @@ class _PurchaseHomePageState extends ConsumerState<PurchaseHomePage> {
   }
 
   Future<void> _openPeriodPicker() async {
-    await showModalBottomSheet<void>(
+    await showHexaBottomSheet<void>(
       context: context,
-      isScrollControlled: true,
-      showDragHandle: true,
-      builder: (ctx) => SafeArea(
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const ListTile(
-                title: Text('Period',
-                    style: TextStyle(fontWeight: FontWeight.w800)),
-                subtitle: Text('Affects History + Reports totals'),
-              ),
-              for (final e in const [
-                (_HistPeriodPreset.today, 'Today'),
-                (_HistPeriodPreset.week, 'This week'),
-                (_HistPeriodPreset.month, 'This month'),
-                (_HistPeriodPreset.year, 'This year'),
-                (_HistPeriodPreset.allTime, 'All time'),
-                (_HistPeriodPreset.custom, 'Custom range'),
-              ])
-                ListTile(
-                  leading: Icon(
-                    _preset == e.$1
-                        ? Icons.check_circle
-                        : Icons.circle_outlined,
-                  ),
-                  title: Text(e.$2),
-                  onTap: () async {
-                    Navigator.pop(ctx);
-                    if (e.$1 == _HistPeriodPreset.custom) {
-                      await _pickCustomRange();
-                    } else {
-                      _applyPreset(e.$1);
-                    }
-                  },
-                ),
-            ],
+      compact: true,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const ListTile(
+            title: Text('Period',
+                style: TextStyle(fontWeight: FontWeight.w800)),
+            subtitle: Text('Affects History + Reports totals'),
           ),
-        ),
+          for (final e in const [
+            (_HistPeriodPreset.today, 'Today'),
+            (_HistPeriodPreset.week, 'This week'),
+            (_HistPeriodPreset.month, 'This month'),
+            (_HistPeriodPreset.year, 'This year'),
+            (_HistPeriodPreset.allTime, 'All time'),
+            (_HistPeriodPreset.custom, 'Custom range'),
+          ])
+            ListTile(
+              leading: Icon(
+                _preset == e.$1
+                    ? Icons.check_circle
+                    : Icons.circle_outlined,
+              ),
+              title: Text(e.$2),
+              onTap: () async {
+                Navigator.pop(context);
+                if (e.$1 == _HistPeriodPreset.custom) {
+                  await _pickCustomRange();
+                } else {
+                  _applyPreset(e.$1);
+                }
+              },
+            ),
+        ],
       ),
     );
   }
@@ -788,11 +799,14 @@ class _PurchaseHomePageState extends ConsumerState<PurchaseHomePage> {
   }
 
   Future<void> _openMoreFilters() async {
-    await showModalBottomSheet<void>(
+    await showHexaBottomSheet<void>(
       context: context,
-      isScrollControlled: true,
-      showDragHandle: true,
-      builder: (ctx) => const _PurchaseHistoryFiltersSheet(),
+      compact: false,
+      padding: EdgeInsets.zero,
+      child: SizedBox(
+        height: HexaResponsive.adaptiveSheetMaxHeight(context) * 0.78,
+        child: const _PurchaseHistoryFiltersSheet(),
+      ),
     );
   }
 
@@ -1624,22 +1638,13 @@ class _PurchaseHomePageState extends ConsumerState<PurchaseHomePage> {
                           : RefreshIndicator(
                         onRefresh: _refreshHistory,
                         child: visible.isEmpty && !showLocalWipRow
-                            ? ListView(
-                                physics: const AlwaysScrollableScrollPhysics(
-                                  parent: BouncingScrollPhysics(),
-                                ),
-                                children: [
-                                  SizedBox(
-                                    height: MediaQuery.sizeOf(context).height *
-                                        0.22,
-                                  ),
-                                  if (items.isEmpty)
-                                    _HistoryEmpty(
-                                      onAdd: () =>
-                                          context.push('/purchase/new'),
-                                    )
-                                  else
-                                    _HistoryFiltersHideAll(
+                            ? _purchaseHistoryCenteredEmptyScroll(
+                                child: items.isEmpty
+                                    ? _HistoryEmpty(
+                                        onAdd: () =>
+                                            context.push('/purchase/new'),
+                                      )
+                                    : _HistoryFiltersHideAll(
                                       loadedCount: items.length,
                                       onClearAll: () {
                                         ref
@@ -1692,7 +1697,6 @@ class _PurchaseHomePageState extends ConsumerState<PurchaseHomePage> {
                                         context.go('/purchase');
                                       },
                                     ),
-                                ],
                               )
                             : _historyScrollContent(
                                 context: context,
@@ -1726,18 +1730,12 @@ class _PurchaseHomePageState extends ConsumerState<PurchaseHomePage> {
     required String? listSelectedId,
   }) {
     if (visible.isEmpty && !showLocalWipRow) {
-      return ListView(
-        physics: const AlwaysScrollableScrollPhysics(
-          parent: BouncingScrollPhysics(),
-        ),
-        children: [
-          SizedBox(height: MediaQuery.sizeOf(context).height * 0.22),
-          if (items.isEmpty)
-            _HistoryEmpty(onAdd: () => context.push('/purchase/new'))
-          else
-            _HistoryFiltersHideAll(
-              loadedCount: items.length,
-              onClearAll: () {
+      return _purchaseHistoryCenteredEmptyScroll(
+        child: items.isEmpty
+            ? _HistoryEmpty(onAdd: () => context.push('/purchase/new'))
+            : _HistoryFiltersHideAll(
+                loadedCount: items.length,
+                onClearAll: () {
                 ref.read(purchaseHistorySearchProvider.notifier).state = '';
                 _searchCtrl.clear();
                 ref.read(purchaseHistoryPrimaryFilterProvider.notifier).state =
@@ -1760,7 +1758,6 @@ class _PurchaseHomePageState extends ConsumerState<PurchaseHomePage> {
                 context.go('/purchase');
               },
             ),
-        ],
       );
     }
     final grouped = buildGroupedPurchaseHistory(visible);
@@ -1953,15 +1950,13 @@ class _PurchaseHistoryFiltersSheetState
     final dateFrom = ref.watch(purchaseHistoryDateFromProvider);
     final dateTo = ref.watch(purchaseHistoryDateToProvider);
 
-    return SizedBox(
-      height: MediaQuery.sizeOf(context).height * 0.78,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Expanded(
-            child: ListView(
-              padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
-              children: [
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Expanded(
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+            children: [
                 const Text(
                   'Filters & sort',
                   textAlign: TextAlign.center,
@@ -2144,59 +2139,50 @@ class _PurchaseHistoryFiltersSheetState
               ],
             ),
           ),
-          SafeArea(
-            top: false,
-            child: Padding(
-              padding: EdgeInsets.fromLTRB(
-                16,
-                8,
-                16,
-                12 + MediaQuery.viewInsetsOf(context).bottom,
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  FilledButton(
-                    onPressed: () {
-                      ref
-                          .read(purchaseHistorySupplierContainsProvider.notifier)
-                          .state = _supplier.text.trim().isEmpty
-                          ? null
-                          : _supplier.text.trim();
-                      ref
-                              .read(purchaseHistoryBrokerContainsProvider.notifier)
-                              .state =
-                          _broker.text.trim().isEmpty ? null : _broker.text.trim();
-                      Navigator.pop(context);
-                    },
-                    child: const Text('Apply'),
-                  ),
-                  TextButton(
-                    onPressed: () {
-                      _supplier.clear();
-                      _broker.clear();
-                      ref
-                          .read(purchaseHistorySupplierContainsProvider.notifier)
-                          .state = null;
-                      ref
-                          .read(purchaseHistoryBrokerContainsProvider.notifier)
-                          .state = null;
-                      ref
-                          .read(purchaseHistoryPackKindFilterProvider.notifier)
-                          .state = null;
-                      ref.read(purchaseHistoryDateFromProvider.notifier).state =
-                          null;
-                      ref.read(purchaseHistoryDateToProvider.notifier).state =
-                          null;
-                    },
-                    child: const Text('Clear advanced filters'),
-                  ),
-                ],
-              ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                FilledButton(
+                  onPressed: () {
+                    ref
+                        .read(purchaseHistorySupplierContainsProvider.notifier)
+                        .state = _supplier.text.trim().isEmpty
+                            ? null
+                            : _supplier.text.trim();
+                    ref
+                        .read(purchaseHistoryBrokerContainsProvider.notifier)
+                        .state =
+                        _broker.text.trim().isEmpty ? null : _broker.text.trim();
+                    Navigator.pop(context);
+                  },
+                  child: const Text('Apply'),
+                ),
+                TextButton(
+                  onPressed: () {
+                    _supplier.clear();
+                    _broker.clear();
+                    ref
+                        .read(purchaseHistorySupplierContainsProvider.notifier)
+                        .state = null;
+                    ref
+                        .read(purchaseHistoryBrokerContainsProvider.notifier)
+                        .state = null;
+                    ref
+                        .read(purchaseHistoryPackKindFilterProvider.notifier)
+                        .state = null;
+                    ref.read(purchaseHistoryDateFromProvider.notifier).state =
+                        null;
+                    ref.read(purchaseHistoryDateToProvider.notifier).state =
+                        null;
+                  },
+                  child: const Text('Clear advanced filters'),
+                ),
+              ],
             ),
           ),
         ],
-      ),
     );
   }
 }
@@ -2352,57 +2338,55 @@ class _PurchaseHistoryFullscreenSearchPageState
   }
 
   Future<void> _openPeriodPicker() async {
-    await showModalBottomSheet<void>(
+    await showHexaBottomSheet<void>(
       context: context,
-      isScrollControlled: true,
-      showDragHandle: true,
-      builder: (ctx) => SafeArea(
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const ListTile(
-                title: Text('Period',
-                    style: TextStyle(fontWeight: FontWeight.w800)),
-                subtitle: Text('Affects History + Reports totals'),
-              ),
-              for (final e in const [
-                (_HistPeriodPreset.today, 'Today'),
-                (_HistPeriodPreset.week, 'This week'),
-                (_HistPeriodPreset.month, 'This month'),
-                (_HistPeriodPreset.year, 'This year'),
-                (_HistPeriodPreset.allTime, 'All time'),
-                (_HistPeriodPreset.custom, 'Custom range'),
-              ])
-                ListTile(
-                  leading: Icon(
-                    _preset == e.$1
-                        ? Icons.check_circle
-                        : Icons.circle_outlined,
-                  ),
-                  title: Text(e.$2),
-                  onTap: () async {
-                    Navigator.pop(ctx);
-                    if (e.$1 == _HistPeriodPreset.custom) {
-                      await _pickCustomRange();
-                    } else {
-                      _applyPreset(e.$1);
-                    }
-                  },
-                ),
-            ],
+      compact: true,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const ListTile(
+            title: Text('Period',
+                style: TextStyle(fontWeight: FontWeight.w800)),
+            subtitle: Text('Affects History + Reports totals'),
           ),
-        ),
+          for (final e in const [
+            (_HistPeriodPreset.today, 'Today'),
+            (_HistPeriodPreset.week, 'This week'),
+            (_HistPeriodPreset.month, 'This month'),
+            (_HistPeriodPreset.year, 'This year'),
+            (_HistPeriodPreset.allTime, 'All time'),
+            (_HistPeriodPreset.custom, 'Custom range'),
+          ])
+            ListTile(
+              leading: Icon(
+                _preset == e.$1
+                    ? Icons.check_circle
+                    : Icons.circle_outlined,
+              ),
+              title: Text(e.$2),
+              onTap: () async {
+                Navigator.pop(context);
+                if (e.$1 == _HistPeriodPreset.custom) {
+                  await _pickCustomRange();
+                } else {
+                  _applyPreset(e.$1);
+                }
+              },
+            ),
+        ],
       ),
     );
   }
 
   Future<void> _openMoreFilters() async {
-    await showModalBottomSheet<void>(
+    await showHexaBottomSheet<void>(
       context: context,
-      isScrollControlled: true,
-      showDragHandle: true,
-      builder: (ctx) => const _PurchaseHistoryFiltersSheet(),
+      compact: false,
+      padding: EdgeInsets.zero,
+      child: SizedBox(
+        height: HexaResponsive.adaptiveSheetMaxHeight(context) * 0.78,
+        child: const _PurchaseHistoryFiltersSheet(),
+      ),
     );
   }
 

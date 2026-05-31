@@ -104,19 +104,11 @@ class _UserManagementPageState extends ConsumerState<UserManagementPage> {
     var active = true;
     var saving = false;
 
-    await showModalBottomSheet<void>(
+    await showHexaBottomSheet<void>(
       context: context,
-      isScrollControlled: true,
-      showDragHandle: true,
-      builder: (ctx) {
-        return Padding(
-          padding: EdgeInsets.only(
-            left: 16,
-            right: 16,
-            top: 8,
-            bottom: MediaQuery.viewInsetsOf(ctx).bottom + 16,
-          ),
-          child: StatefulBuilder(
+      compact: false,
+      padding: EdgeInsets.zero,
+      child: StatefulBuilder(
             builder: (ctx, setModal) {
               Future<void> submit() async {
                 if (saving) return;
@@ -266,8 +258,6 @@ class _UserManagementPageState extends ConsumerState<UserManagementPage> {
               );
             },
           ),
-        );
-      },
     );
     nameCtrl.dispose();
     emailCtrl.dispose();

@@ -40,17 +40,71 @@ Still pending (Wave 5):
 - [x] Bold orange/green truck pill on each stock row (qty + days)
 - [x] Row meta: verified-by / last updated — no PO/PUR ids on stock UI
 - [x] Item delivery card: qty + verifier, no PO numbers
-- [ ] Purchase wizard output page white-space
-- [ ] Barcode + contact picker sheets
-- [ ] Reports drill-down back navigation polish
-- [ ] Decimal sweep on purchase wizard + PDF exports
-- [ ] Manual QA: delivery commit → SYS column updates live
+- [x] Purchase wizard output page white-space (`purchase_saved_sheet` → compact `showHexaBottomSheet`)
+- [x] Purchase home period + filters sheets (4 call sites); empty-state 22% spacer removed
+- [x] Barcode scan + contact picker sheets (`warehouse_scan_action`, `search_picker`, `scan_stock_result`)
+- [x] Reports PDF + more-tabs sheets → compact `showHexaBottomSheet`
+- [x] Reports item drill → `context.replace` (back returns to Reports, no shake)
+- [x] Wizard delivery prompt + decimal sweep (summary, items, fast items, PDF receipt + invoice)
+- [x] Central sheet viewport — non-compact `Align(heightFactor: 1)` kills top blank gap
+- [ ] Manual QA: delivery commit → SYS column updates live (code: `invalidateAfterDeliveryCommit` → `stockListProvider`)
+- [x] All raw `showModalBottomSheet` migrated — only `hexa_responsive.dart` host remains
 
-- [ ] Full white-space audit on remaining bottom sheets (purchase wizard output, barcode, contacts pickers)
-- [ ] Reports drill-down back navigation polish (PopScope already wired)
-- [ ] User profile tab content typography pass (Activity/Stock/Purchases rows)
-- [ ] Decimal sweep: purchase wizard display, low-stock tree rows, PDF exports
-- [ ] Manual QA: delivery commit → SYS column updates without pull-to-refresh
+### Sheet white-space audit (tap / pop pages)
+
+**Standard:** `showHexaBottomSheet(compact: true)` for action menus; `compact: false` + explicit `SizedBox(height: adaptiveSheetMaxHeight * ratio)` only when content scrolls with `Expanded`.
+
+| File | Sheet | Status |
+|------|-------|--------|
+| `hexa_responsive.dart` | All `showHexaBottomSheet` host | ✅ viewport `heightFactor: 1` |
+| `purchase_saved_sheet.dart` | Post-save actions | ✅ compact |
+| `purchase_home_page.dart` | Period picker, filters | ✅ compact / 78% |
+| `stock_quick_purchase_sheet.dart` | Quick purchase | ✅ compact |
+| `scan_stock_result_sheet.dart` | Scan +/- stock | ✅ compact |
+| `warehouse_scan_action_sheet.dart` | Post-scan actions | ✅ compact |
+| `staff_verification_sheet.dart` | Delivery verify | ✅ max-height scroll |
+| `search_picker_sheet.dart` | Supplier/catalog pick | ✅ content height |
+| `smart_search_field.dart` | See-all suggestions | ✅ content height |
+| `operational_stock_filter_sheet.dart` | Stock filters | ✅ 78% |
+| `low_stock_dashboard_page.dart` | Low-stock filters | ✅ 55% |
+| `item_stock_snapshot_card.dart` | Opening / reorder | ✅ compact |
+| `item_quick_view_sheet.dart` | Item quick view | ✅ compact |
+| `stock_row_actions.dart` | Row actions | ✅ compact |
+| `quick_stock_action_sheet.dart` | Quick stock patch | ✅ compact |
+| `update_stock_sheet.dart` | Update stock | ✅ compact |
+| `low_stock_item_detail_sheet.dart` | Low-stock detail | ✅ compact |
+| `stock_bulk_archive_sheet.dart` | Bulk archive | ✅ compact |
+| `reorder_level_sheet.dart` | Reorder level | ✅ compact |
+| `daily_stock_report_sheet.dart` | Daily report | ✅ adaptive max |
+| `home_warehouse_analytics_sheet.dart` | Warehouse analytics | ✅ adaptive max |
+| `reports_page.dart` | More tabs, PDF export | ✅ compact |
+| `purchase_entry_wizard_v2.dart` | Delivery prompt | ✅ compact |
+| `home_page.dart` | Home quick actions | ✅ compact |
+| `home_live_status_bar.dart` | Status drill | ✅ compact |
+| `staff_home_page.dart` | Staff actions | ✅ compact |
+| `shell_screen.dart` | Shell overflow menu | ✅ compact |
+| `stock_page.dart` | Stock overflow | ✅ compact |
+| `stock_bulk_actions_sheet.dart` | Bulk barcode | ✅ compact |
+| `stock_warehouse_filter_sheet.dart` | Warehouse filter | ✅ compact |
+| `stock_row_preview_sheet.dart` | Row preview | ✅ compact |
+| `opening_stock_*` (4 files) | Opening stock setup | ✅ compact / 78% |
+| `assign_barcode_sheet.dart` | Assign barcode | ✅ compact |
+| `edit_item_code_sheet.dart` | Edit item code | ✅ compact |
+| `low_stock_approval_sheet.dart` | Approval | ✅ compact |
+| `barcode_scan_page.dart` | Scan options | ✅ compact |
+| `bulk_barcode_print_page.dart` | Print options (×2) | ✅ compact |
+| `contacts_page.dart` | Contact actions | ✅ compact |
+| `catalog_type_items_page.dart` | Catalog actions (×2) | ✅ compact |
+| `item_detail_page.dart` | Item actions | ✅ compact |
+| `item_edit_page.dart` | Edit helpers | ✅ compact |
+| `purchase_detail_page.dart` | Commit dialog sheet | ✅ compact |
+| `purchase_item_entry_sheet.dart` | KG picker | ✅ compact |
+| `scan_draft_edit_item_sheet.dart` | Scan draft edit | ✅ compact |
+| `user_management_page.dart` | User actions | ✅ compact |
+| `reorder_list_page.dart` | Reorder actions | ✅ compact |
+| `broker_history_page.dart` | Broker actions | ✅ compact |
+| `supplier_ledger_page.dart` | Supplier actions | ✅ compact |
+| `item_history_page.dart` | History actions | ✅ compact |
 
 
 - [x] Compact sheet blank gap — `HexaResponsiveSheetViewport` compact uses `Align(heightFactor: 1)`; stock row actions → `showHexaBottomSheet`

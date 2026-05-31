@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../../core/design_system/hexa_responsive.dart';
@@ -21,11 +23,21 @@ Future<void> showSmartSearchResultsSheet({
   ) buildTile,
 }) async {
   final rootNav = Navigator.of(context, rootNavigator: true);
+  final maxH = HexaResponsive.adaptiveSheetMaxHeight(context);
+  final rowH = 56.0;
+  final headerH = 72.0;
+  final listH = math.min(
+    items.length * rowH + 16,
+    maxH * 0.45,
+  ).clamp(120.0, maxH * 0.45);
+  final sheetH = (headerH + listH).clamp(200.0, maxH * 0.55);
+
   await showHexaBottomSheet<void>(
     context: context,
     compact: false,
+    padding: EdgeInsets.zero,
     child: SizedBox(
-      height: MediaQuery.sizeOf(context).height * 0.55,
+      height: sheetH,
       child: Builder(
         builder: (sheetCtx) {
           final cs = Theme.of(sheetCtx).colorScheme;

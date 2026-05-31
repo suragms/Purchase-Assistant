@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/design_system/hexa_responsive.dart';
 import '../../../core/router/shell_navigation.dart';
 import '../../../features/shell/shell_branch_provider.dart';
 import '../../../core/auth/dashboard_role.dart';
@@ -42,7 +43,6 @@ import '../../../core/providers/stock_providers.dart'
 import '../../../core/providers/warehouse_alerts_provider.dart'
     show warehouseAlertsProvider;
 import '../../../core/design_system/hexa_operational_tokens.dart';
-import '../../../core/design_system/hexa_responsive.dart';
 import '../../../core/theme/hexa_colors.dart';
 import '../../purchase/presentation/widgets/purchase_saved_sheet.dart';
 import '../../purchase/presentation/widgets/resume_purchase_draft_banner.dart';
@@ -278,28 +278,26 @@ class _HomePageState extends ConsumerState<HomePage>
   Future<void> _showAccountMenu() async {
     final session = ref.read(sessionProvider);
     if (session == null || !mounted) return;
-    final action = await showModalBottomSheet<String>(
+    final action = await showHexaBottomSheet<String>(
       context: context,
-      showDragHandle: true,
-      builder: (ctx) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              title: Text(session.primaryBusiness.role.toUpperCase()),
-              subtitle: Text(
-                session.primaryBusiness.contactEmail ??
-                    session.primaryBusiness.phone ??
-                    session.primaryBusiness.name,
-              ),
+      compact: true,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          ListTile(
+            title: Text(session.primaryBusiness.role.toUpperCase()),
+            subtitle: Text(
+              session.primaryBusiness.contactEmail ??
+                  session.primaryBusiness.phone ??
+                  session.primaryBusiness.name,
             ),
-            ListTile(
-              leading: const Icon(Icons.logout),
-              title: const Text('Sign out'),
-              onTap: () => Navigator.pop(ctx, 'logout'),
-            ),
-          ],
-        ),
+          ),
+          ListTile(
+            leading: const Icon(Icons.logout),
+            title: const Text('Sign out'),
+            onTap: () => Navigator.pop(context, 'logout'),
+          ),
+        ],
       ),
     );
     if (action == 'logout' && mounted) {

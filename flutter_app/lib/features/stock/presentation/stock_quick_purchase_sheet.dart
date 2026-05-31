@@ -22,19 +22,11 @@ Future<bool> showStockQuickPurchaseSheet({
   required WidgetRef ref,
   required Map<String, dynamic> item,
 }) async {
-  final result = await showModalBottomSheet<bool>(
+  final result = await showHexaBottomSheet<bool>(
     context: context,
-    isScrollControlled: true,
-    useSafeArea: true,
-    showDragHandle: true,
-    backgroundColor: HexaColors.brandCard,
-    shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
-    ),
-    builder: (ctx) => Align(
-      alignment: Alignment.bottomCenter,
-      child: _StockQuickPurchaseBody(item: item),
-    ),
+    compact: true,
+    padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+    child: _StockQuickPurchaseBody(item: item),
   );
   return result == true;
 }
@@ -239,15 +231,12 @@ class _StockQuickPurchaseBodyState
     final unitLabel = _unit.toUpperCase();
     final stockLabel = stockDisplayPrimary(current, _unit);
 
-    return HexaResponsiveSheetViewport(
-      compact: true,
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-      child: SingleChildScrollView(
-        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
+    return SingleChildScrollView(
+      keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -413,7 +402,6 @@ class _StockQuickPurchaseBodyState
             ),
           ],
         ),
-      ),
     );
   }
 }
