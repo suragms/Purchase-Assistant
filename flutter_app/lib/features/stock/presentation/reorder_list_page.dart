@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import '../../../core/auth/session_notifier.dart';
 import '../../../core/providers/reorder_list_provider.dart';
 import '../../../core/theme/hexa_colors.dart';
+import '../../../core/utils/unit_utils.dart';
 import '../../../core/widgets/friendly_load_error.dart';
 class ReorderListPage extends ConsumerStatefulWidget {
   const ReorderListPage({super.key});
@@ -225,9 +226,17 @@ class _ReorderTab extends ConsumerWidget {
               final r = visible[i];
               final itemId = r['item_id']?.toString() ?? '';
               final name = r['item_name']?.toString() ?? '—';
-              final cur = r['current_stock']?.toString() ?? '—';
-              final ro = r['reorder_level']?.toString() ?? '—';
               final unit = r['unit']?.toString() ?? '';
+              final curRaw = r['current_stock'];
+              final roRaw = r['reorder_level'];
+              final curNum = curRaw is num ? curRaw.toDouble() : double.tryParse('$curRaw');
+              final roNum = roRaw is num ? roRaw.toDouble() : double.tryParse('$roRaw');
+              final cur = curNum != null
+                  ? formatStockQtyForUnit(unit, curNum)
+                  : '—';
+              final ro = roNum != null
+                  ? formatStockQtyForUnit(unit, roNum)
+                  : '—';
               final supplier = r['supplier_name']?.toString().trim() ?? '';
               final lastRate = r['last_purchase_rate'];
               final rateStr = lastRate is num && lastRate > 0

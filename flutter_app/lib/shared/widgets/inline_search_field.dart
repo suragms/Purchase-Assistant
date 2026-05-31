@@ -391,7 +391,7 @@ class _InlineSearchFieldState extends State<InlineSearchField> {
                                 final it = opts[i];
                                 void commit() {
                                   _pendingSelection = null;
-                                  onSelected(it);
+                                  _pick(it, keepFocus: false);
                                 }
 
                                 return GestureDetector(

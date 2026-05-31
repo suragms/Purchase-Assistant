@@ -210,8 +210,8 @@ class ItemStockSnapshotCard extends ConsumerWidget {
             ],
             const SizedBox(height: 10),
             _summaryLine(
-              label: 'On-hand stock',
-              value: _qty(ledgerQty),
+              label: 'Stock in hand',
+              value: _qty(ledgerQty, unit),
               unitLabel: unitLabel,
               emphasized: true,
               subtitle: updatedAt != null
@@ -220,11 +220,31 @@ class ItemStockSnapshotCard extends ConsumerWidget {
                       : _timeAgo(updatedAt))
                   : null,
             ),
+            if (isOwner && lifetimeDelivered > 0.001) ...[
+              const SizedBox(height: 6),
+              _summaryLine(
+                label: 'Delivered to stock',
+                value: _qty(lifetimeDelivered, unit),
+                unitLabel: unitLabel,
+              ),
+            ],
+            if (isOwner && pendingDeliveryQty > 0.001) ...[
+              const SizedBox(height: 6),
+              _summaryLine(
+                label: 'Pending delivery',
+                value: _qty(pendingDeliveryQty, unit),
+                unitLabel: unitLabel,
+                valueColor: const Color(0xFFEA580C),
+                subtitle: pendingDays != null && pendingDays > 0
+                    ? 'Truck · ${pendingDays}d'
+                    : null,
+              ),
+            ],
             if (!isStaff && hasPhysicalCount) ...[
               const SizedBox(height: 6),
               _summaryLine(
                 label: 'Physical count',
-                value: physicalQty > 0.001 ? _qty(physicalQty) : '—',
+                value: physicalQty > 0.001 ? _qty(physicalQty, unit) : '—',
                 unitLabel: unitLabel,
               ),
             ],
@@ -316,26 +336,26 @@ class ItemStockSnapshotCard extends ConsumerWidget {
                   children: [
                     _summaryLine(
                       label: 'Opening stock',
-                      value: _qty(openingQty),
+                      value: _qty(openingQty, unit),
                       unitLabel: unitLabel,
                     ),
                     _summaryLine(
                       label: '+ Purchased (committed)',
-                      value: _qty(purchasedQty),
+                      value: _qty(purchasedQty, unit),
                       unitLabel: unitLabel,
                       valueColor: const Color(0xFF2563EB),
                     ),
                     const Divider(height: 20),
                     _summaryLine(
                       label: '= Expected system total',
-                      value: _qty(expectedSystemQty),
+                      value: _qty(expectedSystemQty, unit),
                       unitLabel: unitLabel,
                       emphasized: true,
                     ),
                     if (systemOutOfSync) ...[
                       const SizedBox(height: 4),
                       Text(
-                        'Ledger on-hand ${_qty(ledgerQty)} $unitLabel — commit deliveries or recompute',
+                        'Ledger on-hand ${_qty(ledgerQty, unit)} $unitLabel — commit deliveries or recompute',
                         style: TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.w600,
@@ -346,7 +366,7 @@ class ItemStockSnapshotCard extends ConsumerWidget {
                     const SizedBox(height: 6),
                     _summaryLine(
                       label: 'Physical count',
-                      value: physicalQty > 0.001 ? _qty(physicalQty) : '—',
+                      value: physicalQty > 0.001 ? _qty(physicalQty, unit) : '—',
                       unitLabel: unitLabel,
                       subtitle: [
                         if (updatedAt != null)
@@ -358,7 +378,7 @@ class ItemStockSnapshotCard extends ConsumerWidget {
                     _summaryLine(
                       label: 'Difference',
                       value: hasPhysicalCount
-                          ? '${diff > 0 ? '+' : ''}${_qty(diff)}'
+                          ? '${diff > 0 ? '+' : ''}${_qty(diff, unit)}'
                           : '—',
                       unitLabel: unitLabel,
                       valueColor: hasPhysicalCount ? _diffColor(diff) : null,
@@ -375,7 +395,7 @@ class ItemStockSnapshotCard extends ConsumerWidget {
               const SizedBox(height: 6),
               _summaryLine(
                 label: 'Physical count',
-                value: physicalQty > 0.001 ? _qty(physicalQty) : '—',
+                value: physicalQty > 0.001 ? _qty(physicalQty, unit) : '—',
                 unitLabel: unitLabel,
               ),
             ],
@@ -383,7 +403,7 @@ class ItemStockSnapshotCard extends ConsumerWidget {
               const SizedBox(height: 6),
               _summaryLine(
                 label: 'Difference',
-                value: '${diff > 0 ? '+' : ''}${_qty(diff)}',
+                value: '${diff > 0 ? '+' : ''}${_qty(diff, unit)}',
                 unitLabel: unitLabel,
                 valueColor: _diffColor(diff),
               ),
@@ -413,7 +433,7 @@ class ItemStockSnapshotCard extends ConsumerWidget {
                   Expanded(
                     child: reorder > 0.0001
                         ? Text(
-                            '${_qty(reorder)} $unitLabel',
+                            '${_qty(reorder, unit)} $unitLabel',
                             style: const TextStyle(fontWeight: FontWeight.w700),
                           )
                         : Text(
@@ -454,7 +474,7 @@ class ItemStockSnapshotCard extends ConsumerWidget {
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
-                            'Pending · ${_qty(pendingDeliveryQty)} $unitLabel',
+                            'Pending · ${_qty(pendingDeliveryQty, unit)} $unitLabel',
                             style: const TextStyle(
                               fontWeight: FontWeight.w900,
                               fontSize: 14,
@@ -494,7 +514,7 @@ class ItemStockSnapshotCard extends ConsumerWidget {
               runSpacing: 6,
               children: [
                 if (reorder > 0.0001)
-                  _pill('Reorder at ${_qty(reorder)} $unitLabel'),
+                  _pill('Reorder at ${_qty(reorder, unit)} $unitLabel'),
                 if (hasPending)
                   _pill(pendingDays != null && pendingDays > 0
                       ? 'Incoming pending • $pendingDays d'
@@ -514,10 +534,10 @@ class ItemStockSnapshotCard extends ConsumerWidget {
     );
   }
 
-  static String _qty(double n) {
+  static String _qty(double n, String unit) {
     if (!n.isFinite) return '—';
     if (n.abs() < 0.001) return '0';
-    return formatStockQtyNumber(n);
+    return formatStockQtyForUnit(unit, n);
   }
 
   static Color _diffColor(double diff) {

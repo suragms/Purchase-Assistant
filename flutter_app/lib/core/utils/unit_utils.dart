@@ -31,6 +31,21 @@ String? stockDisplaySecondary(
   return null;
 }
 
+bool isKgStockUnit(String? unit) {
+  final u = (unit ?? '').trim().toLowerCase();
+  return u == 'kg' || u == 'kilogram' || u == 'kilograms';
+}
+
+/// Warehouse list qty: integers for bag/box/tin/piece; up to 2 decimals for kg only.
+String formatStockQtyForUnit(String? unit, double n) {
+  if (!n.isFinite) return '—';
+  if (isKgStockUnit(unit)) {
+    final s = n.toStringAsFixed(2);
+    return s.endsWith('0') ? s.substring(0, s.length - 1) : s;
+  }
+  return formatStockQtyNumber(n);
+}
+
 /// Warehouse list qty: no trailing `.000`, comma thousands for ints.
 String formatStockQtyNumber(double n) {
   final rounded = n.roundToDouble();

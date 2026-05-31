@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 
 import '../../../../core/design_system/hexa_ds_tokens.dart';
 import '../../../../core/design_system/hexa_responsive.dart';
-import '../../../../core/utils/unit_utils.dart';
 import 'stock_row_metrics.dart';
 import 'stock_status_badge.dart' show formatStockRelativeTime;
 import 'stock_table_layout.dart';
@@ -130,8 +129,12 @@ class StockTableRow extends StatelessWidget {
                     ),
                   ),
                   _metricCell(
-                    formatStockQtyNumber(StockRowMetrics.ledgerQty(item)),
+                    StockRowMetrics.systemCellLabel(item),
                     StockRowMetrics.inlineStatusColor(item),
+                  ),
+                  _metricCell(
+                    StockRowMetrics.pendingCellDisplay(item).primary,
+                    StockRowMetrics.pendingCellDisplay(item).color,
                   ),
                   _metricCell(
                     StockRowMetrics.physicalCellLabel(item),

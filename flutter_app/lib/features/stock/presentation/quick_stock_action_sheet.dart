@@ -75,7 +75,9 @@ class _QuickStockActionBodyState extends ConsumerState<_QuickStockActionBody> {
     _mode = widget.initialMode;
     _current = coerceToDouble(widget.item['current_stock']);
     if (!_current.isFinite) _current = 0;
-    _qtyCtrl = TextEditingController(text: formatStockQtyNumber(_current));
+    _qtyCtrl = TextEditingController(
+      text: formatStockQtyForUnit(_unit, _current),
+    );
     _notesCtrl = TextEditingController();
     _idempotencyKey =
         'physical:${widget.item['id']}:${DateTime.now().microsecondsSinceEpoch}';
@@ -275,10 +277,9 @@ class _QuickStockActionBodyState extends ConsumerState<_QuickStockActionBody> {
             inputFormatters: [
               FilteringTextInputFormatter.allow(RegExp(r'[\d.,]')),
             ],
-            decoration: InputDecoration(
+            decoration: const InputDecoration(
               isDense: true,
-              suffixText: _unitLabel,
-              border: const OutlineInputBorder(),
+              border: OutlineInputBorder(),
             ),
           ),
           const SizedBox(height: 14),

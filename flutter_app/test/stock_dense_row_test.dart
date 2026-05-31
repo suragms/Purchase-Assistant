@@ -72,7 +72,8 @@ void main() {
       ),
     );
 
-    expect(find.text('SYSTEM'), findsOneWidget);
+    expect(find.text('SYS'), findsOneWidget);
+    expect(find.text('PEND'), findsOneWidget);
     expect(find.text('PHYS'), findsOneWidget);
     expect(find.text('DIFF'), findsOneWidget);
     expect(find.text('STATUS'), findsNothing);
@@ -109,6 +110,6 @@ void main() {
     );
 
     expect(find.text('20'), findsOneWidget);
-    expect(find.text('—'), findsNWidgets(2));
+    expect(find.text('—'), findsNWidgets(3));
   });
 }

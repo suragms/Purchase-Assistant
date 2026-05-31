@@ -54,11 +54,10 @@ class StockNumberDisplay extends StatelessWidget {
   Widget build(BuildContext context) {
     if (!qty.isFinite) return const Text('—');
     final numColor = stockNumberColor(status);
-    final rounded = qty.roundToDouble();
-    final qtyStr = (qty - rounded).abs() < 0.001
-        ? formatStockQtyNumber(rounded)
-        : formatStockQtyNumber(qty);
-    final unitLabel = unit.trim().isEmpty ? '' : unit.toUpperCase();
+    final qtyStr = formatStockQtyForUnit(unit, qty);
+    final unitLabel = isKgStockUnit(unit) && unit.trim().isNotEmpty
+        ? unit.toUpperCase()
+        : '';
 
     return Row(
       mainAxisSize: MainAxisSize.min,

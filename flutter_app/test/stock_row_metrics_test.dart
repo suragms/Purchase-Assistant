@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:harisree_warehouse/core/utils/unit_utils.dart';
 import 'package:harisree_warehouse/features/stock/presentation/widgets/stock_row_metrics.dart';
 
 void main() {
@@ -77,6 +78,30 @@ void main() {
         StockRowMetrics.diffCellLabel(const {'current_stock': 5}),
         '—',
       );
+    });
+  });
+
+  group('formatStockQtyForUnit', () {
+    test('bag uses integer without decimals', () {
+      expect(formatStockQtyForUnit('bag', 101), '101');
+      expect(formatStockQtyForUnit('BAG', 101.000), '101');
+    });
+
+    test('kg keeps decimals', () {
+      expect(formatStockQtyForUnit('kg', 23.22), '23.22');
+    });
+  });
+
+  group('StockRowMetrics pendingCellDisplay', () {
+    test('shows pending qty and days', () {
+      final cell = StockRowMetrics.pendingCellDisplay(const {
+        'pending_delivery_qty': 12,
+        'pending_order_days': 4,
+        'has_pending_order': true,
+        'stock_unit': 'bag',
+      });
+      expect(cell.primary, '12');
+      expect(cell.secondary, '4d');
     });
   });
 

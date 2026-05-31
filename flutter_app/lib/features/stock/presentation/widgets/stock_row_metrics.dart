@@ -69,11 +69,15 @@ abstract final class StockRowMetrics {
     return double.nan;
   }
 
+  /// Compact warehouse table cell — ledger on-hand.
+  static String systemCellLabel(Map<String, dynamic> item) =>
+      formatStockQtyForUnit(unit(item), ledgerQty(item));
+
   /// Compact warehouse table cell — physical qty or em dash.
   static String physicalCellLabel(Map<String, dynamic> item) {
     final phys = physicalQty(item);
     if (phys == null || !phys.isFinite) return '—';
-    return formatStockQtyNumber(phys);
+    return formatStockQtyForUnit(unit(item), phys);
   }
 
   /// Compact warehouse table cell — signed physical minus system, or em dash.
@@ -82,7 +86,37 @@ abstract final class StockRowMetrics {
     if (!diff.isFinite) return '—';
     if (diff.abs() < 0.001) return '0';
     final sign = diff > 0 ? '+' : '';
-    return '$sign${formatStockQtyNumber(diff)}';
+    return '$sign${formatStockQtyForUnit(unit(item), diff)}';
+  }
+
+  /// Pending truck qty (+ optional days) for warehouse PEND column.
+  static ({String primary, String? secondary, Color color}) pendingCellDisplay(
+    Map<String, dynamic> item,
+  ) {
+    const pendingColor = Color(0xFFEA580C);
+    const deliveredColor = Color(0xFF16A34A);
+    const muted = Color(0xFF94A3B8);
+    final u = unit(item);
+    final pending = pendingDeliveryQty(item) ?? 0;
+    final days = (item['pending_order_days'] as num?)?.toInt();
+    final kind = deliveryIndicator(item);
+
+    if (pending > 0.001 || kind == StockDeliveryIndicator.pending) {
+      final qty = pending > 0.001 ? pending : 0.0;
+      return (
+        primary: qty > 0.001 ? formatStockQtyForUnit(u, qty) : '•',
+        secondary: days != null && days > 0 ? '${days}d' : null,
+        color: pendingColor,
+      );
+    }
+    if (kind == StockDeliveryIndicator.delivered) {
+      return (
+        primary: '✓',
+        secondary: days != null && days > 0 ? '${days}d' : null,
+        color: deliveredColor,
+      );
+    }
+    return (primary: '—', secondary: null, color: muted);
   }
 
   static String openingLabel(Map<String, dynamic> item) {

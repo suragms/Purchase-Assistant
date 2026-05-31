@@ -54,14 +54,11 @@ Future<void> showOperationalStockFilter({
   await showHexaBottomSheet<void>(
     context: context,
     compact: false,
-    child: SizedBox(
-      height: MediaQuery.sizeOf(context).height * 0.78,
-      child: _OperationalFilterBody(
-        subcategoryCtrl: subcategoryCtrl,
-        includeSupplier: includeSupplier,
-        isStaffMode: isStaffMode,
-        bottomNavInset: bottomNavInset,
-      ),
+    child: _OperationalFilterBody(
+      subcategoryCtrl: subcategoryCtrl,
+      includeSupplier: includeSupplier,
+      isStaffMode: isStaffMode,
+      bottomNavInset: bottomNavInset,
     ),
   );
 }

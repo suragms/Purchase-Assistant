@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/design_system/hexa_ds_tokens.dart';
-import '../../../../core/utils/unit_utils.dart';
 import '../../../../core/design_system/hexa_responsive.dart';
 import 'stock_row_metrics.dart';
 import 'stock_table_layout.dart';
@@ -133,9 +132,10 @@ class StockWarehouseRow extends StatelessWidget {
                     ),
                   ),
                   _boxedMetric(
-                    formatStockQtyNumber(StockRowMetrics.ledgerQty(item)),
+                    StockRowMetrics.systemCellLabel(item),
                     StockRowMetrics.inlineStatusColor(item),
                   ),
+                  _pendingMetric(item),
                   _boxedMetric(
                     StockRowMetrics.physicalCellLabel(item),
                     const Color(0xFF0F766E),
@@ -148,6 +148,45 @@ class StockWarehouseRow extends StatelessWidget {
               ),
             ),
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _pendingMetric(Map<String, dynamic> item) {
+    final cell = StockRowMetrics.pendingCellDisplay(item);
+    return Container(
+      width: StockTableLayout.metricColWidth,
+      decoration: StockTableLayout.cellDecoration(),
+      alignment: Alignment.center,
+      padding: const EdgeInsets.symmetric(horizontal: 1, vertical: 2),
+      child: FittedBox(
+        fit: BoxFit.scaleDown,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              cell.primary,
+              maxLines: 1,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w900,
+                color: cell.color,
+                height: 1,
+              ),
+            ),
+            if (cell.secondary != null)
+              Text(
+                cell.secondary!,
+                maxLines: 1,
+                style: TextStyle(
+                  fontSize: 9,
+                  fontWeight: FontWeight.w800,
+                  color: cell.color.withValues(alpha: 0.85),
+                  height: 1.1,
+                ),
+              ),
+          ],
         ),
       ),
     );

@@ -195,6 +195,12 @@ class _UserProfilePageState extends ConsumerState<UserProfilePage>
           controller: _tabs,
           isScrollable: true,
           tabAlignment: TabAlignment.start,
+          labelStyle: HexaDsType.body(13, weight: FontWeight.w800),
+          unselectedLabelStyle: HexaDsType.body(13, weight: FontWeight.w600),
+          labelColor: HexaColors.brandPrimary,
+          unselectedLabelColor: HexaColors.textSecondary,
+          indicatorSize: TabBarIndicatorSize.label,
+          dividerColor: Colors.transparent,
           tabs: const [
             Tab(text: 'Overview'),
             Tab(text: 'Activity'),
@@ -275,10 +281,10 @@ class _HeaderCard extends ConsumerWidget {
     final lastLogin = DateTime.tryParse(user['last_login_at']?.toString() ?? '');
 
     return Card(
-      margin: const EdgeInsets.all(16),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      margin: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(12),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -427,18 +433,39 @@ class _OverviewTab extends StatelessWidget {
         ? Map<String, dynamic>.from(user['stats'] as Map)
         : <String, dynamic>{};
     return ListView(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
+      padding: const EdgeInsets.fromLTRB(12, 4, 12, 16),
       children: [
-        _denseTile('Total stock edits', '${totals['stock_edits_total'] ?? 0}'),
-        _denseTile('Total purchases', '${totals['purchases_total'] ?? 0}'),
-        _denseTile('Total scans', '${totals['scans_total'] ?? 0}'),
-        _denseTile('Items created', '${totals['items_created_total'] ?? 0}'),
+        Card(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          child: Column(
+            children: [
+              _denseTile('Total stock edits', '${totals['stock_edits_total'] ?? 0}'),
+              const Divider(height: 1),
+              _denseTile('Total purchases', '${totals['purchases_total'] ?? 0}'),
+              const Divider(height: 1),
+              _denseTile('Total scans', '${totals['scans_total'] ?? 0}'),
+              const Divider(height: 1),
+              _denseTile('Items created', '${totals['items_created_total'] ?? 0}'),
+            ],
+          ),
+        ),
         const SizedBox(height: 8),
-        _denseTile('7d activity', '${user['activity_count_7d'] ?? 0} events'),
-        _denseTile('7d purchases', '${user['purchases_7d'] ?? 0}'),
-        _denseTile('7d stock edits', '${user['stock_updates_7d'] ?? 0}'),
-        _denseTile('Today scans', '${stats['scans'] ?? 0}'),
-        _denseTile('Today stock updates', '${stats['stock_updates'] ?? 0}'),
+        Card(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          child: Column(
+            children: [
+              _denseTile('7d activity', '${user['activity_count_7d'] ?? 0} events'),
+              const Divider(height: 1),
+              _denseTile('7d purchases', '${user['purchases_7d'] ?? 0}'),
+              const Divider(height: 1),
+              _denseTile('7d stock edits', '${user['stock_updates_7d'] ?? 0}'),
+              const Divider(height: 1),
+              _denseTile('Today scans', '${stats['scans'] ?? 0}'),
+              const Divider(height: 1),
+              _denseTile('Today stock updates', '${stats['stock_updates'] ?? 0}'),
+            ],
+          ),
+        ),
         if (user['notes'] != null && user['notes'].toString().isNotEmpty)
           _denseTile('Notes', user['notes'].toString()),
         if (user['created_at'] != null)
@@ -739,13 +766,27 @@ class _PermissionsTabState extends ConsumerState<_PermissionsTab> {
 }
 
 Widget _denseTile(String title, String subtitle) {
-  return Card(
-    margin: const EdgeInsets.only(bottom: 8),
-    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-    child: ListTile(
-      dense: true,
-      title: Text(title, style: HexaDsType.body(14, weight: FontWeight.w600)),
-      subtitle: Text(subtitle, style: HexaDsType.body(12)),
+  return Padding(
+    padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          flex: 5,
+          child: Text(
+            title,
+            style: HexaDsType.body(13, weight: FontWeight.w600),
+          ),
+        ),
+        Expanded(
+          flex: 4,
+          child: Text(
+            subtitle,
+            textAlign: TextAlign.end,
+            style: HexaDsType.body(13),
+          ),
+        ),
+      ],
     ),
   );
 }

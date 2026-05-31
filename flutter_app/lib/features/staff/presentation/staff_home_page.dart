@@ -295,7 +295,7 @@ class StaffHomePage extends ConsumerWidget {
               const SizedBox(height: HexaOp.cardGap),
               const StaffHomeSectionHeader(
                 title: 'Warehouse & purchases',
-                subtitle: 'On-hand stock and this month',
+                subtitle: 'Stock in hand and this month',
               ),
               const StaffHomeWarehousePurchaseStats(),
               if (pendingDeliveries > 0) ...[
