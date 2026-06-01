@@ -5,6 +5,9 @@ services:
     name: my-purchases-api
     runtime: python
     rootDir: backend
+    autoDeploy: true
+    autoDeployTrigger: commit
+    branch: main
     buildCommand: pip install -r requirements.txt
     # Run migrations BEFORE the new instance binds $PORT (avoids 503 / port-scan timeout).
     preDeployCommand: alembic upgrade head

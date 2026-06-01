@@ -113,6 +113,8 @@
 ## Pre-client deploy checklist (stock + auth)
 
 - [x] Render API: `alembic upgrade head` through **050_stock_ledger_replay_current_stock** (verified 2026-06-01)
+- [ ] Render **my-purchases-api**: turn **Auto-Deploy → On commit** ([service settings](https://dashboard.render.com/web/srv-d7ea0il8nd3s73e4fvl0/settings)) — was **off**, so GitHub pushes did not deploy
+- [ ] GitHub secret `RENDER_API_KEY` for `.github/workflows/render-deploy-api.yml` (backup deploy on `backend/**` push)
 - [ ] Render Dashboard: **Pre-Deploy** `alembic upgrade head`, `AUTO_MIGRATE=0`, `AUTO_STOCK_BACKFILL_ON_START=false` (see `render.yaml`)
 - [ ] Run `python -m scripts.backfill_purchase_stock_commit` once for old verified POs
 - [ ] `GET /health/ready` → `stock_sync_ready: true`, `received_qty_column: true`
