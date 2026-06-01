@@ -8,6 +8,7 @@ import '../api/hexa_api.dart';
 import '../auth/provider_api_guard.dart';
 import '../auth/session_notifier.dart'
     show activeSessionProvider, hexaApiProvider;
+import 'stock_list_exceptions.dart';
 import '../../features/shell/shell_branch_provider.dart';
 import '../json_coerce.dart';
 import 'analytics_kpi_provider.dart' show analyticsDateRangeProvider;
@@ -131,14 +132,6 @@ const kHomeOutOfStockListQuery = StockListQuery(
   page: 1,
   sort: 'stock_asc',
 );
-
-Map<String, dynamic> _emptyStockListPayload(StockListQuery query) =>
-    <String, dynamic>{
-      'items': <dynamic>[],
-      'total': 0,
-      'page': 1,
-      'per_page': query.perPage,
-    };
 
 /// Stock list API only when Stock tab is visible, or Home needs the OOS strip query.
 bool _stockListFetchAllowed(Ref ref, StockListQuery query) {
@@ -351,18 +344,22 @@ final stockChangesFeedProvider =
 
 /// Cache key for `/stock/list` — query + operational filters (server-side).
 class StockListCacheKey {
-  const StockListCacheKey(this.query, this.op);
+  const StockListCacheKey(this.query, this.op, this.businessId);
 
   final StockListQuery query;
   final StockOperationalFilters op;
+  final String businessId;
 
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      other is StockListCacheKey && query == other.query && op == other.op;
+      other is StockListCacheKey &&
+          query == other.query &&
+          op == other.op &&
+          businessId == other.businessId;
 
   @override
-  int get hashCode => Object.hash(query, op);
+  int get hashCode => Object.hash(query, op, businessId);
 }
 
 /// Shared GET `/stock/list` cache — dedupes home + stock page watchers (30s TTL).
@@ -372,14 +369,20 @@ final stockListCacheProvider = FutureProvider.autoDispose
   final op = key.op;
   providerKeepAlive(ref, const Duration(minutes: 3));
   if (!_stockListFetchAllowed(ref, query)) {
-    return _emptyStockListPayload(query);
+    throw const StockListFetchBlockedException('tab_not_visible');
+  }
+  if (providerSkipApi(ref)) {
+    throw const StockListFetchBlockedException('api_gate');
   }
   final session = ref.watch(activeSessionProvider);
   if (session == null) {
-    return _emptyStockListPayload(query);
+    throw const StockListFetchBlockedException('no_session');
+  }
+  if (session.primaryBusiness.id != key.businessId) {
+    throw const StockListFetchBlockedException('business_mismatch');
   }
   return ref.read(hexaApiProvider).listStock(
-        businessId: session.primaryBusiness.id,
+        businessId: key.businessId,
         page: query.page,
         perPage: query.perPage,
         q: query.q,
@@ -400,13 +403,21 @@ final stockListCacheProvider = FutureProvider.autoDispose
 
 /// Stock page list — reads [stockListCacheProvider] for the active [stockListQueryProvider].
 final stockListProvider = FutureProvider.autoDispose((ref) async {
+  final session = ref.watch(activeSessionProvider);
+  if (session == null || providerSkipApi(ref)) {
+    throw const StockListFetchBlockedException('no_session');
+  }
   final query = ref.watch(stockListQueryProvider);
   final op = ref.watch(stockOperationalFiltersProvider);
   final purchasedInPeriod = query.purchasedInPeriod || op.purchasedInPeriodOnly;
   final effective = purchasedInPeriod == query.purchasedInPeriod
       ? query
       : query.copyWith(purchasedInPeriod: purchasedInPeriod);
-  return ref.watch(stockListCacheProvider(StockListCacheKey(effective, op)).future);
+  return ref.watch(
+    stockListCacheProvider(
+      StockListCacheKey(effective, op, session.primaryBusiness.id),
+    ).future,
+  );
 });
 
 /// Loads **all** stock rows matching [stockListQueryProvider] filters (paged API calls).
@@ -517,13 +528,17 @@ final stockStatusCountsProvider =
   final keepAlive = ref.keepAlive();
   final timer = Timer(const Duration(minutes: 2), keepAlive.close);
   ref.onDispose(timer.cancel);
-  if (providerSkipApi(ref)) return {};
+  if (providerSkipApi(ref)) {
+    throw const StockListFetchBlockedException('api_gate');
+  }
   if (!shellBranchIsVisible(ref, ShellBranch.home) &&
       !shellBranchIsVisible(ref, ShellBranch.stock)) {
     return {};
   }
   final session = ref.watch(activeSessionProvider);
-  if (session == null) return {};
+  if (session == null) {
+    throw const StockListFetchBlockedException('no_session');
+  }
   final api = ref.read(hexaApiProvider);
   final bid = session.primaryBusiness.id;
 

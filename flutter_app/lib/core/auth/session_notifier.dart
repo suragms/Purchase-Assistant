@@ -115,7 +115,7 @@ final hexaApiProvider = Provider<HexaApi>((ref) {
                 // SessionNotifier torn down — token is still persisted + attached.
               }
               if (!disposed) {
-                ref.read(authApiGateProvider.notifier).clearSuspend();
+                ref.read(authApiGateProvider.notifier).reset();
               }
               return true;
             } on DioException catch (e) {

@@ -2,11 +2,16 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:share_plus/share_plus.dart';
 
+import '../../../core/auth/auth_failure_policy.dart';
 import '../../../core/auth/session_notifier.dart';
+import '../../../core/models/session.dart';
+import '../../../core/providers/stock_list_exceptions.dart';
 import '../../../core/services/stock_list_pdf.dart';
 import '../../../core/services/pdf_actions.dart';
 import '../../../core/json_coerce.dart';
@@ -409,6 +414,9 @@ class _StockPageState extends ConsumerState<StockPage>
     final deliveryCounts = StockRowMetrics.countDeliveryIndicators(raw);
     final deliveryFilter = ref.watch(stockDeliveryFilterProvider);
     final listQ = ref.watch(stockListQueryProvider);
+    final chipCounts =
+        ref.watch(stockStatusCountsProvider).valueOrNull ?? const {};
+    final chipAll = chipCounts['all'] ?? 0;
     final total = coerceToInt(data['total']);
     final maxPage = stockListMaxPage(total, listQ.perPage);
     final bottomPad = 24.0;
@@ -506,19 +514,44 @@ class _StockPageState extends ConsumerState<StockPage>
           hasScrollBody: false,
           child: HexaEmptyState(
             icon: Icons.inventory_2_outlined,
-            title: filterCount > 0 ||
-                    listQ.q.isNotEmpty ||
-                    deliveryFilter != StockDeliveryFilter.all
-                ? 'No items match filters'
-                : 'No stock items yet',
-            subtitle: filterCount > 0 ||
-                    listQ.q.isNotEmpty ||
-                    deliveryFilter != StockDeliveryFilter.all
-                ? 'Open Filters and tap Clear advanced, or change the status chips above.'
-                : 'Add catalog items to start tracking warehouse stock.',
-            primaryActionLabel:
-                filterCount > 0 ? 'Clear filters' : 'Refresh',
-            onPrimaryAction: filterCount > 0
+            title: chipAll > 0 &&
+                    items.isEmpty &&
+                    filterCount == 0 &&
+                    listQ.q.isEmpty &&
+                    deliveryFilter == StockDeliveryFilter.all
+                ? 'Stock list did not load'
+                : filterCount > 0 ||
+                        listQ.q.isNotEmpty ||
+                        deliveryFilter != StockDeliveryFilter.all
+                    ? 'No items match filters'
+                    : 'No stock items yet',
+            subtitle: chipAll > 0 &&
+                    items.isEmpty &&
+                    filterCount == 0 &&
+                    listQ.q.isEmpty
+                ? 'Counts show $chipAll items but the list request failed. Tap Refresh or sign in again.'
+                : filterCount > 0 ||
+                        listQ.q.isNotEmpty ||
+                        deliveryFilter != StockDeliveryFilter.all
+                    ? 'Open Filters and tap Clear advanced, or change the status chips above.'
+                    : 'Add catalog items to start tracking warehouse stock.',
+            primaryActionLabel: chipAll > 0 &&
+                    items.isEmpty &&
+                    filterCount == 0
+                ? 'Retry load'
+                : filterCount > 0
+                    ? 'Clear filters'
+                    : 'Refresh',
+            onPrimaryAction: chipAll > 0 &&
+                    items.isEmpty &&
+                    filterCount == 0
+                ? () {
+                    ref.read(authApiGateProvider.notifier).reset();
+                    _resetMerged();
+                    ref.invalidate(stockListProvider);
+                    ref.invalidate(stockStatusCountsProvider);
+                  }
+                : filterCount > 0
                 ? () {
                     ref.read(stockListQueryProvider.notifier).state =
                         listQ.copyWith(
@@ -602,6 +635,14 @@ class _StockPageState extends ConsumerState<StockPage>
       _resetMerged();
     });
 
+    ref.listen<Session?>(sessionProvider, (prev, next) {
+      if (prev == null && next != null) {
+        _resetMerged();
+        ref.invalidate(stockListProvider);
+        ref.invalidate(stockStatusCountsProvider);
+      }
+    });
+
     ref.listen(stockListProvider, (prev, next) {
       if (next.isLoading &&
           prev?.hasValue == true &&
@@ -641,14 +682,43 @@ class _StockPageState extends ConsumerState<StockPage>
     final isReloading = listAsync.isLoading && data != null;
     final showDebounceProgress = _debounce?.isActive ?? false;
 
+    final authExpired = ref.watch(authSessionExpiredProvider);
+    final authCircuit = ref.watch(auth401CircuitOpenProvider);
+    final sessionForAuth = ref.watch(sessionProvider);
+    final authBlocked = authExpired ||
+        authCircuit ||
+        (sessionForAuth == null && !listAsync.isLoading);
+
     Widget body;
-    if (data == null && listAsync.isLoading) {
+    if (authBlocked) {
+      body = FriendlyLoadError(
+        message: 'Sign in to load stock',
+        subtitle:
+            'Your session expired or could not be verified. Sign in again to see warehouse items.',
+        onRetry: () async {
+          ref.read(authApiGateProvider.notifier).reset();
+          await ref.read(sessionProvider.notifier).logout();
+          if (mounted) context.go('/login');
+        },
+      );
+    } else if (data == null && listAsync.isLoading) {
       body = const ListSkeleton(rowCount: 12);
     } else if (listAsync.hasError && data == null) {
+      final err = listAsync.error;
+      final isAuth = isStockListAuthFailure(err) ||
+          (err is DioException && err.response?.statusCode == 401);
       body = FriendlyLoadError(
+        message: isAuth ? 'Sign in to load stock' : 'Unable to load stock',
+        subtitle: isAuth
+            ? 'Warehouse list needs a valid session. Sign in and try again.'
+            : null,
         onRetry: () {
+          if (isAuth) {
+            ref.read(authApiGateProvider.notifier).reset();
+          }
           _resetMerged();
           ref.invalidate(stockListProvider);
+          ref.invalidate(stockStatusCountsProvider);
         },
       );
     } else if (data != null) {

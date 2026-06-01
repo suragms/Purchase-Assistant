@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../core/auth/session_notifier.dart';
 import '../../../../core/providers/stock_providers.dart';
 import '../../../../core/widgets/section_inline_error.dart';
 import 'home_recent_changes_section.dart' show HomeSectionSkeleton;
@@ -14,25 +15,22 @@ class HomeOutOfStockSection extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final listAsync = ref.watch(
-      stockListCacheProvider(
-        StockListCacheKey(kHomeOutOfStockListQuery, const StockOperationalFilters()),
-      ),
+    final session = ref.watch(activeSessionProvider);
+    if (session == null) {
+      return const HomeSectionSkeleton(rows: 2);
+    }
+    final cacheKey = StockListCacheKey(
+      kHomeOutOfStockListQuery,
+      const StockOperationalFilters(),
+      session.primaryBusiness.id,
     );
+    final listAsync = ref.watch(stockListCacheProvider(cacheKey));
 
     return listAsync.when(
       loading: () => const HomeSectionSkeleton(rows: 2),
       error: (_, __) => SectionInlineError(
         message: 'Could not load out-of-stock items',
-        onRetry: () =>
-            ref.invalidate(
-              stockListCacheProvider(
-                StockListCacheKey(
-                  kHomeOutOfStockListQuery,
-                  const StockOperationalFilters(),
-                ),
-              ),
-            ),
+        onRetry: () => ref.invalidate(stockListCacheProvider(cacheKey)),
       ),
       data: (payload) {
         final raw = payload['items'];
