@@ -76,6 +76,7 @@
 
 - [x] **Overlap fix:** drop `NestedScrollView` + 148px `SliverAppBar`; stack `AppBar` → header card → scrollable `TabBar` → `TabBarView` (Overview / Activity / Permissions)
 - [x] Header: column layout (avatar, pills, meta, Edit/More row); activity section chips on own surface + divider
+- [x] **API:** `GET …/users/{id}/purchases` — fix async `MissingGreenlet` from lazy `lines` load (SQL line count); deploy API to clear production 500
 
 ## Navigation / reload UX (2026-06-01)
 

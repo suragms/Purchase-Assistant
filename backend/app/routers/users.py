@@ -1,6 +1,6 @@
 import re
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.deps import get_current_user, require_membership, require_role
 from app.models import Business, CatalogItem, ItemCategory, Membership, TradePurchase, User
+from app.models.trade_purchase import TradePurchaseLine
 from app.models.contacts import Supplier
 from app.models.stock_adjustment import StockAdjustmentLog
 from app.models.user_session import StaffActivityLog, UserSession
@@ -632,8 +633,14 @@ async def user_purchases(
     _m: Annotated[Membership, Depends(require_role("owner", "admin", "manager", "super_admin"))],
     limit: int = Query(50, ge=1, le=100),
 ):
+    line_count_col = (
+        select(func.count(TradePurchaseLine.id))
+        .where(TradePurchaseLine.trade_purchase_id == TradePurchase.id)
+        .correlate(TradePurchase)
+        .scalar_subquery()
+    )
     r = await db.execute(
-        select(TradePurchase, Supplier.name)
+        select(TradePurchase, Supplier.name, line_count_col.label("item_count"))
         .outerjoin(Supplier, Supplier.id == TradePurchase.supplier_id)
         .where(
             TradePurchase.business_id == business_id,
@@ -643,18 +650,24 @@ async def user_purchases(
         .limit(limit)
     )
     out: list[UserPurchaseBrief] = []
-    for p, supplier_name in r.all():
-        total = getattr(p, "grand_total", None) or getattr(p, "total_amount", None)
-        line_count = len(getattr(p, "lines", None) or [])
+    for p, supplier_name, item_count in r.all():
+        total = p.total_amount
+        pd_raw = p.purchase_date
+        if pd_raw is not None and isinstance(pd_raw, date) and not isinstance(pd_raw, datetime):
+            purchase_dt: datetime | None = datetime.combine(
+                pd_raw, datetime.min.time(), tzinfo=timezone.utc
+            )
+        else:
+            purchase_dt = pd_raw if isinstance(pd_raw, datetime) else p.created_at
         out.append(
             UserPurchaseBrief(
                 id=p.id,
-                human_id=getattr(p, "human_id", None),
-                purchase_date=getattr(p, "purchase_date", None) or p.created_at,
-                status=getattr(p, "status", None),
+                human_id=p.human_id,
+                purchase_date=purchase_dt,
+                status=p.status,
                 total_amount=float(total) if total is not None else None,
                 supplier_name=supplier_name,
-                item_count=line_count or None,
+                item_count=int(item_count or 0),
             )
         )
     return out
