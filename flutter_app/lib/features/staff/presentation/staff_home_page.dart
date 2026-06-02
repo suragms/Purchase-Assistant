@@ -326,7 +326,7 @@ class StaffHomePage extends ConsumerWidget {
                       icon: Icons.inventory_2_outlined,
                       label: 'Deliveries',
                       count: pendingDeliveries,
-                      onTap: () => context.push('/staff/pending-deliveries'),
+                      onTap: () => context.push('/staff/deliveries'),
                     ),
                   ),
                   const SizedBox(width: 10),
