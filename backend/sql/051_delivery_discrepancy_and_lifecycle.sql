@@ -57,7 +57,7 @@ CREATE TABLE IF NOT EXISTS delivery_discrepancies (
   truck_number VARCHAR(100),
   driver_name VARCHAR(200),
   invoice_number VARCHAR(100),
-  broker_id UUID REFERENCES contacts(id) ON DELETE SET NULL,
+  broker_id UUID,
   notes TEXT,
   photo_urls TEXT[] NOT NULL DEFAULT '{}',
   reported_by UUID REFERENCES users(id) ON DELETE SET NULL,
@@ -77,25 +77,116 @@ CREATE INDEX IF NOT EXISTS idx_dd_unresolved
   ON delivery_discrepancies(business_id, resolved_at)
   WHERE resolved_at IS NULL;
 
+-- Older production DBs may not have public.contacts; add FK only when present.
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM information_schema.tables
+    WHERE table_schema = 'public'
+      AND table_name = 'contacts'
+  ) THEN
+    ALTER TABLE delivery_discrepancies
+      DROP CONSTRAINT IF EXISTS delivery_discrepancies_broker_id_fkey;
+    ALTER TABLE delivery_discrepancies
+      ADD CONSTRAINT delivery_discrepancies_broker_id_fkey
+      FOREIGN KEY (broker_id)
+      REFERENCES contacts(id)
+      ON DELETE SET NULL;
+  END IF;
+END $$;
+
 -- DB-002 / DB-008: performance indexes for hot paths.
-CREATE INDEX IF NOT EXISTS idx_tpl_biz_date_item
-  ON trade_purchase_lines(business_id, created_at DESC, catalog_item_id)
-  WHERE deleted_at IS NULL;
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'trade_purchase_lines'
+      AND column_name = 'business_id'
+  ) AND EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'trade_purchase_lines'
+      AND column_name = 'deleted_at'
+  ) THEN
+    CREATE INDEX IF NOT EXISTS idx_tpl_biz_date_item
+      ON trade_purchase_lines(business_id, created_at DESC, catalog_item_id)
+      WHERE deleted_at IS NULL;
+  ELSIF EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'trade_purchase_lines'
+      AND column_name = 'business_id'
+  ) THEN
+    CREATE INDEX IF NOT EXISTS idx_tpl_biz_date_item
+      ON trade_purchase_lines(business_id, created_at DESC, catalog_item_id);
+  ELSE
+    CREATE INDEX IF NOT EXISTS idx_tpl_biz_date_item
+      ON trade_purchase_lines(created_at DESC, catalog_item_id);
+  END IF;
+END $$;
 
-CREATE INDEX IF NOT EXISTS idx_trade_purchase_lines_catalog_item_id
-  ON trade_purchase_lines(catalog_item_id)
-  WHERE deleted_at IS NULL AND catalog_item_id IS NOT NULL;
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'trade_purchase_lines'
+      AND column_name = 'deleted_at'
+  ) THEN
+    CREATE INDEX IF NOT EXISTS idx_trade_purchase_lines_catalog_item_id
+      ON trade_purchase_lines(catalog_item_id)
+      WHERE deleted_at IS NULL AND catalog_item_id IS NOT NULL;
+  ELSE
+    CREATE INDEX IF NOT EXISTS idx_trade_purchase_lines_catalog_item_id
+      ON trade_purchase_lines(catalog_item_id)
+      WHERE catalog_item_id IS NOT NULL;
+  END IF;
+END $$;
 
-CREATE INDEX IF NOT EXISTS idx_stock_movements_item_date
-  ON stock_movements(item_id, created_at DESC)
-  WHERE business_id IS NOT NULL;
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'stock_movements'
+      AND column_name = 'business_id'
+  ) THEN
+    CREATE INDEX IF NOT EXISTS idx_stock_movements_item_date
+      ON stock_movements(item_id, created_at DESC)
+      WHERE business_id IS NOT NULL;
+  ELSE
+    CREATE INDEX IF NOT EXISTS idx_stock_movements_item_date
+      ON stock_movements(item_id, created_at DESC);
+  END IF;
+END $$;
 
 CREATE INDEX IF NOT EXISTS idx_staff_activity_log_biz_date
   ON staff_activity_log(business_id, created_at DESC);
 
-CREATE INDEX IF NOT EXISTS idx_trade_purchases_biz_status_date
-  ON trade_purchases(business_id, status, created_at DESC)
-  WHERE deleted_at IS NULL;
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'trade_purchases'
+      AND column_name = 'deleted_at'
+  ) THEN
+    CREATE INDEX IF NOT EXISTS idx_trade_purchases_biz_status_date
+      ON trade_purchases(business_id, status, created_at DESC)
+      WHERE deleted_at IS NULL;
+  ELSE
+    CREATE INDEX IF NOT EXISTS idx_trade_purchases_biz_status_date
+      ON trade_purchases(business_id, status, created_at DESC);
+  END IF;
+END $$;
 
 -- Ensure barcode uniqueness index exists without creating a duplicate physical index.
 DO $$
