@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:dio/dio.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show kIsWeb, defaultTargetPlatform, TargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -32,17 +32,13 @@ import 'barcode_scan_web_stub.dart'
     if (dart.library.html) 'barcode_scan_web.dart';
 
 const _kMaxRecent = 10;
-const _kDebounceMs = 300;
+const _kDebounceMs = 800; // Increase app-side debounce (prevent double-fire)
 const _kManualSearchDebounceMs = 400;
-/// Retail + warehouse linear formats (fewer = faster camera decode).
+/// Primary warehouse formats (fewer = faster camera decode on iOS).
 const _kWarehouseBarcodeFormats = <BarcodeFormat>[
-  BarcodeFormat.code128,
-  BarcodeFormat.code39,
-  BarcodeFormat.ean13,
-  BarcodeFormat.ean8,
-  BarcodeFormat.upcA,
-  BarcodeFormat.upcE,
-  BarcodeFormat.qrCode,
+  BarcodeFormat.code128, // Primary warehouse format
+  BarcodeFormat.ean13,   // Product barcodes
+  BarcodeFormat.qrCode,  // Harisree QR labels
 ];
 
 /// Warehouse barcode scan — camera + manual lookup → item detail.
@@ -81,9 +77,7 @@ class _BarcodeScanPageState extends ConsumerState<BarcodeScanPage>
     )..repeat(reverse: true);
     _manualCtrl.addListener(_onManualChanged);
     unawaited(_loadRecent());
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) unawaited(_initCamera());
-    });
+    unawaited(_initCamera());
   }
 
   void _onManualChanged() {
@@ -171,10 +165,11 @@ class _BarcodeScanPageState extends ConsumerState<BarcodeScanPage>
     if (kIsWeb) {
       try {
         _camera = MobileScannerController(
-          detectionSpeed: DetectionSpeed.noDuplicates,
-          detectionTimeoutMs: _kDebounceMs,
+          detectionSpeed: DetectionSpeed.normal,
+          detectionTimeoutMs: 500,
           facing: CameraFacing.back,
           formats: _kWarehouseBarcodeFormats,
+          autoStart: true,
         );
         if (mounted) setState(() {});
         return;
@@ -206,10 +201,11 @@ class _BarcodeScanPageState extends ConsumerState<BarcodeScanPage>
     }
     if (!mounted) return;
     _camera = MobileScannerController(
-      detectionSpeed: DetectionSpeed.noDuplicates,
-      detectionTimeoutMs: _kDebounceMs,
+      detectionSpeed: DetectionSpeed.normal,
+      detectionTimeoutMs: 500,
       facing: CameraFacing.back,
       formats: _kWarehouseBarcodeFormats,
+      autoStart: true,
     );
     setState(() {});
   }
@@ -242,9 +238,16 @@ class _BarcodeScanPageState extends ConsumerState<BarcodeScanPage>
 
   Future<void> _resumeScan() async {
     _busy = false;
-    if (!kIsWeb && _camera != null) {
+    _lastCode = null; // Reset debounce so same code can be scanned again
+    _lastAt = null;
+
+    if (_camera != null) {
       try {
-        await _camera!.start();
+        // On iOS: camera may already be running (we didn't stop it)
+        // On Android: restart after stop
+        if (!kIsWeb && defaultTargetPlatform != TargetPlatform.iOS) {
+          await _camera!.start();
+        }
       } catch (_) {}
     }
     if (mounted) setState(() {});
@@ -416,26 +419,29 @@ class _BarcodeScanPageState extends ConsumerState<BarcodeScanPage>
 
   Future<void> _lookupAndNavigate(String raw) async {
     final code = raw.trim();
-    if (code.isEmpty) return;
+    if (code.isEmpty || _busy) return;
     final session = ref.read(sessionProvider);
     if (session == null) return;
-    if (!_busy) {
-      _busy = true;
-      if (mounted) setState(() {});
+
+    _busy = true;
+    if (mounted) setState(() {});
+
+    // Do NOT stop camera on iOS — just ignore new detects via _busy flag
+    // Only stop on non-web (Android) where stop/start is reliable
+    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
+      try {
+        await _camera?.stop();
+      } catch (_) {}
     }
+
     try {
-      if (_camera != null) {
-        try {
-          await _camera!.stop();
-        } catch (_) {}
-      }
       final row = await ref
           .read(hexaApiProvider)
           .barcodeStockLookup(
             businessId: session.primaryBusiness.id,
             code: code,
           )
-          .timeout(const Duration(seconds: 6));
+          .timeout(const Duration(seconds: 8)); // Increased from 6 to 8
       final id = row['id']?.toString();
       final name = row['name']?.toString() ?? code;
       if (id == null || id.isEmpty) {
@@ -476,8 +482,14 @@ class _BarcodeScanPageState extends ConsumerState<BarcodeScanPage>
     } on TimeoutException {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Server is slow — try again'),
+        SnackBar(
+          content: const Text(
+            'Server is starting up. Please wait a moment and try again.',
+          ),
+          action: SnackBarAction(
+            label: 'Retry',
+            onPressed: () => _lookupAndNavigate(raw),
+          ),
         ),
       );
       await _resumeScan();
@@ -489,8 +501,10 @@ class _BarcodeScanPageState extends ConsumerState<BarcodeScanPage>
       }
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-            content: Text(barcodeMessageForUser(e,
-                ctx: BarcodeOperationContext.scanner))),
+          content: Text(
+            barcodeMessageForUser(e, ctx: BarcodeOperationContext.scanner),
+          ),
+        ),
       );
       await _resumeScan();
     }
@@ -498,10 +512,25 @@ class _BarcodeScanPageState extends ConsumerState<BarcodeScanPage>
 
   void _onDetect(BarcodeCapture cap) {
     if (_busy) return;
-    final first = cap.barcodes.isNotEmpty ? cap.barcodes.first : null;
-    final v = first?.rawValue?.trim();
+    if (!mounted) return;
+
+    // On iOS, cap.barcodes can be empty even when detection fires — filter early
+    final barcodes = cap.barcodes
+        .where((b) => b.rawValue != null && b.rawValue!.trim().isNotEmpty)
+        .toList();
+
+    if (barcodes.isEmpty) return;
+
+    // Prefer QR codes over linear barcodes (QR is more reliable on iOS)
+    final preferred = barcodes.firstWhere(
+      (b) => b.format == BarcodeFormat.qrCode,
+      orElse: () => barcodes.first,
+    );
+
+    final v = preferred.rawValue?.trim();
     if (v == null || v.isEmpty) return;
     if (!_debouncePass(v)) return;
+
     _busy = true;
     unawaited(_lookupAndNavigate(v));
   }
@@ -580,11 +609,12 @@ class _BarcodeScanPageState extends ConsumerState<BarcodeScanPage>
     final theme = Theme.of(context);
     final size = MediaQuery.sizeOf(context);
     final landscape = size.width > size.height;
-    final cameraH = (size.height * (landscape ? 0.34 : 0.42))
-        .clamp(landscape ? 150.0 : 220.0, landscape ? 240.0 : 380.0)
+    final cameraH = (size.height * (landscape ? 0.40 : 0.48))
+        .clamp(landscape ? 180.0 : 260.0, landscape ? 280.0 : 420.0)
         .toDouble();
     final pendingSync = ref.watch(stockOfflinePendingCountProvider);
     final manualMatches = _manualMatches;
+    final safariUpload = kIsWeb && preferUploadBarcodeOnWeb;
     return Scaffold(
       appBar: AppBar(
         leading: IconButton(
@@ -652,6 +682,18 @@ class _BarcodeScanPageState extends ConsumerState<BarcodeScanPage>
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          if (safariUpload)
+            MaterialBanner(
+              content: const Text(
+                'Safari camera scan is unreliable. Use Upload barcode photo for best results.',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: _busy ? null : _scanFromImage,
+                  child: const Text('Upload photo'),
+                ),
+              ],
+            ),
           if (pendingSync > 0)
             MaterialBanner(
               content: Text('Pending sync: $pendingSync stock change(s)'),
@@ -744,39 +786,41 @@ class _BarcodeScanPageState extends ConsumerState<BarcodeScanPage>
                 child: Stack(
                   fit: StackFit.expand,
                   children: [
-                    if (_camera != null)
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(12),
-                        child: Padding(
-                          padding: const EdgeInsets.all(12),
-                          child: MobileScanner(
-                            controller: _camera,
-                            onDetect: _onDetect,
-                          ),
-                        ),
-                      )
-                    else
-                      const Center(child: CircularProgressIndicator()),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(12),
+                      child: _camera != null
+                          ? MobileScanner(
+                              controller: _camera!,
+                              onDetect: _onDetect,
+                            )
+                          : Container(
+                              color: Colors.black87,
+                              child: const Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  CircularProgressIndicator(
+                                    color: Colors.white,
+                                    strokeWidth: 2,
+                                  ),
+                                  SizedBox(height: 12),
+                                  Text(
+                                    'Starting camera…',
+                                    style: TextStyle(
+                                      color: Colors.white70,
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                    ),
                     Center(
-                      child: Container(
-                        width: math.min(
-                          260,
-                          size.width -
-                              HexaResponsive.pageGutter(
-                                    context,
-                                    operational: true,
-                                  ) *
-                                  2,
-                        ),
-                        height: 140,
-                        decoration: BoxDecoration(
-                          border: Border.all(
-                            color: HexaColors.brandPrimary,
-                            width: 2,
-                          ),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Center(
+                      child: CustomPaint(
+                        painter: ScannerReticlePainter(color: HexaColors.brandPrimary),
+                        child: Container(
+                          width: math.min(320, size.width - 16),
+                          height: 120,
+                          alignment: Alignment.center,
                           child: Text(
                             'Align barcode here',
                             style: theme.textTheme.labelSmall?.copyWith(
@@ -792,20 +836,15 @@ class _BarcodeScanPageState extends ConsumerState<BarcodeScanPage>
                         return AnimatedBuilder(
                           animation: _scanLineCtrl,
                           builder: (context, _) {
-                            final y = 160 * _scanLineCtrl.value;
+                            final y = 140 * _scanLineCtrl.value;
                             return Align(
                               alignment: Alignment.center,
                               child: Transform.translate(
-                                offset: Offset(0, y - 80),
+                                offset: Offset(0, y - 70),
                                 child: Container(
                                   width: math.min(
-                                    260,
-                                    MediaQuery.sizeOf(context).width -
-                                        HexaResponsive.pageGutter(
-                                              context,
-                                              operational: true,
-                                            ) *
-                                            2,
+                                    320,
+                                    MediaQuery.sizeOf(context).width - 16,
                                   ),
                                   height: 2,
                                   color: Colors.redAccent,
@@ -1008,4 +1047,55 @@ class _FallbackAction extends StatelessWidget {
       ),
     );
   }
+}
+
+class ScannerReticlePainter extends CustomPainter {
+  ScannerReticlePainter({required this.color});
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 3.0;
+
+    final length = 16.0;
+    final radius = 8.0;
+
+    // Top-left
+    final pathTL = Path()
+      ..moveTo(0, length)
+      ..lineTo(0, radius)
+      ..arcToPoint(Offset(radius, 0), radius: Radius.circular(radius))
+      ..lineTo(length, 0);
+    canvas.drawPath(pathTL, paint);
+
+    // Top-right
+    final pathTR = Path()
+      ..moveTo(size.width - length, 0)
+      ..lineTo(size.width - radius, 0)
+      ..arcToPoint(Offset(size.width, radius), radius: Radius.circular(radius))
+      ..lineTo(size.width, length);
+    canvas.drawPath(pathTR, paint);
+
+    // Bottom-left
+    final pathBL = Path()
+      ..moveTo(0, size.height - length)
+      ..lineTo(0, size.height - radius)
+      ..arcToPoint(Offset(radius, size.height), radius: Radius.circular(radius))
+      ..lineTo(length, size.height);
+    canvas.drawPath(pathBL, paint);
+
+    // Bottom-right
+    final pathBR = Path()
+      ..moveTo(size.width - length, size.height)
+      ..lineTo(size.width - radius, size.height)
+      ..arcToPoint(Offset(size.width, size.height - radius), radius: Radius.circular(radius))
+      ..lineTo(size.width, size.height - length);
+    canvas.drawPath(pathBR, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }

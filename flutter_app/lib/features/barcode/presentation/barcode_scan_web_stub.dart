@@ -2,3 +2,7 @@
 Future<String?> decodeBarcodeFromImageBytes(List<int> bytes) async => null;
 
 bool get barcodeDetectorAvailable => false;
+
+bool get isSafariBrowser => false;
+
+bool get preferUploadBarcodeOnWeb => false;

@@ -26,11 +26,12 @@ class PurchaseDetailActionBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (hideFinancials) return const SizedBox.shrink();
+    if (hideFinancials && onEdit == null) return const SizedBox.shrink();
 
     final cs = Theme.of(context).colorScheme;
     final bottomInset = MediaQuery.paddingOf(context).bottom;
-    final showMarkPaid = purchase.statusEnum != PurchaseStatus.paid &&
+    final showMarkPaid = !hideFinancials &&
+        purchase.statusEnum != PurchaseStatus.paid &&
         purchase.statusEnum != PurchaseStatus.cancelled;
 
     return Material(
@@ -60,29 +61,33 @@ class PurchaseDetailActionBar extends StatelessWidget {
               child: ListView(
                 scrollDirection: Axis.horizontal,
                 children: [
-                  _actionChip(
-                    label: 'Edit',
-                    icon: Icons.edit_outlined,
-                    onPressed: onEdit,
-                  ),
-                  const SizedBox(width: 8),
-                  _actionChip(
-                    label: 'Export PDF',
-                    icon: Icons.picture_as_pdf_outlined,
-                    onPressed: onExportPdf,
-                  ),
-                  const SizedBox(width: 8),
-                  _actionChip(
-                    label: 'Share',
-                    icon: Icons.share_outlined,
-                    onPressed: onShare,
-                  ),
-                  const SizedBox(width: 8),
-                  _actionChip(
-                    label: 'Print',
-                    icon: Icons.print_outlined,
-                    onPressed: onPrint,
-                  ),
+                  if (onEdit != null) ...[
+                    _actionChip(
+                      label: 'Edit',
+                      icon: Icons.edit_outlined,
+                      onPressed: onEdit,
+                    ),
+                    if (!hideFinancials) const SizedBox(width: 8),
+                  ],
+                  if (!hideFinancials) ...[
+                    _actionChip(
+                      label: 'Export PDF',
+                      icon: Icons.picture_as_pdf_outlined,
+                      onPressed: onExportPdf,
+                    ),
+                    const SizedBox(width: 8),
+                    _actionChip(
+                      label: 'Share',
+                      icon: Icons.share_outlined,
+                      onPressed: onShare,
+                    ),
+                    const SizedBox(width: 8),
+                    _actionChip(
+                      label: 'Print',
+                      icon: Icons.print_outlined,
+                      onPressed: onPrint,
+                    ),
+                  ],
                 ],
               ),
             ),

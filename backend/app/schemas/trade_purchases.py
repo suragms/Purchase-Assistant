@@ -374,6 +374,11 @@ class TradePurchaseDispatchIn(DecimalModel):
 
 class TradePurchaseArriveIn(DecimalModel):
     notes: str | None = Field(None, max_length=2000)
+    truck_number: str | None = Field(None, max_length=100)
+    driver_contact: str | None = Field(None, max_length=100)
+    damage_qty: Decimal | None = None
+    missing_qty: Decimal | None = None
+    broker_confirmed: bool | None = None
 
 
 class TradePurchaseDeliveryPipelineOut(DecimalModel):

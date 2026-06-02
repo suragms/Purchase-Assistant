@@ -47,6 +47,8 @@ data/*.webp
 
 # Cursor project settings
 .cursor/settings.json
+.cursor/KICHU
+flutter_app/clean_analyze.txt
 
 # IDE
 .idea/

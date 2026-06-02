@@ -134,6 +134,15 @@ async def apply_stock_movement(
     else:
         idem = f"{movement_kind}:{item_id}:{uuid.uuid4().hex}"
 
+    from app.services.stock_change_guard import assert_stock_changes_allowed
+
+    await assert_stock_changes_allowed(
+        db,
+        business_id=business_id,
+        movement_kind=movement_kind,
+        source_type=source_type,
+    )
+
     item = await _locked_item(db, business_id=business_id, item_id=item_id)
     if item is None:
         raise ValueError("Item not found")
@@ -226,3 +235,27 @@ async def apply_stock_movement(
         )
 
     return StockMovementResult(movement, item)
+
+
+_MAX_STALE_RETRIES = 3
+
+
+async def apply_stock_movement_with_retry(
+    db: AsyncSession,
+    *,
+    max_attempts: int = _MAX_STALE_RETRIES,
+    **kwargs: Any,
+) -> StockMovementResult:
+    """Retry on optimistic-lock conflict (concurrent stock updates)."""
+    last_err: StaleStockVersionError | None = None
+    for attempt in range(max_attempts):
+        try:
+            return await apply_stock_movement(db, **kwargs)
+        except StaleStockVersionError as e:
+            last_err = e
+            if attempt + 1 >= max_attempts:
+                raise
+            kwargs = dict(kwargs)
+            kwargs["last_seen_stock_version"] = None
+    assert last_err is not None
+    raise last_err

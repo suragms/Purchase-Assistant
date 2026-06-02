@@ -176,7 +176,8 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           loc == '/login' ||
           loc == '/forgot-password' ||
           loc == '/reset-password' ||
-          loc.startsWith('/scan/');
+          loc.startsWith('/scan/') ||
+          loc.startsWith('/item/');
 
       ProviderContainer container;
       try {
@@ -299,12 +300,28 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/scan/:token',
+        redirect: (context, state) {
+          final t = state.pathParameters['token'] ?? '';
+          if (t.isEmpty) return '/login';
+          return '/item/$t';
+        },
+      ),
+      GoRoute(
+        path: '/item/:lookupKey',
         pageBuilder: (context, state) => iosPushPage(
           key: state.pageKey,
           child: PublicItemScanPage(
-            token: state.pathParameters['token'] ?? '',
+            lookupKey: state.pathParameters['lookupKey'] ?? '',
           ),
         ),
+      ),
+      GoRoute(
+        path: '/barcode/:code',
+        redirect: (context, state) {
+          final c = state.pathParameters['code'] ?? '';
+          if (c.isEmpty) return '/login';
+          return '/item/$c';
+        },
       ),
       GoRoute(
         path: '/barcode/scan',
@@ -650,7 +667,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           final raw = state.uri.queryParameters['name'] ?? '';
           return iosPushPage(
             key: state.pageKey,
-            child: CategoryItemsPage(category: Uri.decodeComponent(raw)),
+            child: CategoryItemsPage(category: raw),
           );
         },
       ),

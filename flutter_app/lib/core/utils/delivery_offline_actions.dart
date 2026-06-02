@@ -11,12 +11,22 @@ Future<({bool queued, Map<String, dynamic>? body})> markPurchaseArrivedResilient
   required String businessId,
   required String purchaseId,
   String? notes,
+  String? truckNumber,
+  String? driverContact,
+  double? damageQty,
+  double? missingQty,
+  bool? brokerConfirmed,
 }) async {
   try {
     final body = await ref.read(hexaApiProvider).arrivePurchase(
           businessId: businessId,
           purchaseId: purchaseId,
           notes: notes,
+          truckNumber: truckNumber,
+          driverContact: driverContact,
+          damageQty: damageQty,
+          missingQty: missingQty,
+          brokerConfirmed: brokerConfirmed,
         );
     return (queued: false, body: Map<String, dynamic>.from(body));
   } on DioException catch (e) {

@@ -58,4 +58,14 @@ class RecentUnifiedSearchQueriesNotifier extends Notifier<List<String>> {
     await p.setStringList(k, const []);
     state = const [];
   }
+
+  /// Called on logout — clears recent search for every business on shared devices.
+  Future<void> clearAllOnLogout() async {
+    final p = ref.read(sharedPreferencesProvider);
+    final keys = p.getKeys().where((k) => k.startsWith(_kPrefix));
+    for (final k in keys) {
+      await p.remove(k);
+    }
+    state = const [];
+  }
 }

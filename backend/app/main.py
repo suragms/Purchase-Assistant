@@ -40,6 +40,7 @@ from app.routers import (
     media,
     price_intelligence,
     public_items,
+    public_barcode,
     realtime,
     reports_trade,
     report_views,
@@ -495,6 +496,7 @@ app.include_router(catalog.router)
 app.include_router(contacts.router)
 app.include_router(media.router)
 app.include_router(public_items.router)
+app.include_router(public_barcode.router)
 app.include_router(realtime.router)
 app.include_router(notifications.router)
 app.include_router(admin.router)

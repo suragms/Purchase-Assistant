@@ -1,6 +1,24 @@
 # Purchase Assistant — Living task board
 
-**Last updated:** 2026-05-29 (Stock SSOT alignment — system vs physical)
+**Last updated:** 2026-06-01 (Production bug sprint BUG-001–015)
+
+## Production bugs (2026-06-01)
+
+- [x] **BUG-001** Scan sheet: 3-tile row (system / physical / last purchase)
+- [x] **BUG-002** Public `/item/:key`: current stock headline + summary card
+- [x] **BUG-003** Public `/public/barcode/{code}.json` + `/barcode/:code` → `/item/`; label URLs `/item/{token}`
+- [x] **BUG-004** Delivery stock: `apply_stock_movement_with_retry` (3× on stale version)
+- [x] **BUG-005** `homeInsightsProvider` keepAlive 3 min (stock list cache already TTL)
+- [x] **BUG-006** Resume: 30s JWT refresh throttle; no `authRefresh` bump on tab focus unless token changes
+- [x] **BUG-007** Purchase detail: Edit visible for staff when financials hidden (`purchase_edit`)
+- [x] **BUG-008** Search debounce 350ms
+- [x] **BUG-009** Bottom sheets: `HexaResponsiveSheetViewport` already uses `viewInsets` (verify per sheet)
+- [x] **BUG-010** `STALE_STOCK_VERSION` friendly 409 message
+- [x] **BUG-011** Staff receive: truck, driver, damage/missing qty, broker confirm → API
+- [x] **BUG-012** Safari: upload-photo banner on barcode scan (web)
+- [x] **BUG-013** Logout clears all recent unified search prefs
+- [x] **BUG-014** Category items route: no double `Uri.decodeComponent`
+- [x] **BUG-015** `.gitignore` for `clean_analyze.txt`, `.cursor/KICHU`
 
 ## Live DB (Supabase MCP 2026-06-01)
 

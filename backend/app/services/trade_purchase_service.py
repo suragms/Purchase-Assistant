@@ -1406,10 +1406,23 @@ async def arrive_trade_purchase(
     now = utcnow()
     tp.delivery_status = "arrived"
     tp.arrived_at = now
+    if body.truck_number and body.truck_number.strip():
+        tp.truck_number = body.truck_number.strip()
+    if body.driver_contact and body.driver_contact.strip():
+        tp.driver_contact = body.driver_contact.strip()
+    arrival_lines: list[str] = []
     if body.notes and body.notes.strip():
+        arrival_lines.append(body.notes.strip())
+    if body.damage_qty is not None and body.damage_qty > 0:
+        arrival_lines.append(f"Damage qty: {body.damage_qty}")
+    if body.missing_qty is not None and body.missing_qty > 0:
+        arrival_lines.append(f"Missing qty: {body.missing_qty}")
+    if body.broker_confirmed is True:
+        arrival_lines.append("Broker confirmed: yes")
+    if arrival_lines:
         existing = (tp.delivery_notes or "").strip()
-        note = body.notes.strip()
-        tp.delivery_notes = f"{existing}\n{note}".strip() if existing else note
+        block = "\n".join(arrival_lines)
+        tp.delivery_notes = f"{existing}\n{block}".strip() if existing else block
     tp.updated_at = now
     await log_staff_activity(
         db,

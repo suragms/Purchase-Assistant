@@ -32,12 +32,27 @@ class StaffReceiveShipmentPage extends ConsumerStatefulWidget {
 class _StaffReceiveShipmentPageState
     extends ConsumerState<StaffReceiveShipmentPage> {
   final _notesCtrl = TextEditingController();
+  final _truckCtrl = TextEditingController();
+  final _driverCtrl = TextEditingController();
+  final _damageCtrl = TextEditingController();
+  final _missingCtrl = TextEditingController();
+  bool _brokerConfirmed = false;
   bool _saving = false;
 
   @override
   void dispose() {
     _notesCtrl.dispose();
+    _truckCtrl.dispose();
+    _driverCtrl.dispose();
+    _damageCtrl.dispose();
+    _missingCtrl.dispose();
     super.dispose();
+  }
+
+  double? _parseOptionalQty(String raw) {
+    final t = raw.trim();
+    if (t.isEmpty) return null;
+    return double.tryParse(t);
   }
 
   Future<void> _submitReceive(TradePurchase p) async {
@@ -68,6 +83,8 @@ class _StaffReceiveShipmentPageState
       if (ds == DeliveryStatus.pending ||
           ds == DeliveryStatus.dispatched ||
           ds == DeliveryStatus.inTransit) {
+        final damageQty = _parseOptionalQty(_damageCtrl.text);
+        final missingQty = _parseOptionalQty(_missingCtrl.text);
         await markPurchaseArrivedResilient(
           ref: ref,
           businessId: bid,
@@ -75,7 +92,19 @@ class _StaffReceiveShipmentPageState
           notes: _notesCtrl.text.trim().isEmpty
               ? null
               : _notesCtrl.text.trim(),
+          truckNumber: _truckCtrl.text.trim(),
+          driverContact: _driverCtrl.text.trim(),
+          damageQty: damageQty,
+          missingQty: missingQty,
+          brokerConfirmed: _brokerConfirmed,
         );
+        if (mounted &&
+            ((damageQty ?? 0) > 0 || (missingQty ?? 0) > 0)) {
+          showTopSnack(
+            context,
+            'Discrepancy recorded in arrival notes — owner will review',
+          );
+        }
       }
 
       final lineMaps = [
@@ -207,6 +236,61 @@ class _StaffReceiveShipmentPageState
                     const SizedBox(height: 8),
                     ...p.lines.map((line) => _LineCheckTile(line: line)),
                     const SizedBox(height: 16),
+                    TextField(
+                      controller: _truckCtrl,
+                      textInputAction: TextInputAction.next,
+                      decoration: const InputDecoration(
+                        labelText: 'Truck number',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: _driverCtrl,
+                      textInputAction: TextInputAction.next,
+                      decoration: const InputDecoration(
+                        labelText: 'Driver name / contact',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: _damageCtrl,
+                            keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true,
+                            ),
+                            decoration: const InputDecoration(
+                              labelText: 'Damage qty',
+                              border: OutlineInputBorder(),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: TextField(
+                            controller: _missingCtrl,
+                            keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true,
+                            ),
+                            decoration: const InputDecoration(
+                              labelText: 'Missing qty',
+                              border: OutlineInputBorder(),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('Broker confirmed delivery'),
+                      value: _brokerConfirmed,
+                      onChanged: (v) => setState(() => _brokerConfirmed = v),
+                    ),
+                    const SizedBox(height: 8),
                     TextField(
                       controller: _notesCtrl,
                       maxLines: 3,

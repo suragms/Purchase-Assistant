@@ -267,7 +267,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
 
   void _scheduleSearch(String v) {
     _debounce?.cancel();
-    _debounce = Timer(const Duration(milliseconds: 250), () {
+    _debounce = Timer(const Duration(milliseconds: 350), () {
       if (!mounted) return;
       final next = v.trim();
       if (next == _debounced) return;

@@ -208,6 +208,12 @@ String _purchaseHistoryBackRoute(WidgetRef ref) {
   return '/purchase';
 }
 
+bool _canEditPurchase(WidgetRef ref) {
+  final session = ref.read(sessionProvider);
+  if (session == null) return false;
+  return sessionPermissions(session)['purchase_edit'] == true;
+}
+
 class PurchaseDetailPage extends ConsumerStatefulWidget {
   const PurchaseDetailPage({
     super.key,
@@ -1135,7 +1141,8 @@ class PurchaseDetailBodyState extends ConsumerState<PurchaseDetailBody> {
                   p.statusEnum != PurchaseStatus.cancelled
               ? () => _markPaidSheet(context, ref, p)
               : null,
-          onEdit: p.statusEnum == PurchaseStatus.cancelled
+          onEdit: p.statusEnum == PurchaseStatus.cancelled ||
+                  !_canEditPurchase(ref)
               ? null
               : () => context.push('/purchase/edit/${p.id}'),
           onExportPdf: downloadPdf,

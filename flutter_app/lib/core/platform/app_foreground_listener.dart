@@ -93,7 +93,6 @@ class _AppForegroundListenerState extends ConsumerState<AppForegroundListener>
     try {
       ref.read(authApiGateProvider.notifier).clearSuspend();
     } catch (_) {}
-    authRefresh.value++;
   }
 
   @override

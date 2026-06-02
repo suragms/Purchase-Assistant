@@ -408,14 +408,14 @@ async def apply_confirmed_purchase_stock(
     label = purchase_human_id or str(purchase_id)
     reason = f"Purchase received ({label})".strip()
 
-    from app.services.stock_movement_service import apply_stock_movement
+    from app.services.stock_movement_service import apply_stock_movement_with_retry
 
     updates: list[dict] = list(skipped)
     for cid, delta in by_item.items():
         if delta <= 0:
             continue
         idem = f"trade_purchase:{purchase_id}:{cid}"
-        result = await apply_stock_movement(
+        result = await apply_stock_movement_with_retry(
             db,
             business_id=business_id,
             item_id=cid,
@@ -472,7 +472,7 @@ async def revert_confirmed_purchase_stock(
     if not by_item:
         return []
 
-    from app.services.stock_movement_service import apply_stock_movement
+    from app.services.stock_movement_service import apply_stock_movement_with_retry
 
     label = purchase_human_id or str(purchase_id)
     reason = f"Purchase reversed ({label})".strip()
@@ -481,7 +481,7 @@ async def revert_confirmed_purchase_stock(
         if qty <= 0:
             continue
         idem = f"revert:trade_purchase:{purchase_id}:{cid}"
-        result = await apply_stock_movement(
+        result = await apply_stock_movement_with_retry(
             db,
             business_id=business_id,
             item_id=cid,
@@ -545,14 +545,14 @@ async def sync_confirmed_purchase_stock_diff(
     if actor is None:
         raise ValueError("actor user not found for purchase sync")
 
-    from app.services.stock_movement_service import apply_stock_movement
+    from app.services.stock_movement_service import apply_stock_movement_with_retry
 
     label = purchase_human_id or str(purchase_id)
     reason = f"Purchase adjusted ({label})"
     updates: list[dict] = []
     for cid, delta in deltas.items():
         idem = f"adjust:trade_purchase:{purchase_id}:{cid}:{delta}"
-        result = await apply_stock_movement(
+        result = await apply_stock_movement_with_retry(
             db,
             business_id=business_id,
             item_id=cid,

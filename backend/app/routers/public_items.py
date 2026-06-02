@@ -2,10 +2,10 @@ import html
 
 from fastapi import APIRouter, HTTPException, status
 from sqlalchemy import desc, select
-from starlette.responses import HTMLResponse
+from starlette.responses import HTMLResponse, JSONResponse
 
 from app.database import async_session_factory
-from app.models import CatalogItem, ItemCategory
+from app.models import CatalogItem, ItemCategory, Supplier
 from app.models.stock_physical_count import StockPhysicalCount
 from app.services.stock_inventory import (
     movement_delivered_qty_map,
@@ -40,13 +40,23 @@ async def _latest_physical_qty(
     return float(row.counted_qty or 0), when
 
 
-async def _safe_item_payload(
+async def _supplier_name_for_item(db, item: CatalogItem) -> str | None:
+    if not item.last_supplier_id:
+        return None
+    r = await db.execute(
+        select(Supplier.name).where(Supplier.id == item.last_supplier_id)
+    )
+    return r.scalar_one_or_none()
+
+
+def _safe_item_payload(
     item: CatalogItem,
     category_name: str | None,
     *,
     delivered_qty: float | None = None,
     physical_qty: float | None = None,
     physical_counted_at: str | None = None,
+    supplier_name: str | None = None,
 ) -> dict:
     current = float(item.current_stock or 0)
     reorder = float(item.reorder_level or 0)
@@ -75,12 +85,17 @@ async def _safe_item_payload(
         "last_purchase_rate": float(item.last_purchase_price)
         if item.last_purchase_price is not None
         else None,
+        "last_purchase_qty": float(item.last_line_qty)
+        if item.last_line_qty is not None
+        else None,
+        "last_purchase_unit": item.last_line_unit or unit,
+        "supplier_name": supplier_name,
     }
 
 
 async def _load_public_item(
     token: str,
-) -> tuple[CatalogItem, str | None, float, float | None, str | None]:
+) -> tuple[CatalogItem, str | None, float, float | None, str | None, str | None]:
     clean = token.strip()
     if not clean or len(clean) > 64:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Item not found")
@@ -95,52 +110,76 @@ async def _load_public_item(
         )
         row = by_token.first()
         if row is None:
-            by_code = await db.execute(
+            by_barcode = await db.execute(
                 select(CatalogItem, ItemCategory.name)
                 .join(ItemCategory, ItemCategory.id == CatalogItem.category_id)
                 .where(
-                    CatalogItem.item_code == clean,
+                    CatalogItem.barcode == clean,
                     CatalogItem.deleted_at.is_(None),
                 )
                 .limit(2)
             )
-            code_rows = by_code.all()
-            if len(code_rows) != 1:
-                raise HTTPException(
-                    status.HTTP_404_NOT_FOUND,
-                    detail="Item not found — scan the QR on the label",
+            barcode_rows = by_barcode.all()
+            if len(barcode_rows) == 1:
+                row = barcode_rows[0]
+            else:
+                by_code = await db.execute(
+                    select(CatalogItem, ItemCategory.name)
+                    .join(ItemCategory, ItemCategory.id == CatalogItem.category_id)
+                    .where(
+                        CatalogItem.item_code == clean,
+                        CatalogItem.deleted_at.is_(None),
+                    )
+                    .limit(2)
                 )
-            row = code_rows[0]
+                code_rows = by_code.all()
+                if len(code_rows) != 1:
+                    raise HTTPException(
+                        status.HTTP_404_NOT_FOUND,
+                        detail="Item not found — scan the QR on the label",
+                    )
+                row = code_rows[0]
         item, category_name = row[0], row[1]
         delivered_map = await movement_delivered_qty_map(
             db, item.business_id, [item.id]
         )
         delivered = float(delivered_map.get(item.id, 0))
         phys_qty, phys_at = await _latest_physical_qty(db, item.business_id, item.id)
-        return item, category_name, delivered, phys_qty, phys_at
+        supplier = await _supplier_name_for_item(db, item)
+        return item, category_name, delivered, phys_qty, phys_at, supplier
 
 
 @router.get("/{token}.json")
-async def public_item_json(token: str) -> dict:
-    item, category_name, delivered, phys_qty, phys_at = await _load_public_item(token)
-    return _safe_item_payload(
-        item,
-        category_name,
-        delivered_qty=delivered,
-        physical_qty=phys_qty,
-        physical_counted_at=phys_at,
+async def public_item_json(token: str) -> JSONResponse:
+    item, category_name, delivered, phys_qty, phys_at, supplier = await _load_public_item(
+        token
     )
-
-
-@router.get("/{token}", response_class=HTMLResponse)
-async def public_item_page(token: str) -> HTMLResponse:
-    item, category_name, delivered, phys_qty, phys_at = await _load_public_item(token)
     payload = _safe_item_payload(
         item,
         category_name,
         delivered_qty=delivered,
         physical_qty=phys_qty,
         physical_counted_at=phys_at,
+        supplier_name=supplier,
+    )
+    return JSONResponse(
+        payload,
+        headers={"Cache-Control": "public, max-age=60"},
+    )
+
+
+@router.get("/{token}", response_class=HTMLResponse)
+async def public_item_page(token: str) -> HTMLResponse:
+    item, category_name, delivered, phys_qty, phys_at, supplier = await _load_public_item(
+        token
+    )
+    payload = _safe_item_payload(
+        item,
+        category_name,
+        delivered_qty=delivered,
+        physical_qty=phys_qty,
+        physical_counted_at=phys_at,
+        supplier_name=supplier,
     )
     status_label = str(payload["status"]).replace("_", " ").title()
     stock_qty = payload["current_stock"]

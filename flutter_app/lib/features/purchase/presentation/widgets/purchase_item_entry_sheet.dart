@@ -986,8 +986,32 @@ class _PurchaseItemEntrySheetState extends ConsumerState<PurchaseItemEntrySheet>
 
   /// kg/bag resolved to a number; single source of truth = `_kgPerUnit` (seeded
   /// from catalog row on pick OR from the manual "Kg per bag" input).
-  double? _kgPer() =>
-      (_kgPerUnit != null && _kgPerUnit! > 0) ? _kgPerUnit : null;
+  double? _kgPer() {
+    if (_kgPerUnit != null && _kgPerUnit! > 0) return _kgPerUnit;
+    if (!_isBagFamilyUnit()) return null;
+    final fromField = _parseD(_kgPerBagCtrl.text);
+    if (fromField != null && fromField > 0) return fromField;
+    // CRITICAL FIX: auto-derive from item name ("30 KG" in name = 30 kg/bag)
+    final clf = _activeClassification();
+    if (clf.kgFromName != null && clf.kgFromName! > 0) {
+      // Sync state so future reads are consistent
+      if (mounted) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted && (_kgPerUnit == null || _kgPerUnit! <= 0)) {
+            setState(() {
+              _kgPerUnit = clf.kgFromName;
+              _weightPricing = true;
+              if (_kgPerBagCtrl.text.isEmpty || _parseD(_kgPerBagCtrl.text) == null) {
+                _kgPerBagCtrl.text = _fmtQty(clf.kgFromName!);
+              }
+            });
+          }
+        });
+      }
+      return clf.kgFromName;
+    }
+    return null;
+  }
 
   /// Catalog item selected AND catalog row carries kg/bag.
   bool _hasCatalogKg() {
@@ -1772,10 +1796,21 @@ class _PurchaseItemEntrySheetState extends ConsumerState<PurchaseItemEntrySheet>
           (unit.isEmpty ? 'Unit is required' : null);
       _errKgPerBag = null;
       if (unitLow == 'bag' || unitLow == 'sack') {
-        final k = _kgPer();
+        var k = _kgPer();
+        // Auto-derive from item name if still null (e.g. "30 KG" in name → 30)
+        if ((k == null || k <= 0) && _kgPerBagCtrl.text.trim().isEmpty) {
+          if (clf.kgFromName != null && clf.kgFromName! > 0) {
+            k = clf.kgFromName;
+            _kgPerUnit = clf.kgFromName;
+            _weightPricing = true;
+            _kgPerBagCtrl.text = _fmtQty(clf.kgFromName!);
+          }
+        }
         if (k == null || k <= 0) {
           _errKgPerBag =
               'Kg per bag is required for bag lines. Enter it below, or use the catalog prompt when offered.';
+        } else {
+          _errKgPerBag = null; // Clear any stale error
         }
       } else if (clf.type == UnitType.weightBag) {
         final k = _kgPer();
@@ -2273,6 +2308,31 @@ class _PurchaseItemEntrySheetState extends ConsumerState<PurchaseItemEntrySheet>
     return chosen;
   }
 
+  void _clearKgIfNotDerivedFromName() {
+    if (!_isBagFamilyUnit()) {
+      _kgPerUnit = null;
+      _weightPricing = false;
+      _kgPerBagCtrl.clear();
+      return;
+    }
+    // Don't clear if name-derived kg is available
+    final clf = _activeClassification();
+    if (clf.kgFromName != null && clf.kgFromName! > 0) {
+      _kgPerUnit = clf.kgFromName;
+      _weightPricing = true;
+      if (_kgPerBagCtrl.text.isEmpty) {
+        _kgPerBagCtrl.text = _fmtQty(clf.kgFromName!);
+      }
+      return;
+    }
+    _kgPerUnit = null;
+    _weightPricing = false;
+    // Don't clear _kgPerBagCtrl if user typed something
+    if (_parseD(_kgPerBagCtrl.text) == null) {
+      _kgPerBagCtrl.clear();
+    }
+  }
+
   void _recomputeModeFromUnitAndCatalog() {
     if (_selectedCatalogItemId == null || _selectedCatalogItemId!.isEmpty) {
       return;
@@ -2286,9 +2346,7 @@ class _PurchaseItemEntrySheetState extends ConsumerState<PurchaseItemEntrySheet>
     if (kpbD == null) {
       if (_kgPerUnit != null && _hasCatalogKg() == false) {
         setState(() {
-          _weightPricing = false;
-          _kgPerUnit = null;
-          _kgPerBagCtrl.clear();
+          _clearKgIfNotDerivedFromName();
         });
       }
       return;
@@ -2315,6 +2373,17 @@ class _PurchaseItemEntrySheetState extends ConsumerState<PurchaseItemEntrySheet>
     if (k != null && k > 0) return;
     final kpb = _catalogKpb(row);
     if (kpb != null && kpb > 0) return;
+
+    // NEW: If item name contains kg info, auto-use it instead of showing modal
+    final clf = _activeClassification();
+    if (clf.kgFromName != null && clf.kgFromName! > 0) {
+      setState(() {
+        _kgPerUnit = clf.kgFromName;
+        _weightPricing = true;
+        _kgPerBagCtrl.text = _fmtQty(clf.kgFromName!);
+      });
+      return; // ← Don't show the blocking sheet
+    }
 
     final currentName = (row['name']?.toString() ?? _itemCtrl.text).trim();
     if (currentName.isEmpty) return;
@@ -2507,9 +2576,7 @@ class _PurchaseItemEntrySheetState extends ConsumerState<PurchaseItemEntrySheet>
 
   /// Per-line-unit rates from catalog when not using bag ₹/kg snapshot.
   void _applyFlatUnitFromCatalog(Map<String, dynamic> row) {
-    _weightPricing = false;
-    _kgPerUnit = null;
-    _kgPerBagCtrl.clear();
+    _clearKgIfNotDerivedFromName();
     var rate = 0.0;
     final lp = row['default_landing_cost'];
     final lpD = _numD(lp);

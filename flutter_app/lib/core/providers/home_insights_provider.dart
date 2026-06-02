@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
@@ -32,6 +34,8 @@ class HomeInsightsData {
 
 final homeInsightsProvider =
     FutureProvider.autoDispose<HomeInsightsData>((ref) async {
+  final link = ref.keepAlive();
+  Timer(const Duration(minutes: 3), link.close);
   final session = ref.watch(sessionProvider);
   if (session == null) {
     throw StateError('Not signed in');

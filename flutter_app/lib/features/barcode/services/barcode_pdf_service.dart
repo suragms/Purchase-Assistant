@@ -58,7 +58,7 @@ class BarcodeLabelData {
     final token = publicToken?.trim();
     if (token == null || token.isEmpty) return null;
     final base = webBase.endsWith('/') ? webBase.substring(0, webBase.length - 1) : webBase;
-    return '$base/scan/$token';
+    return '$base/item/$token';
   }
 
   Map<String, dynamic> toJson() => {

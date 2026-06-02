@@ -13,6 +13,7 @@ import '../providers/business_aggregates_invalidation.dart'
     show invalidateWorkspaceSeedData;
 import '../providers/catalog_providers.dart';
 import '../providers/prefs_provider.dart';
+import '../providers/recent_unified_search_provider.dart';
 import '../notifications/local_notifications_service.dart';
 import '../providers/staff_home_providers.dart' show invalidateStaffHomeCaches;
 import '../providers/suppliers_list_provider.dart';
@@ -308,9 +309,17 @@ class SessionNotifier extends Notifier<Session?> {
     );
   }
 
+  static DateTime? _lastResumeRefreshAt;
+
   /// After tab focus / app resume: refresh JWT before parallel home/stock polls.
   Future<void> refreshOnResume() async {
     if (_disposed || state == null) return;
+    final now = DateTime.now();
+    if (_lastResumeRefreshAt != null &&
+        now.difference(_lastResumeRefreshAt!) <
+            const Duration(seconds: 30)) {
+      return;
+    }
     final store = ref.read(tokenStoreProvider);
     final api = ref.read(hexaApiProvider);
     final t = await store.read();
@@ -321,9 +330,14 @@ class SessionNotifier extends Notifier<Session?> {
       if (_disposed) return;
       await store.write(access: pair.access, refresh: pair.refresh);
       api.setAuthToken(pair.access);
+      final priorAccess = state?.accessToken;
       await applyRefreshedTokens(pair.access, pair.refresh);
       _clearAuthFailureFlags();
-      authRefresh.value++;
+      _lastResumeRefreshAt = now;
+      // Avoid invalidating all session-scoped providers on every tab focus.
+      if (priorAccess != pair.access) {
+        authRefresh.value++;
+      }
     } on DioException catch (e) {
       final sc = e.response?.statusCode;
       if (sc == 401 || sc == 403) {
@@ -826,6 +840,11 @@ class SessionNotifier extends Notifier<Session?> {
     await signOutGoogleIfNeeded();
     await store.clear();
     await cache.clear();
+    try {
+      await ref
+          .read(recentUnifiedSearchQueriesProvider.notifier)
+          .clearAllOnLogout();
+    } catch (_) {}
     try {
       ref.read(apiDegradedProvider.notifier).clear();
       ref.read(authSessionExpiredProvider.notifier).clear();

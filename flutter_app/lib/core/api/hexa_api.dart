@@ -1447,11 +1447,23 @@ class HexaApi {
     required String businessId,
     required String purchaseId,
     String? notes,
+    String? truckNumber,
+    String? driverContact,
+    double? damageQty,
+    double? missingQty,
+    bool? brokerConfirmed,
   }) async {
     final res = await _dio.post<Map<String, dynamic>>(
       '/v1/businesses/$businessId/trade-purchases/$purchaseId/arrive',
       data: {
         if (notes != null && notes.trim().isNotEmpty) 'notes': notes.trim(),
+        if (truckNumber != null && truckNumber.trim().isNotEmpty)
+          'truck_number': truckNumber.trim(),
+        if (driverContact != null && driverContact.trim().isNotEmpty)
+          'driver_contact': driverContact.trim(),
+        if (damageQty != null && damageQty > 0) 'damage_qty': damageQty,
+        if (missingQty != null && missingQty > 0) 'missing_qty': missingQty,
+        if (brokerConfirmed == true) 'broker_confirmed': true,
       },
     );
     return Map<String, dynamic>.from(res.data ?? {});

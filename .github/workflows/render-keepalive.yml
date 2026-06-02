@@ -3,7 +3,7 @@ name: Render API keep-alive
 
 on:
   schedule:
-    - cron: "*/14 * * * *"
+    - cron: "*/9 * * * *"
   workflow_dispatch:
 
 jobs:
