@@ -19,8 +19,12 @@ Future<bool> tryWebSharePurchasePdf({
   if (!navigator.hasProperty('share')) return false;
 
   final blob = html.Blob([bytes], 'application/pdf');
-  // ignore: undefined_named_parameter
-  final file = html.File([blob], filename, type: 'application/pdf');
+  // dart:html File: third arg is options map (not named `type`) on dart2js.
+  final file = html.File(
+    [blob],
+    filename,
+    <String, dynamic>{'type': 'application/pdf'},
+  );
 
   final shareData = js.JsObject.jsify({
     'files': [file],
