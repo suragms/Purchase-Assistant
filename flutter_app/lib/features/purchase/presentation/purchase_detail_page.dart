@@ -34,7 +34,10 @@ import 'widgets/purchase_delivery_timeline.dart';
 import 'widgets/purchase_detail_header.dart';
 import 'widgets/purchase_detail_line_row.dart';
 import 'widgets/purchase_detail_summary_strip.dart';
+import 'widgets/purchase_detail_damage_section.dart';
+import 'widgets/purchase_damage_report_sheet.dart';
 import 'widgets/staff_verification_sheet.dart';
+import '../../../core/providers/purchase_damage_reports_provider.dart';
 import '../../../core/utils/snack.dart';
 import '../../../core/utils/trade_purchase_commission.dart';
 import '../../../core/utils/trade_purchase_rate_display.dart';
@@ -978,6 +981,25 @@ class PurchaseDetailBodyState extends ConsumerState<PurchaseDetailBody> {
         ),
         const SizedBox(height: 8),
         ..._lineRows(context, p, cs, hideFinancials),
+        const SizedBox(height: 14),
+        PurchaseDetailDamageSection(
+          purchaseId: p.id,
+          canReport: _isStaff() || _isOwnerOrManager(),
+          onReport: () async {
+            final firstLine =
+                p.lines.isNotEmpty ? p.lines.first.itemName : null;
+            final ok = await showPurchaseDamageReportSheet(
+              context: context,
+              ref: ref,
+              purchaseId: p.id,
+              initialItemName: firstLine,
+            );
+            if (ok == true && context.mounted) {
+              ref.invalidate(purchaseDamageReportsProvider(p.id));
+              showTopSnack(context, 'Damage reported — owner notified');
+            }
+          },
+        ),
       ],
     );
   }

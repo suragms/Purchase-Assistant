@@ -30,6 +30,39 @@ _LOGO_TYPES = {"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp"}
 router = APIRouter(prefix="/v1/me", tags=["me"])
 
 
+def _normalize_accounts_whatsapp(raw: str | None) -> str | None:
+    if raw is None:
+        return None
+    t = raw.strip()
+    if not t:
+        return None
+    digits = "".join(c for c in t if c.isdigit())
+    if digits.startswith("91") and len(digits) == 12:
+        digits = digits[2:]
+    if len(digits) != 10:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            detail="accounts_whatsapp_number must be 10 digits (India mobile)",
+        )
+    return digits
+
+
+def _business_brief(b: Business, role: str, permissions: dict[str, bool]) -> "BusinessBrief":
+    return BusinessBrief(
+        id=b.id,
+        name=b.name,
+        role=role,
+        permissions=permissions,
+        branding_title=b.branding_title,
+        branding_logo_url=b.branding_logo_url,
+        gst_number=b.gst_number,
+        address=b.address,
+        phone=b.phone,
+        contact_email=b.contact_email,
+        accounts_whatsapp_number=b.accounts_whatsapp_number,
+    )
+
+
 class UserProfileOut(BaseModel):
     id: uuid.UUID
     email: str
@@ -86,6 +119,7 @@ class BusinessBrief(BaseModel):
     address: str | None = None
     phone: str | None = None
     contact_email: str | None = None
+    accounts_whatsapp_number: str | None = None
 
     model_config = {"from_attributes": False}
 
@@ -122,20 +156,7 @@ async def my_businesses(
     out: list[BusinessBrief] = []
     for m, b in rows:
         perms = await membership_permissions(m)
-        out.append(
-            BusinessBrief(
-                id=b.id,
-                name=b.name,
-                role=m.role,
-                permissions=perms,
-                branding_title=b.branding_title,
-                branding_logo_url=b.branding_logo_url,
-                gst_number=b.gst_number,
-                address=b.address,
-                phone=b.phone,
-                contact_email=b.contact_email,
-            )
-        )
+        out.append(_business_brief(b, m.role, perms))
     return out
 
 
@@ -147,6 +168,7 @@ class BusinessBrandingPatch(BaseModel):
     address: str | None = None
     phone: str | None = Field(None, max_length=32)
     contact_email: str | None = Field(None, max_length=255)
+    accounts_whatsapp_number: str | None = Field(None, max_length=20)
 
 
 @router.patch("/businesses/{business_id}/branding", response_model=BusinessBrief)
@@ -197,21 +219,16 @@ async def patch_my_business_branding(
             b.contact_email = None
         elif isinstance(e, str):
             b.contact_email = e.strip().lower()
+    if "accounts_whatsapp_number" in data:
+        raw = data["accounts_whatsapp_number"]
+        if raw is None or (isinstance(raw, str) and not raw.strip()):
+            b.accounts_whatsapp_number = None
+        elif isinstance(raw, str):
+            b.accounts_whatsapp_number = _normalize_accounts_whatsapp(raw)
     await db.commit()
     await db.refresh(b)
     perms = await membership_permissions(_owner)
-    return BusinessBrief(
-        id=b.id,
-        name=b.name,
-        role=_owner.role,
-        permissions=perms,
-        branding_title=b.branding_title,
-        branding_logo_url=b.branding_logo_url,
-        gst_number=b.gst_number,
-        address=b.address,
-        phone=b.phone,
-        contact_email=b.contact_email,
-    )
+    return _business_brief(b, _owner.role, perms)
 
 
 def _branding_storage_dir() -> Path:
@@ -251,18 +268,7 @@ async def upload_business_logo(
     await db.commit()
     await db.refresh(b)
     perms = await membership_permissions(_owner)
-    return BusinessBrief(
-        id=b.id,
-        name=b.name,
-        role=_owner.role,
-        permissions=perms,
-        branding_title=b.branding_title,
-        branding_logo_url=b.branding_logo_url,
-        gst_number=b.gst_number,
-        address=b.address,
-        phone=b.phone,
-        contact_email=b.contact_email,
-    )
+    return _business_brief(b, _owner.role, perms)
 
 
 class ScanPurchaseLineOut(BaseModel):

@@ -49,6 +49,8 @@ from app.services.trade_preview_service import (
 )
 from app.services.realtime_events import publish_business_event
 from app.services.stock_movement_service import NegativeStockError, StaleStockVersionError
+from app.services import purchase_damage_service as pds
+from app.schemas.purchase_damage import PurchaseDamageReportIn, PurchaseDamageReportOut
 
 router = APIRouter(prefix="/v1/businesses/{business_id}/trade-purchases", tags=["trade-purchases"])
 _log = logging.getLogger(__name__)
@@ -629,6 +631,82 @@ async def get_trade_purchase(
     if not out:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Purchase not found")
     return _purchase_detail_response(_m.role, out)
+
+
+@router.post(
+    "/{purchase_id}/damage-reports",
+    response_model=PurchaseDamageReportOut,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_purchase_damage_report(
+    business_id: uuid.UUID,
+    purchase_id: uuid.UUID,
+    body: PurchaseDamageReportIn,
+    user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+    _m: Annotated[Membership, Depends(require_permission("stock_edit"))],
+):
+    del _m
+    try:
+        row = await pds.create_damage_report(
+            db,
+            business_id=business_id,
+            purchase_id=purchase_id,
+            user=user,
+            item_name=body.item_name,
+            qty_damaged=body.qty_damaged,
+            damage_type=body.damage_type,
+            notes=body.notes,
+        )
+    except LookupError:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Purchase not found")
+    except ValueError as e:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
+    reporter_name = None
+    if row.reported_by_user_id:
+        reporter_name = (user.name or user.email or "").strip() or None
+    return PurchaseDamageReportOut(
+        id=row.id,
+        created_at=row.created_at,
+        reported_by=reporter_name,
+        item_name=row.item_name,
+        qty_damaged=row.qty_damaged,
+        damage_type=row.damage_type,
+        notes=row.notes,
+    )
+
+
+@router.get(
+    "/{purchase_id}/damage-reports",
+    response_model=list[PurchaseDamageReportOut],
+)
+async def list_purchase_damage_reports(
+    business_id: uuid.UUID,
+    purchase_id: uuid.UUID,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    _m: Annotated[Membership, Depends(require_membership)],
+):
+    del _m
+    try:
+        rows = await pds.list_damage_reports(
+            db, business_id=business_id, purchase_id=purchase_id
+        )
+    except LookupError:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Purchase not found")
+    out: list[PurchaseDamageReportOut] = []
+    for row, reporter_name in rows:
+        out.append(
+            PurchaseDamageReportOut(
+                id=row.id,
+                created_at=row.created_at,
+                reported_by=(reporter_name or "").strip() or None,
+                item_name=row.item_name,
+                qty_damaged=row.qty_damaged,
+                damage_type=row.damage_type,
+                notes=row.notes,
+            )
+        )
+    return out
 
 
 @router.get("/{purchase_id}/lifecycle-events", response_model=list[PurchaseLifecycleEventOut])

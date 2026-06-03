@@ -38,7 +38,6 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
   @override
   void initState() {
     super.initState();
-    _syncShellBranch(widget.navigationShell.currentIndex);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _syncShellBranch(widget.navigationShell.currentIndex);
     });
@@ -84,8 +83,8 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
     }
     final stockAlertN = ref.watch(notificationsUnreadCountProvider);
     final width = MediaQuery.sizeOf(context).width;
-    final showsRail = width >= kNavigationRailMin;
-    final railExtended = width >= kDesktopMin;
+    final showsRail = width > 0 && width >= kNavigationRailMin;
+    final railExtended = width > 0 && width >= kDesktopMin;
     final session = ref.watch(sessionProvider);
     final biz = session?.primaryBusiness;
 
@@ -122,7 +121,9 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
           ? null
           : LayoutBuilder(
               builder: (context, c) {
-                if (c.maxWidth >= kNavigationRailMin) {
+                if (c.maxWidth.isFinite &&
+                    c.maxWidth > 0 &&
+                    c.maxWidth >= kNavigationRailMin) {
                   return const SizedBox.shrink();
                 }
                 return _ShellBottomBar(

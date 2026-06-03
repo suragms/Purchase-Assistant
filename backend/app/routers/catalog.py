@@ -167,7 +167,7 @@ class CatalogItemCreate(BaseModel):
     tax_percent: float | None = Field(default=None, ge=0, le=100)
     default_landing_cost: float | None = Field(default=None, ge=0)
     default_selling_cost: float | None = Field(default=None, ge=0)
-    default_supplier_ids: list[uuid.UUID] = Field(min_length=1)
+    default_supplier_ids: list[uuid.UUID] = Field(default_factory=list)
     default_broker_ids: list[uuid.UUID] | None = None
     package_type: str | None = Field(default=None, max_length=32)
 

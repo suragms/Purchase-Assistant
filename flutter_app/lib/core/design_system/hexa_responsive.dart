@@ -37,7 +37,15 @@ abstract final class HexaBreakpoints {
   static const double desktop = 1100;
   static const double ultraWide = 1600;
 
+  /// Layout width; 0 when MediaQuery is not ready (web first frame).
+  static double _layoutWidth(BuildContext context) {
+    final w = MediaQuery.sizeOf(context).width;
+    if (!w.isFinite || w <= 0) return 0;
+    return w;
+  }
+
   static HexaViewportClass classify(double width) {
+    if (!width.isFinite || width <= 0) return HexaViewportClass.phone;
     if (width < compactPhone) return HexaViewportClass.compactPhone;
     if (width < phone) return HexaViewportClass.phone;
     if (width < tablet) return HexaViewportClass.tablet;
@@ -45,38 +53,65 @@ abstract final class HexaBreakpoints {
     return HexaViewportClass.ultraWide;
   }
 
-  static bool isCompact(BuildContext context) =>
-      MediaQuery.sizeOf(context).width < compactPhone;
+  static bool isCompact(BuildContext context) {
+    final w = _layoutWidth(context);
+    return w > 0 && w < compactPhone;
+  }
 
-  static bool isPhone(BuildContext context) =>
-      MediaQuery.sizeOf(context).width < phone;
+  static bool isPhone(BuildContext context) {
+    final w = _layoutWidth(context);
+    return w == 0 || w < phone;
+  }
 
-  static bool isTabletOrLarger(BuildContext context) =>
-      MediaQuery.sizeOf(context).width >= tablet;
+  static bool isTabletOrLarger(BuildContext context) {
+    final w = _layoutWidth(context);
+    return w > 0 && w >= tablet;
+  }
 
-  static bool isDesktop(BuildContext context) =>
-      MediaQuery.sizeOf(context).width >= desktop;
+  static bool isDesktop(BuildContext context) {
+    final w = _layoutWidth(context);
+    return w > 0 && w >= desktop;
+  }
 
   /// Master-detail and desktop dashboard grids (spec: ≥1024).
-  static bool isDesktopLayout(BuildContext context) =>
-      MediaQuery.sizeOf(context).width >= kDesktopMin;
+  static bool isDesktopLayout(BuildContext context) {
+    final w = _layoutWidth(context);
+    return w > 0 && w >= kDesktopMin;
+  }
 
-  static bool isNavigationRail(BuildContext context) =>
-      MediaQuery.sizeOf(context).width >= kNavigationRailMin;
+  static bool isNavigationRail(BuildContext context) {
+    final w = _layoutWidth(context);
+    return w > 0 && w >= kNavigationRailMin;
+  }
+}
+
+double _hexaLayoutWidth(BuildContext context) {
+  final w = MediaQuery.sizeOf(context).width;
+  if (!w.isFinite || w <= 0) return 0;
+  return w;
 }
 
 /// Layout helpers aligned to DESKTOP_DESIGN_SPEC breakpoints.
 extension HexaLayoutContext on BuildContext {
-  bool get isMobileLayout => MediaQuery.sizeOf(this).width <= kMobileMax;
-
-  bool get isTabletLayout {
-    final w = MediaQuery.sizeOf(this).width;
-    return w >= kTabletMin && w < kDesktopMin;
+  bool get isMobileLayout {
+    final w = _hexaLayoutWidth(this);
+    return w == 0 || w <= kMobileMax;
   }
 
-  bool get isDesktopLayout => MediaQuery.sizeOf(this).width >= kDesktopMin;
+  bool get isTabletLayout {
+    final w = _hexaLayoutWidth(this);
+    return w > 0 && w >= kTabletMin && w < kDesktopMin;
+  }
 
-  bool get showsNavigationRail => MediaQuery.sizeOf(this).width >= kNavigationRailMin;
+  bool get isDesktopLayout {
+    final w = _hexaLayoutWidth(this);
+    return w > 0 && w >= kDesktopMin;
+  }
+
+  bool get showsNavigationRail {
+    final w = _hexaLayoutWidth(this);
+    return w > 0 && w >= kNavigationRailMin;
+  }
 }
 
 abstract final class HexaResponsive {
@@ -90,8 +125,8 @@ abstract final class HexaResponsive {
 
   /// Vertical gap between home/report sections (tighter on phones).
   static double sectionGap(BuildContext context) {
-    final width = MediaQuery.sizeOf(context).width;
-    if (width <= kMobileMax) return HexaOp.mobileSectionGap;
+    final width = _hexaLayoutWidth(context);
+    if (width == 0 || width <= kMobileMax) return HexaOp.mobileSectionGap;
     if (width < kDesktopMin) return HexaOp.sectionGap;
     return HexaOp.desktopSectionGap;
   }
@@ -100,8 +135,8 @@ abstract final class HexaResponsive {
     BuildContext context, {
     bool operational = false,
   }) {
-    final width = MediaQuery.sizeOf(context).width;
-    if (width < HexaBreakpoints.compactPhone) return 12;
+    final width = _hexaLayoutWidth(context);
+    if (width == 0 || width < HexaBreakpoints.compactPhone) return 12;
     if (operational) {
       if (width >= HexaBreakpoints.desktop) return 20;
       return HexaOp.pageGutter;

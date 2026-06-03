@@ -8,7 +8,9 @@ import '../../../../core/json_coerce.dart';
 import '../../../../core/auth/auth_error_messages.dart';
 import '../../../../core/providers/business_aggregates_invalidation.dart'
     show syncPurchaseStockAfterVerify;
+import '../../../../core/utils/snack.dart';
 import '../../../../core/utils/unit_utils.dart';
+import 'purchase_damage_report_sheet.dart';
 
 Future<bool> showStaffVerificationSheet({
   required BuildContext context,
@@ -185,6 +187,30 @@ class _StaffVerificationSheetState extends ConsumerState<_StaffVerificationSheet
               ),
             ),
             const SizedBox(height: 12),
+            OutlinedButton.icon(
+              onPressed: _saving
+                  ? null
+                  : () async {
+                      final firstName = widget.lines.isNotEmpty
+                          ? widget.lines.first['item_name']?.toString()
+                          : null;
+                      final ok = await showPurchaseDamageReportSheet(
+                        context: context,
+                        ref: ref,
+                        purchaseId: widget.purchaseId,
+                        initialItemName: firstName,
+                      );
+                      if (ok == true && context.mounted) {
+                        showTopSnack(
+                          context,
+                          'Damage reported — owner notified',
+                        );
+                      }
+                    },
+              icon: const Icon(Icons.report_outlined, size: 18),
+              label: const Text('Report damage / short delivery'),
+            ),
+            const SizedBox(height: 10),
             FilledButton(
               onPressed: _saving ? null : _submit,
               child: const Text('SUBMIT VERIFICATION'),

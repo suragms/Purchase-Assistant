@@ -1,5 +1,11 @@
 # Render Blueprint reference — mirror these in the Dashboard if not using Blueprint sync.
-# my-purchases-api → rootDir backend, healthCheckPath /health/ready
+# my-purchases-api → rootDir backend, healthCheckPath /health/live (no DB on platform probe)
+#
+# PRODUCTION UPGRADE PATH:
+# Current: Render Starter ($7/mo) — spins down after inactivity
+# Recommended: Render Individual ($25/mo) — always-on, no spin-down
+# This single change eliminates most cold-start complaints.
+# For Supabase: upgrade to Pro ($25/mo) to remove pause-on-inactivity behavior.
 services:
   - type: web
     name: my-purchases-api
@@ -12,7 +18,7 @@ services:
     # Run migrations BEFORE the new instance binds $PORT (avoids 503 / port-scan timeout).
     preDeployCommand: alembic upgrade head
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT --log-level info
-    healthCheckPath: /health/ready
+    healthCheckPath: /health/live
     envVars:
       - key: APP_ENV
         value: production

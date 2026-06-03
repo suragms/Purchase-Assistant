@@ -5,8 +5,8 @@ import 'package:intl/intl.dart';
 
 import '../../../core/design_system/hexa_ds_tokens.dart';
 import '../../../core/models/trade_purchase_models.dart';
+import '../../../core/providers/business_aggregates_invalidation.dart';
 import '../../../core/providers/staff_home_providers.dart';
-import '../../../core/providers/trade_purchases_provider.dart';
 import '../../../core/theme/hexa_colors.dart';
 import '../../../core/utils/unit_utils.dart';
 import '../../../core/widgets/friendly_load_error.dart';
@@ -60,11 +60,7 @@ class StaffPendingDeliveriesPage extends ConsumerWidget {
         loading: () => const ListSkeleton(rowCount: 6),
         error: (_, __) => FriendlyLoadError(
           message: 'Could not load pending deliveries',
-          onRetry: () {
-            ref.invalidate(staffDeliverySectionsProvider);
-            ref.invalidate(staffPendingDeliveriesProvider);
-            ref.invalidate(tradePurchasesListProvider);
-          },
+          onRetry: () => invalidateStaffDeliverySurfaces(ref),
         ),
         data: (sections) {
           return ListView(

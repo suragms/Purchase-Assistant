@@ -178,6 +178,7 @@ async def _emit_delivery_notification(
             dedupe_key=dedupe_key,
             action_route=f"/purchase/detail/{tp.id}",
             related_purchase_id=tp.id,
+            target_roles=["owner", "admin", "manager", "staff"],
         )
         await db.commit()
     except Exception:

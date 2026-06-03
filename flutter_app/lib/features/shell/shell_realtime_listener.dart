@@ -51,6 +51,9 @@ class _ShellRealtimeListenerState extends ConsumerState<ShellRealtimeListener> {
       if (signal.notifications) {
         invalidateNotificationSurfaces(ref);
       }
+      if (signal.delivery) {
+        invalidateStaffDeliverySurfacesLight(ref);
+      }
       if (signal.warehouse) {
         final urgent = signal.affectedItemIds.isNotEmpty;
         if (urgent || !_throttleWarehouse()) {

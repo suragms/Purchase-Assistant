@@ -5,26 +5,27 @@ import 'package:flutter/foundation.dart' show VoidCallback;
 
 import 'hexa_api.dart';
 
-/// Cold PaaS warm-up (`/health/ready` + `/health`) and optional periodic ping.
+/// Cold PaaS warm-up (`/health/live`) and optional periodic ping.
 class ApiWarmupService {
   ApiWarmupService._();
 
   static Timer? _keepAlive;
 
-  /// Call before authenticated traffic: probes `/health/ready` (DB) then `/health`.
-  /// Retries help sleepy PaaS cold starts; **stops immediately** on connection refused
-  /// (nothing listening) so local dev does not hammer `/health` hundreds of times.
+  static const _attemptTimeout = Duration(seconds: 3);
+  static const _retryDelay = Duration(seconds: 2);
+  static const _maxAttempts = 5;
+
+  /// Call before authenticated traffic: probes `/health/live` (no DB).
+  /// Retries help sleepy PaaS cold starts; **stops immediately** on connection refused.
   static Future<void> pingHealth(
     HexaApi api, {
     VoidCallback? onSlow,
     VoidCallback? onUnreachable,
   }) async {
-    final slow = Timer(const Duration(seconds: 3), () => onSlow?.call());
-    const attempts = 5;
-    const timeout = Duration(seconds: 10);
-    for (var attempt = 0; attempt < attempts; attempt++) {
+    final slow = Timer(const Duration(seconds: 2), () => onSlow?.call());
+    for (var attempt = 0; attempt < _maxAttempts; attempt++) {
       try {
-        await api.healthReady().timeout(timeout);
+        await _pingLiveWithRetry(api);
         slow.cancel();
         return;
       } catch (e) {
@@ -33,23 +34,21 @@ class ApiWarmupService {
           onUnreachable?.call();
           return;
         }
-        try {
-          await api.health().timeout(timeout);
-          slow.cancel();
-          return;
-        } catch (e2) {
-          if (_isUnreachableHost(e2)) {
-            slow.cancel();
-            onUnreachable?.call();
-            return;
-          }
-          if (attempt < attempts - 1) {
-            await Future<void>.delayed(Duration(seconds: attempt + 1));
-          }
+        if (attempt < _maxAttempts - 1) {
+          await Future<void>.delayed(Duration(seconds: attempt + 1));
         }
       }
     }
     slow.cancel();
+  }
+
+  static Future<void> _pingLiveWithRetry(HexaApi api) async {
+    try {
+      await api.healthLive().timeout(_attemptTimeout);
+    } on TimeoutException {
+      await Future<void>.delayed(_retryDelay);
+      await api.healthLive().timeout(_attemptTimeout);
+    }
   }
 
   static bool _isUnreachableHost(Object e) {
@@ -65,12 +64,8 @@ class ApiWarmupService {
     _keepAlive = Timer.periodic(const Duration(minutes: 10), (_) {
       unawaited(() async {
         try {
-          await api.healthReady().timeout(const Duration(seconds: 12));
-        } catch (_) {
-          try {
-            await api.health().timeout(const Duration(seconds: 12));
-          } catch (_) {}
-        }
+          await api.healthLive().timeout(const Duration(seconds: 12));
+        } catch (_) {}
       }());
     });
   }

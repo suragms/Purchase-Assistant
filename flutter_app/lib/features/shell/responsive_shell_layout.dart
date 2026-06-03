@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 /// Desktop/tablet: NavigationRail + content. Mobile: content only (bottom nav outside).
-class ResponsiveShellLayout extends StatelessWidget {
+class ResponsiveShellLayout extends StatefulWidget {
   const ResponsiveShellLayout({
     super.key,
     required this.rail,
@@ -14,16 +14,41 @@ class ResponsiveShellLayout extends StatelessWidget {
   final double breakpoint;
 
   @override
+  State<ResponsiveShellLayout> createState() => _ResponsiveShellLayoutState();
+}
+
+class _ResponsiveShellLayoutState extends State<ResponsiveShellLayout> {
+  bool _scheduledConstraintsRetry = false;
+
+  bool _hasUsableWidth(BoxConstraints constraints) {
+    final w = constraints.maxWidth;
+    return w.isFinite && w > 0;
+  }
+
+  void _retryAfterConstraints() {
+    if (_scheduledConstraintsRetry || !mounted) return;
+    _scheduledConstraintsRetry = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _scheduledConstraintsRetry = false;
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final wide = constraints.maxWidth >= breakpoint;
-        if (!wide) return body;
+        if (!_hasUsableWidth(constraints)) {
+          _retryAfterConstraints();
+          return const SizedBox.shrink();
+        }
+        final wide = constraints.maxWidth >= widget.breakpoint;
+        if (!wide) return widget.body;
         return Row(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            rail,
-            Expanded(child: body),
+            widget.rail,
+            Expanded(child: widget.body),
           ],
         );
       },

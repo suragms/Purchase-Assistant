@@ -33,7 +33,10 @@ import '../../../core/providers/home_owner_dashboard_providers.dart';
 import '../../../core/providers/prefs_provider.dart';
 import '../../../core/providers/stock_providers.dart';
 import '../../../core/providers/suppliers_list_provider.dart';
+import '../../../core/providers/business_profile_provider.dart';
 import '../../../core/services/offline_store.dart';
+import '../../../core/services/purchase_accounts_share.dart';
+import '../../../core/theme/hexa_colors.dart';
 import '../../../core/services/offline_sync_service.dart';
 import '../../../core/services/staff_activity_logger.dart';
 import '../../../core/notifications/local_notifications_service.dart';
@@ -428,9 +431,7 @@ class _PurchaseEntryWizardV2State extends ConsumerState<PurchaseEntryWizardV2>
       final row = _catalogRowById(catalog, cid);
       if (row == null) return;
       final label = row['name']?.toString() ?? '';
-      final unit = row['default_purchase_unit']?.toString() ??
-          row['default_unit']?.toString() ??
-          'kg';
+      final unit = _catalogLineUnitFromRow(row);
       var land = 0.0;
       final lp = row['default_landing_cost'];
       if (lp is num && lp > 0) land = lp.toDouble();
@@ -465,6 +466,21 @@ class _PurchaseEntryWizardV2State extends ConsumerState<PurchaseEntryWizardV2>
       if (m['id']?.toString() == id) return m;
     }
     return null;
+  }
+
+  /// Catalog unit for new purchase lines (bag / kg / piece / box).
+  static String _catalogLineUnitFromRow(Map<String, dynamic> row) {
+    for (final key in [
+      'unit_type',
+      'packaging_type',
+      'stock_tracking_mode',
+      'default_purchase_unit',
+      'default_unit',
+    ]) {
+      final v = row[key]?.toString().trim();
+      if (v != null && v.isNotEmpty) return v.toLowerCase();
+    }
+    return 'kg';
   }
 
   Future<void> _prefetchNextHumanId() async {
@@ -1471,7 +1487,7 @@ class _PurchaseEntryWizardV2State extends ConsumerState<PurchaseEntryWizardV2>
     }
   }
 
-  Future<void> _validateAndSave() async {
+  Future<void> _validateAndSave({bool shareAfterSave = false}) async {
     if (_isSaving) return;
     setState(() {
       _inlineSaveError = null;
@@ -1524,9 +1540,13 @@ class _PurchaseEntryWizardV2State extends ConsumerState<PurchaseEntryWizardV2>
       builder: (ctx) => AlertDialog(
         title: const Text('Confirm purchase save?'),
         content: Text(
-          _isEditMode()
-              ? 'Save changes to this purchase?'
-              : 'Saving will submit this purchase to your records. Continue?',
+          shareAfterSave
+              ? (_isEditMode()
+                  ? 'Save changes and share to accounts WhatsApp?'
+                  : 'Save and share purchase summary to accounts WhatsApp?')
+              : (_isEditMode()
+                  ? 'Save changes to this purchase?'
+                  : 'Saving will submit this purchase to your records. Continue?'),
         ),
         actions: [
           TextButton(
@@ -1543,7 +1563,10 @@ class _PurchaseEntryWizardV2State extends ConsumerState<PurchaseEntryWizardV2>
     if (confirm != true || !mounted) return;
 
     HapticFeedback.mediumImpact();
-    await _savePurchaseAttempt(forceDuplicate: false);
+    await _savePurchaseAttempt(
+      forceDuplicate: false,
+      shareAfterSave: shareAfterSave,
+    );
   }
 
   bool _aiScanWarningsBlock(Map<String, dynamic> scan) {
@@ -1614,7 +1637,10 @@ class _PurchaseEntryWizardV2State extends ConsumerState<PurchaseEntryWizardV2>
     }
   }
 
-  Future<void> _savePurchaseAttempt({required bool forceDuplicate}) async {
+  Future<void> _savePurchaseAttempt({
+    required bool forceDuplicate,
+    bool shareAfterSave = false,
+  }) async {
     if (_isSaving) return;
     final session = ref.read(sessionProvider);
     if (session == null) {
@@ -1784,6 +1810,29 @@ class _PurchaseEntryWizardV2State extends ConsumerState<PurchaseEntryWizardV2>
         unawaited(StaffActivityLogger.logPurchase(ref, saved));
       }
       if (!mounted) return;
+      if (shareAfterSave && pid.isNotEmpty) {
+        final configured = await ensureAccountsWhatsappConfigured(context, ref);
+        if (configured && mounted) {
+          final merged = enrichSavedTradePurchaseJson(
+            saved,
+            supplierNameFallback: draftSnap.supplierName,
+            brokerNameFallback: draftSnap.brokerName,
+            purchaseDateFallback: draftSnap.purchaseDate,
+          );
+          final p = TradePurchase.fromJson(merged);
+          final biz = ref.read(invoiceBusinessProfileProvider);
+          final pdfResult = await sharePurchaseToAccountsStaff(p, biz);
+          if (mounted && !pdfResult.ok) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(pdfResult.message),
+                duration: const Duration(seconds: 5),
+              ),
+            );
+          }
+        }
+      }
+      if (!mounted) return;
       final quick = ref.read(quickSavePurchaseProvider);
       if (quick) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -1928,7 +1977,10 @@ class _PurchaseEntryWizardV2State extends ConsumerState<PurchaseEntryWizardV2>
           ),
         );
         if (proceed == true && mounted) {
-          await _savePurchaseAttempt(forceDuplicate: true);
+          await _savePurchaseAttempt(
+            forceDuplicate: true,
+            shareAfterSave: shareAfterSave,
+          );
         }
         return;
       }
@@ -2251,28 +2303,62 @@ class _PurchaseEntryWizardV2State extends ConsumerState<PurchaseEntryWizardV2>
                 style: TextStyle(color: Colors.red[800], fontSize: 11),
               ),
             ),
-          SizedBox(
-            height: kbInset > 0 ? 44 : 56,
-            width: double.infinity,
-            child: FilledButton(
-              onPressed: _isSaving ? null : _validateAndSave,
-              child: _isSaving
-                  ? const SizedBox(
-                      height: 18,
-                      width: 18,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: Colors.white,
-                      ),
-                    )
-                  : const Text(
-                      'CONTINUE',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w800,
-                        fontSize: 15,
-                      ),
+          Row(
+            children: [
+              Expanded(
+                child: SizedBox(
+                  height: kbInset > 0 ? 44 : 52,
+                  child: OutlinedButton(
+                    onPressed: _isSaving
+                        ? null
+                        : () => _validateAndSave(shareAfterSave: false),
+                    child: _isSaving
+                        ? const SizedBox(
+                            height: 18,
+                            width: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Text(
+                            'Save Only',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 14,
+                            ),
+                          ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: SizedBox(
+                  height: kbInset > 0 ? 44 : 52,
+                  child: FilledButton(
+                    style: FilledButton.styleFrom(
+                      backgroundColor: HexaColors.brandAccent,
                     ),
-            ),
+                    onPressed: _isSaving
+                        ? null
+                        : () => _validateAndSave(shareAfterSave: true),
+                    child: _isSaving
+                        ? const SizedBox(
+                            height: 18,
+                            width: 18,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : const Text(
+                            'Save & Share',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w800,
+                              fontSize: 14,
+                            ),
+                          ),
+                  ),
+                ),
+              ),
+            ],
           ),
         ],
       ],

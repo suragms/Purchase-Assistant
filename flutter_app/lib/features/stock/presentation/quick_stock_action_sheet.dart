@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -68,6 +70,8 @@ class _QuickStockActionBodyState extends ConsumerState<_QuickStockActionBody> {
   String? _reasonType = 'verification';
   String _reasonLabel = 'Physical count';
   late StockUpdateMode _mode;
+  String? _qtyError;
+  String? _reasonError;
 
   @override
   void initState() {
@@ -78,6 +82,7 @@ class _QuickStockActionBodyState extends ConsumerState<_QuickStockActionBody> {
       text: formatStockQtyForUnit(_unit, _current),
     );
     _notesCtrl = TextEditingController();
+    _qtyCtrl.addListener(_revalidateQty);
   }
 
   double _seedQtyForMode(StockUpdateMode mode) {
@@ -94,6 +99,7 @@ class _QuickStockActionBodyState extends ConsumerState<_QuickStockActionBody> {
       _mode = mode;
       _current = _seedQtyForMode(mode);
       _qtyCtrl.text = formatStockQtyForUnit(_unit, _current);
+      _reasonError = null;
       if (mode == StockUpdateMode.physical) {
         _reasonType = 'verification';
         _reasonLabel = 'Physical count';
@@ -101,11 +107,49 @@ class _QuickStockActionBodyState extends ConsumerState<_QuickStockActionBody> {
         _reasonType = 'correction';
         _reasonLabel = 'Correction';
       }
+      _qtyError = _qtyErrorText();
+    });
+  }
+
+  double? _parseEnteredQty() {
+    final t = _qtyCtrl.text.trim().replaceAll(',', '');
+    if (t.isEmpty) return null;
+    final v = double.tryParse(t);
+    if (v == null || !v.isFinite || v < 0) return null;
+    return v;
+  }
+
+  String? _qtyErrorText() {
+    if (_parseEnteredQty() != null) return null;
+    final t = _qtyCtrl.text.trim();
+    if (t.isEmpty) return 'Enter a quantity';
+    return 'Enter a valid quantity';
+  }
+
+  void _revalidateQty() {
+    if (!mounted) return;
+    final next = _qtyErrorText();
+    setState(() => _qtyError = next);
+  }
+
+  bool get _canSave {
+    final parsedQty = _parseEnteredQty();
+    return !_saving &&
+        parsedQty != null &&
+        (_mode == StockUpdateMode.physical ||
+            (_reasonType != null && _reasonType!.isNotEmpty));
+  }
+
+  void _onSavePressed() {
+    FocusScope.of(context).unfocus();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) unawaited(_save());
     });
   }
 
   @override
   void dispose() {
+    _qtyCtrl.removeListener(_revalidateQty);
     _qtyCtrl.dispose();
     _notesCtrl.dispose();
     super.dispose();
@@ -133,20 +177,23 @@ class _QuickStockActionBodyState extends ConsumerState<_QuickStockActionBody> {
   }
 
   Future<void> _save() async {
-    if (_mode == StockUpdateMode.system && _reasonType == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Select a reason')),
-      );
+    FocusScope.of(context).unfocus();
+    if (!mounted) return;
+
+    if (!_canSave) {
+      if (!mounted) return;
+      setState(() {
+        _qtyError = _qtyErrorText();
+        if (_mode == StockUpdateMode.system &&
+            (_reasonType == null || _reasonType!.isEmpty)) {
+          _reasonError = 'Select a reason';
+        }
+      });
       return;
     }
-    final parsed = double.tryParse(_qtyCtrl.text.trim().replaceAll(',', ''));
-    if (parsed == null || !parsed.isFinite) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Enter a valid quantity')),
-      );
-      return;
-    }
+    final parsed = _parseEnteredQty()!;
     if (_saving) return;
+    if (!mounted) return;
     setState(() => _saving = true);
     try {
       final session = ref.read(sessionProvider);
@@ -188,11 +235,18 @@ class _QuickStockActionBodyState extends ConsumerState<_QuickStockActionBody> {
               '${formatStockQtyForUnit(_unit, parsed)} $unitLabel (reorder ${formatStockQtyForUnit(_unit, reorder)})',
         );
       }
-      if (context.mounted) Navigator.of(context).pop(true);
+      if (!context.mounted) return;
+      await HapticFeedback.mediumImpact();
+      if (!context.mounted) return;
+      Navigator.of(context).pop(true);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(userFacingError(e))),
+          SnackBar(
+            content: Text(userFacingError(e)),
+            duration: const Duration(seconds: 5),
+            behavior: SnackBarBehavior.floating,
+          ),
         );
       }
     } finally {
@@ -202,8 +256,7 @@ class _QuickStockActionBodyState extends ConsumerState<_QuickStockActionBody> {
 
   @override
   Widget build(BuildContext context) {
-    final canSave = !_saving &&
-        (_mode == StockUpdateMode.physical || _reasonType != null);
+    final canSave = _canSave;
     final stockLabel = stockDisplayPrimary(_current, _unit);
     final lastPhysical = _lastPhysicalLabel;
     final systemQty = coerceToDouble(widget.item['current_stock']);
@@ -310,13 +363,18 @@ class _QuickStockActionBodyState extends ConsumerState<_QuickStockActionBody> {
           TextField(
             controller: _qtyCtrl,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            textInputAction: TextInputAction.done,
             inputFormatters: [
               FilteringTextInputFormatter.allow(RegExp(r'[\d.,]')),
             ],
-            decoration: const InputDecoration(
+            decoration: InputDecoration(
               isDense: true,
-              border: OutlineInputBorder(),
+              border: const OutlineInputBorder(),
+              errorText: _qtyError,
             ),
+            onSubmitted: (_) {
+              if (canSave) _onSavePressed();
+            },
           ),
           if (_mode == StockUpdateMode.system) ...[
             const SizedBox(height: 14),
@@ -336,11 +394,23 @@ class _QuickStockActionBodyState extends ConsumerState<_QuickStockActionBody> {
                     onSelected: (_) => setState(() {
                       _reasonType = chip.$2;
                       _reasonLabel = chip.$1;
+                      _reasonError = null;
                     }),
                     compact: true,
                   ),
               ],
             ),
+            if (_reasonError != null) ...[
+              const SizedBox(height: 6),
+              Text(
+                _reasonError!,
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFFB91C1C),
+                ),
+              ),
+            ],
           ],
           const SizedBox(height: 14),
           const Text(
@@ -359,20 +429,23 @@ class _QuickStockActionBodyState extends ConsumerState<_QuickStockActionBody> {
           const SizedBox(height: 16),
           SizedBox(
             height: 48,
-            child: FilledButton(
-              onPressed: canSave ? _save : null,
-              child: _saving
-                  ? const SizedBox(
-                      width: 22,
-                      height: 22,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : Text(
-                      _mode == StockUpdateMode.system
-                          ? 'SAVE SYSTEM STOCK'
-                          : 'SAVE PHYSICAL COUNT',
-                      style: const TextStyle(fontWeight: FontWeight.w900),
-                    ),
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              child: FilledButton(
+                onPressed: canSave && !_saving ? _onSavePressed : null,
+                child: _saving
+                    ? const SizedBox(
+                        width: 22,
+                        height: 22,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : Text(
+                        _mode == StockUpdateMode.system
+                            ? 'SAVE SYSTEM STOCK'
+                            : 'SAVE PHYSICAL COUNT',
+                        style: const TextStyle(fontWeight: FontWeight.w900),
+                      ),
+              ),
             ),
           ),
         ],

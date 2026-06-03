@@ -1406,10 +1406,12 @@ class _PurchaseItemEntrySheetState extends ConsumerState<PurchaseItemEntrySheet>
       }
       final blob = _catalogSearchBlob(row);
       final sub = _catalogSearchSuggestionSubtitle(row).trim();
+      final name = row['name']?.toString() ?? '';
+      final chip = _catalogUnitChipLabel(row);
       out.add(
         InlineSearchItem(
           id: row['id']?.toString() ?? '',
-          label: row['name']?.toString() ?? '',
+          label: name.isEmpty ? name : '$name · $chip',
           subtitle: sub.isEmpty ? null : sub,
           searchText: blob.isEmpty ? null : blob,
           sortBoost: boost,
@@ -2075,8 +2077,29 @@ class _PurchaseItemEntrySheetState extends ConsumerState<PurchaseItemEntrySheet>
     return 'Selling rate (optional) (₹/$sfx)';
   }
 
+  String _catalogUnitChipLabel(Map<String, dynamic> row) {
+    for (final key in [
+      'unit_type',
+      'packaging_type',
+      'default_purchase_unit',
+      'default_unit',
+    ]) {
+      final v = row[key]?.toString().trim();
+      if (v != null && v.isNotEmpty) {
+        final u = v.toLowerCase();
+        if (u == 'piece' || u == 'pcs') return 'Piece';
+        if (u == 'bag' || u == 'sack') return 'Bag';
+        if (u == 'box') return 'Box';
+        if (u == 'kg') return 'Kg';
+        return v[0].toUpperCase() + v.substring(1);
+      }
+    }
+    return 'Kg';
+  }
+
   String _catalogSearchSuggestionSubtitle(Map<String, dynamic> row) {
     final lines = <String>[];
+    final unitChip = _catalogUnitChipLabel(row);
     final unit = row['default_unit']?.toString().trim();
     final lpp = row['last_purchase_price'];
     double? price;
@@ -2086,8 +2109,10 @@ class _PurchaseItemEntrySheetState extends ConsumerState<PurchaseItemEntrySheet>
       price = double.tryParse(lpp.toString());
     }
 
-    final headParts = <String>[];
-    if (unit != null && unit.isNotEmpty) headParts.add(unit);
+    final headParts = <String>[unitChip];
+    if (unit != null && unit.isNotEmpty && unit.toLowerCase() != unitChip.toLowerCase()) {
+      headParts.add(unit);
+    }
     final stockRaw = row['current_stock'];
     final stockQty = stockRaw is num
         ? stockRaw.toDouble()

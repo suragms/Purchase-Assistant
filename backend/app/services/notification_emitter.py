@@ -42,11 +42,15 @@ async def recipient_user_ids_for_business(
     business_id: uuid.UUID,
     *,
     owner_only: bool = False,
+    target_roles: list[str] | None = None,
 ) -> list[uuid.UUID]:
     q = select(Membership.user_id, Membership.role).where(
         Membership.business_id == business_id
     )
     rows = (await db.execute(q)).all()
+    if target_roles:
+        allowed = {r.strip().lower() for r in target_roles if r and r.strip()}
+        return [uid for uid, role in rows if (role or "").lower() in allowed]
     if owner_only:
         return [uid for uid, role in rows if (role or "").lower() in _OWNER_ROLES]
     return [uid for uid, _ in rows]
@@ -71,12 +75,19 @@ async def emit_notification(
     payload: dict[str, Any] | None = None,
     metadata: dict[str, Any] | None = None,
     owner_only: bool = False,
+    target_roles: list[str] | None = None,
 ) -> int:
     """Insert notification rows for each target user. Returns count inserted."""
+    merged_payload = dict(payload or {})
+    if target_roles:
+        merged_payload["target_roles"] = [r.strip().lower() for r in target_roles if r]
     targets = user_ids
     if not targets:
         targets = await recipient_user_ids_for_business(
-            db, business_id, owner_only=owner_only
+            db,
+            business_id,
+            owner_only=owner_only,
+            target_roles=target_roles,
         )
     if not targets:
         return 0
@@ -108,7 +119,7 @@ async def emit_notification(
                 related_item_id=related_item_id,
                 related_purchase_id=related_purchase_id,
                 related_supplier_id=related_supplier_id,
-                payload=payload,
+                payload=merged_payload if merged_payload else None,
                 alert_metadata=metadata,
                 dedupe_key=dedupe_key[:220] if dedupe_key else None,
             )

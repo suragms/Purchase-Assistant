@@ -6,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../../../core/models/trade_purchase_models.dart';
 import '../../../../core/providers/business_profile_provider.dart';
+import '../../../../core/services/purchase_accounts_share.dart';
 import '../../../../core/services/purchase_pdf.dart';
 import '../../../../core/theme/hexa_colors.dart';
 import '../../../../core/design_system/hexa_responsive.dart';
@@ -38,33 +39,6 @@ Map<String, dynamic> enrichSavedTradePurchaseJson(
     o['purchase_date'] = DateFormat('yyyy-MM-dd').format(purchaseDateFallback);
   }
   return o;
-}
-
-String _whatsappSummary(TradePurchase p) {
-  final buf = StringBuffer();
-  buf.writeln('*Purchase ${p.humanId}*');
-  buf.writeln(DateFormat('dd MMM yyyy').format(p.purchaseDate));
-  if ((p.supplierName ?? '').trim().isNotEmpty) {
-    buf.writeln('Supplier: ${p.supplierName}');
-  }
-  for (final l in p.lines) {
-    final line =
-        '${l.itemName}  ${l.qty} ${l.unit}  @ ${_inr(l.landingCost)}  →  ${_inr(l.qty * l.landingCost)}';
-    buf.writeln(line);
-  }
-  buf.writeln('Total: ${_inr(p.totalAmount)}');
-  buf.writeln(
-    'Bill PDF: in the app use Share PDF on this purchase (no web link).',
-  );
-  return buf.toString();
-}
-
-Future<void> _openWhatsAppSummary(TradePurchase p) async {
-  final text = _whatsappSummary(p);
-  final uri = Uri.parse('https://wa.me/?text=${Uri.encodeComponent(text)}');
-  if (await canLaunchUrl(uri)) {
-    await launchUrl(uri, mode: LaunchMode.externalApplication);
-  }
 }
 
 /// Bottom sheet after purchase save. Returns where to navigate: `home`, `detail`, or null (treat as home).
@@ -301,7 +275,7 @@ Future<String?> showPurchaseSavedSheet(
               ),
               onTap: () async {
                 Navigator.pop(context, 'home');
-                await _openWhatsAppSummary(p);
+                await openWhatsAppSummaryMessage(p, biz: biz);
               },
             ),
             ListTile(

@@ -259,6 +259,22 @@ void invalidateNotificationSurfaces(dynamic ref) {
   ref.invalidate(appNotificationUnreadCountProvider);
 }
 
+/// Staff delivery lists, pipeline KPIs, and owner home — without full financial KPI storm.
+void invalidateStaffDeliverySurfacesLight(dynamic ref) {
+  ref.invalidate(deliveryPipelineProvider);
+  invalidateTradePurchaseCaches(ref);
+  ref.invalidate(staffPendingDeliveriesProvider);
+  ref.invalidate(staffTodayActivityProvider);
+  ref.invalidate(staffTodaySummaryProvider);
+  ref.invalidate(stockListProvider);
+}
+
+/// Full staff + owner delivery refresh after verify/commit.
+void invalidateStaffDeliverySurfaces(dynamic ref) {
+  invalidateStaffDeliverySurfacesLight(ref);
+  ref.invalidate(homeOwnerPeriodDashboardProvider);
+}
+
 /// Staff submitted warehouse counts — purchase/delivery status only (no stock delta).
 void invalidateAfterDeliveryVerify(
   dynamic ref, {
@@ -266,8 +282,7 @@ void invalidateAfterDeliveryVerify(
   Set<String>? affectedItemIds,
 }) {
   ref.invalidate(tradePurchaseDetailProvider(purchaseId));
-  ref.invalidate(deliveryPipelineProvider);
-  ref.invalidate(staffPendingDeliveriesProvider);
+  invalidateStaffDeliverySurfacesLight(ref);
   invalidateWarehouseSurfacesLight(ref);
   for (final id in affectedItemIds ?? const <String>{}) {
     if (id.isEmpty) continue;
@@ -284,9 +299,8 @@ void invalidateAfterDeliveryCommit(
   Set<String>? affectedItemIds,
 }) {
   invalidatePurchaseWorkspace(ref, affectedItemIds: affectedItemIds);
-  ref.invalidate(deliveryPipelineProvider);
   ref.invalidate(tradePurchaseDetailProvider(purchaseId));
-  ref.invalidate(staffPendingDeliveriesProvider);
+  invalidateStaffDeliverySurfaces(ref);
   ref.invalidate(homeStockAttentionCountProvider);
   bumpBusinessDataWriteRevision(ref);
 }

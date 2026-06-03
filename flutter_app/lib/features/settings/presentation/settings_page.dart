@@ -365,8 +365,8 @@ class _BusinessCard extends StatelessWidget {
           icon: Icons.receipt_long_outlined,
           title: 'Purchase order / business profile',
           subtitle: businessProfileReadOnly
-              ? 'View GSTIN, address, phone (read-only)'
-              : 'GSTIN, address, phone for PDF purchase orders',
+              ? 'View GSTIN, address, phone, accounts WhatsApp (read-only)'
+              : 'GSTIN, address, phone, accounts WhatsApp for PO sharing',
           onTap: () => context.push(
             businessProfileReadOnly
                 ? '/settings/business?readonly=1'

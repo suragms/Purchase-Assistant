@@ -8,7 +8,7 @@ import '../../../core/design_system/hexa_ds_tokens.dart';
 import '../../../core/design_system/hexa_operational_tokens.dart';
 import '../../../core/design_system/hexa_responsive.dart';
 import '../../../core/providers/app_period_provider.dart';
-import '../../../core/providers/delivery_pipeline_provider.dart';
+import '../../../core/providers/business_aggregates_invalidation.dart';
 import '../../../core/providers/notifications_provider.dart';
 import '../../../core/providers/staff_home_providers.dart';
 import '../../../core/providers/stock_providers.dart';
@@ -162,7 +162,7 @@ Future<void> _showStaffProfileSheet(BuildContext context, WidgetRef ref) async {
 }
 
 void _invalidateStaffHomeRefresh(WidgetRef ref) {
-  ref.invalidate(staffTodayActivityProvider);
+  invalidateStaffDeliverySurfaces(ref);
   ref.invalidate(staffTodayStockWorkProvider);
   ref.invalidate(staffLowStockAlertsProvider);
   ref.invalidate(staffRecentScansProvider);
@@ -171,7 +171,6 @@ void _invalidateStaffHomeRefresh(WidgetRef ref) {
   ref.invalidate(missingCodeItemsProvider);
   ref.invalidate(openingStockMissingProvider);
   ref.invalidate(staffTradePurchasesHistoryProvider);
-  ref.invalidate(deliveryPipelineProvider);
   ref.invalidate(stockOnHandTotalsProvider);
   ref.invalidate(stockTotalsProvider(AppPeriod.month));
   ref.invalidate(stockStatusCountsProvider);

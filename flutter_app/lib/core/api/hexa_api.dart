@@ -9,6 +9,7 @@ import 'package:flutter/foundation.dart' show debugPrint, kDebugMode;
 import 'package:http_parser/http_parser.dart';
 
 import 'dio_auto_retry_interceptor.dart';
+import 'hexa_connection_timeout_retry_interceptor.dart';
 import '../auth/auth_error_messages.dart' show dioIsAutoRetryableTransport;
 import '../config/app_config.dart';
 import '../models/session.dart';
@@ -123,8 +124,8 @@ class HexaApi {
         _dio = Dio(
           BaseOptions(
             baseUrl: baseUrl ?? AppConfig.resolvedApiBaseUrl,
-            connectTimeout: const Duration(seconds: 12),
-            receiveTimeout: const Duration(seconds: 20),
+            connectTimeout: const Duration(seconds: 20),
+            receiveTimeout: const Duration(seconds: 30),
             headers: const {
               'X-Requested-With': 'harisree-app',
             },
@@ -133,8 +134,8 @@ class HexaApi {
         _plain = Dio(
           BaseOptions(
             baseUrl: baseUrl ?? AppConfig.resolvedApiBaseUrl,
-            connectTimeout: const Duration(seconds: 12),
-            receiveTimeout: const Duration(seconds: 20),
+            connectTimeout: const Duration(seconds: 20),
+            receiveTimeout: const Duration(seconds: 30),
             headers: const {
               'X-Requested-With': 'harisree-app',
             },
@@ -268,6 +269,12 @@ class HexaApi {
         },
       ),
     );
+    _dio.interceptors.add(
+      HexaConnectionTimeoutRetryInterceptor(_dio),
+    );
+    _plain.interceptors.add(
+      HexaConnectionTimeoutRetryInterceptor(_plain),
+    );
     _dio.interceptors.add(DioAutoRetryInterceptor(_dio, maxAttempts: 4));
     final banner = _onConnectivityBanner;
     if (banner != null) {
@@ -289,6 +296,12 @@ class HexaApi {
   /// Public health check (no auth). Used for AI status indicator.
   Future<Map<String, dynamic>> health() async {
     final res = await _plain.get<Map<String, dynamic>>('/health');
+    return res.data ?? <String, dynamic>{};
+  }
+
+  /// Instant liveness (no DB) — warmup and Render wake.
+  Future<Map<String, dynamic>> healthLive() async {
+    final res = await _plain.get<Map<String, dynamic>>('/health/live');
     return res.data ?? <String, dynamic>{};
   }
 
@@ -866,6 +879,10 @@ class HexaApi {
     /// When true, always sends [contactEmail] (use empty string to clear).
     bool includeContactEmail = false,
     String? contactEmail,
+
+    /// When true, always sends [accountsWhatsappNumber] (use empty string to clear).
+    bool includeAccountsWhatsapp = false,
+    String? accountsWhatsappNumber,
   }) async {
     final res = await _dio.patch<Map<String, dynamic>>(
       '/v1/me/businesses/$businessId/branding',
@@ -877,6 +894,8 @@ class HexaApi {
         if (address != null) 'address': address,
         if (phone != null) 'phone': phone,
         if (includeContactEmail) 'contact_email': (contactEmail ?? '').trim(),
+        if (includeAccountsWhatsapp)
+          'accounts_whatsapp_number': (accountsWhatsappNumber ?? '').trim(),
       },
     );
     return res.data ?? {};
@@ -1594,6 +1613,36 @@ class HexaApi {
       },
     );
     return res.data ?? {};
+  }
+
+  Future<Map<String, dynamic>> createPurchaseDamageReport({
+    required String businessId,
+    required String purchaseId,
+    required String itemName,
+    required double qtyDamaged,
+    required String damageType,
+    String? notes,
+  }) async {
+    final res = await _dio.post<Map<String, dynamic>>(
+      '/v1/businesses/$businessId/trade-purchases/$purchaseId/damage-reports',
+      data: {
+        'item_name': itemName,
+        'qty_damaged': qtyDamaged,
+        'damage_type': damageType,
+        if (notes != null && notes.trim().isNotEmpty) 'notes': notes.trim(),
+      },
+    );
+    return res.data ?? {};
+  }
+
+  Future<List<Map<String, dynamic>>> listPurchaseDamageReports({
+    required String businessId,
+    required String purchaseId,
+  }) async {
+    final res = await _dio.get<dynamic>(
+      '/v1/businesses/$businessId/trade-purchases/$purchaseId/damage-reports',
+    );
+    return _parseJsonMapList(res.data);
   }
 
   /// Trade purchase line aggregates (replaces legacy Entry-based `/analytics/items`).

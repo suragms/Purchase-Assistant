@@ -81,14 +81,14 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("DATABASE_POOL_SIZE", "DB_POOL_SIZE"),
     )
     database_pool_max_overflow: int = Field(
-        default=8,
+        default=5,
         validation_alias=AliasChoices("DATABASE_MAX_OVERFLOW", "DB_MAX_OVERFLOW"),
     )
     database_pool_timeout_seconds: int = Field(
         default=20,
         validation_alias=AliasChoices("DATABASE_POOL_TIMEOUT", "DB_POOL_TIMEOUT"),
     )
-    database_pool_recycle_seconds: int = 285
+    database_pool_recycle_seconds: int = 300
     # asyncpg statement timeout per executed command (seconds). 0 disables.
     database_command_timeout_seconds: float = Field(
         default=45.0,

@@ -5,6 +5,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../auth/auth_failure_policy.dart';
 import '../auth/session_notifier.dart' show sessionProvider;
+import '../providers/delivery_pipeline_provider.dart';
+import '../providers/realtime_events_provider.dart';
+import '../providers/stock_providers.dart';
+import '../providers/trade_purchases_provider.dart';
 import 'app_foreground_provider.dart';
 import 'app_visibility_stub.dart'
     if (dart.library.html) 'app_visibility_web.dart' as app_visibility;
@@ -93,6 +97,10 @@ class _AppForegroundListenerState extends ConsumerState<AppForegroundListener>
     try {
       ref.read(authApiGateProvider.notifier).clearSuspend();
     } catch (_) {}
+    ref.invalidate(deliveryPipelineProvider);
+    ref.invalidate(stockListProvider);
+    invalidateTradePurchaseCaches(ref);
+    ref.invalidate(realtimeInvalidationProvider);
   }
 
   @override

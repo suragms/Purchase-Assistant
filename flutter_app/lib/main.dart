@@ -16,6 +16,7 @@ import 'core/auth/session_notifier.dart' show sessionProvider, hexaApiProvider;
 import 'core/theme/app_theme.dart';
 import 'core/theme/hexa_colors.dart';
 import 'core/notifications/local_notifications_service.dart';
+import 'core/platform/hexa_layout_error_widget.dart';
 import 'core/platform/remove_boot_overlay.dart';
 import 'core/providers/prefs_provider.dart'
     show kNotificationsOptInKey, sharedPreferencesProvider;
@@ -102,6 +103,7 @@ Widget _bootstrapChrome(Widget child) {
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  ErrorWidget.builder = buildHexaLayoutErrorWidget;
   _installHexaPlatformAsyncErrorHook();
   FlutterError.onError = (FlutterErrorDetails details) {
     FlutterError.presentError(details);

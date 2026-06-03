@@ -46,12 +46,14 @@ class RealtimeInvalidationSignal {
     required this.tick,
     this.notifications = false,
     this.warehouse = false,
+    this.delivery = false,
     this.affectedItemIds = const {},
   });
 
   final int tick;
   final bool notifications;
   final bool warehouse;
+  final bool delivery;
   final Set<String> affectedItemIds;
 }
 
@@ -87,6 +89,7 @@ final realtimeInvalidationProvider =
     }
     var notifications = false;
     var warehouse = false;
+    var delivery = false;
     final affectedItemIds = <String>{};
     for (final row in rows) {
       final key =
@@ -102,6 +105,7 @@ final realtimeInvalidationProvider =
           type == 'stock.activity_changed' ||
           type == 'purchase.changed') {
         warehouse = true;
+        if (type == 'purchase.changed') delivery = true;
         affectedItemIds.addAll(itemIdsFromRealtimePayload(payload));
       }
     }
@@ -109,6 +113,7 @@ final realtimeInvalidationProvider =
       tick: tick,
       notifications: notifications,
       warehouse: warehouse,
+      delivery: delivery,
       affectedItemIds: affectedItemIds,
     );
   }

@@ -33,6 +33,12 @@ async def root_head():
     return Response(status_code=200)
 
 
+@router.get("/health/live")
+async def health_live():
+    """Instant liveness for Render platform health checks (no DB)."""
+    return {"alive": True}
+
+
 @router.get("/health")
 async def health(settings: Settings = Depends(get_settings)):
     """Liveness + non-secret config hints for ops (Render/Vercel smoke tests)."""

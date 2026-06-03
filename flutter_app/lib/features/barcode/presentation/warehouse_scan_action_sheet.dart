@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -50,6 +52,8 @@ class _WarehouseScanActionBodyState extends ConsumerState<_WarehouseScanActionBo
   String? _reasonType;
   bool _saving = false;
   bool _actionChosen = false;
+  String? _qtyError;
+  String? _reasonError;
 
   @override
   void initState() {
@@ -66,20 +70,51 @@ class _WarehouseScanActionBodyState extends ConsumerState<_WarehouseScanActionBo
     _qtyCtl.text = cur == cur.roundToDouble()
         ? '${cur.round()}'
         : cur.toStringAsFixed(1);
+    _qtyCtl.addListener(_revalidateQty);
   }
 
   @override
   void dispose() {
+    _qtyCtl.removeListener(_revalidateQty);
     _qtyCtl.dispose();
     _notesCtl.dispose();
     super.dispose();
+  }
+
+  double? _parseEnteredQty() {
+    final t = _qtyCtl.text.trim().replaceAll(',', '');
+    if (t.isEmpty) return null;
+    final v = double.tryParse(t);
+    if (v == null || !v.isFinite || v < 0) return null;
+    return v;
+  }
+
+  String? _qtyErrorText() {
+    if (_parseEnteredQty() != null) return null;
+    final t = _qtyCtl.text.trim();
+    if (t.isEmpty) return 'Enter a quantity';
+    return 'Enter a valid quantity';
+  }
+
+  void _revalidateQty() {
+    final next = _qtyErrorText();
+    if (next != _qtyError) {
+      setState(() => _qtyError = next);
+    }
+  }
+
+  void _onSavePressed() {
+    FocusScope.of(context).unfocus();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) unawaited(_save());
+    });
   }
 
   String get _itemId => widget.item['id']?.toString() ?? '';
 
   double get _systemQty => coerceToDouble(widget.item['current_stock']);
 
-  double? get _enteredQty => double.tryParse(_qtyCtl.text.trim());
+  double? get _enteredQty => _parseEnteredQty();
 
   String get _unit =>
       widget.item['unit']?.toString() ??
@@ -119,28 +154,24 @@ class _WarehouseScanActionBodyState extends ConsumerState<_WarehouseScanActionBo
       );
       return;
     }
-    final qty = _enteredQty;
-    if (qty == null || qty < 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Enter a valid quantity')),
-      );
+    final qty = _parseEnteredQty();
+    if (qty == null) {
+      setState(() {
+        _qtyError = _qtyErrorText();
+      });
       return;
     }
 
     if (_mode == StockUpdateMode.system) {
       if ((_reasonType == null || _reasonType!.isEmpty) &&
           (qty - _systemQty).abs() > 0.01) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Select a reason for the change')),
-        );
+        setState(() => _reasonError = 'Select a reason for the change');
         return;
       }
     } else {
       final diff = _systemQty - qty;
       if (diff.abs() > 0.01 && (_reasonType == null || _reasonType!.isEmpty)) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Select a reason for the difference')),
-        );
+        setState(() => _reasonError = 'Select a reason for the difference');
         return;
       }
       if (diff.abs() > 0.5) {
@@ -273,12 +304,20 @@ class _WarehouseScanActionBodyState extends ConsumerState<_WarehouseScanActionBo
         return;
       }
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(loadStateErrorSubtitle(e))),
+        SnackBar(
+          content: Text(loadStateErrorSubtitle(e)),
+          duration: const Duration(seconds: 5),
+          behavior: SnackBarBehavior.floating,
+        ),
       );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(loadStateErrorSubtitle(e))),
+        SnackBar(
+          content: Text(loadStateErrorSubtitle(e)),
+          duration: const Duration(seconds: 5),
+          behavior: SnackBarBehavior.floating,
+        ),
       );
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -291,8 +330,10 @@ class _WarehouseScanActionBodyState extends ConsumerState<_WarehouseScanActionBo
     final isReadOnly = session == null || sessionIsStockReadOnly(session);
     final privileged =
         session != null && sessionIsPrivilegedStockRole(session);
+    final parsedQty = _parseEnteredQty();
+    final canSave = !_saving && parsedQty != null;
     final showReason = _mode == StockUpdateMode.system
-        ? (_enteredQty != null && (_enteredQty! - _systemQty).abs() > 0.01)
+        ? (parsedQty != null && (parsedQty - _systemQty).abs() > 0.01)
         : _diff.abs() > 0.01;
 
     final lpQty = coerceToDoubleNullable(widget.item['last_purchase_qty']);
@@ -479,12 +520,17 @@ class _WarehouseScanActionBodyState extends ConsumerState<_WarehouseScanActionBo
               child: TextField(
                 controller: _qtyCtl,
                 keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                textInputAction: TextInputAction.done,
                 decoration: InputDecoration(
                   suffixText: _unitLabel,
                   isDense: true,
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                  errorText: _qtyError,
                 ),
                 onChanged: (_) => setState(() {}),
+                onSubmitted: (_) {
+                  if (canSave) _onSavePressed();
+                },
               ),
             ),
             IconButton(
@@ -517,11 +563,25 @@ class _WarehouseScanActionBodyState extends ConsumerState<_WarehouseScanActionBo
               return FilterChip(
                 label: Text(e.value, style: const TextStyle(fontSize: 11)),
                 selected: sel,
-                onSelected: (_) => setState(() => _reasonType = e.key),
+                onSelected: (_) => setState(() {
+                  _reasonType = e.key;
+                  _reasonError = null;
+                }),
                 visualDensity: VisualDensity.compact,
               );
             }).toList(),
           ),
+          if (_reasonError != null) ...[
+            const SizedBox(height: 6),
+            Text(
+              _reasonError!,
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFFB91C1C),
+              ),
+            ),
+          ],
         ],
         const SizedBox(height: 8),
         TextField(
@@ -550,7 +610,7 @@ class _WarehouseScanActionBodyState extends ConsumerState<_WarehouseScanActionBo
               flex: 2,
               child: FilledButton(
                 style: FilledButton.styleFrom(backgroundColor: HexaColors.brandPrimary),
-                onPressed: _saving ? null : _save,
+                onPressed: canSave ? _onSavePressed : null,
                 child: _saving
                     ? const SizedBox(
                         width: 18,

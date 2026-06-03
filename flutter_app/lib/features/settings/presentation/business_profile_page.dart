@@ -22,6 +22,7 @@ class _BusinessProfilePageState extends ConsumerState<BusinessProfilePage> {
   late final TextEditingController _addressCtrl;
   late final TextEditingController _phoneCtrl;
   late final TextEditingController _emailCtrl;
+  late final TextEditingController _accountsWhatsappCtrl;
   bool _saving = false;
 
   @override
@@ -33,6 +34,7 @@ class _BusinessProfilePageState extends ConsumerState<BusinessProfilePage> {
     _addressCtrl = TextEditingController();
     _phoneCtrl = TextEditingController();
     _emailCtrl = TextEditingController();
+    _accountsWhatsappCtrl = TextEditingController();
     WidgetsBinding.instance.addPostFrameCallback((_) => _loadFromSession());
   }
 
@@ -46,6 +48,7 @@ class _BusinessProfilePageState extends ConsumerState<BusinessProfilePage> {
       _addressCtrl.text = pb.address ?? '';
       _phoneCtrl.text = pb.phone ?? '';
       _emailCtrl.text = pb.contactEmail ?? '';
+      _accountsWhatsappCtrl.text = pb.accountsWhatsappNumber ?? '';
     });
   }
 
@@ -57,6 +60,7 @@ class _BusinessProfilePageState extends ConsumerState<BusinessProfilePage> {
     _addressCtrl.dispose();
     _phoneCtrl.dispose();
     _emailCtrl.dispose();
+    _accountsWhatsappCtrl.dispose();
     super.dispose();
   }
 
@@ -78,6 +82,26 @@ class _BusinessProfilePageState extends ConsumerState<BusinessProfilePage> {
     return null;
   }
 
+  String? _normalizeAccountsWhatsappDigits(String raw) {
+    final t = raw.trim();
+    if (t.isEmpty) return null;
+    var digits = t.replaceAll(RegExp(r'\D'), '');
+    if (digits.startsWith('91') && digits.length == 12) {
+      digits = digits.substring(2);
+    }
+    return digits;
+  }
+
+  String? _validateAccountsWhatsapp(String raw) {
+    final t = raw.trim();
+    if (t.isEmpty) return null;
+    final digits = _normalizeAccountsWhatsappDigits(t);
+    if (digits == null || digits.length != 10) {
+      return 'Enter a 10-digit mobile number';
+    }
+    return null;
+  }
+
   Future<void> _save() async {
     final session = ref.read(sessionProvider);
     if (session == null || session.primaryBusiness.role != 'owner') return;
@@ -92,12 +116,15 @@ class _BusinessProfilePageState extends ConsumerState<BusinessProfilePage> {
 
     final gstErr = _validateGst(_gstCtrl.text);
     final phErr = _validatePhone(_phoneCtrl.text);
-    if (gstErr != null || phErr != null) {
+    final waErr = _validateAccountsWhatsapp(_accountsWhatsappCtrl.text);
+    if (gstErr != null || phErr != null || waErr != null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(gstErr ?? phErr ?? 'Invalid')),
+        SnackBar(content: Text(gstErr ?? phErr ?? waErr ?? 'Invalid')),
       );
       return;
     }
+
+    final waDigits = _normalizeAccountsWhatsappDigits(_accountsWhatsappCtrl.text);
 
     setState(() => _saving = true);
     final messenger = ScaffoldMessenger.of(context);
@@ -111,6 +138,8 @@ class _BusinessProfilePageState extends ConsumerState<BusinessProfilePage> {
             phone: _phoneCtrl.text.trim(),
             includeContactEmail: true,
             contactEmail: _emailCtrl.text,
+            includeAccountsWhatsapp: true,
+            accountsWhatsappNumber: waDigits ?? '',
           );
       await ref.read(sessionProvider.notifier).refreshBusinesses();
       if (!mounted) return;
@@ -155,7 +184,8 @@ class _BusinessProfilePageState extends ConsumerState<BusinessProfilePage> {
         padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
         children: [
           Text(
-            'Shown on purchase order PDFs (GSTIN, address, phone, contact email).',
+            'Shown on purchase order PDFs (GSTIN, address, phone, contact email). '
+            'Accounts WhatsApp is used to share purchase summaries.',
             style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant, height: 1.35),
           ),
           const SizedBox(height: 16),
@@ -217,6 +247,17 @@ class _BusinessProfilePageState extends ConsumerState<BusinessProfilePage> {
                     decoration: const InputDecoration(
                       labelText: 'Contact email (optional)',
                       hintText: 'For purchase order PDF header',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _accountsWhatsappCtrl,
+                    readOnly: readOnly,
+                    keyboardType: TextInputType.phone,
+                    decoration: const InputDecoration(
+                      labelText: 'Accounts Staff WhatsApp Number',
+                      hintText: '+91 XXXXX XXXXX',
                       border: OutlineInputBorder(),
                     ),
                   ),

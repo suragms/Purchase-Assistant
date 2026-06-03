@@ -32,13 +32,14 @@ import 'barcode_scan_web_stub.dart'
     if (dart.library.html) 'barcode_scan_web.dart';
 
 const _kMaxRecent = 10;
-const _kDebounceMs = 800; // Increase app-side debounce (prevent double-fire)
+const _kDebounceMs = 400;
 const _kManualSearchDebounceMs = 400;
 /// Primary warehouse formats (fewer = faster camera decode on iOS).
 const _kWarehouseBarcodeFormats = <BarcodeFormat>[
   BarcodeFormat.code128, // Primary warehouse format
   BarcodeFormat.ean13,   // Product barcodes
   BarcodeFormat.qrCode,  // Harisree QR labels
+  BarcodeFormat.code39,  // Some warehouse labels
 ];
 
 /// Warehouse barcode scan — camera + manual lookup → item detail.
@@ -82,6 +83,9 @@ class _BarcodeScanPageState extends ConsumerState<BarcodeScanPage>
   late final AnimationController _scanLineCtrl;
   bool _cameraDenied = false;
   bool _cameraPermanent = false;
+  Timer? _safariNoDetectTimer;
+  bool _safariUploadNudgeShown = false;
+  bool _hadDetectThisVisit = false;
 
   @override
   void initState() {
@@ -180,11 +184,35 @@ class _BarcodeScanPageState extends ConsumerState<BarcodeScanPage>
   MobileScannerController _newScannerController() {
     return MobileScannerController(
       detectionSpeed: DetectionSpeed.normal,
-      detectionTimeoutMs: 500,
+      detectionTimeoutMs: 300,
       facing: CameraFacing.back,
       formats: _kWarehouseBarcodeFormats,
       autoStart: true,
     );
+  }
+
+  void _scheduleSafariNoDetectNudge() {
+    if (!kIsWeb || !isSafariBrowser) return;
+    _safariNoDetectTimer?.cancel();
+    _safariNoDetectTimer = Timer(const Duration(seconds: 3), () {
+      if (!mounted ||
+          _busy ||
+          _hadDetectThisVisit ||
+          _safariUploadNudgeShown) {
+        return;
+      }
+      _safariUploadNudgeShown = true;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Tap to upload image for scanning'),
+          behavior: SnackBarBehavior.floating,
+          action: SnackBarAction(
+            label: 'Upload',
+            onPressed: () => unawaited(_scanFromImage()),
+          ),
+        ),
+      );
+    });
   }
 
   Future<void> _initCamera() async {
@@ -202,6 +230,7 @@ class _BarcodeScanPageState extends ConsumerState<BarcodeScanPage>
               _cameraPermanent = false;
               _cameraDeniedMessage = null;
             });
+            _scheduleSafariNoDetectNudge();
           }
         } catch (_) {
           if (mounted) {
@@ -589,6 +618,8 @@ class _BarcodeScanPageState extends ConsumerState<BarcodeScanPage>
     if (v == null || v.isEmpty) return;
     if (!_debouncePass(v)) return;
 
+    _hadDetectThisVisit = true;
+    _safariNoDetectTimer?.cancel();
     unawaited(_lookupAndNavigate(v));
   }
 
@@ -655,6 +686,7 @@ class _BarcodeScanPageState extends ConsumerState<BarcodeScanPage>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _safariNoDetectTimer?.cancel();
     _manualSearchDebounce?.cancel();
     _scanLineCtrl.dispose();
     _manualCtrl.removeListener(_onManualChanged);

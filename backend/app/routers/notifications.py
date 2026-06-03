@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.deps import get_current_user, require_membership
-from app.models import User
+from app.models import Membership, User
 from app.models.notification import AppNotification
 from app.schemas.notification import (
     ClientNotificationEventIn,
@@ -35,12 +35,24 @@ def _user_filters(business_id: uuid.UUID, user_id: uuid.UUID):
     ]
 
 
+def _notification_visible_to_role(
+    payload: dict | None, user_role: str
+) -> bool:
+    if not payload:
+        return True
+    roles = payload.get("target_roles")
+    if not isinstance(roles, list) or not roles:
+        return True
+    allowed = {str(r).strip().lower() for r in roles if r}
+    return (user_role or "").strip().lower() in allowed
+
+
 @router.get("", response_model=list[NotificationOut])
 async def list_notifications(
     business_id: uuid.UUID,
     db: Annotated[AsyncSession, Depends(get_db)],
     user: Annotated[User, Depends(get_current_user)],
-    _m: Annotated[object, Depends(require_membership)],
+    _m: Annotated[Membership, Depends(require_membership)],
     page: int = Query(1, ge=1),
     per_page: int = Query(30, ge=1, le=100),
     kind: str | None = Query(default=None, max_length=64),
@@ -49,7 +61,7 @@ async def list_notifications(
     unread_only: bool = Query(default=False),
     q: str | None = Query(default=None, max_length=120),
 ):
-    del _m
+    user_role = (_m.role or "").strip().lower()
     off = (page - 1) * per_page
     filters = _user_filters(business_id, user.id)
     if kind:
@@ -78,6 +90,8 @@ async def list_notifications(
     )
     out: list[NotificationOut] = []
     for row, actor_name in r.all():
+        if not _notification_visible_to_role(row.payload, user_role):
+            continue
         base = NotificationOut.model_validate(row)
         out.append(
             base.model_copy(

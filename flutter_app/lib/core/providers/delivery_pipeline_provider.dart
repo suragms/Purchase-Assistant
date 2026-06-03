@@ -9,6 +9,9 @@ import '../json_coerce.dart';
 /// Owner dashboard: counts per delivery_status from API.
 final deliveryPipelineProvider =
     FutureProvider.autoDispose<Map<String, dynamic>>((ref) async {
+  final link = ref.keepAlive();
+  ref.onDispose(() => link.close());
+
   final session = ref.watch(activeSessionProvider);
   if (session == null) return {};
   try {

@@ -558,7 +558,7 @@ String? purchaseLineSaveBlockReason(PurchaseLineDraft l) {
   if (weightLine || unitIsBag) {
     if (kpu == null || kpu <= 0) {
       return unitIsBag
-          ? 'Kg per bag is required for this unit.'
+          ? 'kg per bag required for bag items'
           : 'Kg per unit must be greater than 0.';
     }
     if (pk == null || pk <= 0) {

@@ -10,6 +10,7 @@ class BusinessProfile {
     this.phone,
     this.contactEmail,
     this.logoUrl,
+    this.accountsWhatsappNumber,
   });
 
   final String legalName;
@@ -20,6 +21,7 @@ class BusinessProfile {
   /// Shown on purchase order PDF header when set.
   final String? contactEmail;
   final String? logoUrl;
+  final String? accountsWhatsappNumber;
 
   static String? _trimOrNull(String? s) {
     final t = s?.trim();
@@ -36,6 +38,7 @@ class BusinessProfile {
       phone: _trimOrNull(b.phone),
       contactEmail: _trimOrNull(b.contactEmail),
       logoUrl: _trimOrNull(b.brandingLogoUrl),
+      accountsWhatsappNumber: _trimOrNull(b.accountsWhatsappNumber),
     );
   }
 }

@@ -207,6 +207,7 @@ class NotificationItem {
     this.serverKind,
     this.priority,
     this.category,
+    this.targetRoles,
   });
 
   final String id;
@@ -222,6 +223,7 @@ class NotificationItem {
   final String? serverKind;
   final String? priority;
   final String? category;
+  final List<String>? targetRoles;
 }
 
 class NotificationsNotifier extends StateNotifier<List<NotificationItem>> {
@@ -301,6 +303,10 @@ DateTime warehouseAlertStableCreatedAt(String alertId) {
 /// Role-based visibility for notification feed (see NOTIFICATIONS_SYSTEM_AUDIT.md).
 bool notificationVisibleForRole(NotificationItem n, Session session) {
   final role = session.primaryBusiness.role.toLowerCase();
+  final targets = n.targetRoles;
+  if (targets != null && targets.isNotEmpty) {
+    return targets.map((r) => r.toLowerCase()).contains(role);
+  }
   if (role != 'staff') return true;
 
   if (n.id.startsWith('pur_')) return false;
@@ -310,6 +316,13 @@ bool notificationVisibleForRole(NotificationItem n, Session session) {
   }
 
   final kind = n.serverKind ?? '';
+  if (kind == 'damage_report') return false;
+  if (kind.contains('profit') ||
+      kind.contains('spend') ||
+      kind == 'rate_alert' ||
+      kind == 'financial') {
+    return false;
+  }
   if (kind == 'stock_variance' || kind == 'stock_mismatch') return false;
   if (kind == 'payment_due' ||
       kind == 'purchase_overdue' ||
@@ -760,6 +773,18 @@ NotificationItem notificationItemFromServerRow(Map<String, dynamic> row) {
   }
   final actor = row['triggered_by_name']?.toString();
   final subtitle = actor != null && actor.isNotEmpty ? '$body\nBy: $actor' : body;
+  List<String>? targetRoles;
+  final payload = row['payload'];
+  if (payload is Map) {
+    final raw = payload['target_roles'];
+    if (raw is List) {
+      targetRoles = raw
+          .map((e) => e?.toString().trim().toLowerCase())
+          .whereType<String>()
+          .where((s) => s.isNotEmpty)
+          .toList();
+    }
+  }
   return NotificationItem(
     id: 'srv_$sid',
     type: NotificationType.serverInApp,
@@ -772,5 +797,6 @@ NotificationItem notificationItemFromServerRow(Map<String, dynamic> row) {
     serverKind: kind.isEmpty ? null : kind,
     priority: row['priority']?.toString(),
     category: row['category']?.toString(),
+    targetRoles: targetRoles,
   );
 }

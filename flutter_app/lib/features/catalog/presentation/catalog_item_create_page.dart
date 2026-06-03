@@ -1,7 +1,9 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../core/router/navigation_ext.dart';
 import '../../../core/auth/session_notifier.dart';
@@ -60,6 +62,12 @@ class _CatalogItemCreatePageState extends ConsumerState<CatalogItemCreatePage> {
   bool _saving = false;
   String? _error;
   bool _prefilled = false;
+  Timer? _nameDebounce;
+  String? _bagDetectHint;
+  bool _bagDetectDismissed = false;
+  String? _kgFieldError;
+
+  static final _kgInName = RegExp(r'(\d+(?:\.\d+)?)\s*kg', caseSensitive: false);
 
   String _packageTypeForMode(String mode) {
     switch (mode) {
@@ -96,7 +104,69 @@ class _CatalogItemCreatePageState extends ConsumerState<CatalogItemCreatePage> {
   }
 
   @override
+  void initState() {
+    super.initState();
+    _nameCtrl.addListener(_onNameChanged);
+    _kgCtrl.addListener(_onKgChanged);
+  }
+
+  void _onKgChanged() {
+    if (!mounted) return;
+    if (_kgFieldError != null) {
+      setState(() => _kgFieldError = null);
+    }
+  }
+
+  void _onNameChanged() {
+    _nameDebounce?.cancel();
+    _nameDebounce = Timer(const Duration(milliseconds: 300), _applyBagDetectionFromName);
+  }
+
+  void _applyBagDetectionFromName() {
+    if (!mounted || _bagDetectDismissed) return;
+    final match = _kgInName.firstMatch(_nameCtrl.text);
+    if (match == null) {
+      if (_bagDetectHint != null) {
+        setState(() => _bagDetectHint = null);
+      }
+      return;
+    }
+    final kg = match.group(1) ?? '';
+    if (kg.isEmpty) return;
+    setState(() {
+      _unit = 'bag';
+      _packagingMode = StockTrackingMode.wholesaleBag;
+      _kgCtrl.text = kg;
+      _bagDetectHint = 'Detected: Bag item · ${kg}kg per bag — tap to change';
+      _kgFieldError = null;
+    });
+  }
+
+  void _dismissBagDetection() {
+    setState(() {
+      _bagDetectDismissed = true;
+      _bagDetectHint = null;
+    });
+  }
+
+  void _selectUnit(String u) {
+    setState(() {
+      _unit = u;
+      _packagingMode = _modeForUnit(u);
+      _bagDetectDismissed = true;
+      _bagDetectHint = null;
+      if (u != 'bag') {
+        _kgCtrl.clear();
+        _kgFieldError = null;
+      }
+    });
+  }
+
+  @override
   void dispose() {
+    _nameDebounce?.cancel();
+    _nameCtrl.removeListener(_onNameChanged);
+    _kgCtrl.removeListener(_onKgChanged);
     _nameCtrl.dispose();
     _itemCodeCtrl.dispose();
     _kgCtrl.dispose();
@@ -206,25 +276,20 @@ class _CatalogItemCreatePageState extends ConsumerState<CatalogItemCreatePage> {
       setState(() => _error = 'Pick a subcategory from search.');
       return false;
     }
-    final sups = ref.read(suppliersListProvider).valueOrNull ?? [];
-    if (sups.isEmpty) {
-      setState(() => _error = 'Add a supplier in Contacts first.');
-      return false;
-    }
-    if (sups.length > 1) {
-      if (_supplierId == null || _supplierId!.isEmpty) {
-        setState(() => _error = 'Select a supplier.');
-        return false;
-      }
-    }
     if (_unit == 'bag') {
       final kg = double.tryParse(_kgCtrl.text.trim());
       if (kg == null || kg <= 0) {
-        setState(() => _error = 'Enter weight per bag (kg).');
+        setState(() {
+          _kgFieldError = 'Weight per bag is required';
+          _error = 'Enter weight per bag (kg).';
+        });
         return false;
       }
     }
-    setState(() => _error = null);
+    setState(() {
+      _error = null;
+      _kgFieldError = null;
+    });
     return true;
   }
 
@@ -262,10 +327,10 @@ class _CatalogItemCreatePageState extends ConsumerState<CatalogItemCreatePage> {
     final typeRow = _rowByTypeId(types, _typeId!)!;
     final categoryFromType = typeRow['category_id']?.toString() ?? '';
 
-    final sups = ref.read(suppliersListProvider).valueOrNull ?? [];
-    final supplierId = sups.length == 1
-        ? sups.first['id']?.toString() ?? ''
-        : _supplierId ?? '';
+    final supplierIds = <String>[];
+    if (_supplierId != null && _supplierId!.isNotEmpty) {
+      supplierIds.add(_supplierId!);
+    }
 
     final brokers = ref.read(brokersListProvider).valueOrNull ?? [];
     if (_brokerId != null && _brokerId!.isNotEmpty) {
@@ -294,8 +359,12 @@ class _CatalogItemCreatePageState extends ConsumerState<CatalogItemCreatePage> {
     }
     final hsn = _hsnCtrl.text.trim();
     final itemCode = _itemCodeCtrl.text.trim().toUpperCase();
-    final purchaseRate = double.tryParse(_purchaseRateCtrl.text.trim());
-    final sellingRate = double.tryParse(_sellingRateCtrl.text.trim());
+    final purchaseText = _purchaseRateCtrl.text.trim();
+    final sellingText = _sellingRateCtrl.text.trim();
+    final purchaseRate =
+        purchaseText.isEmpty ? null : double.tryParse(purchaseText);
+    final sellingRate =
+        sellingText.isEmpty ? null : double.tryParse(sellingText);
     final brokerIds = (_brokerId != null && _brokerId!.isNotEmpty)
         ? <String>[_brokerId!]
         : const <String>[];
@@ -306,7 +375,7 @@ class _CatalogItemCreatePageState extends ConsumerState<CatalogItemCreatePage> {
             name: name,
             typeId: typeRow['id']?.toString(),
             defaultUnit: _unit,
-            defaultSupplierIds: [supplierId],
+            defaultSupplierIds: supplierIds,
             defaultBrokerIds: brokerIds,
             hsnCode: hsn.isEmpty ? null : hsn,
             itemCode: itemCode.isEmpty ? null : itemCode,
@@ -336,9 +405,14 @@ class _CatalogItemCreatePageState extends ConsumerState<CatalogItemCreatePage> {
           SnackBar(content: Text('Saved "$name". Add another.')),
         );
       } else if (widget.returnResultOnSave && newId.isNotEmpty) {
+        await HapticFeedback.mediumImpact();
         _popPage(<String, dynamic>{'id': newId, 'name': name});
       } else if (newId.isNotEmpty) {
-        _popPage(<String, dynamic>{'id': newId, 'name': name});
+        await HapticFeedback.mediumImpact();
+        _popPage();
+        if (context.mounted) {
+          context.push('/catalog/item/$newId');
+        }
       } else {
         _popPage();
         ScaffoldMessenger.of(context).showSnackBar(
@@ -440,23 +514,37 @@ class _CatalogItemCreatePageState extends ConsumerState<CatalogItemCreatePage> {
         error: (_, __) => const Text('Could not load suppliers.'),
         data: (sups) {
           if (sups.isEmpty) {
-            return const Text(
-              'Add at least one supplier in Contacts before creating items.',
-              style: TextStyle(color: Colors.deepOrange, fontWeight: FontWeight.w600),
+            return Text(
+              'Supplier can be linked later from item detail.',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: const Color(0xFF64748B),
+                    fontWeight: FontWeight.w600,
+                  ),
             );
           }
           if (sups.length == 1) {
             final n = sups.first['name']?.toString() ?? 'Supplier';
-            if (_supplierId == null) {
+            if (_supplierId == null && _supplierSearchCtrl.text.isEmpty) {
               _supplierId = sups.first['id']?.toString();
               _supplierSearchCtrl.text = n;
             }
-            return Text('Supplier: $n', style: const TextStyle(fontWeight: FontWeight.w700));
           }
           return Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const Text('Supplier *'),
+              Row(
+                children: [
+                  const Expanded(child: Text('Supplier (optional)')),
+                  if (_supplierId != null && _supplierId!.isNotEmpty)
+                    TextButton(
+                      onPressed: () => setState(() {
+                        _supplierId = null;
+                        _supplierSearchCtrl.clear();
+                      }),
+                      child: const Text('Clear'),
+                    ),
+                ],
+              ),
               const SizedBox(height: 6),
               InlineSearchField(
                 key: ValueKey('ci_sup_${sups.length}_$_supplierId'),
@@ -464,6 +552,13 @@ class _CatalogItemCreatePageState extends ConsumerState<CatalogItemCreatePage> {
                 controller: _supplierSearchCtrl,
                 placeholder: 'Search supplier…',
                 onSelected: (it) => setState(() => _supplierId = it.id),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Supplier can be linked later from item detail.',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: const Color(0xFF64748B),
+                    ),
               ),
             ],
           );
@@ -547,34 +642,47 @@ class _CatalogItemCreatePageState extends ConsumerState<CatalogItemCreatePage> {
         onModeChanged: (m) => setState(() {
           _packagingMode = m;
           _unit = StockTrackingMode.catalogUnitForMode(m);
-          _kgCtrl.clear();
+          _bagDetectDismissed = true;
+          _bagDetectHint = null;
+          if (_unit != 'bag') {
+            _kgCtrl.clear();
+            _kgFieldError = null;
+          }
         }),
         weightController: _kgCtrl,
+        itemNameForAutofill: _nameCtrl.text,
       ),
       const SizedBox(height: 8),
       Wrap(
         spacing: 6,
         children: [
-          for (final u in ['kg', 'bag', 'piece', 'box', 'tin'])
+          for (final u in ['bag', 'kg', 'box', 'piece'])
             ChoiceChip(
-              label: Text(u.toUpperCase()),
+              label: Text(u[0].toUpperCase() + u.substring(1)),
               selected: _unit == u,
-              onSelected: (_) => setState(() {
-                _unit = u;
-                _packagingMode = _modeForUnit(u);
-                _kgCtrl.clear();
-              }),
+              onSelected: (_) => _selectUnit(u),
             ),
         ],
       ),
+      if (_bagDetectHint != null) ...[
+        const SizedBox(height: 8),
+        ActionChip(
+          label: Text(
+            _bagDetectHint!,
+            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+          ),
+          onPressed: _dismissBagDetection,
+        ),
+      ],
       if (_unit == 'bag') ...[
         const SizedBox(height: 8),
         TextField(
           controller: _kgCtrl,
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          decoration: const InputDecoration(
+          decoration: InputDecoration(
             labelText: 'Weight per bag (kg) *',
-            border: OutlineInputBorder(),
+            border: const OutlineInputBorder(),
+            errorText: _kgFieldError,
           ),
         ),
       ],
@@ -598,7 +706,8 @@ class _CatalogItemCreatePageState extends ConsumerState<CatalogItemCreatePage> {
         controller: _itemCodeCtrl,
         decoration: const InputDecoration(
           labelText: 'Item code (optional)',
-          helperText: 'Staff can add later — auto-generated if blank.',
+          hintText: 'Auto-generated if empty',
+          helperText: 'Leave blank for a 4-digit code from the system.',
           border: OutlineInputBorder(),
         ),
         textCapitalization: TextCapitalization.characters,
@@ -619,7 +728,7 @@ class _CatalogItemCreatePageState extends ConsumerState<CatalogItemCreatePage> {
               controller: _purchaseRateCtrl,
               keyboardType: const TextInputType.numberWithOptions(decimal: true),
               decoration: const InputDecoration(
-                labelText: 'Purchase rate',
+                labelText: 'Purchase rate (optional)',
                 border: OutlineInputBorder(),
               ),
             ),
@@ -630,7 +739,7 @@ class _CatalogItemCreatePageState extends ConsumerState<CatalogItemCreatePage> {
               controller: _sellingRateCtrl,
               keyboardType: const TextInputType.numberWithOptions(decimal: true),
               decoration: const InputDecoration(
-                labelText: 'Selling rate',
+                labelText: 'Selling rate (optional)',
                 border: OutlineInputBorder(),
               ),
             ),
