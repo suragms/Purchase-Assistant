@@ -111,21 +111,17 @@ class _StaffVerificationSheetState extends ConsumerState<_StaffVerificationSheet
             notes: _notesCtrl.text,
           );
       final status = (body['delivery_status']?.toString() ?? '').toLowerCase();
-      if (status != 'stock_committed') {
-        if (!mounted) return;
-        setState(() {
-          _submitError =
-              'Verification saved, but stock was not committed yet. Please retry or ask owner to commit stock.';
-        });
-        return;
-      }
       syncPurchaseStockAfterVerify(
         ref,
         purchaseId: widget.purchaseId,
         verifyResponse: body,
       );
       if (!mounted) return;
-      setState(() => _submitError = null);
+      setState(() {
+        _submitError = status == 'stock_committed'
+            ? null
+            : 'Verification saved. Stock updates apply after owner/manager commit.';
+      });
       if (mounted) Navigator.pop(context, true);
     } on DioException catch (e) {
       if (!mounted) return;

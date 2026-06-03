@@ -736,7 +736,10 @@ class PurchaseDetailBodyState extends ConsumerState<PurchaseDetailBody> {
       lines: lineMaps,
     );
     if (changed && context.mounted) {
-      showTopSnack(context, 'Verified — system stock updated where units are set');
+      showTopSnack(
+        context,
+        'Verification saved. Stock updates apply after commit.',
+      );
     }
   }
 

@@ -51,7 +51,12 @@ class BarcodeScanPage extends ConsumerStatefulWidget {
 
 class _BarcodeScanPageState extends ConsumerState<BarcodeScanPage>
     with SingleTickerProviderStateMixin, WidgetsBindingObserver {
+  /// Avoid re-requesting OS camera permission on every scanner page open (iOS PWA).
+  static bool _cameraPermissionGrantedThisSession = false;
+
   MobileScannerController? _camera;
+  bool _cameraInitInFlight = false;
+  String? _cameraDeniedMessage;
   final _manualCtrl = TextEditingController();
   final _manualFocus = FocusNode();
   String _manualQuery = '';
@@ -172,53 +177,96 @@ class _BarcodeScanPageState extends ConsumerState<BarcodeScanPage>
     }
   }
 
-  Future<void> _initCamera() async {
-    if (kIsWeb) {
-      try {
-        _camera = MobileScannerController(
-          detectionSpeed: DetectionSpeed.normal,
-          detectionTimeoutMs: 500,
-          facing: CameraFacing.back,
-          formats: _kWarehouseBarcodeFormats,
-          autoStart: true,
-        );
-        if (mounted) setState(() {});
-        return;
-      } catch (_) {
-        if (mounted) setState(() => _cameraDenied = true);
-        return;
-      }
-    }
-    final status = await Permission.camera.status;
-    if (status.isDenied) {
-      final req = await Permission.camera.request();
-      if (!req.isGranted) {
-        if (mounted) {
-          setState(() {
-            _cameraDenied = true;
-            _cameraPermanent = req.isPermanentlyDenied;
-          });
-        }
-        return;
-      }
-    } else if (status.isPermanentlyDenied) {
-      if (mounted) {
-        setState(() {
-          _cameraDenied = true;
-          _cameraPermanent = true;
-        });
-      }
-      return;
-    }
-    if (!mounted) return;
-    _camera = MobileScannerController(
+  MobileScannerController _newScannerController() {
+    return MobileScannerController(
       detectionSpeed: DetectionSpeed.normal,
       detectionTimeoutMs: 500,
       facing: CameraFacing.back,
       formats: _kWarehouseBarcodeFormats,
       autoStart: true,
     );
-    setState(() {});
+  }
+
+  Future<void> _initCamera() async {
+    if (_camera != null && _camera!.value.isRunning) return;
+    if (_cameraInitInFlight) return;
+    _cameraInitInFlight = true;
+    try {
+      if (kIsWeb) {
+        try {
+          _camera = _newScannerController();
+          _cameraPermissionGrantedThisSession = true;
+          if (mounted) {
+            setState(() {
+              _cameraDenied = false;
+              _cameraPermanent = false;
+              _cameraDeniedMessage = null;
+            });
+          }
+        } catch (_) {
+          if (mounted) {
+            setState(() {
+              _cameraDenied = true;
+              _cameraPermanent = false;
+              _cameraDeniedMessage =
+                  'Could not start the camera in this browser. '
+                  'Allow camera for this site in Safari settings, or use '
+                  'Upload barcode photo / manual entry below.';
+            });
+          }
+        }
+        return;
+      }
+
+      if (_cameraPermissionGrantedThisSession) {
+        if (!mounted) return;
+        _camera = _newScannerController();
+        if (mounted) {
+          setState(() {
+            _cameraDenied = false;
+            _cameraDeniedMessage = null;
+          });
+        }
+        return;
+      }
+
+      final status = await Permission.camera.status;
+      if (status.isPermanentlyDenied) {
+        if (mounted) {
+          setState(() {
+            _cameraDenied = true;
+            _cameraPermanent = true;
+            _cameraDeniedMessage = null;
+          });
+        }
+        return;
+      }
+      if (!status.isGranted) {
+        final req = await Permission.camera.request();
+        if (!req.isGranted) {
+          if (mounted) {
+            setState(() {
+              _cameraDenied = true;
+              _cameraPermanent = req.isPermanentlyDenied;
+              _cameraDeniedMessage = null;
+            });
+          }
+          return;
+        }
+      }
+
+      if (!mounted) return;
+      _camera = _newScannerController();
+      _cameraPermissionGrantedThisSession = true;
+      if (mounted) {
+        setState(() {
+          _cameraDenied = false;
+          _cameraDeniedMessage = null;
+        });
+      }
+    } finally {
+      _cameraInitInFlight = false;
+    }
   }
 
   Future<void> _loadRecent() async {
@@ -541,7 +589,6 @@ class _BarcodeScanPageState extends ConsumerState<BarcodeScanPage>
     if (v == null || v.isEmpty) return;
     if (!_debouncePass(v)) return;
 
-    _busy = true;
     unawaited(_lookupAndNavigate(v));
   }
 
@@ -614,6 +661,7 @@ class _BarcodeScanPageState extends ConsumerState<BarcodeScanPage>
     _manualCtrl.dispose();
     _manualFocus.dispose();
     _camera?.dispose();
+    _camera = null;
     super.dispose();
   }
 
@@ -727,9 +775,10 @@ class _BarcodeScanPageState extends ConsumerState<BarcodeScanPage>
                       size: 48, color: theme.colorScheme.error),
                   const SizedBox(height: 12),
                   Text(
-                    _cameraPermanent
-                        ? 'Please allow camera access in Settings to scan barcodes.'
-                        : 'Camera permission is needed to scan barcodes.',
+                    _cameraDeniedMessage ??
+                        (_cameraPermanent
+                            ? 'Please allow camera access in Settings to scan barcodes.'
+                            : 'Camera permission is needed to scan barcodes.'),
                     textAlign: TextAlign.center,
                     style: theme.textTheme.bodyMedium,
                   ),
@@ -745,6 +794,7 @@ class _BarcodeScanPageState extends ConsumerState<BarcodeScanPage>
                         setState(() {
                           _cameraDenied = false;
                           _cameraPermanent = false;
+                          _cameraDeniedMessage = null;
                         });
                         unawaited(_initCamera());
                       },
@@ -764,6 +814,7 @@ class _BarcodeScanPageState extends ConsumerState<BarcodeScanPage>
                       setState(() {
                         _cameraDenied = false;
                         _cameraPermanent = false;
+                        _cameraDeniedMessage = null;
                       });
                       unawaited(_initCamera());
                     },
@@ -783,6 +834,7 @@ class _BarcodeScanPageState extends ConsumerState<BarcodeScanPage>
                       setState(() {
                         _cameraDenied = false;
                         _cameraPermanent = false;
+                        _cameraDeniedMessage = null;
                       });
                       unawaited(_initCamera());
                     },

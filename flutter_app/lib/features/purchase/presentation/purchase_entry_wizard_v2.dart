@@ -1231,7 +1231,7 @@ class _PurchaseEntryWizardV2State extends ConsumerState<PurchaseEntryWizardV2>
               supplierId != null && supplierId.isNotEmpty ? supplierId : null,
           priorityCatalogItemIds: priorityIds,
           omitLineFreightDeliveredBilltyDiscount: false,
-          navigateCatalogQuickAddItem: session == null || catalog.isEmpty
+          navigateCatalogQuickAddItem: session == null
               ? null
               : () async {
                   final supId = draft.supplierId?.trim();

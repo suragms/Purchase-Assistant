@@ -167,8 +167,18 @@ BEGIN
   END IF;
 END $$;
 
-CREATE INDEX IF NOT EXISTS idx_staff_activity_log_biz_date
-  ON staff_activity_log(business_id, created_at DESC);
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM information_schema.tables
+    WHERE table_schema = 'public'
+      AND table_name = 'staff_activity_log'
+  ) THEN
+    CREATE INDEX IF NOT EXISTS idx_staff_activity_log_biz_date
+      ON staff_activity_log(business_id, created_at DESC);
+  END IF;
+END $$;
 
 DO $$
 BEGIN
