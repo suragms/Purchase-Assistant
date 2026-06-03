@@ -1,9 +1,11 @@
 import 'dart:async';
 
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/auth/auth_error_messages.dart';
 import '../../../core/auth/session_notifier.dart';
 import '../../../core/errors/user_facing_errors.dart';
 import '../../../core/json_coerce.dart';
@@ -64,6 +66,7 @@ class _QuickStockActionBody extends ConsumerStatefulWidget {
 
 class _QuickStockActionBodyState extends ConsumerState<_QuickStockActionBody> {
   bool _saving = false;
+  late Map<String, dynamic> _item;
   late final TextEditingController _qtyCtrl;
   late final TextEditingController _notesCtrl;
   late double _current;
@@ -76,6 +79,7 @@ class _QuickStockActionBodyState extends ConsumerState<_QuickStockActionBody> {
   @override
   void initState() {
     super.initState();
+    _item = Map<String, dynamic>.from(widget.item);
     _mode = widget.initialMode;
     _current = _seedQtyForMode(_mode);
     _qtyCtrl = TextEditingController(
@@ -87,11 +91,53 @@ class _QuickStockActionBodyState extends ConsumerState<_QuickStockActionBody> {
 
   double _seedQtyForMode(StockUpdateMode mode) {
     if (mode == StockUpdateMode.physical) {
-      final phys = coerceToDoubleNullable(widget.item['physical_stock_qty']);
+      final phys = coerceToDoubleNullable(_item['physical_stock_qty']);
       if (phys != null && phys.isFinite && phys >= 0) return phys;
     }
-    final sys = coerceToDouble(widget.item['current_stock']);
+    final sys = coerceToDouble(_item['current_stock']);
     return sys.isFinite ? sys : 0;
+  }
+
+  int? _stockVersion() {
+    final v = _item['stock_version'];
+    if (v is int) return v;
+    if (v is num) return v.toInt();
+    return int.tryParse(v?.toString() ?? '');
+  }
+
+  bool _isStaleStockVersionError(Object e) {
+    if (e is! DioException || e.response?.statusCode != 409) return false;
+    final data = e.response?.data;
+    if (data is! Map) return false;
+    final detail = data['detail'];
+    if (detail is Map) {
+      return detail['code']?.toString() == 'STALE_STOCK_VERSION';
+    }
+    return false;
+  }
+
+  Future<void> _applyFreshItem(Map<String, dynamic> fresh) async {
+    if (!mounted) return;
+    setState(() {
+      _item = Map<String, dynamic>.from(fresh);
+      _current = _seedQtyForMode(_mode);
+      _qtyCtrl.text = formatStockQtyForUnit(_unit, _current);
+    });
+  }
+
+  Future<bool> _refreshItemFromServer() async {
+    final session = ref.read(sessionProvider);
+    if (session == null) return false;
+    try {
+      final fresh = await ref.read(hexaApiProvider).getStockItem(
+            businessId: session.primaryBusiness.id,
+            itemId: _itemId,
+          );
+      await _applyFreshItem(fresh);
+      return true;
+    } catch (_) {
+      return false;
+    }
   }
 
   void _onModeChanged(StockUpdateMode mode) {
@@ -155,25 +201,54 @@ class _QuickStockActionBodyState extends ConsumerState<_QuickStockActionBody> {
     super.dispose();
   }
 
-  String get _itemId => widget.item['id']?.toString() ?? '';
+  String get _itemId => _item['id']?.toString() ?? '';
 
-  String get _name => widget.item['name']?.toString() ?? 'Item';
+  String get _name => _item['name']?.toString() ?? 'Item';
 
   String get _unit =>
-      widget.item['stock_unit']?.toString() ??
-      widget.item['unit']?.toString() ??
+      _item['stock_unit']?.toString() ??
+      _item['unit']?.toString() ??
       'piece';
 
   String get _unitLabel => _unit.isNotEmpty ? _unit.toUpperCase() : '';
 
   String? get _lastPhysicalLabel {
-    if (widget.item['physical_stock_qty'] == null) return null;
-    final qty = coerceToDouble(widget.item['physical_stock_qty']);
+    if (_item['physical_stock_qty'] == null) return null;
+    final qty = coerceToDouble(_item['physical_stock_qty']);
     if (!qty.isFinite) return null;
-    final diff = coerceToDouble(widget.item['physical_stock_difference_qty']);
+    final diff = coerceToDouble(_item['physical_stock_difference_qty']);
     final sign = diff >= 0 ? '+' : '';
     return 'Last physical: ${formatStockQtyForUnit(_unit, qty)} $_unitLabel'
         '${diff.abs() > 0.001 ? ' ($sign${formatStockQtyForUnit(_unit, diff)} diff)' : ''}';
+  }
+
+  Future<void> _persistStock(num parsed) async {
+    final session = ref.read(sessionProvider);
+    if (session == null) return;
+    final note = _notesCtrl.text.trim();
+    final reasonLabel = _reasonLabel;
+    if (_mode == StockUpdateMode.system) {
+      await ref.read(hexaApiProvider).patchStockItem(
+            businessId: session.primaryBusiness.id,
+            itemId: _itemId,
+            newQty: parsed,
+            adjustmentType: _reasonType ?? 'correction',
+            reason: note.isNotEmpty ? '$reasonLabel — $note' : reasonLabel,
+            lastSeenStockVersion: _stockVersion(),
+          );
+      ref.invalidate(appNotificationsListProvider);
+      ref.invalidate(notificationCenterCoordinatorProvider);
+    } else {
+      final listQ = ref.read(stockListQueryProvider);
+      await ref.read(hexaApiProvider).recordPhysicalStockCount(
+            businessId: session.primaryBusiness.id,
+            itemId: _itemId,
+            countedQty: parsed,
+            notes: note.isNotEmpty ? '$reasonLabel — $note' : reasonLabel,
+            periodStart: listQ.periodStart,
+            periodEnd: listQ.periodEnd,
+          );
+    }
   }
 
   Future<void> _save() async {
@@ -195,38 +270,15 @@ class _QuickStockActionBodyState extends ConsumerState<_QuickStockActionBody> {
     if (_saving) return;
     if (!mounted) return;
     setState(() => _saving = true);
+    var retriedStale = false;
     try {
-      final session = ref.read(sessionProvider);
-      if (session == null) return;
-      final note = _notesCtrl.text.trim();
-      final reasonLabel = _reasonLabel;
-      if (_mode == StockUpdateMode.system) {
-        await ref.read(hexaApiProvider).patchStockItem(
-              businessId: session.primaryBusiness.id,
-              itemId: _itemId,
-              newQty: parsed,
-              adjustmentType: _reasonType ?? 'correction',
-              reason: note.isNotEmpty ? '$reasonLabel — $note' : reasonLabel,
-            );
-        ref.invalidate(appNotificationsListProvider);
-        ref.invalidate(notificationCenterCoordinatorProvider);
-      } else {
-        final listQ = ref.read(stockListQueryProvider);
-        await ref.read(hexaApiProvider).recordPhysicalStockCount(
-              businessId: session.primaryBusiness.id,
-              itemId: _itemId,
-              countedQty: parsed,
-              notes: note.isNotEmpty ? '$reasonLabel — $note' : reasonLabel,
-              periodStart: listQ.periodStart,
-              periodEnd: listQ.periodEnd,
-            );
-      }
+      await _persistStock(parsed);
       invalidateWarehouseSurfaces(ref, itemId: _itemId);
       ref.invalidate(stockAuditPeriodProvider);
       ref.invalidate(stockChangesFeedProvider);
       ref.invalidate(staffTodayActivityProvider);
       ref.invalidate(staffTodaySummaryProvider);
-      final reorder = coerceToDouble(widget.item['reorder_level']);
+      final reorder = coerceToDouble(_item['reorder_level']);
       if (reorder > 0 && parsed <= reorder) {
         final unitLabel = _unit.isNotEmpty ? _unit.toUpperCase() : '';
         await LocalNotificationsService.instance.showLowStockItem(
@@ -240,10 +292,28 @@ class _QuickStockActionBodyState extends ConsumerState<_QuickStockActionBody> {
       if (!context.mounted) return;
       Navigator.of(context).pop(true);
     } catch (e) {
+      if (_isStaleStockVersionError(e) && !retriedStale) {
+        retriedStale = true;
+        final refreshed = await _refreshItemFromServer();
+        if (refreshed && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Stock changed while you were editing. Values refreshed — tap Save again.',
+              ),
+              duration: Duration(seconds: 5),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+          return;
+        }
+      }
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(userFacingError(e)),
+            content: Text(
+              e is DioException ? friendlyApiError(e) : userFacingError(e),
+            ),
             duration: const Duration(seconds: 5),
             behavior: SnackBarBehavior.floating,
           ),
@@ -259,7 +329,7 @@ class _QuickStockActionBodyState extends ConsumerState<_QuickStockActionBody> {
     final canSave = _canSave;
     final stockLabel = stockDisplayPrimary(_current, _unit);
     final lastPhysical = _lastPhysicalLabel;
-    final systemQty = coerceToDouble(widget.item['current_stock']);
+    final systemQty = coerceToDouble(_item['current_stock']);
 
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -333,10 +403,10 @@ class _QuickStockActionBodyState extends ConsumerState<_QuickStockActionBody> {
                 ),
               ),
             ),
-          if (widget.item['last_stock_updated_by'] != null) ...[
+          if (_item['last_stock_updated_by'] != null) ...[
             const SizedBox(height: 4),
             Text(
-              'Last system edit: ${widget.item['last_stock_updated_by']}',
+              'Last system edit: ${_item['last_stock_updated_by']}',
               style: const TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.w700,

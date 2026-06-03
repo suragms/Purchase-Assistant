@@ -73,8 +73,15 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
       ref.read(shellCurrentBranchProvider.notifier).state = idx;
     }
     final routePath = GoRouterState.of(context).uri.path;
-    // Browser back can leave URL on /home while IndexedStack index is stale.
-    if (routePath == '/home' && idx != ShellBranch.home) {
+    final pathBranch = shellBranchIndexForPath(routePath);
+    // Sync IndexedStack branch with the visible route (e.g. /stock/low-stock stack push).
+    if (pathBranch != null && pathBranch != idx) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        ref.read(shellCurrentBranchProvider.notifier).state = pathBranch;
+        navigationShell.goBranch(pathBranch);
+      });
+    } else if (routePath == '/home' && idx != ShellBranch.home) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
         ref.read(shellCurrentBranchProvider.notifier).state = ShellBranch.home;

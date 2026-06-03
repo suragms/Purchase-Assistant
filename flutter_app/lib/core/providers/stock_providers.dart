@@ -635,29 +635,22 @@ final lowStockByCategoryProvider =
       '${range.start.year}-${range.start.month.toString().padLeft(2, '0')}-${range.start.day.toString().padLeft(2, '0')}';
   final periodEnd =
       '${range.end.year}-${range.end.month.toString().padLeft(2, '0')}-${range.end.day.toString().padLeft(2, '0')}';
+  // Server-side shortage filter (low + critical + out) — much smaller than status=all.
   final lowRows = await _fetchStockListAllPages(
     api: api,
     businessId: bid,
-    status: 'all',
+    status: 'shortage',
     includePeriod: true,
     periodStart: periodStart,
     periodEnd: periodEnd,
   );
-  final byId = <String, Map<String, dynamic>>{};
+  final merged = <Map<String, dynamic>>[];
   for (final item in lowRows) {
-    final status = (item['stock_status']?.toString() ?? '').toLowerCase();
-    // Low stock page: system stock vs reorder only (backend stock_status SSOT).
-    if (status != 'low' && status != 'out' && status != 'critical') {
-      continue;
-    }
     final id = item['id']?.toString();
     if (id != null && id.isNotEmpty) {
-      byId[id] = item;
-    } else {
-      byId['_${byId.length}'] = item;
+      merged.add(item);
     }
   }
-  final merged = byId.values.toList();
 
   final result = <String, Map<String, List<Map<String, dynamic>>>>{};
   for (final item in merged) {

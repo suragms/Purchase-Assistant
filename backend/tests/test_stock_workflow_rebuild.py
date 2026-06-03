@@ -129,6 +129,29 @@ def test_physical_update_writes_movement_and_is_idempotent():
     assert Decimal(str(latest.json()["current_stock"])) == Decimal("145")
 
 
+def test_patch_stock_rejects_stale_stock_version():
+    h, bid = _owner_headers()
+    iid = _catalog_item_id(h, bid, current_stock=10)
+    client.patch(
+        f"/v1/businesses/{bid}/stock/{iid}",
+        headers=h,
+        json={"new_qty": 11, "adjustment_type": "correction", "reason": "prep"},
+    )
+
+    stale = client.patch(
+        f"/v1/businesses/{bid}/stock/{iid}",
+        headers=h,
+        json={
+            "new_qty": 12,
+            "adjustment_type": "correction",
+            "reason": "retry",
+            "last_seen_stock_version": 0,
+        },
+    )
+    assert stale.status_code == 409, stale.text
+    assert stale.json()["detail"]["code"] == "STALE_STOCK_VERSION"
+
+
 def test_physical_update_rejects_stale_stock_version():
     h, bid = _owner_headers()
     iid = _catalog_item_id(h, bid, current_stock=10)

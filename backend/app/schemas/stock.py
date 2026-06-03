@@ -16,6 +16,8 @@ class StockPatchIn(BaseModel):
         ),
     )
     reason: str | None = None
+    last_seen_stock_version: int | None = Field(default=None, ge=0)
+    idempotency_key: str | None = Field(default=None, max_length=120)
 
 
 class StockPhysicalUpdateIn(BaseModel):

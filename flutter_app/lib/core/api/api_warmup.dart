@@ -11,21 +11,23 @@ class ApiWarmupService {
 
   static Timer? _keepAlive;
 
-  static const _attemptTimeout = Duration(seconds: 3);
-  static const _retryDelay = Duration(seconds: 2);
-  static const _maxAttempts = 5;
+  static const _attemptTimeout = Duration(seconds: 8);
+  static const _retryDelay = Duration(seconds: 3);
+  static const _maxAttempts = 10;
 
-  /// Call before authenticated traffic: probes `/health/live` (no DB).
-  /// Retries help sleepy PaaS cold starts; **stops immediately** on connection refused.
+  /// Call before authenticated traffic: probes `/health/live` then `/health/ready`.
+  /// Retries help sleepy PaaS cold starts (Render can take 30–90s); **stops immediately**
+  /// on connection refused.
   static Future<void> pingHealth(
     HexaApi api, {
     VoidCallback? onSlow,
     VoidCallback? onUnreachable,
   }) async {
-    final slow = Timer(const Duration(seconds: 2), () => onSlow?.call());
+    final slow = Timer(const Duration(seconds: 3), () => onSlow?.call());
     for (var attempt = 0; attempt < _maxAttempts; attempt++) {
       try {
         await _pingLiveWithRetry(api);
+        await api.healthReady().timeout(const Duration(seconds: 15));
         slow.cancel();
         return;
       } catch (e) {
@@ -35,7 +37,7 @@ class ApiWarmupService {
           return;
         }
         if (attempt < _maxAttempts - 1) {
-          await Future<void>.delayed(Duration(seconds: attempt + 1));
+          await Future<void>.delayed(Duration(seconds: attempt + 2));
         }
       }
     }

@@ -96,37 +96,44 @@ BEGIN
   END IF;
 END $$;
 
--- DB-002 / DB-008: performance indexes for hot paths.
+-- DB-002 / DB-008: performance indexes for hot paths (lines table may lack business_id/created_at).
 DO $$
 BEGIN
   IF EXISTS (
-    SELECT 1
-    FROM information_schema.columns
-    WHERE table_schema = 'public'
-      AND table_name = 'trade_purchase_lines'
-      AND column_name = 'business_id'
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'trade_purchase_lines' AND column_name = 'business_id'
   ) AND EXISTS (
-    SELECT 1
-    FROM information_schema.columns
-    WHERE table_schema = 'public'
-      AND table_name = 'trade_purchase_lines'
-      AND column_name = 'deleted_at'
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'trade_purchase_lines' AND column_name = 'created_at'
+  ) AND EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'trade_purchase_lines' AND column_name = 'deleted_at'
   ) THEN
     CREATE INDEX IF NOT EXISTS idx_tpl_biz_date_item
       ON trade_purchase_lines(business_id, created_at DESC, catalog_item_id)
       WHERE deleted_at IS NULL;
   ELSIF EXISTS (
-    SELECT 1
-    FROM information_schema.columns
-    WHERE table_schema = 'public'
-      AND table_name = 'trade_purchase_lines'
-      AND column_name = 'business_id'
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'trade_purchase_lines' AND column_name = 'business_id'
+  ) AND EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'trade_purchase_lines' AND column_name = 'created_at'
   ) THEN
     CREATE INDEX IF NOT EXISTS idx_tpl_biz_date_item
       ON trade_purchase_lines(business_id, created_at DESC, catalog_item_id);
-  ELSE
+  ELSIF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'trade_purchase_lines' AND column_name = 'created_at'
+  ) THEN
     CREATE INDEX IF NOT EXISTS idx_tpl_biz_date_item
       ON trade_purchase_lines(created_at DESC, catalog_item_id);
+  ELSIF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'trade_purchase_lines' AND column_name = 'catalog_item_id'
+  ) THEN
+    CREATE INDEX IF NOT EXISTS idx_tpl_biz_date_item
+      ON trade_purchase_lines(catalog_item_id)
+      WHERE catalog_item_id IS NOT NULL;
   END IF;
 END $$;
 

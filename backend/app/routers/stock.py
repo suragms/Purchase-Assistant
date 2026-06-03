@@ -3429,7 +3429,19 @@ async def patch_stock_item(
             qty=Decimal(body.new_qty),
             reason=body.reason or body.adjustment_type,
             source_type="stock_patch",
+            idempotency_key=body.idempotency_key,
+            last_seen_stock_version=body.last_seen_stock_version,
         )
+    except StaleStockVersionError as e:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail={
+                "code": "STALE_STOCK_VERSION",
+                "message": str(e),
+                "current_stock": str(e.current_qty),
+                "stock_version": e.current_version,
+            },
+        ) from e
     except NegativeStockError as e:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
     except ValueError as e:

@@ -6,6 +6,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -1688,6 +1689,48 @@ class _PurchaseItemEntrySheetState extends ConsumerState<PurchaseItemEntrySheet>
                 });
               },
               child: const Text('Use kg'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Catalog saved as loose kg but name/weight imply bag — link to item edit.
+  Widget? _catalogLooseKgMisconfigFixBanner() {
+    final id = _selectedCatalogItemId?.trim();
+    if (id == null || id.isEmpty) return null;
+    final row = _catalogRowById(id);
+    if (!catalogItemMisconfiguredAsLooseKgWithBagWeight(row)) return null;
+    final unitLow = _unitCtrl.text.trim().toLowerCase();
+    final usedBag = unitLow == 'bag' || unitLow == 'sack';
+    final blocked = _errUnit != null && _errUnit!.contains('loose KG');
+    if (!blocked && !usedBag) return null;
+    final theme = Theme.of(context);
+    return Material(
+      color: const Color(0xFFFFF7ED),
+      borderRadius: BorderRadius.circular(8),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Text(
+                'This item should use bag tracking (e.g. 30 kg per bag). '
+                'Fix the catalog unit, then enter bags here.',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  fontWeight: FontWeight.w700,
+                  color: const Color(0xFF9A3412),
+                  height: 1.25,
+                ),
+              ),
+            ),
+            TextButton(
+              onPressed: () {
+                context.push('/catalog/item/$id/edit');
+              },
+              child: const Text('Fix unit'),
             ),
           ],
         ),
@@ -3627,6 +3670,7 @@ class _PurchaseItemEntrySheetState extends ConsumerState<PurchaseItemEntrySheet>
         builder: (cx, _) {
           final chips = <Widget>[
             for (final w in [
+              _catalogLooseKgMisconfigFixBanner(),
               _nameImpliesBagButKgUnitBanner(),
               _suggestOneBagInsteadOfKgBanner(),
               _didYouMeanKgNotBagsBanner(),

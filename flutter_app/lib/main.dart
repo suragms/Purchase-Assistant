@@ -195,7 +195,7 @@ class _HexaBootstrapState extends State<_HexaBootstrap> {
             onSlow: () {
               WidgetsBinding.instance.addPostFrameCallback((_) {
                 container.read(apiDegradedProvider.notifier).notifyDegraded(
-                      'Connecting to server…',
+                      'Waking up server (can take up to a minute on first load)…',
                     );
               });
             },

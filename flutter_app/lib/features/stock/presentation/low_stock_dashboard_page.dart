@@ -61,6 +61,9 @@ class _LowStockDashboardPageState extends ConsumerState<LowStockDashboardPage>
   void initState() {
     super.initState();
     _tabs = TabController(length: _tabCount, vsync: this);
+    _tabs.addListener(() {
+      if (!_tabs.indexIsChanging && mounted) setState(() {});
+    });
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
@@ -450,6 +453,7 @@ class _LowStockDashboardPageState extends ConsumerState<LowStockDashboardPage>
           final desktop = context.isDesktopLayout;
           final tree = TabBarView(
             controller: _tabs,
+            physics: const NeverScrollableScrollPhysics(),
             children: [
               for (final tab in _tabOrder)
                 LowStockCategoryTree(

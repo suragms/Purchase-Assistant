@@ -2790,6 +2790,8 @@ class HexaApi {
     required num newQty,
     String adjustmentType = 'verification',
     String? reason,
+    int? lastSeenStockVersion,
+    String? idempotencyKey,
   }) async {
     final res = await _dio.patch<Map<String, dynamic>>(
       '/v1/businesses/$businessId/stock/$itemId',
@@ -2797,6 +2799,10 @@ class HexaApi {
         'new_qty': newQty,
         'adjustment_type': adjustmentType,
         if (reason != null && reason.trim().isNotEmpty) 'reason': reason.trim(),
+        if (lastSeenStockVersion != null)
+          'last_seen_stock_version': lastSeenStockVersion,
+        if (idempotencyKey != null && idempotencyKey.trim().isNotEmpty)
+          'idempotency_key': idempotencyKey.trim(),
       },
     );
     return res.data ?? {};

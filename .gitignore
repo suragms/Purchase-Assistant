@@ -9,6 +9,10 @@ backend/.pytest_tmp/
 # Env
 .env
 backend/.env
+backend/.env.render
+backend/.env.prod
+*.pgdump
+restore_log.txt
 backend/hexa_dev.db
 backend/hexa_demo.db
 backend/hexa_seed_demo.db

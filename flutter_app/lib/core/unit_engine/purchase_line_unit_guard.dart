@@ -56,6 +56,27 @@ String? validatePurchaseLineUnitAgainstCatalog(
   return null;
 }
 
+/// Catalog saved as loose kg but name/weight imply wholesale bag — fix on item edit.
+bool catalogItemMisconfiguredAsLooseKgWithBagWeight(
+  Map<String, dynamic>? catalogRow,
+) {
+  if (catalogRow == null || catalogRow.isEmpty) return false;
+  final defaultUnit =
+      (catalogRow['default_unit'] ?? catalogRow['stock_unit'] ?? '')
+          .toString()
+          .trim()
+          .toLowerCase();
+  if (defaultUnit != 'kg') return false;
+  if (_hasWeight(catalogRow)) return true;
+  final name = catalogRow['name']?.toString() ?? '';
+  final m = RegExp(r'(\d+(?:\.\d+)?)\s*KG\b', caseSensitive: false)
+      .firstMatch(name);
+  if (m == null) return false;
+  final kg = double.tryParse(m.group(1) ?? '');
+  if (kg == null) return false;
+  return {25, 30, 40, 45, 50, 55}.contains(kg.round());
+}
+
 bool _hasWeight(Map<String, dynamic> row) {
   final w = row['default_kg_per_bag'] ?? row['package_size'];
   if (w == null) return false;

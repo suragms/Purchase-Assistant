@@ -16,8 +16,9 @@ _backend_root = Path(__file__).resolve().parent.parent
 try:
     from dotenv import load_dotenv
 
-    # Prefer values in backend/.env over inherited shell env (avoids stale DATABASE_* on dev machines).
-    load_dotenv(_backend_root / ".env", override=True)
+    # Prefer backend/.env on dev machines; allow ops scripts to pass DATABASE_URL (e.g. Render migration).
+    if os.environ.get("SKIP_BACKEND_DOTENV", "").strip().lower() not in ("1", "true", "yes"):
+        load_dotenv(_backend_root / ".env", override=True)
 except ImportError:
     pass
 

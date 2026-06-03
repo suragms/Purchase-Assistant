@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -21,6 +23,8 @@ class ShellRealtimeListener extends ConsumerStatefulWidget {
 class _ShellRealtimeListenerState extends ConsumerState<ShellRealtimeListener> {
   int _lastTick = 0;
   DateTime? _lastWarehouseInvalidate;
+  Timer? _warehouseDebounce;
+  RealtimeInvalidationSignal? _pendingWarehouseSignal;
 
   bool _throttleWarehouse() {
     final now = DateTime.now();
@@ -30,6 +34,24 @@ class _ShellRealtimeListenerState extends ConsumerState<ShellRealtimeListener> {
     }
     _lastWarehouseInvalidate = now;
     return false;
+  }
+
+  @override
+  void dispose() {
+    _warehouseDebounce?.cancel();
+    super.dispose();
+  }
+
+  void _scheduleWarehouseInvalidate(RealtimeInvalidationSignal signal) {
+    _pendingWarehouseSignal = signal;
+    _warehouseDebounce?.cancel();
+    _warehouseDebounce = Timer(const Duration(milliseconds: 300), () {
+      if (!mounted || providerSkipApi(ref)) return;
+      final pending = _pendingWarehouseSignal;
+      _pendingWarehouseSignal = null;
+      if (pending == null || !pending.warehouse) return;
+      _applyWarehouseSignal(pending);
+    });
   }
 
   @override
@@ -57,19 +79,21 @@ class _ShellRealtimeListenerState extends ConsumerState<ShellRealtimeListener> {
       if (signal.warehouse) {
         final urgent = signal.affectedItemIds.isNotEmpty;
         if (urgent || !_throttleWarehouse()) {
-          final ids = signal.affectedItemIds;
-          if (ids.isEmpty) {
-            invalidateWarehouseSurfacesLight(ref);
-          } else {
-            for (final id in ids) {
-              invalidateWarehouseSurfacesLight(ref, itemId: id);
-            }
-          }
-          // Home activity/inventory are not tied to shell branch visibility anymore,
-          // but skip full dashboard bust on passive realtime ticks.
-          ref.invalidate(homeRecentActivityFeedProvider);
-          ref.invalidate(homeInventorySummaryProvider);
+          _scheduleWarehouseInvalidate(signal);
         }
       }
+  }
+
+  void _applyWarehouseSignal(RealtimeInvalidationSignal signal) {
+    final ids = signal.affectedItemIds;
+    if (ids.isEmpty) {
+      invalidateWarehouseSurfacesLight(ref);
+    } else {
+      for (final id in ids) {
+        invalidateWarehouseSurfacesLight(ref, itemId: id);
+      }
+    }
+    ref.invalidate(homeRecentActivityFeedProvider);
+    ref.invalidate(homeInventorySummaryProvider);
   }
 }

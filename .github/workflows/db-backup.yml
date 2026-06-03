@@ -1,0 +1,37 @@
+# Weekly logical backup of Render Postgres (harisree-db).
+# Required GitHub secret: RENDER_DB_EXTERNAL_URL (external postgresql://… from Render Dashboard → Connect)
+name: db-backup
+
+on:
+  schedule:
+    - cron: "0 3 * * 0"
+  workflow_dispatch:
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Install PostgreSQL client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+
+      - name: pg_dump to artifact
+        env:
+          RENDER_DB_EXTERNAL_URL: ${{ secrets.RENDER_DB_EXTERNAL_URL }}
+        run: |
+          if [ -z "$RENDER_DB_EXTERNAL_URL" ]; then
+            echo "::error::RENDER_DB_EXTERNAL_URL secret is not set."
+            exit 1
+          fi
+          STAMP=$(date -u +%Y%m%d)
+          pg_dump "$RENDER_DB_EXTERNAL_URL" \
+            --no-owner --no-acl --schema=public --format=custom \
+            --file="harisree_render_${STAMP}.pgdump"
+          ls -lh "harisree_render_${STAMP}.pgdump"
+
+      - name: Upload backup artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: harisree-db-backup
+          path: harisree_render_*.pgdump
+          retention-days: 28

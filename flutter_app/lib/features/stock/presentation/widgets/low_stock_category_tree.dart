@@ -275,6 +275,17 @@ class _LowStockCategoryTreeState extends State<LowStockCategoryTree> {
     _subTabByCat.clear();
     _lastFilterKey =
         '${widget.tab}|${widget.searchQuery}|${widget.searchScope}|${widget.subcategoryFilter}|${widget.grouped.length}';
+    final filtered = filterLowStockGrouped(
+      grouped: widget.grouped,
+      tab: widget.tab,
+      searchQuery: widget.searchQuery,
+      searchScope: widget.searchScope,
+      subcategoryFilter: widget.subcategoryFilter,
+    );
+    final cats = sortedLowStockCategories(filtered, widget.tab);
+    if (cats.isNotEmpty) {
+      _expandedCats.add(cats.first);
+    }
   }
 
   @override

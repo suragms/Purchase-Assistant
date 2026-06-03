@@ -4,6 +4,16 @@ import 'package:go_router/go_router.dart';
 
 import '../../features/shell/shell_branch_provider.dart';
 
+/// Maps a route path to the shell branch that should be active (stack pushes included).
+int? shellBranchIndexForPath(String path) {
+  if (path.startsWith('/stock')) return ShellBranch.stock;
+  if (path.startsWith('/home')) return ShellBranch.home;
+  if (path.startsWith('/reports')) return ShellBranch.reports;
+  if (path.startsWith('/purchase')) return ShellBranch.history;
+  if (path.startsWith('/search')) return ShellBranch.search;
+  return null;
+}
+
 /// Default shell location for each IndexedStack branch.
 String shellLocationForBranch(int branch) => switch (branch) {
       ShellBranch.home => '/home',
