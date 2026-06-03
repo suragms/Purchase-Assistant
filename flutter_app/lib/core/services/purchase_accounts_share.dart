@@ -21,7 +21,11 @@ import 'purchase_pdf.dart';
 import 'whatsapp_phone_normalize.dart';
 
 export 'whatsapp_phone_normalize.dart'
-    show normalizeAccountsWhatsappPhone, normalizeGulfMobile, normalizeIndiaMobile10;
+    show
+        normalizeAccountsWhatsappPhone,
+        normalizeGulfMobile,
+        normalizeIndiaMobile10,
+        normalizedFromStoredAccountsWhatsapp;
 
 const int _kMaxSummaryLines = 40;
 
