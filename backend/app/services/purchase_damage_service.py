@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from decimal import Decimal
 
-from sqlalchemy import func, select
+from sqlalchemy import func, inspect as sa_inspect, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import TradePurchase, TradePurchaseLine, User
@@ -35,6 +35,19 @@ def reason_to_damage_type(reason: str | None) -> str:
     if reason == "wrong_item":
         return "missing"
     return "damaged"
+
+
+async def _damage_report_schema_v2(db: AsyncSession) -> bool:
+    """True when migration 057 columns exist (status, catalog_item_id, …)."""
+
+    def _check(connection) -> bool:
+        try:
+            cols = {c["name"] for c in sa_inspect(connection).get_columns("purchase_damage_reports")}
+        except Exception:
+            return False
+        return "status" in cols
+
+    return await db.run_sync(_check)
 
 
 async def _load_purchase(
@@ -140,6 +153,10 @@ async def create_damage_report(
     emit_notification: bool = True,
     damaged_items_in_batch: int | None = None,
 ) -> PurchaseDamageReport:
+    if not await _damage_report_schema_v2(db):
+        raise ValueError(
+            "Damage reports need database update 057. Run alembic upgrade head on production."
+        )
     tp = await _load_purchase(db, business_id=business_id, purchase_id=purchase_id)
     resolved_name = await _resolve_item_name(
         db,
@@ -203,6 +220,8 @@ async def list_damage_reports(
     purchase_id: uuid.UUID,
 ) -> list[tuple[PurchaseDamageReport, str | None]]:
     await _load_purchase(db, business_id=business_id, purchase_id=purchase_id)
+    if not await _damage_report_schema_v2(db):
+        return []
 
     r = await db.execute(
         select(PurchaseDamageReport, User.name)
@@ -219,6 +238,8 @@ async def list_damage_reports(
 async def count_pending_damage_reports(
     db: AsyncSession, *, business_id: uuid.UUID
 ) -> int:
+    if not await _damage_report_schema_v2(db):
+        return 0
     n = (
         await db.execute(
             select(func.count())
@@ -240,6 +261,10 @@ async def update_damage_report_status(
     status: str,
     notes: str | None = None,
 ) -> PurchaseDamageReport:
+    if not await _damage_report_schema_v2(db):
+        raise ValueError(
+            "Damage reports need database update 057. Run alembic upgrade head on production."
+        )
     st = status.strip().lower()
     if st not in _OWNER_PATCH_STATUS:
         raise ValueError("Invalid status")
