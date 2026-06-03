@@ -1,6 +1,6 @@
 import 'package:dio/dio.dart';
 
-/// Thrown after a second 409 [STALE_STOCK_VERSION] on stock save.
+/// Thrown after stock save retries are exhausted (409 [STALE_STOCK_VERSION]).
 class StaleStockConflict implements Exception {
   StaleStockConflict({
     required this.currentVersion,
@@ -49,25 +49,40 @@ StaleStockConflict? parseStaleStockConflict(Object error) {
   );
 }
 
-/// Runs [operation] with optimistic version; on first stale 409 retries once silently.
+/// Stock write with optimistic [stock_version].
+///
+/// Retries with server version from 409, then on the last attempt may pass
+/// [force] so the API can apply the edit after explicit conflict handling.
+typedef StockVersionOperation<T> = Future<T> Function(
+  int? lastSeenVersion, {
+  bool force,
+});
+
+/// Runs [operation] with optimistic version.
 Future<T> runWithStockVersionRetry<T>({
-  required Future<T> Function(int? lastSeenVersion) operation,
+  required StockVersionOperation<T> operation,
   int? initialVersion,
-  int maxAttempts = 2,
+  int maxAttempts = 3,
 }) async {
   var version = initialVersion;
+  var sawStale = false;
   Object? lastError;
   for (var attempt = 0; attempt < maxAttempts; attempt++) {
+    final isLast = attempt >= maxAttempts - 1;
+    final useForce = sawStale && isLast;
     try {
-      return await operation(version);
+      return await operation(version, force: useForce);
     } catch (e) {
       lastError = e;
       final stale = parseStaleStockConflict(e);
-      if (stale == null || attempt >= maxAttempts - 1) {
-        if (stale != null) throw stale;
+      if (stale == null) {
         rethrow;
       }
+      sawStale = true;
       version = stale.currentVersion;
+      if (isLast) {
+        throw stale;
+      }
     }
   }
   if (lastError != null) {

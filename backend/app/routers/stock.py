@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import uuid
 from collections import defaultdict
 from time import monotonic
@@ -12,6 +13,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.database import get_db
+
+logger = logging.getLogger(__name__)
 from app.deps import get_current_user, require_membership, require_permission, require_role
 from app.services.staff_audit import log_staff_activity
 from app.services.notification_emitter import CATEGORY_STAFF
@@ -3383,16 +3386,27 @@ async def record_physical_stock_count(
         counted_by_name=display,
     )
     db.add(entry)
-    await log_staff_activity(
-        db,
-        business_id=business_id,
-        user=user,
-        action_type="PHYSICAL_STOCK_COUNT",
-        item_id=item_id,
-        item_name=item.name,
-        before_data={"system_qty": float(system_qty)},
-        after_data={"counted_qty": float(counted), "difference_qty": float(counted - system_qty)},
-    )
+    await db.flush()
+    try:
+        await log_staff_activity(
+            db,
+            business_id=business_id,
+            user=user,
+            action_type="PHYSICAL_STOCK_COUNT",
+            item_id=item_id,
+            item_name=item.name,
+            before_data={"system_qty": float(system_qty)},
+            after_data={
+                "counted_qty": float(counted),
+                "difference_qty": float(counted - system_qty),
+            },
+        )
+    except Exception:
+        logger.warning(
+            "staff activity log failed after physical count item_id=%s",
+            item_id,
+            exc_info=True,
+        )
     await db.commit()
     await db.refresh(entry)
     return _physical_count_out(item, entry)
@@ -3419,7 +3433,8 @@ async def update_physical_stock(
         "correction": "correction",
         "sale": "sale",
     }.get(body.adjustment_type, "physical_count")
-    version_tolerance = 2 if body.adjustment_type == "verification" else 0
+    # Floor edits often use list rows one version behind; allow +1 drift (not verification +2).
+    version_tolerance = 2 if body.adjustment_type == "verification" else 1
     try:
         result = await apply_stock_movement(
             db,
@@ -3624,7 +3639,7 @@ async def patch_stock_item(
         "correction": "correction",
         "sale": "sale",
     }.get(body.adjustment_type, body.adjustment_type)
-    version_tolerance = 2 if body.adjustment_type == "verification" else 0
+    version_tolerance = 2 if body.adjustment_type == "verification" else 1
     try:
         result = await apply_stock_movement(
             db,

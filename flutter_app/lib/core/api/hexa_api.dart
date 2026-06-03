@@ -2915,9 +2915,11 @@ class HexaApi {
     String? reason,
     int? lastSeenStockVersion,
     String? idempotencyKey,
+    bool force = false,
   }) async {
     final res = await _dio.patch<Map<String, dynamic>>(
       '/v1/businesses/$businessId/stock/$itemId',
+      queryParameters: force ? {'force': 'true'} : null,
       data: {
         'new_qty': newQty,
         'adjustment_type': adjustmentType,
@@ -2943,7 +2945,7 @@ class HexaApi {
   }) {
     return runWithStockVersionRetry(
       initialVersion: initialStockVersion,
-      operation: (version) => patchStockItem(
+      operation: (version, {force = false}) => patchStockItem(
         businessId: businessId,
         itemId: itemId,
         newQty: newQty,
@@ -2951,6 +2953,7 @@ class HexaApi {
         reason: reason,
         lastSeenStockVersion: version,
         idempotencyKey: idempotencyKey,
+        force: force,
       ),
     );
   }
@@ -2966,9 +2969,11 @@ class HexaApi {
     String? idempotencyKey,
     String? periodStart,
     String? periodEnd,
+    bool force = false,
   }) async {
     final res = await _dio.post<Map<String, dynamic>>(
       '/v1/businesses/$businessId/stock/$itemId/physical-update',
+      queryParameters: force ? {'force': 'true'} : null,
       data: {
         'counted_qty': countedQty,
         'adjustment_type': adjustmentType,
@@ -3001,7 +3006,7 @@ class HexaApi {
   }) {
     return runWithStockVersionRetry(
       initialVersion: initialStockVersion,
-      operation: (version) => updatePhysicalStock(
+      operation: (version, {force = false}) => updatePhysicalStock(
         businessId: businessId,
         itemId: itemId,
         countedQty: countedQty,
@@ -3012,6 +3017,7 @@ class HexaApi {
         idempotencyKey: idempotencyKey,
         periodStart: periodStart,
         periodEnd: periodEnd,
+        force: force,
       ),
     );
   }
@@ -3049,7 +3055,7 @@ class HexaApi {
   }) {
     return runWithStockVersionRetry(
       initialVersion: initialStockVersion,
-      operation: (_) => verifyStockCount(
+      operation: (_, {force = false}) => verifyStockCount(
         businessId: businessId,
         itemId: itemId,
         countedQty: countedQty,

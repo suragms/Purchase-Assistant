@@ -270,6 +270,9 @@ class _QuickStockActionBodyState extends ConsumerState<_QuickStockActionBody> {
     if (!mounted) return;
     setState(() => _saving = true);
     try {
+      if (_mode == StockUpdateMode.system) {
+        await _refreshItemFromServer();
+      }
       await _persistStock(parsed);
       if (!mounted) return;
       invalidateWarehouseSurfaces(ref, itemId: _itemId);

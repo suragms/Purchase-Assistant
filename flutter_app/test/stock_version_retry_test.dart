@@ -31,13 +31,15 @@ void main() {
     var calls = 0;
     final result = await runWithStockVersionRetry<int>(
       initialVersion: 1,
-      operation: (version) async {
+      operation: (version, {force = false}) async {
         calls++;
         if (calls == 1) {
           expect(version, 1);
+          expect(force, isFalse);
           throw _stale409(version: 2);
         }
         expect(version, 2);
+        expect(force, isFalse);
         return 99;
       },
     );
@@ -45,11 +47,31 @@ void main() {
     expect(calls, 2);
   });
 
-  test('runWithStockVersionRetry throws StaleStockConflict on second 409', () {
+  test('runWithStockVersionRetry uses force on final stale attempt', () async {
+    var calls = 0;
+    final result = await runWithStockVersionRetry<int>(
+      initialVersion: 0,
+      maxAttempts: 3,
+      operation: (version, {force = false}) async {
+        calls++;
+        if (calls < 3) {
+          throw _stale409(version: calls);
+        }
+        expect(force, isTrue);
+        expect(version, 2);
+        return 42;
+      },
+    );
+    expect(result, 42);
+    expect(calls, 3);
+  });
+
+  test('runWithStockVersionRetry throws StaleStockConflict when all attempts stale', () {
     expect(
       () => runWithStockVersionRetry<void>(
         initialVersion: 0,
-        operation: (_) async {
+        maxAttempts: 2,
+        operation: (_, {force = false}) async {
           throw _stale409(version: 1);
         },
       ),
