@@ -199,12 +199,26 @@ final hexaApiProvider = Provider<HexaApi>((ref) {
       if (disposed) return;
       try {
         ref.read(authRefreshFailureTrackerProvider).reset();
-        ref.read(authApiGateProvider.notifier).reset();
+        ref.read(authApiGateProvider.notifier).forceCircuitOpen();
         ref.read(authSessionExpiredProvider.notifier).markExpired();
         authRefresh.value++;
         await ref.read(sessionProvider.notifier).logout();
       } catch (_) {/* container disposed */}
     }),
+    onSuspendForAuthFailure: () {
+      if (disposed) return;
+      try {
+        ref.read(authApiGateProvider.notifier).suspendFor401();
+      } catch (_) {/* container disposed */}
+    },
+    blockBusinessApi: () {
+      if (disposed) return true;
+      try {
+        return ref.read(authBlockApiRequestsProvider);
+      } catch (_) {
+        return true;
+      }
+    },
     onBusiness401: () {
       if (disposed) return true;
       try {

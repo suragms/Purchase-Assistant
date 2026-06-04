@@ -16,7 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models import CatalogItem, Membership, User
 from app.models.stock_adjustment import StockAdjustmentLog
 from app.models.stock_movement import StockMovement
-from app.services.staff_audit import log_staff_activity
+from app.services.staff_audit import log_staff_activity_best_effort
 from app.services.stock_inventory import catalog_stock_qty
 from app.services.unit_normalization import catalog_stock_unit
 
@@ -272,7 +272,7 @@ async def apply_stock_movement(
         )
 
     if create_activity:
-        await log_staff_activity(
+        await log_staff_activity_best_effort(
             db,
             business_id=business_id,
             user=user,

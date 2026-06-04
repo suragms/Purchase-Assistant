@@ -9,6 +9,7 @@ import 'package:go_router/go_router.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../../core/auth/auth_failure_policy.dart';
+import '../../../core/auth/provider_api_guard.dart';
 import '../../../core/auth/session_notifier.dart';
 import '../../../core/models/session.dart';
 import '../../../core/providers/stock_list_exceptions.dart';
@@ -107,6 +108,7 @@ class _StockPageState extends ConsumerState<StockPage>
 
     _deliveryCountsPoll = Timer.periodic(const Duration(seconds: 30), (_) {
       if (!mounted) return;
+      if (providerSkipApi(ref)) return;
       ref.invalidate(stockDeliveryIndicatorCountsProvider);
     });
 
@@ -640,6 +642,15 @@ class _StockPageState extends ConsumerState<StockPage>
         _resetMerged();
         ref.invalidate(stockListProvider);
         ref.invalidate(stockStatusCountsProvider);
+      }
+    });
+
+    ref.listen<bool>(auth401CircuitOpenProvider, (prev, next) {
+      if (next && mounted) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          context.go('/login');
+        });
       }
     });
 

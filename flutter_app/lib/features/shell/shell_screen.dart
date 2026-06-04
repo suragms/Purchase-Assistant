@@ -88,7 +88,9 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
         navigationShell.goBranch(ShellBranch.home);
       });
     }
-    final stockAlertN = ref.watch(notificationsUnreadCountProvider);
+    final stockAlertN = providerSkipApi(ref)
+        ? 0
+        : ref.watch(notificationsUnreadCountProvider);
     final width = MediaQuery.sizeOf(context).width;
     final showRail = width > 0 && width >= kShellRailMin;
     final railExtended = width > 0 && width >= kShellRailExtendedMin;

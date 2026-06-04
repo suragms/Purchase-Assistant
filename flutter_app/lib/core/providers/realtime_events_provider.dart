@@ -63,9 +63,9 @@ final realtimeInvalidationProvider =
   final link = ref.keepAlive();
   ref.onDispose(() => link.close());
 
+  if (providerSkipApi(ref)) return;
   final session = ref.watch(sessionProvider);
-  final authExpired = ref.watch(authSessionExpiredProvider);
-  if (session == null || authExpired) return;
+  if (session == null) return;
   final api = ref.read(hexaApiProvider);
   final seen = <String>{};
   var tick = 0;

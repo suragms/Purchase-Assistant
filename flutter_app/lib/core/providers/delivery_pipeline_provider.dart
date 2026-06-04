@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../auth/provider_api_guard.dart';
 import '../auth/session_notifier.dart'
     show activeSessionProvider, hexaApiProvider;
 import '../json_coerce.dart';
@@ -11,6 +12,7 @@ import 'home_dashboard_provider.dart'
 /// Owner dashboard: counts per delivery_status from API.
 final deliveryPipelineProvider =
     FutureProvider.autoDispose<Map<String, dynamic>>((ref) async {
+  if (providerSkipApi(ref)) return {};
   if (homeTabHasOperationalBundle(ref)) {
     return Map<String, dynamic>.from(
       ref.watch(homeDashboardDataProvider).snapshot.data.operational!.deliveryPipeline,

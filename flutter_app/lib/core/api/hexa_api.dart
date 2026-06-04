@@ -117,12 +117,16 @@ class HexaApi {
     void Function(bool degraded, String? hint)? onConnectivityBanner,
     bool Function()? authSessionExpired,
     bool Function()? onBusiness401,
+    void Function()? onSuspendForAuthFailure,
+    bool Function()? blockBusinessApi,
   })  : _onUnauthorizedRefresh = onUnauthorizedRefresh,
         _onTerminalAuthFailure = onTerminalAuthFailure,
         _resolveAccessToken = resolveAccessToken,
         _onConnectivityBanner = onConnectivityBanner,
         _authSessionExpired = authSessionExpired,
         _onBusiness401 = onBusiness401,
+        _onSuspendForAuthFailure = onSuspendForAuthFailure,
+        _blockBusinessApi = blockBusinessApi,
         _dio = Dio(
           BaseOptions(
             baseUrl: baseUrl ?? AppConfig.resolvedApiBaseUrl,
@@ -168,6 +172,15 @@ class HexaApi {
           if (_isAuthEndpoint(path)) {
             return handler.next(options);
           }
+          if (_blockBusinessApi?.call() == true) {
+            return handler.reject(
+              DioException(
+                requestOptions: options,
+                type: DioExceptionType.cancel,
+                message: 'auth_blocked',
+              ),
+            );
+          }
           final existing = options.headers['Authorization']?.toString() ??
               _dio.options.headers['Authorization']?.toString();
           if (existing == null || existing.isEmpty) {
@@ -202,23 +215,16 @@ class HexaApi {
           if (_authSessionExpired?.call() == true) {
             return handler.next(err);
           }
+          _onSuspendForAuthFailure?.call();
           if (req.extra['authRetried'] == true) {
-            if (_onBusiness401?.call() == true) {
-              await _onTerminalAuthFailure?.call('401_burst');
-            } else {
-              await _onTerminalAuthFailure?.call('auth_retry_failed');
-            }
+            await _onTerminalAuthFailure?.call('auth_retry_failed');
             return handler.next(err);
           }
           // Refresh first — expired access tokens are normal after redeploy;
           // do not suspend the API until refresh actually fails.
           final ok = await _onUnauthorizedRefresh?.call() ?? false;
           if (!ok) {
-            if (_onBusiness401?.call() == true) {
-              await _onTerminalAuthFailure?.call('401_burst');
-            } else {
-              await _onTerminalAuthFailure?.call('refresh_failed');
-            }
+            await _onTerminalAuthFailure?.call('refresh_failed');
             return handler.next(err);
           }
           final auth = _dio.options.headers['Authorization'];
@@ -292,6 +298,8 @@ class HexaApi {
   final void Function(bool degraded, String? hint)? _onConnectivityBanner;
   final bool Function()? _authSessionExpired;
   final bool Function()? _onBusiness401;
+  final void Function()? _onSuspendForAuthFailure;
+  final bool Function()? _blockBusinessApi;
 
   Dio get raw => _dio;
 

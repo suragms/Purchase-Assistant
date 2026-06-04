@@ -105,6 +105,7 @@ from app.services.stock_movement_service import (
     NegativeStockError,
     StaleStockVersionError,
     apply_stock_movement,
+    apply_stock_movement_with_retry,
 )
 from app.services.realtime_events import publish_business_event
 from app.services.notification_emitter import publish_notification_changed
@@ -3429,7 +3430,7 @@ async def update_physical_stock(
     # Floor edits often use list rows one version behind; allow +1 drift (not verification +2).
     version_tolerance = 2 if body.adjustment_type == "verification" else 1
     try:
-        result = await apply_stock_movement(
+        result = await apply_stock_movement_with_retry(
             db,
             business_id=business_id,
             item_id=item_id,
@@ -3569,7 +3570,7 @@ async def verify_stock_count(
         reason=body.reason + (f" — {body.notes}" if body.notes else ""),
         audit_id=None,
     )
-    await log_staff_activity(
+    await log_staff_activity_best_effort(
         db,
         business_id=business_id,
         user=user,
@@ -3634,7 +3635,7 @@ async def patch_stock_item(
     }.get(body.adjustment_type, body.adjustment_type)
     version_tolerance = 2 if body.adjustment_type == "verification" else 1
     try:
-        result = await apply_stock_movement(
+        result = await apply_stock_movement_with_retry(
             db,
             business_id=business_id,
             item_id=item_id,

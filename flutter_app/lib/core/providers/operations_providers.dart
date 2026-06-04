@@ -2,7 +2,8 @@ import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../auth/auth_failure_policy.dart';
-import '../auth/session_notifier.dart';
+import '../auth/provider_api_guard.dart';
+import '../auth/session_notifier.dart' show activeSessionProvider, hexaApiProvider;
 
 bool _isAuthFailure(Object e) {
   if (e is DioException) {
@@ -13,9 +14,8 @@ bool _isAuthFailure(Object e) {
 }
 
 bool _checklistSessionActive(Ref ref) {
-  final session = ref.watch(sessionProvider);
-  final authExpired = ref.watch(authSessionExpiredProvider);
-  return session != null && !authExpired;
+  if (providerSkipApi(ref)) return false;
+  return ref.watch(activeSessionProvider) != null;
 }
 
 final checklistTodayProvider =

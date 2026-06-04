@@ -95,6 +95,13 @@ class AuthApiGateNotifier extends Notifier<AuthApiGateState> {
     _since = null;
     state = const AuthApiGateState();
   }
+
+  /// After refresh fails — stop all business API immediately (no 4-strike wait).
+  void forceCircuitOpen() {
+    _count = _threshold;
+    _since = DateTime.now();
+    state = const AuthApiGateState(suspended: true, circuitOpen: true);
+  }
 }
 
 final authApiGateProvider =

@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../features/shell/shell_branch_provider.dart';
 import '../api/hexa_api.dart';
+import '../auth/provider_api_guard.dart';
 import '../auth/session_notifier.dart' show activeSessionProvider, hexaApiProvider;
 import '../json_coerce.dart';
 import '../utils/stock_audit_rows.dart';
@@ -45,6 +46,9 @@ Future<Map<String, dynamic>> _fetchOwnerOverviewSnapshot({
   required String from,
   required String to,
 }) {
+  if (providerSkipApi(ref)) {
+    return Future.value(<String, dynamic>{});
+  }
   final key = _ownerOverviewKey(businessId, from, to);
   final fetchedAt = _ownerOverviewFetchedAt[key];
   if (fetchedAt != null &&
