@@ -215,6 +215,10 @@ class HexaApi {
           if (_authSessionExpired?.call() == true) {
             return handler.next(err);
           }
+          if (_onBusiness401?.call() == true) {
+            await _onTerminalAuthFailure?.call('auth_circuit_open');
+            return handler.next(err);
+          }
           _onSuspendForAuthFailure?.call();
           if (req.extra['authRetried'] == true) {
             await _onTerminalAuthFailure?.call('auth_retry_failed');
