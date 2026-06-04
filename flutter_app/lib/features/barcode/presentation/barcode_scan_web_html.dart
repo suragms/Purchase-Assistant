@@ -42,8 +42,8 @@ bool get preferUploadBarcodeOnWeb {
 }
 
 WebLiveBarcodeScanner? createWebLiveBarcodeScanner() {
-  if (!barcodeDetectorAvailable || !isSafariBrowser) return null;
-  return _SafariBarcodeDetectorScanner();
+  if (!barcodeDetectorAvailable) return null;
+  return _WebBarcodeDetectorScanner();
 }
 
 Future<String?> decodeBarcodeFromImageBytes(List<int> bytes) async {
@@ -110,7 +110,7 @@ String? _firstCodeFromDetectResults(List<dynamic> results) {
   return text.isEmpty ? null : text;
 }
 
-class _SafariBarcodeDetectorScanner implements WebLiveBarcodeScanner {
+class _WebBarcodeDetectorScanner implements WebLiveBarcodeScanner {
   static int _nextViewId = 0;
 
   html.VideoElement? _video;
@@ -123,7 +123,7 @@ class _SafariBarcodeDetectorScanner implements WebLiveBarcodeScanner {
   late final String _viewType;
   bool _viewRegistered = false;
 
-  _SafariBarcodeDetectorScanner() {
+  _WebBarcodeDetectorScanner() {
     _viewType = 'barcode-live-${_nextViewId++}';
   }
 
@@ -154,6 +154,15 @@ class _SafariBarcodeDetectorScanner implements WebLiveBarcodeScanner {
 
   @override
   Future<bool> start(void Function(String code) onDetected) async {
+    if (_active && _stream != null && _video != null) {
+      _onDetected = onDetected;
+      _detectTimer?.cancel();
+      _detectTimer = Timer.periodic(
+        const Duration(milliseconds: 280),
+        (_) => unawaited(_detectOnce()),
+      );
+      return true;
+    }
     await stop();
     _onDetected = onDetected;
     try {
@@ -185,7 +194,7 @@ class _SafariBarcodeDetectorScanner implements WebLiveBarcodeScanner {
       _registerViewIfNeeded();
       _active = true;
       _detectTimer = Timer.periodic(
-        const Duration(milliseconds: 800),
+        const Duration(milliseconds: 280),
         (_) => unawaited(_detectOnce()),
       );
       return true;

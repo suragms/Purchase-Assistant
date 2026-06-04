@@ -93,9 +93,12 @@ class _WarehouseScanActionBodyState extends ConsumerState<_WarehouseScanActionBo
     _item = Map<String, dynamic>.from(widget.item);
     _seedQtyFromItem();
     _qtyCtl.addListener(_revalidateQty);
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) unawaited(_refreshItemFromServer());
-    });
+    final hasStockRow = widget.item['current_stock'] != null;
+    if (!hasStockRow) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) unawaited(_refreshItemFromServer());
+      });
+    }
   }
 
   @override

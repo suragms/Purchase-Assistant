@@ -28,6 +28,8 @@ import '../../../core/router/navigation_ext.dart';
 import '../../../shared/widgets/search_picker_sheet.dart';
 import '../../stock/presentation/stock_sheet_launch.dart';
 import '../../stock/presentation/stock_undo_snackbar.dart';
+import '../barcode_camera_session.dart';
+import '../barcode_lookup_cache.dart';
 import 'warehouse_scan_action_sheet.dart';
 import 'barcode_scan_web_stub.dart'
     if (dart.library.html) 'barcode_scan_web.dart';
@@ -91,6 +93,7 @@ class _BarcodeScanPageState extends ConsumerState<BarcodeScanPage>
   bool _safariUploadNudgeShown = false;
   bool _hadDetectThisVisit = false;
   bool _scanConfirmed = false;
+  String? _lookupLabel;
 
   @override
   void initState() {
@@ -206,7 +209,7 @@ class _BarcodeScanPageState extends ConsumerState<BarcodeScanPage>
   MobileScannerController _newScannerController() {
     return MobileScannerController(
       detectionSpeed: DetectionSpeed.noDuplicates,
-      detectionTimeoutMs: kIsWeb ? 150 : 100,
+      detectionTimeoutMs: kIsWeb ? 90 : 100,
       facing: CameraFacing.back,
       formats: _kWarehouseBarcodeFormats,
       autoStart: true,
@@ -234,8 +237,8 @@ class _BarcodeScanPageState extends ConsumerState<BarcodeScanPage>
     unawaited(_lookupAndNavigate(v));
   }
 
-  Future<bool> _tryStartSafariBarcodeDetector() async {
-    if (!kIsWeb || !isSafariBrowser) return false;
+  Future<bool> _tryStartWebBarcodeDetector() async {
+    if (!kIsWeb) return false;
     final scanner = createWebLiveBarcodeScanner();
     if (scanner == null) return false;
     final ok = await scanner.start(_onWebBarcodeCode);
@@ -245,8 +248,10 @@ class _BarcodeScanPageState extends ConsumerState<BarcodeScanPage>
     }
     await _camera?.dispose();
     _camera = null;
+    BarcodeCameraSession.mobile = null;
     _webLiveScanner = scanner;
     _useWebDetectorPreview = true;
+    BarcodeCameraSession.retainWebDetector(scanner);
     await _markCameraPermGranted();
     if (mounted) {
       setState(() {
@@ -262,7 +267,8 @@ class _BarcodeScanPageState extends ConsumerState<BarcodeScanPage>
   Future<void> _startWebMobileScanner() async {
     await _stopWebLiveScanner();
     try {
-      _camera = _newScannerController();
+      _camera = BarcodeCameraSession.mobile ?? _newScannerController();
+      BarcodeCameraSession.retainMobile(_camera!);
       await _markCameraPermGranted();
       if (mounted) {
         setState(() {
@@ -322,6 +328,11 @@ class _BarcodeScanPageState extends ConsumerState<BarcodeScanPage>
     });
   }
 
+  Future<void> _retryCameraAfterDenial() async {
+    await BarcodeCameraSession.reset();
+    await _initCamera();
+  }
+
   Future<void> _initCamera() async {
     if ((_camera != null && _camera!.value.isRunning) ||
         (_useWebDetectorPreview && (_webLiveScanner?.isActive ?? false))) {
@@ -336,7 +347,33 @@ class _BarcodeScanPageState extends ConsumerState<BarcodeScanPage>
       }
 
       if (kIsWeb) {
-        if (await _tryStartSafariBarcodeDetector()) return;
+        if (BarcodeCameraSession.hasLiveWebDetector &&
+            BarcodeCameraSession.webDetector != null) {
+          _webLiveScanner = BarcodeCameraSession.webDetector;
+          _useWebDetectorPreview = true;
+          await _webLiveScanner!.start(_onWebBarcodeCode);
+          if (mounted) {
+            setState(() {
+              _cameraDenied = false;
+              _cameraPermanent = false;
+              _cameraDeniedMessage = null;
+            });
+          }
+          return;
+        }
+        if (BarcodeCameraSession.hasLiveMobile &&
+            BarcodeCameraSession.mobile != null) {
+          _camera = BarcodeCameraSession.mobile;
+          if (mounted) {
+            setState(() {
+              _cameraDenied = false;
+              _cameraPermanent = false;
+              _cameraDeniedMessage = null;
+            });
+          }
+          return;
+        }
+        if (await _tryStartWebBarcodeDetector()) return;
         await _startWebMobileScanner();
         return;
       }
@@ -353,26 +390,31 @@ class _BarcodeScanPageState extends ConsumerState<BarcodeScanPage>
         return;
       }
 
-      if (_cameraPermissionGrantedThisSession) {
+      if (status.isGranted || status.isLimited) {
+        await _markCameraPermGranted();
         await _startNativeMobileScanner();
         return;
       }
 
-      if (!status.isGranted) {
-        final req = await Permission.camera.request();
-        if (!req.isGranted) {
-          if (mounted) {
-            setState(() {
-              _cameraDenied = true;
-              _cameraPermanent = req.isPermanentlyDenied;
-              _cameraDeniedMessage = null;
-            });
-          }
-          return;
+      if (_cameraPermissionGrantedThisSession || persisted) {
+        await _startNativeMobileScanner();
+        return;
+      }
+
+      final req = await Permission.camera.request();
+      if (!req.isGranted && !req.isLimited) {
+        if (mounted) {
+          setState(() {
+            _cameraDenied = true;
+            _cameraPermanent = req.isPermanentlyDenied;
+            _cameraDeniedMessage = null;
+          });
         }
+        return;
       }
 
       if (!mounted) return;
+      await _markCameraPermGranted();
       await _startNativeMobileScanner();
     } finally {
       _cameraInitInFlight = false;
@@ -595,27 +637,7 @@ class _BarcodeScanPageState extends ConsumerState<BarcodeScanPage>
     if (session == null) return;
 
     _setBusy(true);
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Row(
-            children: [
-              SizedBox(
-                width: 18,
-                height: 18,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: Theme.of(context).colorScheme.onInverseSurface,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(child: Text('Looking up $code…')),
-            ],
-          ),
-          duration: const Duration(seconds: 30),
-        ),
-      );
-    }
+    if (mounted) setState(() => _lookupLabel = code);
 
     // Do NOT stop camera on iOS — just ignore new detects via _busy flag
     // Only stop on non-web (Android) where stop/start is reliable
@@ -626,13 +648,16 @@ class _BarcodeScanPageState extends ConsumerState<BarcodeScanPage>
     }
 
     try {
-      final row = await ref
+      final bid = session.primaryBusiness.id;
+      var row = BarcodeLookupCache.get(bid, code);
+      row ??= await ref
           .read(hexaApiProvider)
           .barcodeStockLookup(
-            businessId: session.primaryBusiness.id,
+            businessId: bid,
             code: code,
           )
-          .timeout(const Duration(seconds: 8)); // Increased from 6 to 8
+          .timeout(const Duration(seconds: 6));
+      BarcodeLookupCache.put(bid, code, row);
       final id = row['id']?.toString();
       final name = row['name']?.toString() ?? code;
       if (id == null || id.isEmpty) {
@@ -643,7 +668,6 @@ class _BarcodeScanPageState extends ConsumerState<BarcodeScanPage>
         BarcodeRecentScan(id: id, name: name, code: code),
       );
       if (!mounted) return;
-      ScaffoldMessenger.of(context).clearSnackBars();
       final returnTo = GoRouterState.of(context).uri.queryParameters['return'];
       if (returnTo == 'stock') {
         final saved = await openQuickStockWithFreshItem(
@@ -652,6 +676,7 @@ class _BarcodeScanPageState extends ConsumerState<BarcodeScanPage>
           itemId: id,
           itemName: name,
           fallbackRow: Map<String, dynamic>.from(row),
+          skipFreshFetch: true,
         );
         if (saved && mounted) {
           ref.invalidate(stockListProvider);
@@ -703,7 +728,10 @@ class _BarcodeScanPageState extends ConsumerState<BarcodeScanPage>
       );
       await _resumeScan();
     } finally {
-      if (mounted) _setBusy(false);
+      if (mounted) {
+        setState(() => _lookupLabel = null);
+        _setBusy(false);
+      }
     }
   }
 
@@ -780,6 +808,17 @@ class _BarcodeScanPageState extends ConsumerState<BarcodeScanPage>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     final cam = _camera;
+    if (kIsWeb) {
+      if (state == AppLifecycleState.paused) {
+        if (cam != null) unawaited(cam.stop());
+        unawaited(_stopWebLiveScanner());
+        _scanLineCtrl.stop();
+      } else if (state == AppLifecycleState.resumed) {
+        unawaited(_initCamera());
+        if (!_busy) _scanLineCtrl.repeat(reverse: true);
+      }
+      return;
+    }
     if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.inactive ||
         state == AppLifecycleState.hidden) {
@@ -807,9 +846,14 @@ class _BarcodeScanPageState extends ConsumerState<BarcodeScanPage>
     _manualCtrl.removeListener(_onManualChanged);
     _manualCtrl.dispose();
     _manualFocus.dispose();
-    unawaited(_stopWebLiveScanner());
-    _camera?.dispose();
-    _camera = null;
+    if (kIsWeb) {
+      _webLiveScanner = null;
+      _camera = null;
+    } else {
+      unawaited(_stopWebLiveScanner());
+      unawaited(_camera?.dispose());
+      _camera = null;
+    }
     super.dispose();
   }
 
@@ -984,7 +1028,7 @@ class _BarcodeScanPageState extends ConsumerState<BarcodeScanPage>
                           _cameraPermanent = false;
                           _cameraDeniedMessage = null;
                         });
-                        unawaited(_initCamera());
+                        unawaited(_retryCameraAfterDenial());
                       },
                       child: const Text('Allow camera'),
                     ),
@@ -999,7 +1043,7 @@ class _BarcodeScanPageState extends ConsumerState<BarcodeScanPage>
                               _cameraPermanent = false;
                               _cameraDeniedMessage = null;
                             });
-                            unawaited(_initCamera());
+                            unawaited(_retryCameraAfterDenial());
                           },
                     icon: const Icon(Icons.refresh_rounded),
                     label: const Text('Try again'),
@@ -1111,12 +1155,30 @@ class _BarcodeScanPageState extends ConsumerState<BarcodeScanPage>
                     ),
                     if (_busy)
                       Container(
-                        color: Colors.white54,
+                        color: Colors.black38,
                         alignment: Alignment.center,
-                        child: const SizedBox(
-                          width: 28,
-                          height: 28,
-                          child: CircularProgressIndicator(strokeWidth: 2),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const SizedBox(
+                              width: 28,
+                              height: 28,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            ),
+                            if (_lookupLabel != null) ...[
+                              const SizedBox(height: 10),
+                              Text(
+                                'Looking up $_lookupLabel',
+                                style: theme.textTheme.labelLarge?.copyWith(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ],
+                          ],
                         ),
                       ),
                   ],

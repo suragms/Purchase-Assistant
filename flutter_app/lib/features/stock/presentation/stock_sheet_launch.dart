@@ -14,32 +14,40 @@ Future<bool> openQuickStockWithFreshItem({
   required String itemName,
   Map<String, dynamic>? fallbackRow,
   StockUpdateMode initialMode = StockUpdateMode.physical,
+  bool skipFreshFetch = false,
 }) async {
   final session = ref.read(sessionProvider);
   if (session == null) return false;
 
   Map<String, dynamic> item;
-  try {
-    item = await ref.read(hexaApiProvider).getStockItem(
-          businessId: session.primaryBusiness.id,
-          itemId: itemId,
-        );
-  } on DioException catch (e) {
-    if (fallbackRow != null && fallbackRow.isNotEmpty) {
-      item = Map<String, dynamic>.from(fallbackRow);
-    } else {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              e.response?.statusCode == 404
-                  ? 'Item not found in stock.'
-                  : 'Could not load stock for this item. Try again.',
+  final canUseFallback = fallbackRow != null &&
+      fallbackRow.isNotEmpty &&
+      fallbackRow['current_stock'] != null;
+  if (skipFreshFetch && canUseFallback) {
+    item = Map<String, dynamic>.from(fallbackRow);
+  } else {
+    try {
+      item = await ref.read(hexaApiProvider).getStockItem(
+            businessId: session.primaryBusiness.id,
+            itemId: itemId,
+          );
+    } on DioException catch (e) {
+      if (canUseFallback) {
+        item = Map<String, dynamic>.from(fallbackRow);
+      } else {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                e.response?.statusCode == 404
+                    ? 'Item not found in stock.'
+                    : 'Could not load stock for this item. Try again.',
+              ),
             ),
-          ),
-        );
+          );
+        }
+        return false;
       }
-      return false;
     }
   }
 
