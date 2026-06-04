@@ -48,8 +48,10 @@ class _PurchaseDetailDamageSectionState
 
   @override
   Widget build(BuildContext context) {
-    final reportsAsync =
-        ref.watch(purchaseDamageReportsProvider(widget.purchaseId));
+    // Avoid hammering the API while the section is collapsed (reduces 500 spam in console).
+    final reportsAsync = _expanded
+        ? ref.watch(purchaseDamageReportsProvider(widget.purchaseId))
+        : const AsyncValue<List<Map<String, dynamic>>>.data([]);
     final count = reportsAsync.valueOrNull?.length ?? 0;
     final pending = reportsAsync.valueOrNull
             ?.where((r) => (r['status']?.toString() ?? 'pending') == 'pending')

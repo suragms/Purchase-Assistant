@@ -4,8 +4,11 @@ from __future__ import annotations
 
 import uuid
 from decimal import Decimal
+from types import SimpleNamespace
+from typing import Any
 
-from sqlalchemy import func, inspect as sa_inspect, select
+from sqlalchemy import func, select, text
+from sqlalchemy.exc import DBAPIError, ProgrammingError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import TradePurchase, TradePurchaseLine, User
@@ -39,15 +42,63 @@ def reason_to_damage_type(reason: str | None) -> str:
 
 async def _damage_report_schema_v2(db: AsyncSession) -> bool:
     """True when migration 057 columns exist (status, catalog_item_id, …)."""
+    try:
+        await db.execute(text("SELECT status FROM purchase_damage_reports LIMIT 0"))
+        return True
+    except (ProgrammingError, DBAPIError):
+        await db.rollback()
+        return False
 
-    def _check(connection) -> bool:
-        try:
-            cols = {c["name"] for c in sa_inspect(connection).get_columns("purchase_damage_reports")}
-        except Exception:
-            return False
-        return "status" in cols
 
-    return await db.run_sync(_check)
+def _legacy_damage_row(mapping: Any) -> SimpleNamespace:
+    """Row shape compatible with damage_report_to_out when migration 057 is missing."""
+    return SimpleNamespace(
+        id=mapping["id"],
+        created_at=mapping["created_at"],
+        purchase_id=mapping["purchase_id"],
+        catalog_item_id=None,
+        item_name=mapping["item_name"],
+        qty_damaged=mapping["qty_damaged"],
+        unit=None,
+        damage_type=mapping["damage_type"],
+        reason=None,
+        status="pending",
+        photo_url=None,
+        notes=mapping.get("notes"),
+    )
+
+
+async def _list_damage_reports_legacy(
+    db: AsyncSession,
+    *,
+    business_id: uuid.UUID,
+    purchase_id: uuid.UUID,
+) -> list[tuple[PurchaseDamageReport | SimpleNamespace, str | None]]:
+    r = await db.execute(
+        text(
+            """
+            SELECT
+              pdr.id,
+              pdr.purchase_id,
+              pdr.item_name,
+              pdr.qty_damaged,
+              pdr.damage_type,
+              pdr.notes,
+              pdr.created_at,
+              u.name AS reporter_name
+            FROM purchase_damage_reports pdr
+            LEFT JOIN users u ON u.id = pdr.reported_by_user_id
+            WHERE pdr.business_id = :business_id
+              AND pdr.purchase_id = :purchase_id
+            ORDER BY pdr.created_at DESC
+            """
+        ),
+        {"business_id": business_id, "purchase_id": purchase_id},
+    )
+    return [
+        (_legacy_damage_row(row), (row["reporter_name"] or "").strip() or None)
+        for row in r.mappings().all()
+    ]
 
 
 async def _load_purchase(
@@ -218,21 +269,29 @@ async def list_damage_reports(
     *,
     business_id: uuid.UUID,
     purchase_id: uuid.UUID,
-) -> list[tuple[PurchaseDamageReport, str | None]]:
+) -> list[tuple[PurchaseDamageReport | SimpleNamespace, str | None]]:
     await _load_purchase(db, business_id=business_id, purchase_id=purchase_id)
     if not await _damage_report_schema_v2(db):
-        return []
-
-    r = await db.execute(
-        select(PurchaseDamageReport, User.name)
-        .outerjoin(User, PurchaseDamageReport.reported_by_user_id == User.id)
-        .where(
-            PurchaseDamageReport.business_id == business_id,
-            PurchaseDamageReport.purchase_id == purchase_id,
+        return await _list_damage_reports_legacy(
+            db, business_id=business_id, purchase_id=purchase_id
         )
-        .order_by(PurchaseDamageReport.created_at.desc())
-    )
-    return list(r.all())
+
+    try:
+        r = await db.execute(
+            select(PurchaseDamageReport, User.name)
+            .outerjoin(User, PurchaseDamageReport.reported_by_user_id == User.id)
+            .where(
+                PurchaseDamageReport.business_id == business_id,
+                PurchaseDamageReport.purchase_id == purchase_id,
+            )
+            .order_by(PurchaseDamageReport.created_at.desc())
+        )
+        return list(r.all())
+    except ProgrammingError:
+        await db.rollback()
+        return await _list_damage_reports_legacy(
+            db, business_id=business_id, purchase_id=purchase_id
+        )
 
 
 async def count_pending_damage_reports(
@@ -333,7 +392,8 @@ async def _emit_damage_acknowledged_notification(
 
 
 def damage_report_to_out(
-    row: PurchaseDamageReport, reporter_name: str | None = None
+    row: PurchaseDamageReport | SimpleNamespace,
+    reporter_name: str | None = None,
 ) -> dict:
     return {
         "id": row.id,
