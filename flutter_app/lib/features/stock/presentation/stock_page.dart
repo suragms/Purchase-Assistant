@@ -11,6 +11,7 @@ import 'package:share_plus/share_plus.dart';
 import '../../../core/auth/auth_failure_policy.dart';
 import '../../../core/auth/provider_api_guard.dart';
 import '../../../core/auth/session_notifier.dart';
+import '../../../core/providers/api_degraded_provider.dart';
 import '../../../core/models/session.dart';
 import '../../../core/providers/stock_list_exceptions.dart';
 import '../../../core/services/stock_list_pdf.dart';
@@ -28,7 +29,7 @@ import '../../../core/widgets/friendly_load_error.dart';
 import '../../../core/widgets/list_skeleton.dart';
 import '../../../shared/widgets/hexa_empty_state.dart';
 import '../stock_list_merge.dart';
-import '../stock_list_row_patch.dart';
+import '../stock_list_row_patch.dart' as row_patch;
 import '../stock_period_utils.dart';
 import 'widgets/stock_pagination_bar.dart';
 import 'widgets/stock_operational_top_bar.dart';
@@ -169,6 +170,48 @@ class _StockPageState extends ConsumerState<StockPage>
     });
   }
 
+  Future<void> _retryStockAfterAuthOrApiBlock() async {
+    ref.read(authApiGateProvider.notifier).reset();
+    ref.read(authSessionExpiredProvider.notifier).clear();
+    final session = ref.read(sessionProvider);
+    try {
+      await ref
+          .read(hexaApiProvider)
+          .healthLive()
+          .timeout(const Duration(seconds: 15));
+    } catch (e) {
+      if (!mounted) return;
+      final sc = e is DioException ? e.response?.statusCode : null;
+      final offline = sc == 503 ||
+          sc == 502 ||
+          sc == 504 ||
+          (e is DioException &&
+              (e.type == DioExceptionType.connectionError ||
+                  e.type == DioExceptionType.connectionTimeout));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            offline
+                ? 'Cloud API is offline. In Render Dashboard resume '
+                    '"my-purchases-api", wait ~1 min, then tap Retry.'
+                : 'Cannot reach API right now. Check network and try again.',
+          ),
+          duration: const Duration(seconds: 8),
+        ),
+      );
+      return;
+    }
+    if (!mounted) return;
+    if (session != null) {
+      _resetMerged();
+      ref.invalidate(stockListProvider);
+      ref.invalidate(stockStatusCountsProvider);
+      return;
+    }
+    await ref.read(sessionProvider.notifier).logout();
+    if (mounted) context.go('/login');
+  }
+
   void _clearSearch() {
     _searchCtrl.clear();
     ref.read(stockListQueryProvider.notifier).state =
@@ -221,7 +264,7 @@ class _StockPageState extends ConsumerState<StockPage>
     final patches = ref.watch(stockListRowPatchProvider);
     if (patches.isNotEmpty) {
       raw = raw
-          .map((m) => applyStockListRowPatch(m, patches))
+          .map((m) => row_patch.applyStockListRowPatch(m, patches))
           .toList(growable: false);
     }
     final op = ref.read(stockOperationalFiltersProvider);
@@ -709,21 +752,27 @@ class _StockPageState extends ConsumerState<StockPage>
     final authExpired = ref.watch(authSessionExpiredProvider);
     final authCircuit = ref.watch(auth401CircuitOpenProvider);
     final sessionForAuth = ref.watch(sessionProvider);
+    final apiDegraded = ref.watch(apiDegradedProvider);
     final authBlocked = authExpired ||
         authCircuit ||
         (sessionForAuth == null && !listAsync.isLoading);
+    final apiLikelyDown = apiDegraded != null &&
+        !apiDegraded.toLowerCase().contains('session');
 
     Widget body;
     if (authBlocked) {
+      final stillSignedIn = sessionForAuth != null;
       body = FriendlyLoadError(
-        message: 'Sign in to load stock',
-        subtitle:
-            'Your session expired or could not be verified. Sign in again to see warehouse items.',
-        onRetry: () async {
-          ref.read(authApiGateProvider.notifier).reset();
-          await ref.read(sessionProvider.notifier).logout();
-          if (mounted) context.go('/login');
-        },
+        message: apiLikelyDown && stillSignedIn
+            ? 'Cloud API unavailable'
+            : 'Sign in to load stock',
+        subtitle: apiLikelyDown && stillSignedIn
+            ? apiDegraded
+            : stillSignedIn
+                ? 'Requests were blocked after auth errors. Tap Retry — '
+                    'sign in again only if Retry does not load stock.'
+                : 'Warehouse list needs a valid session. Sign in and try again.',
+        onRetry: () => unawaited(_retryStockAfterAuthOrApiBlock()),
       );
     } else if (data == null && listAsync.isLoading) {
       body = const ListSkeleton(rowCount: 12);
