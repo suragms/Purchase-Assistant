@@ -325,14 +325,6 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         ),
       ),
       GoRoute(
-        path: '/barcode/:code',
-        redirect: (context, state) {
-          final c = state.pathParameters['code'] ?? '';
-          if (c.isEmpty) return '/login';
-          return '/item/$c';
-        },
-      ),
-      GoRoute(
         path: '/lookup',
         pageBuilder: (context, state) => iosPushPage(
           key: state.pageKey,
@@ -397,6 +389,16 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           key: state.pageKey,
           child: const BulkBarcodePrintPage(),
         ),
+      ),
+      // Must be after static `/barcode/*` routes — otherwise `bulk-print`, `scan`, etc.
+      // are captured as :code and redirected to `/item/:code` (broken navigation).
+      GoRoute(
+        path: '/barcode/:code',
+        redirect: (context, state) {
+          final c = state.pathParameters['code'] ?? '';
+          if (c.isEmpty) return '/login';
+          return '/item/$c';
+        },
       ),
       GoRoute(
         path: '/catalog/missing-codes',

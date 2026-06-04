@@ -165,7 +165,7 @@ class HomeOwnerDashboardBody extends ConsumerWidget {
                 location: '/reports',
               ),
           onUsers: () => context.push('/settings/users'),
-          onBarcode: () => context.push('/barcode/bulk-print'),
+          onBarcode: () => context.push('/barcode/scan'),
           onReorder: () => context.push('/stock/reorder'),
           onDailyLog: () => context.push('/home/activity'),
         ),

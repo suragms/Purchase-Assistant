@@ -39,7 +39,7 @@ class HomeOwnerQuickActions extends StatelessWidget {
       _Spec('Delivered', Icons.check_circle_outline_rounded, HexaColors.profit, onDelivered),
       _Spec('Reports', Icons.bar_chart_rounded, const Color(0xFF0D9488), onReports),
       _Spec('Users', Icons.group_rounded, const Color(0xFF5D4037), onUsers),
-      _Spec('Barcode', Icons.qr_code_2_rounded, const Color(0xFF455A64), onBarcode),
+      _Spec('Scan', Icons.qr_code_scanner_rounded, const Color(0xFF455A64), onBarcode),
       _Spec('Reorder', Icons.autorenew_rounded, const Color(0xFF7C3AED), onReorder),
       _Spec('Daily log', Icons.history_rounded, const Color(0xFF0D9488), onDailyLog),
     ];
