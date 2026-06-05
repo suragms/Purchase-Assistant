@@ -9,7 +9,8 @@ import 'package:dio/dio.dart';
 
 import '../../../core/auth/auth_error_messages.dart';
 import '../../../core/models/trade_purchase_models.dart';
-import '../../../core/providers/business_aggregates_invalidation.dart';
+import '../../../core/providers/business_aggregates_invalidation.dart'
+    show invalidateStaffDeliverySurfaces, syncPurchaseStockAfterVerify;
 import '../../../core/theme/hexa_colors.dart';
 import '../../../core/utils/delivery_offline_actions.dart';
 import '../../../core/utils/snack.dart';
@@ -54,6 +55,12 @@ class _StaffReceiveShipmentPageState
     return double.tryParse(t);
   }
 
+  bool _needsDetailedVerification() {
+    final damage = _parseOptionalQty(_damageCtrl.text) ?? 0;
+    final missing = _parseOptionalQty(_missingCtrl.text) ?? 0;
+    return damage > 0 || missing > 0;
+  }
+
   Future<void> _submitReceive(TradePurchase p) async {
     final session = ref.read(sessionProvider);
     if (session == null || _saving) return;
@@ -79,59 +86,89 @@ class _StaffReceiveShipmentPageState
         return;
       }
 
-      if (ds == DeliveryStatus.pending ||
+      final damageQty = _parseOptionalQty(_damageCtrl.text);
+      final missingQty = _parseOptionalQty(_missingCtrl.text);
+      final arrivalNotes = _notesCtrl.text.trim().isEmpty
+          ? null
+          : _notesCtrl.text.trim();
+
+      final needsArrive = ds == DeliveryStatus.pending ||
           ds == DeliveryStatus.dispatched ||
-          ds == DeliveryStatus.inTransit) {
-        final damageQty = _parseOptionalQty(_damageCtrl.text);
-        final missingQty = _parseOptionalQty(_missingCtrl.text);
+          ds == DeliveryStatus.inTransit;
+
+      if (needsArrive) {
         await markPurchaseArrivedResilient(
           ref: ref,
           businessId: bid,
           purchaseId: p.id,
-          notes: _notesCtrl.text.trim().isEmpty
-              ? null
-              : _notesCtrl.text.trim(),
+          notes: arrivalNotes,
           truckNumber: _truckCtrl.text.trim(),
           driverContact: _driverCtrl.text.trim(),
           damageQty: damageQty,
           missingQty: missingQty,
-          brokerConfirmed: _brokerConfirmed,
+          brokerConfirmed: _brokerConfirmed ? true : null,
         );
         if (mounted &&
             ((damageQty ?? 0) > 0 || (missingQty ?? 0) > 0)) {
           showTopSnack(
             context,
-            'Discrepancy recorded in arrival notes — owner will review',
+            'Discrepancy noted — owner will review',
           );
         }
       }
 
-      final lineMaps = [
-        for (final l in p.lines)
-          {
-            'id': l.id,
-            'catalog_item_id': l.catalogItemId,
-            'item_name': l.itemName,
-            'qty': l.qty,
-            'unit': l.unit,
-          }
-      ];
       if (!mounted) return;
-      final verified = await showStaffVerificationSheet(
-        context: context,
-        ref: ref,
-        purchaseId: p.id,
-        lines: lineMaps,
-      );
-      invalidateStaffDeliverySurfaces(ref);
-      if (verified) {
-        if (mounted) {
+
+      if (_needsDetailedVerification()) {
+        final lineMaps = [
+          for (final l in p.lines)
+            {
+              'id': l.id,
+              'catalog_item_id': l.catalogItemId,
+              'item_name': l.itemName,
+              'qty': l.qty,
+              'unit': l.unit,
+            }
+        ];
+        final verified = await showStaffVerificationSheet(
+          context: context,
+          ref: ref,
+          purchaseId: p.id,
+          lines: lineMaps,
+        );
+        invalidateStaffDeliverySurfaces(ref);
+        if (verified && mounted) {
           showTopSnack(
             context,
             'Received — quantities verified. Owner will commit stock to warehouse.',
           );
           context.pop();
         }
+        return;
+      }
+
+      final body = await verifyPurchaseDeliveryAsOrdered(
+        ref: ref,
+        businessId: bid,
+        purchaseId: p.id,
+        lines: [
+          for (final l in p.lines)
+            (lineId: l.id, orderedQty: l.qty),
+        ],
+        notes: arrivalNotes,
+      );
+      syncPurchaseStockAfterVerify(
+        ref,
+        purchaseId: p.id,
+        verifyResponse: body,
+      );
+      invalidateStaffDeliverySurfaces(ref);
+      if (mounted) {
+        showTopSnack(
+          context,
+          'Received as ordered. Owner will commit stock to warehouse.',
+        );
+        context.pop();
       }
     } catch (e) {
       if (mounted) {
@@ -240,7 +277,7 @@ class _StaffReceiveShipmentPageState
                       controller: _truckCtrl,
                       textInputAction: TextInputAction.next,
                       decoration: const InputDecoration(
-                        labelText: 'Truck number',
+                        labelText: 'Truck number (optional)',
                         border: OutlineInputBorder(),
                       ),
                     ),
@@ -249,7 +286,7 @@ class _StaffReceiveShipmentPageState
                       controller: _driverCtrl,
                       textInputAction: TextInputAction.next,
                       decoration: const InputDecoration(
-                        labelText: 'Driver name / contact',
+                        labelText: 'Driver name / contact (optional)',
                         border: OutlineInputBorder(),
                       ),
                     ),
@@ -263,7 +300,7 @@ class _StaffReceiveShipmentPageState
                               decimal: true,
                             ),
                             decoration: const InputDecoration(
-                              labelText: 'Damage qty',
+                              labelText: 'Damage qty (optional)',
                               border: OutlineInputBorder(),
                             ),
                           ),
@@ -276,7 +313,7 @@ class _StaffReceiveShipmentPageState
                               decimal: true,
                             ),
                             decoration: const InputDecoration(
-                              labelText: 'Missing qty',
+                              labelText: 'Missing qty (optional)',
                               border: OutlineInputBorder(),
                             ),
                           ),
@@ -286,7 +323,7 @@ class _StaffReceiveShipmentPageState
                     const SizedBox(height: 8),
                     SwitchListTile(
                       contentPadding: EdgeInsets.zero,
-                      title: const Text('Broker confirmed delivery'),
+                      title: const Text('Broker confirmed (optional)'),
                       value: _brokerConfirmed,
                       onChanged: (v) => setState(() => _brokerConfirmed = v),
                     ),
@@ -333,7 +370,9 @@ class _StaffReceiveShipmentPageState
                             SizedBox(width: 8),
                             Expanded(
                               child: Text(
-                                'Mark arrival and verify counts. Stock updates only after owner commits.',
+                                'Tap Arrive & verify to accept PO quantities. '
+                                'Only fill damage/missing if something is wrong — '
+                                'then you will confirm line details.',
                                 style: TextStyle(fontSize: 12),
                               ),
                             ),

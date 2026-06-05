@@ -1,7 +1,7 @@
 import '../../core/json_coerce.dart';
 
 /// Merges optimistic row fields into a stock list payload (items + total).
-Map<String, dynamic> applyStockListRowPatches(
+Map<String, dynamic> mergeStockListRowMaps(
   Map<String, dynamic> data,
   Map<String, Map<String, dynamic>> patches,
 ) {
@@ -11,12 +11,13 @@ Map<String, dynamic> applyStockListRowPatches(
   final items = <Map<String, dynamic>>[];
   for (final e in raw) {
     if (e is! Map) continue;
-    items.add(applyStockListRowPatch(Map<String, dynamic>.from(e), patches));
+    items.add(mergeStockListRowMap(Map<String, dynamic>.from(e), patches));
   }
   return {...data, 'items': items};
 }
 
-Map<String, dynamic> applyStockListRowPatch(
+/// Merges [patches] into a single list row map (by item id).
+Map<String, dynamic> mergeStockListRowMap(
   Map<String, dynamic> row,
   Map<String, Map<String, dynamic>> patches,
 ) {

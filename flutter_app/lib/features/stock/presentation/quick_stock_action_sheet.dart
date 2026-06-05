@@ -16,8 +16,12 @@ import '../../../core/notifications/local_notifications_service.dart';
 import '../../../core/providers/home_owner_dashboard_providers.dart';
 import '../../../core/providers/staff_home_providers.dart';
 import '../../../core/providers/stock_providers.dart'
-    show applyStockListRowPatch, stockListQueryProvider;
-import '../stock_list_row_patch.dart';
+    show
+        applyStockListRowPatch,
+        stockChangesFeedProvider,
+        stockListQueryProvider;
+import '../stock_list_row_patch.dart'
+    show stockListPatchFromPhysicalCount, stockListPatchFromStockDetail;
 import '../../../core/providers/notification_center_provider.dart';
 import '../../../core/providers/server_notifications_provider.dart';
 import '../../../core/utils/unit_utils.dart';
@@ -289,7 +293,7 @@ class _QuickStockActionBodyState extends ConsumerState<_QuickStockActionBody> {
       await LocalNotificationsService.instance.showLowStockItem(
         itemName: _name,
         detail:
-            '${formatStockQtyForUnit(_unit, parsed)} $unitLabel (reorder ${formatStockQtyForUnit(_unit, reorder)})',
+            '${formatStockQtyForUnit(_unit, parsed.toDouble())} $unitLabel (reorder ${formatStockQtyForUnit(_unit, reorder)})',
       );
     }
   }

@@ -39,3 +39,30 @@ Future<({bool queued, Map<String, dynamic>? body})> markPurchaseArrivedResilient
     return (queued: true, body: null);
   }
 }
+
+/// Verify all lines at ordered qty — no second sheet when counts match PO.
+Future<Map<String, dynamic>> verifyPurchaseDeliveryAsOrdered({
+  required WidgetRef ref,
+  required String businessId,
+  required String purchaseId,
+  required List<({String lineId, double orderedQty})> lines,
+  String? notes,
+}) async {
+  final payload = [
+    for (final l in lines)
+      if (l.lineId.isNotEmpty)
+        {
+          'line_id': l.lineId,
+          'received_qty': l.orderedQty,
+          'damaged_qty': 0,
+          'return_qty': 0,
+        },
+  ];
+  final body = await ref.read(hexaApiProvider).verifyPurchaseDelivery(
+        businessId: businessId,
+        purchaseId: purchaseId,
+        lines: payload,
+        notes: notes,
+      );
+  return Map<String, dynamic>.from(body);
+}

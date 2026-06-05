@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -292,6 +293,39 @@ class _HomePageState extends ConsumerState<HomePage>
     });
   }
 
+  Future<void> _retryHomeAfterAuthOrApiBlock() async {
+    ref.read(authApiGateProvider.notifier).reset();
+    ref.read(authSessionExpiredProvider.notifier).clear();
+    try {
+      await ref
+          .read(hexaApiProvider)
+          .healthLive()
+          .timeout(const Duration(seconds: 15));
+    } catch (e) {
+      if (!mounted) return;
+      final sc = e is DioException ? e.response?.statusCode : null;
+      final offline = sc == 503 ||
+          sc == 502 ||
+          sc == 504 ||
+          (e is DioException &&
+              (e.type == DioExceptionType.connectionError ||
+                  e.type == DioExceptionType.connectionTimeout));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            offline
+                ? 'Cloud API is offline. Resume my-purchases-api on Render, '
+                    'wait ~1 min, then tap Retry.'
+                : 'Cannot reach API right now. Check network and try again.',
+          ),
+        ),
+      );
+      return;
+    }
+    ref.read(apiDegradedProvider.notifier).clear();
+    _invalidateHomeDataProviders();
+  }
+
   Future<void> _refresh() async {
     if (ref.read(shellCurrentBranchProvider) != ShellBranch.home) return;
     _scheduleRefresh(force: true);
@@ -409,11 +443,11 @@ class _HomePageState extends ConsumerState<HomePage>
     final authCircuit = authGate.circuitOpen;
     final authRestoring = authGate.suspended && !authExpired && !authCircuit;
     final degraded = ref.watch(apiDegradedProvider);
-    final authBlocked = authExpired ||
-        authCircuit ||
-        (degraded != null &&
-            (degraded.toLowerCase().contains('session') ||
-                degraded.toLowerCase().contains('sign in')));
+    final apiLikelyDown = degraded != null &&
+        !degraded.toLowerCase().contains('session') &&
+        !degraded.toLowerCase().contains('sign in');
+    final authBlocked = authExpired || (authCircuit && session == null);
+    final authRecovery = authCircuit && session != null;
     final hasDashboard = session != null && sessionHasOwnerDashboard(session);
     final conn = ref.watch(connectivityResultsProvider);
     final offline =
@@ -455,6 +489,26 @@ class _HomePageState extends ConsumerState<HomePage>
                 await ref.read(sessionProvider.notifier).logout();
                 if (context.mounted) context.go('/login');
               },
+            ),
+          ),
+        ),
+      );
+    }
+
+    if (authRecovery) {
+      return Scaffold(
+        backgroundColor: HexaColors.brandBackground,
+        body: SafeArea(
+          child: Padding(
+            padding: EdgeInsets.all(gutter),
+            child: FriendlyLoadError(
+              message: apiLikelyDown
+                  ? 'Cloud API unavailable'
+                  : 'Connection paused after auth errors',
+              subtitle: apiLikelyDown
+                  ? degraded
+                  : 'Tap Retry to reload. Sign in again only if Retry does not work.',
+              onRetry: () => unawaited(_retryHomeAfterAuthOrApiBlock()),
             ),
           ),
         ),

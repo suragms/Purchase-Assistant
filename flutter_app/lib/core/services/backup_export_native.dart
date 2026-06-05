@@ -3,19 +3,26 @@ import 'dart:typed_data';
 
 import 'package:path_provider/path_provider.dart';
 
-/// Saves export bytes under app documents:
-/// `warehouse_exports/{year}/{month}/{category}/{filename}`.
+/// Saves export bytes under:
+/// - Android/iOS: app documents `warehouse_exports/{year}/{month}/{category}/`
+/// - Windows/macOS/Linux: Downloads `warehouse_exports/{year}/{month}/{category}/`
 Future<String?> saveBackupExportBytes({
   required Uint8List bytes,
   required String filename,
   required String category,
 }) async {
-  if (!Platform.isAndroid && !Platform.isIOS) {
-    return null;
-  }
   try {
     final now = DateTime.now();
-    final root = await getApplicationDocumentsDirectory();
+    final Directory root;
+    if (Platform.isAndroid || Platform.isIOS) {
+      root = await getApplicationDocumentsDirectory();
+    } else if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
+      final downloads = await getDownloadsDirectory();
+      if (downloads == null) return null;
+      root = downloads;
+    } else {
+      return null;
+    }
     final dirPath = [
       root.path,
       'warehouse_exports',

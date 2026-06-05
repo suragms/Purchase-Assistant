@@ -3,7 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../auth/auth_failure_policy.dart';
 import '../auth/provider_api_guard.dart';
-import '../auth/session_notifier.dart' show activeSessionProvider, hexaApiProvider;
+import '../auth/session_notifier.dart'
+    show activeSessionProvider, hexaApiProvider, sessionProvider;
 
 bool _isAuthFailure(Object e) {
   if (e is DioException) {

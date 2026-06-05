@@ -8,7 +8,7 @@ class HexaWebPageFrame extends StatelessWidget {
   const HexaWebPageFrame({
     super.key,
     required this.child,
-    this.maxWidth = 800,
+    this.maxWidth = HexaResponsive.maxContentWidth,
     this.horizontalPadding = 24,
   });
 

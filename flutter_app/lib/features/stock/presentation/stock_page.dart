@@ -264,7 +264,7 @@ class _StockPageState extends ConsumerState<StockPage>
     final patches = ref.watch(stockListRowPatchProvider);
     if (patches.isNotEmpty) {
       raw = raw
-          .map((m) => row_patch.applyStockListRowPatch(m, patches))
+          .map((m) => row_patch.mergeStockListRowMap(m, patches))
           .toList(growable: false);
     }
     final op = ref.read(stockOperationalFiltersProvider);

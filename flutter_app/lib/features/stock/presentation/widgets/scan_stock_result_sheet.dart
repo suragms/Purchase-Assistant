@@ -10,9 +10,10 @@ import '../../../../core/design_system/hexa_responsive.dart';
 import '../../../../core/json_coerce.dart';
 import '../../../../core/providers/business_aggregates_invalidation.dart'
     show invalidateWarehouseSurfacesLight;
-import '../../../../core/providers/stock_providers.dart' show applyStockListRowPatch;
+import '../../../../core/providers/stock_providers.dart'
+    show applyStockListRowPatch;
 import '../../../../core/utils/unit_utils.dart';
-import '../../stock_list_row_patch.dart';
+import '../../stock_list_row_patch.dart' show stockListPatchFromStockDetail;
 import '../stock_undo_snackbar.dart';
 
 /// After a successful barcode lookup — fast +/- stock without leaving scanner flow.

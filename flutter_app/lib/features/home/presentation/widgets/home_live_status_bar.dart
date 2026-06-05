@@ -7,10 +7,10 @@ import '../../../../core/design_system/hexa_responsive.dart';
 import '../../../../core/providers/delivery_pipeline_provider.dart';
 import '../../../../core/providers/home_dashboard_provider.dart';
 import '../../../../core/providers/home_owner_dashboard_providers.dart';
-import '../../../../core/providers/stock_providers.dart' show lowStockByCategoryProvider;
+import '../../../../core/providers/stock_providers.dart'
+    show lowStockByCategoryProvider, stockVariancesTodayProvider;
 import '../../../../core/providers/notification_center_provider.dart'
     show homeWarehouseAlertsProvider, notificationCenterCoordinatorProvider;
-import '../../../../core/providers/stock_providers.dart';
 import '../../../../core/providers/warehouse_alerts_provider.dart';
 import '../../../../core/theme/hexa_colors.dart';
 import 'home_formatters.dart';

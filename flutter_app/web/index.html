@@ -23,6 +23,17 @@
 
   <title>Harisree Warehouse</title>
   <link rel="manifest" href="manifest.json">
+  <script>
+    (function () {
+      var host = location.hostname;
+      var correct = 'purchase-assiastant.vercel.app';
+      if (host === 'purchase-assistant.vercel.app') {
+        location.replace(
+          'https://' + correct + location.pathname + location.search + location.hash
+        );
+      }
+    })();
+  </script>
   <style>
     * { -webkit-tap-highlight-color: transparent; touch-action: pan-y; }
     html {
@@ -104,12 +115,38 @@
       padding: 0 16px;
       line-height: 1.4;
     }
+    #wrong-host {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 100000;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      padding: 24px;
+      text-align: center;
+      background: #F5F7FA;
+      font: 600 15px system-ui, sans-serif;
+      color: #14523E;
+    }
+    #wrong-host a {
+      color: #0F766E;
+      font-weight: 700;
+    }
+    #wrong-host.show {
+      display: flex;
+    }
   </style>
 </head>
 <body>
   <div id="splash" aria-hidden="true">
     <img src="icons/Icon-192.png" alt="" width="96" height="96" />
     <span>Harisree Warehouse</span>
+  </div>
+  <div id="wrong-host" role="alert">
+    <p>This link is the wrong Vercel app (blank screen).</p>
+    <p><a href="https://purchase-assiastant.vercel.app/home">Open Harisree Warehouse</a></p>
   </div>
   <div id="boot" aria-live="polite">Starting…</div>
   <script>
@@ -141,8 +178,10 @@
         .then(function (r) {
           var ct = (r.headers.get('content-type') || '').toLowerCase();
           if (!r.ok || ct.indexOf('javascript') === -1) {
+            var wh = document.getElementById('wrong-host');
+            if (wh) wh.classList.add('show');
             showBootError(
-              'Web build missing on this host. Open https://purchase-assiastant.vercel.app or redeploy from GitHub main.'
+              'Wrong site — use https://purchase-assiastant.vercel.app (not purchase-assistant).'
             );
           }
         })

@@ -99,12 +99,14 @@ class HomeOwnerDashboardBody extends ConsumerWidget {
         ),
         SizedBox(height: gap),
         GridView.count(
-          crossAxisCount: 2,
+          crossAxisCount: context.isDesktopLayout ? 4 : 2,
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
           mainAxisSpacing: 8,
           crossAxisSpacing: 8,
-          childAspectRatio: MediaQuery.sizeOf(context).width / 2 / 100,
+          childAspectRatio: context.isDesktopLayout
+              ? 2.2
+              : MediaQuery.sizeOf(context).width / 2 / 100,
           children: [
             _KpiTile(
               label: 'Purchases',

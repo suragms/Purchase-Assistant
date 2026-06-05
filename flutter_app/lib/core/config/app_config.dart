@@ -12,6 +12,9 @@ class AppConfig {
   /// Default product name (store listing / package name are separate).
   static const String appName = HexaColors.appName;
 
+  /// Production Flutter web host (note spelling: assiastant, not assistant).
+  static const String productionWebUrl = 'https://purchase-assiastant.vercel.app';
+
   /// Vercel web builds: set `API_BASE_URL` in project env (see `scripts/vercel-flutter-build.sh`).
   /// If `POST /v1/me/bootstrap-workspace` returns **404**, the client is not hitting the
   /// current backend process (wrong port, stale uvicorn) — fix the URL and restart the API;

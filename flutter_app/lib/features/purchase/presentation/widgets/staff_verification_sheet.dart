@@ -111,7 +111,9 @@ class _StaffVerificationSheetState extends ConsumerState<_StaffVerificationSheet
       final id = row['id']?.toString() ?? '';
       if (id.isEmpty) continue;
       final unit = row['unit']?.toString() ?? 'piece';
-      final r = double.tryParse((_received[id]?.text ?? '').trim()) ?? 0;
+      final ordered = coerceToDouble(row['qty']);
+      final parsed = double.tryParse((_received[id]?.text ?? '').trim());
+      final r = (parsed != null && parsed >= 0) ? parsed : ordered;
       final ds = _damageState[id]!;
       var d = 0.0;
       if (ds.damaged) {

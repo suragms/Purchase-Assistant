@@ -1,16 +1,14 @@
-import 'dart:typed_data';
-
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
-import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/auth/auth_error_messages.dart';
 import '../../../core/auth/session_notifier.dart';
 import '../../../core/router/navigation_ext.dart';
-import '../../../core/services/backup_export_io.dart';
+import '../../../core/services/backup_deliver.dart';
 import '../../../core/utils/snack.dart';
 
 const _kLastZipBackupKey = 'backup_last_zip_at';
@@ -65,27 +63,44 @@ class _BackupPageState extends ConsumerState<BackupPage> {
     });
   }
 
-  Future<void> _shareBytes({
+  String? _sessionBlockedMessage() {
+    if (ref.read(sessionProvider) == null) {
+      return 'Sign in to download exports.';
+    }
+    return null;
+  }
+
+  Future<void> _deliverAndRecord({
     required Uint8List bytes,
     required String filename,
     required String mimeType,
     required String shareText,
     required String saveCategory,
+    required String recordKey,
   }) async {
-    await saveBackupExportBytes(
+    final result = await deliverBackupFile(
       bytes: bytes,
       filename: filename,
-      category: saveCategory,
+      mimeType: mimeType,
+      shareText: shareText,
+      saveCategory: saveCategory,
     );
-    await Share.shareXFiles(
-      [XFile.fromData(bytes, mimeType: mimeType, name: filename)],
-      text: shareText,
-    );
+    if (!mounted) return;
+    if (result.ok) {
+      await _record(recordKey);
+      showTopSnack(context, result.message);
+    } else {
+      showTopSnack(context, result.message, isError: true);
+    }
   }
 
   Future<void> _downloadStockExcel() async {
-    final session = ref.read(sessionProvider);
-    if (session == null) return;
+    final blocked = _sessionBlockedMessage();
+    if (blocked != null) {
+      showTopSnack(context, blocked, isError: true);
+      return;
+    }
+    final session = ref.read(sessionProvider)!;
     setState(() => _busyStock = true);
     try {
       final bytes = await ref.read(hexaApiProvider).downloadStockInventoryXlsx(
@@ -98,25 +113,37 @@ class _BackupPageState extends ConsumerState<BackupPage> {
         return;
       }
       final day = DateFormat('yyyy-MM-dd').format(DateTime.now());
-      await _shareBytes(
+      await _deliverAndRecord(
         bytes: bytes,
         filename: 'harisree_stock_$day.xlsx',
         mimeType:
             'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         shareText: 'Harisree stock inventory',
         saveCategory: 'stock',
+        recordKey: _kLastStockXlsxKey,
       );
-      await _record(_kLastStockXlsxKey);
     } on DioException catch (e) {
       if (mounted) showTopSnack(context, friendlyApiError(e), isError: true);
+    } catch (_) {
+      if (mounted) {
+        showTopSnack(
+          context,
+          'Stock export failed. Sign in again or try later.',
+          isError: true,
+        );
+      }
     } finally {
       if (mounted) setState(() => _busyStock = false);
     }
   }
 
   Future<void> _downloadPurchasesPdf() async {
-    final session = ref.read(sessionProvider);
-    if (session == null) return;
+    final blocked = _sessionBlockedMessage();
+    if (blocked != null) {
+      showTopSnack(context, blocked, isError: true);
+      return;
+    }
+    final session = ref.read(sessionProvider)!;
     setState(() => _busyPdf = true);
     try {
       final bytes = await ref.read(hexaApiProvider).downloadPurchasesMonthPdf(
@@ -135,24 +162,36 @@ class _BackupPageState extends ConsumerState<BackupPage> {
       final now = DateTime.now();
       final fn =
           'harisree_purchases_${now.year}-${now.month.toString().padLeft(2, '0')}.pdf';
-      await _shareBytes(
+      await _deliverAndRecord(
         bytes: bytes,
         filename: fn,
         mimeType: 'application/pdf',
         shareText: 'Harisree purchases — this month',
         saveCategory: 'purchases',
+        recordKey: _kLastPurchasesPdfKey,
       );
-      await _record(_kLastPurchasesPdfKey);
     } on DioException catch (e) {
       if (mounted) showTopSnack(context, friendlyApiError(e), isError: true);
+    } catch (_) {
+      if (mounted) {
+        showTopSnack(
+          context,
+          'PDF export failed. Sign in again or try later.',
+          isError: true,
+        );
+      }
     } finally {
       if (mounted) setState(() => _busyPdf = false);
     }
   }
 
   Future<void> _downloadZip() async {
-    final session = ref.read(sessionProvider);
-    if (session == null) return;
+    final blocked = _sessionBlockedMessage();
+    if (blocked != null) {
+      showTopSnack(context, blocked, isError: true);
+      return;
+    }
+    final session = ref.read(sessionProvider)!;
     setState(() => _busyZip = true);
     try {
       final bytes = await ref.read(hexaApiProvider).downloadBusinessBackup(
@@ -166,25 +205,24 @@ class _BackupPageState extends ConsumerState<BackupPage> {
         return;
       }
       final day = DateFormat('yyyy-MM-dd').format(DateTime.now());
-      final fn = 'purchase_assistant_backup_$day.zip';
-      await saveBackupExportBytes(
+      await _deliverAndRecord(
         bytes: bytes,
-        filename: fn,
-        category: 'zip',
+        filename: 'purchase_assistant_backup_$day.zip',
+        mimeType: 'application/zip',
+        shareText: 'Harisree trade purchase backup',
+        saveCategory: 'zip',
+        recordKey: _kLastZipBackupKey,
       );
-      await Share.shareXFiles(
-        [
-          XFile.fromData(
-            bytes,
-            mimeType: 'application/zip',
-            name: fn,
-          ),
-        ],
-        text: 'Harisree trade purchase backup',
-      );
-      await _record(_kLastZipBackupKey);
     } on DioException catch (e) {
       if (mounted) showTopSnack(context, friendlyApiError(e), isError: true);
+    } catch (_) {
+      if (mounted) {
+        showTopSnack(
+          context,
+          'ZIP backup failed. Sign in again or try later.',
+          isError: true,
+        );
+      }
     } finally {
       if (mounted) setState(() => _busyZip = false);
     }
@@ -192,6 +230,15 @@ class _BackupPageState extends ConsumerState<BackupPage> {
 
   String _fmt(DateTime? t) =>
       t == null ? 'Never on this device' : DateFormat('dd MMM yyyy, HH:mm').format(t);
+
+  String get _storageHint {
+    if (kIsWeb) {
+      return 'On web, files download to your browser Downloads folder. '
+          'If nothing appears, allow downloads for this site.';
+    }
+    return 'On phone, files are saved under warehouse_exports in app storage. '
+        'On desktop, also under Downloads/warehouse_exports when possible.';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -211,8 +258,7 @@ class _BackupPageState extends ConsumerState<BackupPage> {
         padding: const EdgeInsets.all(16),
         children: [
           Text(
-            'Download reports for your records. On phone, files are also saved under '
-            'warehouse_exports in app storage when possible.',
+            'Download reports for your records. $_storageHint',
             style: tt.bodyMedium?.copyWith(color: cs.onSurfaceVariant, height: 1.4),
           ),
           const SizedBox(height: 20),
