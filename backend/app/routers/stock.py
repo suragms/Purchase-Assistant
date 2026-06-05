@@ -107,6 +107,7 @@ from app.services.stock_movement_service import (
     StaleStockVersionError,
     apply_stock_movement,
     apply_stock_movement_with_retry,
+    staff_activity_type_for_stock_kind,
 )
 from app.services.realtime_events import publish_business_event
 from app.services.notification_emitter import publish_notification_changed
@@ -3398,7 +3399,7 @@ async def record_physical_stock_count(
         db,
         business_id=business_id,
         user=user,
-        action_type="PHYSICAL_STOCK_COUNT",
+        action_type=staff_activity_type_for_stock_kind("physical_count"),
         item_id=item_id,
         item_name=item.name,
         before_data={"system_qty": float(system_qty)},

@@ -13,6 +13,9 @@ from app.database import get_db
 router = APIRouter(tags=["health"])
 logger = logging.getLogger("harisree.health")
 
+# Keep in sync with latest Alembic revision in backend/alembic/versions/.
+EXPECTED_ALEMBIC_HEAD = "060_stock_list_performance_indexes"
+
 
 @router.get("/")
 async def root():
@@ -126,13 +129,32 @@ async def health_ready(db: AsyncSession = Depends(get_db)):
             )
         )
         schema["delivery_pipeline"] = ds.scalar() is not None
+        chk = await db.execute(
+            text(
+                """
+                SELECT pg_get_constraintdef(oid)
+                FROM pg_constraint
+                WHERE conname = 'staff_activity_log_action_type_check'
+                LIMIT 1
+                """
+            )
+        )
+        constraint_def = (chk.scalar() or "").upper()
+        schema["staff_activity_v2"] = "STOCK_PHYSICAL_UPDATE" in constraint_def
+        ver_str = str(schema.get("alembic_version") or "")
+        schema["schema_ok"] = ver_str == EXPECTED_ALEMBIC_HEAD and bool(
+            schema.get("staff_activity_v2")
+        )
     except Exception:  # noqa: BLE001
         logger.exception("health_ready: schema probe failed")
+        schema.setdefault("schema_ok", False)
     return {
         "status": "ok",
         "db": "ok",
         "db_ms": ms,
         "schema": schema,
+        "schema_ok": bool(schema.get("schema_ok")),
+        "expected_alembic_head": EXPECTED_ALEMBIC_HEAD,
         "stock_sync_ready": bool(
             schema.get("delivery_pipeline") and schema.get("received_qty_column")
         ),

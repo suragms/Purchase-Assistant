@@ -69,20 +69,32 @@ def _actor_name(user: User) -> str:
     return (user.name or user.username or user.email or "User").strip()
 
 
-def _activity_type_for(kind: str) -> str:
+def staff_activity_type_for_stock_kind(kind: str) -> str:
+    """Map stock movement kind to staff_activity_log.action_type.
+
+    Uses legacy-safe codes (032 CHECK) until migration 059 is applied everywhere.
+    After 059, callers may log richer codes via dedicated endpoints.
+    """
     k = (kind or "").strip().lower()
-    # Backward-compatible activity code so old DB CHECK constraints
-    # do not reject stock writes before migrations are applied.
-    if k in {
+    legacy_safe = {
         "quick_purchase",
         "damage",
         "correction",
         "sale",
         "opening_stock",
         "delivery_adjustment",
-    }:
+        "physical_count",
+        "verification",
+        "usage",
+        "undo",
+    }
+    if k in legacy_safe:
         return "STOCK_UPDATE"
-    return "STOCK_PHYSICAL_UPDATE"
+    return "STOCK_UPDATE"
+
+
+def _activity_type_for(kind: str) -> str:
+    return staff_activity_type_for_stock_kind(kind)
 
 
 def _adjustment_type_for(kind: str) -> str:
