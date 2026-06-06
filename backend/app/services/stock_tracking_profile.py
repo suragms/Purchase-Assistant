@@ -128,16 +128,23 @@ def profile_from_catalog_item(item: Any) -> StockTrackingProfile:
             allowed_line_units=frozenset({"kg", "other"}),
         )
 
-    if pt in ("RETAIL_PACKET", "PACKET", "PKT") or (
-        du == "piece" and (kpb or (psize and pmeas == "KG"))
-    ):
-        w = kpb or psize or _kg_from_name(getattr(item, "name", None))
+    # Owner-set default_unit wins over legacy smart package_type (e.g. 400GM BOX rows).
+    if du == "box":
         return StockTrackingProfile(
-            mode="retail_packet",
-            primary_unit="piece",
-            base_unit="kg",
-            weight_per_primary=w,
-            allowed_line_units=frozenset({"piece", "pcs", "kg", "other"}),
+            mode="box",
+            primary_unit="box",
+            base_unit="box",
+            pieces_per_box=ipb,
+            allowed_line_units=frozenset({"box", "other"}),
+        )
+
+    if du == "tin":
+        return StockTrackingProfile(
+            mode="tin",
+            primary_unit="tin",
+            base_unit="tin",
+            liters_per_tin=wpt or psize,
+            allowed_line_units=frozenset({"tin", "kg", "other"}),
         )
 
     if du == "bag" or pt in ("SACK", "WHOLESALE_BAG", "BAG"):
@@ -150,7 +157,19 @@ def profile_from_catalog_item(item: Any) -> StockTrackingProfile:
             allowed_line_units=frozenset({"bag", "kg", "other"}),
         )
 
-    if du == "box" or pt == "BOX":
+    if pt in ("RETAIL_PACKET", "PACKET", "PKT") or (
+        du == "piece" and (kpb or (psize and pmeas == "KG"))
+    ):
+        w = kpb or psize or _kg_from_name(getattr(item, "name", None))
+        return StockTrackingProfile(
+            mode="retail_packet",
+            primary_unit="piece",
+            base_unit="kg",
+            weight_per_primary=w,
+            allowed_line_units=frozenset({"piece", "pcs", "kg", "other"}),
+        )
+
+    if pt == "BOX":
         return StockTrackingProfile(
             mode="box",
             primary_unit="box",
@@ -159,7 +178,7 @@ def profile_from_catalog_item(item: Any) -> StockTrackingProfile:
             allowed_line_units=frozenset({"box", "other"}),
         )
 
-    if du == "tin" or pt == "TIN":
+    if pt == "TIN":
         return StockTrackingProfile(
             mode="tin",
             primary_unit="tin",

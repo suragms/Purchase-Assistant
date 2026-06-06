@@ -939,6 +939,23 @@ def _sync_item_unit_extras(i: CatalogItem) -> None:
         i.default_weight_per_tin = None
 
 
+def _sync_stock_fields_from_default_unit(i: CatalogItem) -> None:
+    """Align package_type/stock_unit with owner-set default_unit (commit-stock SSOT)."""
+    u = (i.default_unit or "").strip().lower()
+    if u == "box":
+        i.package_type = "BOX"
+        i.stock_unit = "BOX"
+    elif u == "bag":
+        i.package_type = "SACK"
+        i.stock_unit = "KG"
+    elif u == "kg":
+        i.package_type = "LOOSE"
+        i.stock_unit = "KG"
+    elif u == "tin":
+        i.package_type = "TIN"
+        i.stock_unit = "TIN"
+
+
 def _validate_item_unit_constraints(i: CatalogItem) -> None:
     u = i.default_unit
     if u == "bag":
@@ -2941,6 +2958,8 @@ async def update_catalog_item(
             i.default_items_per_box = None
         if i.default_unit != "tin":
             i.default_weight_per_tin = None
+        if "default_unit" in data:
+            _sync_stock_fields_from_default_unit(i)
     if "default_supplier_ids" in data and data["default_supplier_ids"] is not None:
         sids = _dedupe_preserve_order(data["default_supplier_ids"])
         if not sids:

@@ -91,6 +91,24 @@ void main() {
       };
       expect(estimateLineQtyInStockUnit(line, row), 0);
     });
+
+    test('owner box unit + RETAIL_PACKET package → box line passes', () {
+      final line = _line(unit: 'box', qty: 1, itemName: 'SUNRICH 400GM BOX');
+      final row = {
+        'id': 'item-1',
+        'default_unit': 'box',
+        'default_items_per_box': 1,
+        'package_type': 'RETAIL_PACKET',
+        'unit_resolution': {
+          'package_type': 'RETAIL_PACKET',
+          'stock_unit': 'PIECE',
+          'package_size': 400,
+          'package_measurement': 'GM',
+        },
+      };
+      expect(catalogStockUnit(row, line), 'box');
+      expect(estimateLineQtyInStockUnit(line, row), 1);
+    });
   });
 
   group('findPurchaseStockCommitIssues', () {

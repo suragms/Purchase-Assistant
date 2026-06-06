@@ -40,6 +40,10 @@ class PurchaseStockCommitIssue {
     if (su.isEmpty) {
       return '$itemName · ${_fmtQty(qty)} $lu — stock unit is not configured on the catalog item.';
     }
+    if (deriveTradeUnitType(lineUnit) == 'box' && stockUnit == 'piece') {
+      return '$itemName · ${_fmtQty(qty)} $lu — catalog tracks pieces but this purchase is in boxes. '
+          'Edit catalog item: set unit to box and items per box (use 1 for single retail boxes).';
+    }
     return '$itemName · ${_fmtQty(qty)} $lu — catalog stock is tracked in $su; '
         'add kg-per-bag/box weight or change the line unit to match.';
   }
@@ -99,6 +103,12 @@ String catalogStockUnit(
       ?.toString()
       .trim()
       .toUpperCase();
+
+  // Owner-set default_unit is SSOT (overrides RETAIL_PACKET smart rows e.g. 400GM BOX).
+  if (du == 'box') return 'box';
+  if (du == 'tin') return 'tin';
+  if (du == 'bag') return 'bag';
+  if (du == 'kg') return 'kg';
 
   if (pt == 'LOOSE' || pt == 'LOOSE_KG' || du == 'kg') return 'kg';
 

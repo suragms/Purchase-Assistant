@@ -52,3 +52,19 @@ def test_wholesale_bag_profile():
     p = profile_from_catalog_item(item)
     assert p.mode == "wholesale_bag"
     assert p.primary_unit == "bag"
+
+
+def test_owner_box_unit_overrides_retail_packet_package_type():
+    item = SimpleNamespace(
+        id=uuid.uuid4(),
+        default_unit="box",
+        default_items_per_box=Decimal("1"),
+        package_type="RETAIL_PACKET",
+        package_size=Decimal("400"),
+        package_measurement="GM",
+        name="SUNRICH 400GM BOX",
+    )
+    p = profile_from_catalog_item(item)
+    assert p.mode == "box"
+    assert p.primary_unit == "box"
+    assert p.pieces_per_box == Decimal("1")

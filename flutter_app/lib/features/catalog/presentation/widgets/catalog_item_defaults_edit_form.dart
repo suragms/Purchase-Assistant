@@ -79,6 +79,10 @@ class CatalogItemDefaultsEditFormState
   void initState() {
     super.initState();
     _unit = widget.initialUnit;
+    if (_nameLooksLikeBox(widget.nameCtrl.text) &&
+        (_unit == null || _unit == 'piece')) {
+      _unit = 'box';
+    }
     if (_unit == 'box' && widget.ipbCtrl.text.trim().isEmpty) {
       widget.ipbCtrl.text = '1';
     }
@@ -372,6 +376,14 @@ class CatalogItemDefaultsEditFormState
   }
 
   String? get selectedUnit => _unit;
+
+  static bool _nameLooksLikeBox(String name) {
+    final u = name.trim().toUpperCase();
+    return u.contains(' BOX') ||
+        u.endsWith(' BOX') ||
+        u.contains(' CTN') ||
+        u.contains('CARTON');
+  }
 }
 
 class CatalogItemDefaultsValidation {
