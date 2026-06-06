@@ -30,6 +30,8 @@ import '../../../core/providers/home_owner_dashboard_providers.dart'
         stockAuditPeriodProvider,
         stockLowTopHomeProvider,
         stockVariancesTodayProvider;
+import '../../../core/providers/business_write_revision.dart'
+    show businessDataWriteRevisionProvider;
 import '../../../core/providers/purchase_post_save_provider.dart';
 import '../../../core/notifications/local_notifications_service.dart';
 import '../../../core/providers/connectivity_provider.dart';
@@ -90,6 +92,7 @@ class _HomePageState extends ConsumerState<HomePage>
   final _notifiedStaffPurchaseIds = <String>{};
   AppLifecycleState _lifecycle = AppLifecycleState.resumed;
   DateTime? _lastThrottledInvalidate;
+  DateTime? _lastWriteRevisionRefresh;
   DateTime? _homeLastRefreshedAt;
   bool _throttleHomeInvalidate({bool force = false}) {
     if (force) {
@@ -106,7 +109,6 @@ class _HomePageState extends ConsumerState<HomePage>
   }
 
   void _invalidateAlertProviders() {
-    ref.invalidate(homeDashboardDataProvider);
     ref.invalidate(appNotificationsListProvider);
     ref.invalidate(notificationCenterCoordinatorProvider);
   }
@@ -398,6 +400,22 @@ class _HomePageState extends ConsumerState<HomePage>
         if (!mounted) return;
         _handlingPurchasePostSave = true;
         unawaited(_doHandlePurchasePostSave(next));
+      });
+    });
+    ref.listen<int>(businessDataWriteRevisionProvider, (prev, next) {
+      if (prev == null || next <= prev) return;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || providerSkipApi(ref)) return;
+        if (ref.read(shellCurrentBranchProvider) != ShellBranch.home) return;
+        if (!_isHomeDashboardRoot(context)) return;
+        final now = DateTime.now();
+        if (_lastWriteRevisionRefresh != null &&
+            now.difference(_lastWriteRevisionRefresh!) <
+                const Duration(seconds: 12)) {
+          return;
+        }
+        _lastWriteRevisionRefresh = now;
+        _scheduleRefresh(force: false);
       });
     });
     ref.listen(stockAlertCountsProvider, (prev, next) {

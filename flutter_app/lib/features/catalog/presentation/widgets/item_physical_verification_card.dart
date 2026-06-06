@@ -38,10 +38,42 @@ class ItemPhysicalVerificationCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final stock =
-        ref.watch(itemDetailStockProvider(itemId)).valueOrNull ??
-            const <String, dynamic>{};
-    final audit = ref.watch(stockItemAuditProvider(itemId)).valueOrNull ?? const <Map<String, dynamic>>[];
+    final stockAsync = ref.watch(itemDetailStockProvider(itemId));
+    return stockAsync.when(
+      loading: () => const SizedBox.shrink(),
+      error: (_, __) => Card(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Row(
+            children: [
+              const Expanded(
+                child: Text(
+                  'Could not load verification log',
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+                ),
+              ),
+              TextButton(
+                onPressed: () =>
+                    ref.invalidate(itemDetailBundleProvider(itemId)),
+                child: const Text('Retry'),
+              ),
+            ],
+          ),
+        ),
+      ),
+      data: (stock) => _buildCard(context, ref, stock),
+    );
+  }
+
+  Widget _buildCard(
+    BuildContext context,
+    WidgetRef ref,
+    Map<String, dynamic> stock,
+  ) {
+    final audit =
+        ref.watch(stockItemAuditProvider(itemId)).valueOrNull ??
+            const <Map<String, dynamic>>[];
     final session = ref.watch(sessionProvider);
     final canVerify = session != null && sessionHasOwnerDashboard(session);
 

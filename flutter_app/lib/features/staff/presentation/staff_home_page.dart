@@ -7,13 +7,13 @@ import '../../../core/auth/session_notifier.dart';
 import '../../../core/design_system/hexa_ds_tokens.dart';
 import '../../../core/design_system/hexa_operational_tokens.dart';
 import '../../../core/design_system/hexa_responsive.dart';
-import '../../../core/providers/app_period_provider.dart';
 import '../../../core/providers/business_aggregates_invalidation.dart';
 import '../../../core/providers/notifications_provider.dart';
 import '../../../core/providers/staff_home_providers.dart';
 import '../../../core/providers/stock_providers.dart';
 import '../../../core/theme/hexa_colors.dart';
 import '../../../core/widgets/friendly_load_error.dart';
+import 'widgets/staff_home_auto_refresh_listener.dart';
 import 'widgets/staff_home_dashboard_widgets.dart';
 import 'widgets/staff_home_pending_delivery_cards.dart';
 
@@ -163,17 +163,14 @@ Future<void> _showStaffProfileSheet(BuildContext context, WidgetRef ref) async {
 
 void _invalidateStaffHomeRefresh(WidgetRef ref) {
   invalidateStaffDeliverySurfaces(ref);
+  invalidateStaffHomeSurfacesLight(ref);
   ref.invalidate(staffTodayStockWorkProvider);
-  ref.invalidate(staffLowStockAlertsProvider);
   ref.invalidate(staffRecentScansProvider);
   ref.invalidate(staffRecentActivityProvider);
   ref.invalidate(staffStockMismatchCountProvider);
   ref.invalidate(missingCodeItemsProvider);
   ref.invalidate(openingStockMissingProvider);
   ref.invalidate(staffTradePurchasesHistoryProvider);
-  ref.invalidate(stockOnHandTotalsProvider);
-  ref.invalidate(stockTotalsProvider(AppPeriod.month));
-  ref.invalidate(stockStatusCountsProvider);
 }
 
 /// Staff shell home — floor KPIs, warehouse stats, tools.
@@ -194,7 +191,6 @@ class StaffHomePage extends ConsumerWidget {
     final mismatchAsync = ref.watch(staffStockMismatchCountProvider);
     final mismatchCount = mismatchAsync.valueOrNull ?? 0;
     final kpisAsync = ref.watch(staffDeliveryPipelineKpisProvider);
-    final lowStockAsync = ref.watch(staffLowStockAlertsProvider);
 
     final showAttention = (staffHomeShowsPurchaseTools(focus) &&
             pendingDeliveries > 0) ||
@@ -203,13 +199,10 @@ class StaffHomePage extends ConsumerWidget {
         (staffHomeShowsBarcodeTools(focus) && missingCount > 0) ||
         mismatchCount > 0;
 
-    final criticalError = kpisAsync.hasError
-        ? kpisAsync.error
-        : lowStockAsync.hasError
-            ? lowStockAsync.error
-            : null;
+    final criticalError = kpisAsync.hasError ? kpisAsync.error : null;
 
-    return Scaffold(
+    return StaffHomeAutoRefreshListener(
+      child: Scaffold(
       backgroundColor: HexaColors.brandBackground,
       body: SafeArea(
         child: RefreshIndicator(
@@ -439,6 +432,7 @@ class StaffHomePage extends ConsumerWidget {
           ),
         ),
       ),
+    ),
     );
   }
 }

@@ -18,8 +18,8 @@ class PurchaseDeliveryBadge extends StatelessWidget {
     final c = status.color;
     return Container(
       padding: EdgeInsets.symmetric(
-        horizontal: compact ? 6 : 8,
-        vertical: compact ? 2 : 4,
+        horizontal: compact ? 7 : 9,
+        vertical: compact ? 4 : 6,
       ),
       decoration: BoxDecoration(
         color: c.withValues(alpha: 0.12),
@@ -37,7 +37,7 @@ class PurchaseDeliveryBadge extends StatelessWidget {
               fontSize: compact ? 10 : 11,
               fontWeight: FontWeight.w800,
               color: c,
-              height: 1.1,
+              height: 1.25,
             ),
           ),
         ],

@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import '../../../core/api/fastapi_error.dart';
 import '../../../core/auth/auth_error_messages.dart';
 import '../../../core/auth/session_notifier.dart';
 import '../../../core/auth/session_permissions.dart';
@@ -17,6 +18,7 @@ import '../../../core/providers/business_aggregates_invalidation.dart'
         syncPurchaseStockFromPurchaseJson,
         invalidatePurchaseWorkspace;
 import '../../../core/providers/business_write_revision.dart';
+import '../../../core/providers/deferred_invalidation.dart';
 import '../../../core/providers/delivery_pipeline_provider.dart';
 import '../../../core/providers/business_profile_provider.dart';
 import '../../../core/providers/stock_offline_queue_provider.dart';
@@ -39,6 +41,8 @@ import 'widgets/purchase_detail_damage_section.dart';
 import 'widgets/purchase_damage_report_sheet.dart';
 import 'widgets/staff_verification_sheet.dart';
 import '../../../core/providers/purchase_damage_reports_provider.dart';
+import '../../../core/providers/catalog_providers.dart';
+import '../../../core/purchase/purchase_stock_commit_preflight.dart';
 import '../../../core/utils/snack.dart';
 import '../../../core/utils/trade_purchase_commission.dart';
 import '../../../core/utils/trade_purchase_rate_display.dart';
@@ -285,7 +289,7 @@ class _PurchaseDetailPageState extends ConsumerState<PurchaseDetailPage> {
   Widget build(BuildContext context) {
     ref.listen<int>(businessDataWriteRevisionProvider, (prev, next) {
       if (prev != null && next > prev && mounted) {
-        ref.invalidate(tradePurchaseDetailProvider(widget.purchaseId));
+        deferInvalidate(ref, tradePurchaseDetailProvider(widget.purchaseId));
       }
     });
     ref.listen<AsyncValue<TradePurchase>>(
@@ -305,6 +309,8 @@ class _PurchaseDetailPageState extends ConsumerState<PurchaseDetailPage> {
         );
       },
     );
+    // Preflight commit-stock checks need catalog unit_resolution rows.
+    ref.watch(catalogItemsListProvider);
 
     final async = ref.watch(tradePurchaseDetailProvider(widget.purchaseId));
     final seed = widget.seedPurchase;
@@ -640,6 +646,157 @@ class PurchaseDetailBodyState extends ConsumerState<PurchaseDetailBody> {
         .toSet();
   }
 
+  List<Map<String, dynamic>> _catalogRows() {
+    return ref.read(catalogItemsListProvider).valueOrNull ?? const [];
+  }
+
+  List<PurchaseStockCommitIssue> _stockCommitIssues(TradePurchase p) {
+    return findPurchaseStockCommitIssues(p, _catalogRows());
+  }
+
+  Future<void> _showStockCommitBlockedDialog(
+    BuildContext context,
+    TradePurchase p,
+    List<PurchaseStockCommitIssue> issues,
+  ) async {
+    if (issues.isEmpty || !context.mounted) return;
+    String? firstCatalogId;
+    for (final issue in issues) {
+      final id = issue.catalogItemId?.trim();
+      if (id != null && id.isNotEmpty) {
+        firstCatalogId = id;
+        break;
+      }
+    }
+    try {
+      await showDialog<void>(
+        context: context,
+        useRootNavigator: true,
+        builder: (dialogContext) => AlertDialog(
+        title: const Text('Set up units before commit'),
+        content: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'Stock cannot be added until each line converts to the catalog stock unit.',
+              ),
+              const SizedBox(height: 12),
+              ...issues.map(
+                (issue) => Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        issue.headline,
+                        style: const TextStyle(fontWeight: FontWeight.w800),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        issue.detail,
+                        style: const TextStyle(
+                          fontSize: 13,
+                          color: Color(0xFF64748B),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Close'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.of(dialogContext).pop();
+              context.push('/purchase/edit/${p.id}');
+            },
+            child: const Text('Edit purchase'),
+          ),
+          if (firstCatalogId != null)
+            FilledButton(
+              onPressed: () {
+                Navigator.of(dialogContext).pop();
+                context.push('/catalog/item/$firstCatalogId/edit');
+              },
+              child: const Text('Edit catalog item'),
+            ),
+        ],
+      ),
+    );
+    } catch (_) {
+      // Dialog can fail on web if route context lost — banner/snackbar still shown.
+    }
+  }
+
+  Widget _stockCommitSetupBanner(
+    BuildContext context,
+    TradePurchase p,
+    List<PurchaseStockCommitIssue> issues,
+  ) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Material(
+        color: const Color(0xFFFEF2F2),
+        borderRadius: BorderRadius.circular(10),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(10),
+          onTap: () => _showStockCommitBlockedDialog(context, p, issues),
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(
+                color: const Color(0xFFB91C1C).withValues(alpha: 0.35),
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Icon(
+                      Icons.error_outline_rounded,
+                      color: Color(0xFFB91C1C),
+                      size: 20,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        '${issues.length} line${issues.length == 1 ? '' : 's'} need unit setup before commit',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w800,
+                          color: Color(0xFFB91C1C),
+                          fontSize: 13,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Tap to see what to fix in catalog or purchase',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.red.shade900.withValues(alpha: 0.75),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   Future<void> _afterDeliveryMutation(
     BuildContext context, {
     required TradePurchase purchase,
@@ -843,6 +1000,11 @@ class PurchaseDetailBodyState extends ConsumerState<PurchaseDetailBody> {
 
   Future<void> _commitStock(BuildContext context, TradePurchase p) async {
     if (_deliveryActionInFlight) return;
+    final issues = _stockCommitIssues(p);
+    if (issues.isNotEmpty) {
+      await _showStockCommitBlockedDialog(context, p, issues);
+      return;
+    }
     final ok = await showDialog<bool>(
           context: context,
           builder: (dialogContext) => AlertDialog(
@@ -910,14 +1072,28 @@ class PurchaseDetailBodyState extends ConsumerState<PurchaseDetailBody> {
         message: message,
       );
     } catch (e) {
-      if (context.mounted) {
-        showTopSnack(
-          context,
-          e is DioException
-              ? friendlyApiError(e)
-              : 'Could not commit to stock. Try again.',
-          isError: true,
-        );
+      if (!context.mounted) return;
+      final msg = e is DioException
+          ? friendlyApiError(e)
+          : 'Could not commit to stock. Try again.';
+      showTopSnack(
+        context,
+        msg,
+        isError: true,
+        duration: const Duration(seconds: 6),
+      );
+      if (e is DioException && e.response?.statusCode == 400) {
+        final detail = (fastApiDetailString(e.response?.data) ?? '').toLowerCase();
+        if (detail.contains('no stock was added') ||
+            detail.contains('unit setup')) {
+          final issues = _stockCommitIssues(p);
+          if (issues.isNotEmpty && context.mounted) {
+            WidgetsBinding.instance.addPostFrameCallback((_) async {
+              if (!context.mounted) return;
+              await _showStockCommitBlockedDialog(context, p, issues);
+            });
+          }
+        }
       }
     }
   }
@@ -1065,6 +1241,15 @@ class PurchaseDetailBodyState extends ConsumerState<PurchaseDetailBody> {
           ),
         ),
         const SizedBox(height: 8),
+        if (p.deliveryStatusEnum.readyForOwnerCommit && _canCommitStock()) ...[
+          Builder(
+            builder: (context) {
+              final issues = _stockCommitIssues(p);
+              if (issues.isEmpty) return const SizedBox.shrink();
+              return _stockCommitSetupBanner(context, p, issues);
+            },
+          ),
+        ],
         PurchaseDetailDeliveryBanner(
           purchase: p,
           isOwnerOrManager: _isOwnerOrManager(),
@@ -1525,20 +1710,16 @@ class PurchaseDetailBodyState extends ConsumerState<PurchaseDetailBody> {
       invalidatePurchaseWorkspace(ref);
       ref.invalidate(tradePurchaseDetailProvider(p.id));
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Payment saved')),
-        );
+        showTopSnack(context, 'Payment saved');
       }
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              e is DioException
-                  ? friendlyApiError(e)
-                  : 'Something went wrong. Please try again.',
-            ),
-          ),
+        showTopSnack(
+          context,
+          e is DioException
+              ? friendlyApiError(e)
+              : 'Something went wrong. Please try again.',
+          isError: true,
         );
       }
     } finally {

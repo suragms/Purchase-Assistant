@@ -11,7 +11,9 @@ import '../../../core/stock/stock_version_retry.dart';
 import '../../../core/errors/user_facing_errors.dart';
 import '../../../core/json_coerce.dart';
 import '../../../core/providers/business_aggregates_invalidation.dart'
-    show invalidateWarehouseSurfacesLight;
+    show invalidateWarehouseSurfaces;
+import '../../../core/providers/deferred_invalidation.dart';
+import '../../../core/providers/item_detail_providers.dart';
 import '../../../core/notifications/local_notifications_service.dart';
 import '../../../core/providers/home_owner_dashboard_providers.dart';
 import '../../../core/providers/staff_home_providers.dart';
@@ -363,7 +365,11 @@ class _QuickStockActionBodyState extends ConsumerState<_QuickStockActionBody> {
   }
 
   void _refreshListInBackground() {
-    invalidateWarehouseSurfacesLight(widget.parentRef, itemId: _itemId);
+    invalidateWarehouseSurfaces(widget.parentRef, itemId: _itemId);
+    deferInvalidate(
+      widget.parentRef,
+      itemDetailBundleProvider(_itemId),
+    );
     widget.parentRef.invalidate(stockAuditPeriodProvider);
     widget.parentRef.invalidate(stockChangesFeedProvider);
     widget.parentRef.invalidate(staffTodayActivityProvider);

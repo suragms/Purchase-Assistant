@@ -97,6 +97,8 @@ class _AppForegroundListenerState extends ConsumerState<AppForegroundListener>
         return;
       }
       _lastForegroundRefreshAt = now;
+      // Always refresh staff/warehouse summaries on resume (light invalidation).
+      invalidateStaffDeliverySurfacesLight(ref);
       if (_lastWarehouseInvalidateAt != null &&
           now.difference(_lastWarehouseInvalidateAt!) <
               const Duration(seconds: 30)) {
@@ -104,7 +106,6 @@ class _AppForegroundListenerState extends ConsumerState<AppForegroundListener>
         return;
       }
       _lastWarehouseInvalidateAt = now;
-      invalidateStaffDeliverySurfacesLight(ref);
       invalidateWarehouseSurfacesLight(ref);
       ref.invalidate(realtimeInvalidationProvider);
     } finally {

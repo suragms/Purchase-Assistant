@@ -28,8 +28,9 @@ import '../../../core/providers/business_aggregates_invalidation.dart'
     show
         catalogItemIdsFromPurchase,
         invalidateAfterPurchaseDelete,
-        syncPurchaseStockFromPurchaseJson,
         invalidatePurchaseWorkspace;
+import '../../../core/providers/catalog_providers.dart';
+import '../../../core/purchase/purchase_stock_commit_flow.dart';
 import '../../../core/providers/trade_purchases_provider.dart';
 import '../../shell/shell_branch_provider.dart';
 import '../providers/trade_purchase_detail_provider.dart';
@@ -1028,40 +1029,9 @@ class _PurchaseHomePageState extends ConsumerState<PurchaseHomePage> {
 
   Future<void> _markDeliveredQuick(TradePurchase p) async {
     if (!p.deliveryStatusEnum.readyForOwnerCommit) return;
-    final session = ref.read(sessionProvider);
-    if (session == null) return;
     HapticFeedback.mediumImpact();
-    try {
-      final updated = await ref.read(hexaApiProvider).commitPurchaseDelivery(
-            businessId: session.primaryBusiness.id,
-            purchaseId: p.id,
-          );
-      syncPurchaseStockFromPurchaseJson(
-        ref,
-        purchaseId: p.id,
-        body: updated,
-      );
-      try {
-        await ref.read(tradePurchasesListProvider.future);
-      } catch (_) {}
-      if (mounted) {
-        showTopSnack(context, 'Stock added to warehouse');
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() => _optimisticPurchasePatches.remove(p.id));
-        try {
-          await ref.read(tradePurchasesListProvider.future);
-        } catch (_) {}
-        showTopSnack(
-          context,
-          e is DioException
-              ? friendlyApiError(e)
-              : 'Could not update delivery status. Try again.',
-          isError: true,
-        );
-      }
-    }
+    if (!mounted) return;
+    await commitPurchaseStockFromList(context, ref, p);
   }
 
   @override
@@ -1094,6 +1064,7 @@ class _PurchaseHomePageState extends ConsumerState<PurchaseHomePage> {
     final undeliveredSort = ref.watch(purchaseHistoryUndeliveredSortProvider);
     final searchQ = ref.watch(purchaseHistorySearchProvider);
     final localWip = ref.watch(purchaseLocalWipDraftForHistoryProvider);
+    ref.watch(catalogItemsListProvider);
     final narrowHeader = MediaQuery.sizeOf(context).width < 520;
 
     return Scaffold(
@@ -2500,39 +2471,9 @@ class _PurchaseHistoryFullscreenSearchPageState
 
   Future<void> _markDelivered(TradePurchase p) async {
     if (!p.deliveryStatusEnum.readyForOwnerCommit) return;
-    final session = ref.read(sessionProvider);
-    if (session == null) return;
     HapticFeedback.mediumImpact();
-    try {
-      final updated = await ref.read(hexaApiProvider).commitPurchaseDelivery(
-            businessId: session.primaryBusiness.id,
-            purchaseId: p.id,
-          );
-      syncPurchaseStockFromPurchaseJson(
-        ref,
-        purchaseId: p.id,
-        body: updated,
-      );
-      try {
-        await ref.read(tradePurchasesListProvider.future);
-      } catch (_) {}
-      if (mounted) {
-        showTopSnack(context, 'Stock added to warehouse');
-      }
-    } catch (e) {
-      if (mounted) {
-        try {
-          await ref.read(tradePurchasesListProvider.future);
-        } catch (_) {}
-        showTopSnack(
-          context,
-          e is DioException
-              ? friendlyApiError(e)
-              : 'Could not commit to stock. Try again.',
-          isError: true,
-        );
-      }
-    }
+    if (!mounted) return;
+    await commitPurchaseStockFromList(context, ref, p);
   }
 
   Future<void> _confirmDelete(BuildContext ctx, TradePurchase p) async {
@@ -2587,6 +2528,7 @@ class _PurchaseHistoryFullscreenSearchPageState
 
   @override
   Widget build(BuildContext context) {
+    ref.watch(catalogItemsListProvider);
     final range = ref.watch(analyticsDateRangeProvider);
     final inferred = _purchaseHistInferPreset(range);
     if (inferred != _preset && inferred != _HistPeriodPreset.custom) {
@@ -3116,20 +3058,27 @@ class _QuickActionBtn extends StatelessWidget {
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: onTap,
+      behavior: HitTestBehavior.opaque,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        constraints: const BoxConstraints(minHeight: 32),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
         margin: const EdgeInsets.only(left: 6),
         decoration: BoxDecoration(
           color: bg,
-          borderRadius: BorderRadius.circular(4),
+          borderRadius: BorderRadius.circular(6),
         ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 9,
-            fontWeight: FontWeight.w900,
-            letterSpacing: 0.3,
-            color: color,
+        alignment: Alignment.center,
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w900,
+              letterSpacing: 0.2,
+              color: color,
+              height: 1.2,
+            ),
           ),
         ),
       ),

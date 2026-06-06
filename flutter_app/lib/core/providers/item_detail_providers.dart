@@ -38,6 +38,11 @@ final itemDetailBundleProvider =
     );
   }
 
+  // Re-fetch when staff/owner stock or catalog writes bust leaf providers.
+  ref.watch(catalogItemDetailProvider(itemId));
+  ref.watch(stockItemDetailProvider(itemId));
+  ref.watch(stockItemActivityProvider(itemId));
+
   // Purchase history loads lazily via [tradePurchasesForItemProvider].
   final results = await Future.wait([
     ref.read(catalogItemDetailProvider(itemId).future),

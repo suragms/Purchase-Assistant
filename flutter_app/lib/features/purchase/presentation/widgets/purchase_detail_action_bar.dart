@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/design_system/hexa_inline_button.dart';
 import '../../../../core/design_system/hexa_responsive.dart';
 import '../../../../core/models/trade_purchase_models.dart';
 
@@ -50,8 +51,9 @@ class PurchaseDetailActionBar extends StatelessWidget {
                 width: double.infinity,
                 child: FilledButton.icon(
                   onPressed: onMarkPaid,
+                  style: HexaInlineButton.primaryBarStyle(context),
                   icon: const Icon(Icons.check_circle_outline_rounded, size: 18),
-                  label: const Text('Mark as Paid'),
+                  label: HexaInlineButton.label('Mark as Paid'),
                 ),
               ),
               const SizedBox(height: 10),
@@ -63,6 +65,7 @@ class PurchaseDetailActionBar extends StatelessWidget {
                 children: [
                   if (onEdit != null) ...[
                     _actionChip(
+                      context: context,
                       label: 'Edit',
                       icon: Icons.edit_outlined,
                       onPressed: onEdit,
@@ -71,18 +74,21 @@ class PurchaseDetailActionBar extends StatelessWidget {
                   ],
                   if (!hideFinancials) ...[
                     _actionChip(
+                      context: context,
                       label: 'Export PDF',
                       icon: Icons.picture_as_pdf_outlined,
                       onPressed: onExportPdf,
                     ),
                     const SizedBox(width: 8),
                     _actionChip(
+                      context: context,
                       label: 'Share',
                       icon: Icons.share_outlined,
                       onPressed: onShare,
                     ),
                     const SizedBox(width: 8),
                     _actionChip(
+                      context: context,
                       label: 'Print',
                       icon: Icons.print_outlined,
                       onPressed: onPrint,
@@ -98,22 +104,16 @@ class PurchaseDetailActionBar extends StatelessWidget {
   }
 
   Widget _actionChip({
+    required BuildContext context,
     required String label,
     required IconData icon,
     required VoidCallback? onPressed,
   }) {
     return OutlinedButton.icon(
       onPressed: onPressed,
+      style: HexaInlineButton.chipStyle(context),
       icon: Icon(icon, size: 18),
-      label: Text(
-        label,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-      ),
-      style: OutlinedButton.styleFrom(
-        minimumSize: const Size(0, HexaResponsive.minTouchTarget),
-        padding: const EdgeInsets.symmetric(horizontal: 14),
-      ),
+      label: HexaInlineButton.label(label),
     );
   }
 }

@@ -30,7 +30,7 @@ void main() {
     expect(find.text('Purchase'), findsOneWidget);
     expect(find.text('Stock'), findsOneWidget);
     expect(find.text('Low stock'), findsOneWidget);
-    expect(find.text('Delivered'), findsOneWidget);
+    expect(find.text('Deliveries'), findsOneWidget);
     expect(find.text('Reports'), findsOneWidget);
     expect(find.text('3'), findsOneWidget);
   });

@@ -36,7 +36,7 @@ class HomeOwnerQuickActions extends StatelessWidget {
       _Spec('Purchase', Icons.add_shopping_cart_rounded, HexaColors.brandPrimary, onPurchase),
       _Spec('Stock', Icons.inventory_2_rounded, const Color(0xFF1565C0), onStock),
       _Spec('Low stock', Icons.warning_amber_rounded, HexaColors.warning, onLowStock, badge: lowStockCount),
-      _Spec('Delivered', Icons.check_circle_outline_rounded, HexaColors.profit, onDelivered),
+      _Spec('Deliveries', Icons.local_shipping_outlined, const Color(0xFFE65100), onDelivered),
       _Spec('Reports', Icons.bar_chart_rounded, const Color(0xFF0D9488), onReports),
       _Spec('Users', Icons.group_rounded, const Color(0xFF5D4037), onUsers),
       _Spec('Scan', Icons.qr_code_scanner_rounded, const Color(0xFF455A64), onBarcode),

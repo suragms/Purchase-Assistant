@@ -226,5 +226,8 @@ bool hexaErrorLikelyNonFatal(FlutterErrorDetails details) {
       s.contains('RenderBox was not laid out') ||
       s.contains('Vertical viewport was given unbounded height') ||
       s.contains('HiveError') ||
-      s.contains('Box not found');
+      s.contains('Box not found') ||
+      s.contains('modifying a provider') ||
+      s.contains('Tried to modify a provider') ||
+      s.contains('Cannot use "ref"');
 }

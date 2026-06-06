@@ -23,17 +23,64 @@ class ItemStockSnapshotCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final session = ref.watch(sessionProvider);
-    final isOwner = session != null && sessionHasOwnerDashboard(session);
-    final isStaff = session != null &&
-        session.primaryBusiness.role.toLowerCase() == 'staff';
-    final stock =
-        ref.watch(itemDetailStockProvider(itemId)).valueOrNull ??
-            const <String, dynamic>{};
+    final stockAsync = ref.watch(itemDetailStockProvider(itemId));
+    return stockAsync.when(
+      loading: () => const SizedBox(
+        height: 72,
+        child: Center(child: LinearProgressIndicator()),
+      ),
+      error: (_, __) => _sectionRetryCard(
+        context,
+        ref,
+        'Could not load stock summary',
+      ),
+      data: (stock) => _buildWithStock(context, ref, stock),
+    );
+  }
+
+  Widget _sectionRetryCard(
+    BuildContext context,
+    WidgetRef ref,
+    String message,
+  ) {
+    return Card(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                message,
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+            TextButton(
+              onPressed: () => ref.invalidate(itemDetailBundleProvider(itemId)),
+              child: const Text('Retry'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildWithStock(
+    BuildContext context,
+    WidgetRef ref,
+    Map<String, dynamic> stock,
+  ) {
     if (stock.isEmpty) {
       return const SizedBox.shrink();
     }
 
+    final session = ref.watch(sessionProvider);
+    final isOwner = session != null && sessionHasOwnerDashboard(session);
+    final isStaff = session != null &&
+        session.primaryBusiness.role.toLowerCase() == 'staff';
     final unitRaw = (stock['stock_unit'] ?? stock['unit'] ?? 'piece').toString();
     final unit = unitRaw.trim().isEmpty ? 'piece' : unitRaw.trim();
     final unitLabel = unit.toUpperCase();

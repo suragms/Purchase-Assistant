@@ -15,6 +15,7 @@ import '../../../../core/providers/home_owner_dashboard_providers.dart';
 import '../../../../core/providers/stock_providers.dart'
     show openingStockMissingProvider, stockStatusCountsProvider;
 import 'home_analytics_helpers.dart';
+import 'home_delivery_pipeline_card.dart';
 import 'home_owner_quick_actions.dart';
 import 'home_purchase_control_center.dart';
 import 'home_warehouse_activity_feed.dart';
@@ -97,7 +98,7 @@ class HomeOwnerDashboardBody extends ConsumerWidget {
                   label: 'Pending delivery · $pending',
                   color: const Color(0xFFDC2626),
                   filled: true,
-                  onTap: () => context.go('/purchase'),
+                  onTap: () => context.go('/purchase?filter=pending_delivery'),
                 ),
               ],
               if (openingN > 0) ...[
@@ -147,7 +148,7 @@ class HomeOwnerDashboardBody extends ConsumerWidget {
               value: '$pending',
               subtitle: pending > 0 ? 'Needs action' : 'Clear',
               accent: pending > 0 ? const Color(0xFFDC2626) : null,
-              onTap: () => context.go('/purchase'),
+              onTap: () => context.go('/purchase?filter=pending_delivery'),
             ),
             _KpiTile(
               label: 'Low stock',
@@ -175,6 +176,8 @@ class HomeOwnerDashboardBody extends ConsumerWidget {
           ],
         ),
         SizedBox(height: gap),
+        const HomeDeliveryPipelineCard(),
+        SizedBox(height: gap),
         const HomePurchaseControlCenter(),
         SizedBox(height: gap),
         HomeOwnerQuickActions(
@@ -187,7 +190,7 @@ class HomeOwnerDashboardBody extends ConsumerWidget {
                 location: '/stock',
               ),
           onLowStock: () => context.push('/stock/low-stock'),
-          onDelivered: () => context.go('/purchase?filter=received'),
+          onDelivered: () => context.go('/purchase?filter=delivery_commit'),
           onReports: () => goShellTab(
                 context,
                 ref,

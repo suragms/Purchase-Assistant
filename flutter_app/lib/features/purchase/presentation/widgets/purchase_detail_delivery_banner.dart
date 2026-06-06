@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import '../../../../core/design_system/hexa_inline_button.dart';
 import '../../../../core/models/trade_purchase_models.dart';
-import '../../../../core/theme/hexa_colors.dart';
 import 'purchase_delivery_badge.dart';
 
 /// Delivery pipeline status + role-specific primary action.
@@ -103,6 +103,7 @@ class PurchaseDetailDeliveryBanner extends StatelessWidget {
                       subtitle,
                       style: const TextStyle(
                         fontSize: 12,
+                        height: 1.35,
                         color: Color(0xFF64748B),
                       ),
                     ),
@@ -127,7 +128,7 @@ class PurchaseDetailDeliveryBanner extends StatelessWidget {
             const LinearProgressIndicator(minHeight: 2),
             const SizedBox(height: 8),
           ],
-          ..._actions(ds),
+          ..._actions(context, ds),
         ],
       ),
     );
@@ -136,30 +137,30 @@ class PurchaseDetailDeliveryBanner extends StatelessWidget {
   VoidCallback? _enabled(VoidCallback? handler) =>
       deliveryBusy ? null : handler;
 
-  List<Widget> _actions(DeliveryStatus ds) {
+  List<Widget> _actions(BuildContext context, DeliveryStatus ds) {
     final out = <Widget>[];
     if (isOwnerOrManager &&
         ds == DeliveryStatus.pending &&
         onDispatch != null) {
-      out.add(_btn('Mark dispatched', _enabled(onDispatch), outlined: false));
+      out.add(_btn(context, 'Mark dispatched', _enabled(onDispatch), outlined: false));
     }
     if (isStaff &&
         (ds == DeliveryStatus.pending ||
             ds == DeliveryStatus.dispatched ||
             ds == DeliveryStatus.inTransit) &&
         onArrive != null) {
-      out.add(_btn('Mark arrived at warehouse', _enabled(onArrive), outlined: false));
+      out.add(_btn(context, 'Mark arrived at warehouse', _enabled(onArrive), outlined: false));
     }
     if ((isStaff || isOwnerOrManager) && ds.needsStaffAction && onVerify != null) {
-      out.add(_btn('Submit warehouse counts', _enabled(onVerify)));
+      out.add(_btn(context, 'Submit warehouse counts', _enabled(onVerify)));
     }
     if (isOwnerOrManager && ds.readyForOwnerCommit && onCommit != null) {
-      out.add(_btn('Commit to stock', _enabled(onCommit), outlined: false));
+      out.add(_btn(context, 'Commit to stock', _enabled(onCommit), outlined: false));
     }
     if (isOwnerOrManager &&
         ds == DeliveryStatus.stockCommitted &&
         onRevert != null) {
-      out.add(_btn('Revert delivery & stock', _enabled(onRevert), destructive: true));
+      out.add(_btn(context, 'Revert delivery & stock', _enabled(onRevert), destructive: true));
     }
     if (out.isEmpty) return const [];
     return out
@@ -169,23 +170,18 @@ class PurchaseDetailDeliveryBanner extends StatelessWidget {
   }
 
   Widget _btn(
+    BuildContext context,
     String label,
     VoidCallback? onPressed, {
     bool outlined = true,
     bool destructive = false,
   }) {
-    return SizedBox(
-      height: 40,
-      width: double.infinity,
-      child: outlined
-          ? OutlinedButton(
-              onPressed: onPressed,
-              style: destructive
-                  ? OutlinedButton.styleFrom(foregroundColor: HexaColors.loss)
-                  : null,
-              child: Text(label),
-            )
-          : FilledButton(onPressed: onPressed, child: Text(label)),
+    return HexaInlineButton.fullWidth(
+      context: context,
+      label: label,
+      onPressed: onPressed,
+      filled: !outlined,
+      destructive: destructive,
     );
   }
 }

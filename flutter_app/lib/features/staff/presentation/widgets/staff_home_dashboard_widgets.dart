@@ -216,79 +216,127 @@ class StaffHomeWarehousePurchaseStats extends ConsumerWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Expanded(
-          child: _StatsBox(
-            title: 'Warehouse',
-            subtitle: 'On hand now',
-            child: onHandAsync.when(
-              loading: () => const LinearProgressIndicator(minHeight: 2),
-              error: (_, __) => SectionInlineError(
-                message: 'Warehouse stats unavailable',
-                onRetry: () => ref.invalidate(stockOnHandTotalsProvider),
-              ),
-              data: (onHand) {
-                final bags = coerceToDouble(onHand['total_bags']);
-                final kg = coerceToDouble(onHand['total_kg']);
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    _statLine('Bags', bags, HexaColors.brandPrimary),
-                    const SizedBox(height: 6),
-                    _statLine('KG', kg, const Color(0xFF1565C0)),
-                  ],
-                );
-              },
-            ),
-            onTap: () => context.go('/staff/stock'),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              return _StatsBox(
+                title: 'Warehouse',
+                subtitle: 'On hand now',
+                minWidth: constraints.maxWidth,
+                child: onHandAsync.when(
+                  loading: () => const LinearProgressIndicator(minHeight: 2),
+                  error: (_, __) => SectionInlineError(
+                    message: 'Warehouse stats unavailable',
+                    onRetry: () => ref.invalidate(stockOnHandTotalsProvider),
+                  ),
+                  data: (onHand) {
+                    return _unitStatsGrid(
+                      totals: onHand,
+                      bagLabel: 'Bags',
+                      kgLabel: 'KG',
+                      boxLabel: 'Box',
+                      tinLabel: 'Tin',
+                    );
+                  },
+                ),
+                onTap: () => context.go('/staff/stock'),
+              );
+            },
           ),
         ),
         const SizedBox(width: 8),
         Expanded(
-          child: _StatsBox(
-            title: 'Purchases',
-            subtitle: 'This month',
-            child: periodAsync.when(
-              loading: () => const LinearProgressIndicator(minHeight: 2),
-              error: (_, __) => SectionInlineError(
-                message: 'Purchase stats unavailable',
-                onRetry: () =>
-                    ref.invalidate(stockTotalsProvider(AppPeriod.month)),
-              ),
-              data: (period) {
-                final bags = coerceToDouble(period['total_bags']);
-                final kg = coerceToDouble(period['total_kg']);
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    _statLine('Bags bought', bags, const Color(0xFF2563EB)),
-                    const SizedBox(height: 6),
-                    _statLine('KG bought', kg, const Color(0xFF6A1B9A)),
-                  ],
-                );
-              },
-            ),
-            onTap: () => context.go('/staff/deliveries'),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              return _StatsBox(
+                title: 'Purchases',
+                subtitle: 'This month',
+                minWidth: constraints.maxWidth,
+                child: periodAsync.when(
+                  loading: () => const LinearProgressIndicator(minHeight: 2),
+                  error: (_, __) => SectionInlineError(
+                    message: 'Purchase stats unavailable',
+                    onRetry: () =>
+                        ref.invalidate(stockTotalsProvider(AppPeriod.month)),
+                  ),
+                  data: (period) {
+                    return _unitStatsGrid(
+                      totals: period,
+                      bagLabel: 'Bags',
+                      kgLabel: 'KG',
+                      boxLabel: 'Box',
+                      tinLabel: 'Tin',
+                    );
+                  },
+                ),
+                onTap: () => context.go('/staff/deliveries'),
+              );
+            },
           ),
         ),
       ],
     );
   }
 
-  Widget _statLine(String label, double value, Color color) {
-    return Row(
-      children: [
-        Expanded(
-          child: Text(
-            label,
-            style: HexaDsType.label(11, color: HexaDsColors.textMuted),
+  Widget _unitStatsGrid({
+    required Map<String, dynamic> totals,
+    required String bagLabel,
+    required String kgLabel,
+    required String boxLabel,
+    required String tinLabel,
+  }) {
+    final bags = coerceToDouble(totals['total_bags']);
+    final kg = coerceToDouble(totals['total_kg']);
+    final boxes = coerceToDouble(totals['total_boxes']);
+    final tins = coerceToDouble(totals['total_tins']);
+
+    Widget cell(String label, double value, Color color) {
+      return Expanded(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 2),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                _fmtNum(value),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontWeight: FontWeight.w900,
+                  fontSize: 15,
+                  color: color,
+                  height: 1.1,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+                style: HexaDsType.label(9, color: HexaDsColors.textMuted),
+              ),
+            ],
           ),
         ),
-        Text(
-          _fmtNum(value),
-          style: TextStyle(
-            fontWeight: FontWeight.w900,
-            fontSize: 18,
-            color: color,
-          ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            cell(bagLabel, bags, HexaColors.brandPrimary),
+            cell(kgLabel, kg, const Color(0xFF1565C0)),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            cell(boxLabel, boxes, const Color(0xFF6A1B9A)),
+            cell(tinLabel, tins, const Color(0xFFE65100)),
+          ],
         ),
       ],
     );
@@ -301,12 +349,14 @@ class _StatsBox extends StatelessWidget {
     required this.subtitle,
     required this.child,
     required this.onTap,
+    this.minWidth = 0,
   });
 
   final String title;
   final String subtitle;
   final Widget child;
   final VoidCallback onTap;
+  final double minWidth;
 
   @override
   Widget build(BuildContext context) {
@@ -321,17 +371,27 @@ class _StatsBox extends StatelessWidget {
         onTap: onTap,
         child: Padding(
           padding: const EdgeInsets.all(12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text(title, style: HexaDsType.heading(14)),
-              Text(
-                subtitle,
-                style: HexaDsType.body(11, color: HexaDsColors.textMuted),
-              ),
-              const SizedBox(height: 10),
-              child,
-            ],
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minWidth: minWidth > 0 ? minWidth : 120),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: HexaDsType.heading(14),
+                ),
+                Text(
+                  subtitle,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: HexaDsType.body(11, color: HexaDsColors.textMuted),
+                ),
+                const SizedBox(height: 10),
+                child,
+              ],
+            ),
           ),
         ),
       ),

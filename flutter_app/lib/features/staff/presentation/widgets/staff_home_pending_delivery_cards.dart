@@ -16,7 +16,6 @@ import '../../../../core/auth/session_notifier.dart';
 import '../../../../core/utils/unit_utils.dart';
 import '../../../purchase/providers/trade_purchase_detail_provider.dart';
 import '../../../purchase/presentation/widgets/staff_verification_sheet.dart';
-import 'staff_home_dashboard_widgets.dart';
 
 /// Up to 3 actionable delivery cards with Mark arrived / Verify.
 class StaffHomePendingDeliveryCards extends ConsumerWidget {
@@ -30,10 +29,6 @@ class StaffHomePendingDeliveryCards extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const StaffHomeSectionHeader(
-          title: 'Pending deliveries',
-          subtitle: 'Mark arrived or verify counts',
-        ),
         ...pending.take(3).map((p) => _DeliveryCard(purchase: p)),
         if (pending.length > 3)
           TextButton(

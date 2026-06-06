@@ -666,6 +666,7 @@ class _StockPageState extends ConsumerState<StockPage>
   Widget build(BuildContext context) {
     ref.listen(businessWriteEventProvider, (prev, next) {
       if (prev == null || prev.revision == next.revision) return;
+      if (next.kind != 'purchase' && next.kind != 'stock') return;
       ref.invalidate(stockChangesFeedProvider);
       if (next.affectedItemIds.isEmpty) {
         ref.invalidate(stockListProvider);

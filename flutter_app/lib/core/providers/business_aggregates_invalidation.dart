@@ -33,7 +33,22 @@ import 'warehouse_alerts_provider.dart';
 Timer? _invalidateDebounce;
 const _invalidateDebounceMs = 150;
 DateTime? _lastDashboardInvalidateAt;
-const _dashboardInvalidateMinGap = Duration(seconds: 60);
+const _dashboardInvalidateMinGap = Duration(seconds: 10);
+
+/// Immediate owner home refresh after writes (bypasses debounced aggregate gap).
+void forceRefreshOwnerHomeDashboard(dynamic ref) {
+  bustHomeDashboardVolatileCaches();
+  bustHomeShellReportsInflight();
+  _lastDashboardInvalidateAt = DateTime.now();
+  ref.invalidate(homeDashboardDataProvider);
+  ref.invalidate(homeShellReportsProvider);
+  ref.invalidate(homeRecentActivityFeedProvider);
+  ref.invalidate(homeInventorySummaryProvider);
+  ref.invalidate(homeStockAttentionCountProvider);
+  ref.invalidate(stockOnHandTotalsProvider);
+  ref.invalidate(stockStatusCountsProvider);
+  ref.invalidate(deliveryPipelineProvider);
+}
 
 /// KPIs and tables that depend on [analyticsDateRangeProvider] and/or entries.
 /// [ref] is any Riverpod `Ref` / `WidgetRef` with `invalidate`.
@@ -292,6 +307,7 @@ void invalidateStaffDeliverySurfacesLight(dynamic ref) {
   ref.invalidate(staffTodayActivityProvider);
   ref.invalidate(staffTodaySummaryProvider);
   ref.invalidate(stockListProvider);
+  invalidateStaffHomeSurfacesLight(ref);
 }
 
 /// Full staff + owner delivery refresh after verify/commit.
@@ -314,6 +330,7 @@ void invalidateAfterDeliveryVerify(
     invalidateWarehouseSurfacesLight(ref, itemId: id);
   }
   invalidateTradePurchaseCaches(ref);
+  forceRefreshOwnerHomeDashboard(ref);
   bumpBusinessDataWriteRevision(ref);
 }
 
@@ -327,5 +344,6 @@ void invalidateAfterDeliveryCommit(
   ref.invalidate(tradePurchaseDetailProvider(purchaseId));
   invalidateStaffDeliverySurfaces(ref);
   ref.invalidate(homeStockAttentionCountProvider);
+  forceRefreshOwnerHomeDashboard(ref);
   bumpBusinessDataWriteRevision(ref);
 }

@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/design_system/hexa_responsive.dart';
 import '../../../core/providers/business_write_event.dart';
+import '../../../core/providers/deferred_invalidation.dart';
 import '../../../core/providers/item_detail_providers.dart';
 import '../../../core/providers/stock_providers.dart' show stockItemDetailProvider;
 import '../../../core/providers/trade_purchases_provider.dart';
@@ -36,13 +37,15 @@ class ItemDetailPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     ref.listen<BusinessWriteEvent>(businessWriteEventProvider, (prev, next) {
       if (next.revision <= (prev?.revision ?? -1)) return;
-      final purchaseOrStock =
-          next.kind == 'purchase' || next.kind == 'stock';
+      final purchaseOrStock = next.kind == 'purchase' ||
+          next.kind == 'stock' ||
+          next.kind == 'stock_patch';
       if (purchaseOrStock &&
-          (next.affectsItem(itemId) || next.isGlobal)) {
-        ref.invalidate(itemDetailBundleProvider(itemId));
-        ref.invalidate(tradePurchasesForItemProvider(itemId));
-        ref.invalidate(stockItemDetailProvider(itemId));
+          (next.affectsItem(itemId) ||
+              (next.isGlobal && next.kind != 'stock_patch'))) {
+        deferInvalidate(ref, itemDetailBundleProvider(itemId));
+        deferInvalidate(ref, tradePurchasesForItemProvider(itemId));
+        deferInvalidate(ref, stockItemDetailProvider(itemId));
       }
     });
 

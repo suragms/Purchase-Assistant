@@ -9,6 +9,7 @@ import '../models/session.dart';
 import '../models/trade_purchase_models.dart';
 import 'barcode_recent_scans.dart';
 import 'delivery_pipeline_provider.dart';
+import 'app_period_provider.dart';
 import 'prefs_provider.dart';
 import 'stock_providers.dart';
 import 'trade_purchases_provider.dart';
@@ -35,6 +36,18 @@ void invalidateStaffHomeCaches(Ref ref) {
   ref.invalidate(openingStockMissingProvider);
   ref.invalidate(stockStatusCountsProvider);
   ref.invalidate(stockOnHandTotalsProvider);
+}
+
+/// Light refresh for staff home KPIs + warehouse cards (safe to call often).
+void invalidateStaffHomeSurfacesLight(dynamic ref) {
+  ref.invalidate(deliveryPipelineProvider);
+  ref.invalidate(stockOnHandTotalsProvider);
+  ref.invalidate(stockTotalsProvider(AppPeriod.month));
+  ref.invalidate(staffLowStockAlertsProvider);
+  ref.invalidate(stockStatusCountsProvider);
+  ref.invalidate(staffTodaySummaryProvider);
+  ref.invalidate(staffTodayActivityProvider);
+  ref.invalidate(staffPendingDeliveriesProvider);
 }
 
 bool _staffSessionActive(Ref ref) {
@@ -182,7 +195,8 @@ final staffLowStockAlertsProvider =
     ];
   } catch (e) {
     _rethrowAuthFailure(e);
-    rethrow;
+    // Non-auth failures: fall back to status counts instead of blocking staff home.
+    return [];
   }
 });
 
