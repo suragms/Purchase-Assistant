@@ -205,6 +205,12 @@ class _CatalogItemCreatePageState extends ConsumerState<CatalogItemCreatePage> {
         }
       }
     }
+    if (_supplierId == null &&
+        _supplierSearchCtrl.text.isEmpty &&
+        sups.length == 1) {
+      _supplierId = sups.first['id']?.toString();
+      _supplierSearchCtrl.text = sups.first['name']?.toString() ?? '';
+    }
     final presetType = widget.presetTypeId;
     if (presetType != null && presetType.isNotEmpty) {
       final row = _rowByTypeId(types, presetType);
@@ -305,6 +311,28 @@ class _CatalogItemCreatePageState extends ConsumerState<CatalogItemCreatePage> {
   }
 
   Future<void> _exit() async {
+    if (_saving) {
+      final ok = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Cancel save?'),
+          content: const Text(
+            'Item save is still in progress. Close anyway?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Keep waiting'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Close'),
+            ),
+          ],
+        ),
+      );
+      if (ok != true) return;
+    }
     _popPage(false);
   }
 
@@ -413,7 +441,7 @@ class _CatalogItemCreatePageState extends ConsumerState<CatalogItemCreatePage> {
             defaultLandingCost: purchaseRate,
             defaultSellingCost: sellingRate,
             packageType: _packageTypeForMode(_packagingMode),
-          );
+          ).timeout(const Duration(seconds: 45));
 
       if (!mounted) return;
       _invalidateAfterCreate();
@@ -432,6 +460,7 @@ class _CatalogItemCreatePageState extends ConsumerState<CatalogItemCreatePage> {
 
       await HapticFeedback.mediumImpact();
       if (!mounted) return;
+      setState(() => _saving = false);
       if (widget.returnResultOnSave && newId.isNotEmpty) {
         _popPage(<String, dynamic>{'id': newId, 'name': name});
         return;
@@ -449,6 +478,12 @@ class _CatalogItemCreatePageState extends ConsumerState<CatalogItemCreatePage> {
           SnackBar(content: Text('Item "$name" created')),
         );
       }
+    } on TimeoutException {
+      if (!mounted) return;
+      setState(() {
+        _saving = false;
+        _error = 'Save timed out. Check connection and try again.';
+      });
     } catch (e, st) {
       logSilencedApiError(e, st);
       if (!mounted) return;
@@ -473,16 +508,15 @@ class _CatalogItemCreatePageState extends ConsumerState<CatalogItemCreatePage> {
         _maybePrefill(types, sups, brokers);
       });
     });
-    if (!_prefilled) {
-      typesAsync.whenData((types) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (!mounted || _prefilled) return;
-          final sups = ref.read(suppliersListProvider).valueOrNull ?? [];
-          final brokers = ref.read(brokersListProvider).valueOrNull ?? [];
-          _maybePrefill(types, sups, brokers);
-        });
+    ref.listen(suppliersListProvider, (prev, next) {
+      next.whenData((sups) {
+        if (!mounted || _prefilled) return;
+        final types = ref.read(categoryTypesIndexProvider).valueOrNull ?? [];
+        if (types.isEmpty) return;
+        final brokers = ref.read(brokersListProvider).valueOrNull ?? [];
+        _maybePrefill(types, sups, brokers);
       });
-    }
+    });
 
     return PopScope(
       canPop: false,
@@ -490,14 +524,16 @@ class _CatalogItemCreatePageState extends ConsumerState<CatalogItemCreatePage> {
         if (didPop) return;
         await _exit();
       },
-      child: Scaffold(
-        appBar: AppBar(
-          title: const Text('New item'),
-          leading: IconButton(
-            icon: const Icon(Icons.close_rounded),
-            onPressed: _saving ? null : () => unawaited(_exit()),
+      child: SizedBox.expand(
+        child: Scaffold(
+          resizeToAvoidBottomInset: true,
+          appBar: AppBar(
+            title: const Text('New item'),
+            leading: IconButton(
+              icon: const Icon(Icons.close_rounded),
+              onPressed: () => unawaited(_exit()),
+            ),
           ),
-        ),
         body: SafeArea(
           child: Column(
             children: [
@@ -602,6 +638,7 @@ class _CatalogItemCreatePageState extends ConsumerState<CatalogItemCreatePage> {
           ),
         ),
       ),
+      ),
     );
   }
 
@@ -615,12 +652,6 @@ class _CatalogItemCreatePageState extends ConsumerState<CatalogItemCreatePage> {
         error: (_, __) => const SizedBox.shrink(),
         data: (sups) {
           if (sups.isEmpty) return const SizedBox.shrink();
-          if (sups.length == 1 &&
-              _supplierId == null &&
-              _supplierSearchCtrl.text.isEmpty) {
-            _supplierId = sups.first['id']?.toString();
-            _supplierSearchCtrl.text = sups.first['name']?.toString() ?? '';
-          }
           return Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [

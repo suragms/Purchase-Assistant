@@ -343,124 +343,133 @@ class _InlineSearchFieldState extends State<InlineSearchField> {
                   lift = -(panelH + fieldBox.size.height + 8);
                 }
               }
-              return TapRegion(
-                groupId: _suggestionTapGroup,
-                child: Transform.translate(
-                  offset: Offset(0, lift),
-                  child: Align(
+              final fieldWidth = fieldBox != null && fieldBox.hasSize
+                  ? fieldBox.size.width
+                  : mq.size.width - 32;
+              return Transform.translate(
+                offset: Offset(0, lift),
+                child: Align(
                   alignment: Alignment.topLeft,
-                  child: Material(
-                    elevation: 8,
-                    borderRadius: BorderRadius.circular(12),
-                    clipBehavior: Clip.antiAlias,
-                    color: Colors.white,
-                    child: ConstrainedBox(
-                      constraints: BoxConstraints(
-                        maxHeight: _optionsMaxHeight(context, opts.length),
-                      ),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          Align(
-                            alignment: Alignment.centerRight,
-                            child: IconButton(
-                              tooltip: 'Close suggestions',
-                              visualDensity: VisualDensity.compact,
-                              icon: Icon(
-                                Icons.close_rounded,
-                                color: cs.onSurfaceVariant,
-                              ),
-                              onPressed: () => _focus.unfocus(),
-                            ),
-                          ),
-                          Expanded(
-                            child: Scrollbar(
-                              thumbVisibility: true,
-                              child: ListView.separated(
-                                shrinkWrap: false,
-                                padding: EdgeInsets.zero,
-                                physics: const ClampingScrollPhysics(),
-                                itemCount: opts.length,
-                                separatorBuilder: (_, __) => Divider(
-                                  height: 1,
-                                  thickness: 1,
-                                  color: Colors.grey[200],
+                  widthFactor: 0,
+                  heightFactor: 0,
+                  child: TapRegion(
+                    groupId: _suggestionTapGroup,
+                    child: Material(
+                      elevation: 8,
+                      borderRadius: BorderRadius.circular(12),
+                      clipBehavior: Clip.antiAlias,
+                      color: Colors.white,
+                      child: ConstrainedBox(
+                        constraints: BoxConstraints(
+                          maxWidth: fieldWidth,
+                          maxHeight: _optionsMaxHeight(context, opts.length),
+                        ),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Align(
+                              alignment: Alignment.centerRight,
+                              child: IconButton(
+                                tooltip: 'Close suggestions',
+                                visualDensity: VisualDensity.compact,
+                                icon: Icon(
+                                  Icons.close_rounded,
+                                  color: cs.onSurfaceVariant,
                                 ),
-                                itemBuilder: (BuildContext ctx, int i) {
-                                final it = opts[i];
-                                void commit() {
-                                  _pendingSelection = null;
-                                  _pick(it, keepFocus: false);
-                                }
+                                onPressed: () => _focus.unfocus(),
+                              ),
+                            ),
+                            Flexible(
+                              child: Scrollbar(
+                                thumbVisibility: true,
+                                child: ListView.separated(
+                                  shrinkWrap: true,
+                                  padding: EdgeInsets.zero,
+                                  physics: const ClampingScrollPhysics(),
+                                  itemCount: opts.length,
+                                  separatorBuilder: (_, __) => Divider(
+                                    height: 1,
+                                    thickness: 1,
+                                    color: Colors.grey[200],
+                                  ),
+                                  itemBuilder: (BuildContext ctx, int i) {
+                                    final it = opts[i];
+                                    void commit() {
+                                      _pendingSelection = null;
+                                      _pick(it, keepFocus: false);
+                                    }
 
-                                return GestureDetector(
-                                  onTapDown: (_) => _pendingSelection = it,
-                                  onTap: commit,
-                                  behavior: HitTestBehavior.opaque,
-                                  child: ConstrainedBox(
-                                    constraints: const BoxConstraints(
-                                      minHeight: 44,
-                                    ),
-                                    child: Padding(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 12,
-                                        vertical: 10,
-                                      ),
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          Text(
-                                            it.label,
-                                            maxLines: 2,
-                                            overflow: TextOverflow.ellipsis,
-                                            style: const TextStyle(
-                                              fontWeight: FontWeight.w600,
-                                              fontSize: 14,
-                                            ),
+                                    return GestureDetector(
+                                      onTapDown: (_) => _pendingSelection = it,
+                                      onTap: commit,
+                                      behavior: HitTestBehavior.opaque,
+                                      child: ConstrainedBox(
+                                        constraints: const BoxConstraints(
+                                          minHeight: 44,
+                                        ),
+                                        child: Padding(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 12,
+                                            vertical: 10,
                                           ),
-                                          if (it.subtitle != null &&
-                                              it.subtitle!.trim().isNotEmpty)
-                                            Padding(
-                                              padding: const EdgeInsets.only(
-                                                  top: 2),
-                                              child: Text(
-                                                it.subtitle!,
-                                                maxLines: 3,
-                                                overflow:
-                                                    TextOverflow.ellipsis,
-                                                style: TextStyle(
-                                                  fontSize: 12,
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Text(
+                                                it.label,
+                                                maxLines: 2,
+                                                overflow: TextOverflow.ellipsis,
+                                                style: const TextStyle(
                                                   fontWeight: FontWeight.w600,
-                                                  height: 1.25,
-                                                  color: Color.lerp(
-                                                    Theme.of(ctx)
-                                                        .colorScheme
-                                                        .onSurface,
-                                                    Theme.of(ctx)
-                                                        .colorScheme
-                                                        .onSurfaceVariant,
-                                                    0.35,
-                                                  ),
+                                                  fontSize: 14,
                                                 ),
                                               ),
-                                            ),
-                                        ],
+                                              if (it.subtitle != null &&
+                                                  it.subtitle!
+                                                      .trim()
+                                                      .isNotEmpty)
+                                                Padding(
+                                                  padding: const EdgeInsets.only(
+                                                      top: 2),
+                                                  child: Text(
+                                                    it.subtitle!,
+                                                    maxLines: 3,
+                                                    overflow:
+                                                        TextOverflow.ellipsis,
+                                                    style: TextStyle(
+                                                      fontSize: 12,
+                                                      fontWeight:
+                                                          FontWeight.w600,
+                                                      height: 1.25,
+                                                      color: Color.lerp(
+                                                        Theme.of(ctx)
+                                                            .colorScheme
+                                                            .onSurface,
+                                                        Theme.of(ctx)
+                                                            .colorScheme
+                                                            .onSurfaceVariant,
+                                                        0.35,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ),
+                                            ],
+                                          ),
+                                        ),
                                       ),
-                                    ),
-                                  ),
-                                );
-                                },
+                                    );
+                                  },
+                                ),
                               ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                     ),
                   ),
-                ),
                 ),
               );
             },

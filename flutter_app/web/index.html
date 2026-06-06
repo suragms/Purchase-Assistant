@@ -42,7 +42,7 @@
     })();
   </script>
   <style>
-    * { -webkit-tap-highlight-color: transparent; touch-action: pan-y; }
+    * { -webkit-tap-highlight-color: transparent; }
     html {
       height: 100%;
       width: 100%;
@@ -61,8 +61,12 @@
       background: #F5F7FA;
       overscroll-behavior: none;
       -webkit-overflow-scrolling: touch;
-      -webkit-user-select: none;
-      user-select: none;
+      touch-action: manipulation;
+    }
+    /* Flutter web text fields use DOM overlays — body user-select:none blocks typing. */
+    input, textarea, [contenteditable="true"] {
+      -webkit-user-select: text;
+      user-select: text;
     }
     #app {
       width: 100%;
@@ -76,7 +80,7 @@
       min-height: 100vh;
     }
     flt-glass-pane {
-      touch-action: pan-y !important;
+      touch-action: auto !important;
     }
     #splash {
       position: fixed;
