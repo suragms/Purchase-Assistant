@@ -38,7 +38,7 @@ class HexaPageErrorBoundary extends ConsumerWidget {
     }
     return ColoredBox(
       color: HexaColors.brandBackground,
-      child: child,
+      child: SizedBox.expand(child: child),
     );
   }
 }

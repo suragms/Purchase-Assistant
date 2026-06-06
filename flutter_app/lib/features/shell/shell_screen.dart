@@ -73,7 +73,8 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
     if (ref.read(shellCurrentBranchProvider) != idx) {
       ref.read(shellCurrentBranchProvider.notifier).state = idx;
     }
-    final routePath = GoRouterState.of(context).uri.path;
+    final router = GoRouter.maybeOf(context);
+    final routePath = router?.state.uri.path ?? '/home';
     final pathBranch = shellBranchIndexForPath(routePath);
     final isPushedModal = shellIsPushedModalPath(routePath);
     final navSelectedIndex =
@@ -110,7 +111,7 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
       ref.read(shellCurrentBranchProvider.notifier).state = branch;
       navigationShell.goBranch(branch);
       final target = shellLocationForBranch(branch);
-      final current = GoRouterState.of(context).uri.path;
+      final current = GoRouter.maybeOf(context)?.state.uri.path ?? routePath;
       if (current != target && !current.startsWith('$target/')) {
         context.go(target);
       }

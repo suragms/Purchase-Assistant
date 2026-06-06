@@ -270,6 +270,44 @@ class _HexaErrorBoundaryState extends State<_HexaErrorBoundary> {
   }
 }
 
+class _RouterBootPlaceholder extends StatelessWidget {
+  const _RouterBootPlaceholder();
+
+  @override
+  Widget build(BuildContext context) {
+    return ColoredBox(
+      color: HexaColors.brandBackground,
+      child: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              HexaColors.appName,
+              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                    fontWeight: FontWeight.w800,
+                    color: HexaColors.brandPrimary,
+                  ),
+            ),
+            const SizedBox(height: 20),
+            const SizedBox(
+              width: 32,
+              height: 32,
+              child: CircularProgressIndicator(strokeWidth: 2.5),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Loading…',
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: const Color(0xFF64748B),
+                  ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class HexaApp extends ConsumerWidget {
   const HexaApp({super.key});
 
@@ -288,13 +326,18 @@ class HexaApp extends ConsumerWidget {
       themeMode: ThemeMode.light,
       routerConfig: router,
       builder: (context, child) {
-        removeBootOverlayIfPresent();
+        final routed = child != null
+            ? SizedBox.expand(child: child)
+            : const SizedBox.expand(child: _RouterBootPlaceholder());
+        if (child != null) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            removeBootOverlayIfPresent();
+          });
+        }
         // Web: the router [child] can lay out with zero intrinsic height unless we
         // force it to fill the viewport — otherwise the shell / Home body stays blank
         // while the bottom bar (sibling scaffold) still paints.
-        final body = SizedBox.expand(
-          child: child ?? const SizedBox.shrink(),
-        );
+        final body = routed;
         final banner = ref.watch(apiDegradedProvider);
         // Stack (not Column+Expanded): [MaterialApp.router] builder can get unbounded
         // height on web; Expanded would overflow. Overlay for tooltips lives under

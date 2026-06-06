@@ -1,1 +1,1 @@
-void removeBootOverlayIfPresent() {}
+void removeBootOverlayIfPresent({bool force = false}) {}

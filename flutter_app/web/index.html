@@ -229,27 +229,22 @@
     })();
   </script>
   <script>
-    // Harisree on Vercel: do NOT register a service worker. Older deploys shipped a
-    // self-unregistering SW that reloads the tab in a loop → permanent blank screen.
+    // Harisree on Vercel: do NOT register a service worker. Purge legacy SW without
+    // reloading the tab — reload loops caused permanent blank screens on desktop.
     (function () {
       if (!('serviceWorker' in navigator)) return;
       navigator.serviceWorker.getRegistrations().then(function (regs) {
-        return Promise.all(
-          regs.map(function (r) {
-            return r.unregister();
-          }),
-        );
-      }).then(function () {
-        if (!navigator.serviceWorker.controller) return;
-        try {
-          var k = 'harisree_sw_purged_v2';
-          if (!sessionStorage.getItem(k)) {
-            sessionStorage.setItem(k, '1');
-            location.reload();
-          }
-        } catch (_) {}
-      });
+        return Promise.all(regs.map(function (r) { return r.unregister(); }));
+      }).catch(function () {});
     })();
+    window.addEventListener('error', function (ev) {
+      var boot = document.getElementById('boot');
+      if (!boot || boot.classList.contains('boot-error')) return;
+      boot.classList.add('boot-error');
+      boot.textContent =
+        'App error — hard refresh (Ctrl+Shift+R). If it continues, clear site data for this URL.';
+      console.error(ev.error || ev.message);
+    });
   </script>
   <script src="flutter_bootstrap.js" defer></script>
 </body>

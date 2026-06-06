@@ -5,9 +5,8 @@ bool _removed = false;
 
 /// Hides the static `#boot` / `#splash` overlays from [web/index.html] once Flutter
 /// has painted bootstrap UI (not on the engine's empty first frame).
-void removeBootOverlayIfPresent() {
-  if (_removed) return;
-  _removed = true;
+void removeBootOverlayIfPresent({bool force = false}) {
+  if (_removed && !force) return;
   void hide() {
     html.document.getElementById('boot')?.remove();
     final splash = html.document.getElementById('splash');
@@ -20,8 +19,12 @@ void removeBootOverlayIfPresent() {
     });
   }
 
-  // One animation frame after Dart build so the canvas shows spinner/login shell.
+  // Two animation frames so the first painted route (spinner/login/shell) is on canvas
+  // before we remove the HTML splash — avoids a blank gray gap on desktop web.
   html.window.requestAnimationFrame((_) {
-    hide();
+    html.window.requestAnimationFrame((_) {
+      _removed = true;
+      hide();
+    });
   });
 }

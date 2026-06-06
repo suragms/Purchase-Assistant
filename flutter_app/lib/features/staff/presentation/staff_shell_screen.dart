@@ -67,7 +67,7 @@ class _StaffShellScreenState extends ConsumerState<StaffShellScreen> {
     if (ref.read(staffShellCurrentBranchProvider) != idx) {
       ref.read(staffShellCurrentBranchProvider.notifier).state = idx;
     }
-    final routePath = GoRouterState.of(context).uri.path;
+    final routePath = GoRouter.maybeOf(context)?.state.uri.path ?? '/staff/home';
     final pathBranch = staffShellBranchIndexForPath(routePath);
     if (pathBranch != null && pathBranch != idx) {
       WidgetsBinding.instance.addPostFrameCallback((_) {

@@ -18,7 +18,6 @@ import 'core/theme/app_theme.dart';
 import 'core/theme/hexa_colors.dart';
 import 'core/notifications/local_notifications_service.dart';
 import 'core/platform/hexa_layout_error_widget.dart';
-import 'core/platform/remove_boot_overlay.dart';
 import 'core/providers/prefs_provider.dart'
     show kNotificationsOptInKey, sharedPreferencesProvider;
 import 'core/providers/api_degraded_provider.dart';
@@ -75,7 +74,6 @@ void _installHexaPlatformAsyncErrorHook() {
 /// "Could not navigate to initial route" and a broken stack / blank home after
 /// [MaterialApp.router] mounts.
 Widget _bootstrapChrome(Widget child) {
-  removeBootOverlayIfPresent();
   final ui.FlutterView? view = ui.PlatformDispatcher.instance.implicitView ??
       (ui.PlatformDispatcher.instance.views.isNotEmpty
           ? ui.PlatformDispatcher.instance.views.first
