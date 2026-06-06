@@ -324,6 +324,8 @@ class _QuickStockActionBodyState extends ConsumerState<_QuickStockActionBody> {
     setState(() => _saving = true);
     final saveStarted = DateTime.now();
     try {
+      await _refreshItemFromServer();
+      if (!mounted) return;
       final saved = await _persistStock(parsed);
       final elapsed = DateTime.now().difference(saveStarted);
       const minLoading = Duration(milliseconds: 300);

@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_web_plugins/url_strategy.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import 'app.dart';
 import 'core/config/app_config.dart';
@@ -99,6 +100,78 @@ Widget _bootstrapChrome(Widget child) {
       ),
     ),
   );
+}
+
+/// Blocks the app on wrong Vercel hostname — CORS rejects all API calls from JS.
+class _WrongWebHostGate extends StatelessWidget {
+  const _WrongWebHostGate();
+
+  @override
+  Widget build(BuildContext context) {
+    final target = AppConfig.wrongHostRedirectUrl();
+    return Scaffold(
+      backgroundColor: Colors.transparent,
+      body: SafeArea(
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(28),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 420),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.link_off_rounded,
+                    size: 56,
+                    color: HexaColors.brandPrimary,
+                  ),
+                  const SizedBox(height: 20),
+                  Text(
+                    'Wrong app link',
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                          fontWeight: FontWeight.w800,
+                          color: HexaColors.brandPrimary,
+                        ),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    'You opened ${Uri.base.host}. Suppliers, stock saves, and '
+                    'purchases fail here because the server only accepts '
+                    '${Uri.parse(AppConfig.productionWebUrl).host}.',
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: const Color(0xFF64748B),
+                          height: 1.45,
+                        ),
+                  ),
+                  const SizedBox(height: 24),
+                  FilledButton(
+                    onPressed: () async {
+                      final uri = Uri.parse(target);
+                      if (await canLaunchUrl(uri)) {
+                        await launchUrl(uri, webOnlyWindowName: '_self');
+                      }
+                    },
+                    child: const Text('Open Harisree Warehouse'),
+                  ),
+                  const SizedBox(height: 12),
+                  SelectableText(
+                    target,
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: HexaColors.brandPrimary,
+                          fontWeight: FontWeight.w600,
+                        ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 Future<void> main() async {
@@ -272,6 +345,9 @@ class _HexaBootstrapState extends State<_HexaBootstrap> {
 
   @override
   Widget build(BuildContext context) {
+    if (kIsWeb && AppConfig.isWrongProductionWebHost) {
+      return _bootstrapChrome(const _WrongWebHostGate());
+    }
     if (_error != null) {
       return _bootstrapChrome(
         Scaffold(

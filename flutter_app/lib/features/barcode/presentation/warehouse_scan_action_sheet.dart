@@ -259,6 +259,8 @@ class _WarehouseScanActionBodyState extends ConsumerState<_WarehouseScanActionBo
     setState(() => _saving = true);
     final saveStarted = DateTime.now();
     try {
+      await _refreshItemFromServer();
+      if (!mounted) return;
       final bid = session.primaryBusiness.id;
       final note = _notesCtl.text.trim();
       final reasonLabel = _reasons[_reasonType] ?? 'Stock update';

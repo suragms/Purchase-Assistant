@@ -15,6 +15,32 @@ class AppConfig {
   /// Production Flutter web host (note spelling: assiastant, not assistant).
   static const String productionWebUrl = 'https://purchase-assiastant.vercel.app';
 
+  static const List<String> wrongProductionWebHosts = [
+    'purchase-assistant.vercel.app',
+    'purchase-assastant.vercel.app',
+    'purchase-assiantant.vercel.app',
+  ];
+
+  /// True on web when opened on a typo/wrong Vercel host — API CORS blocks all data loads.
+  static bool get isWrongProductionWebHost {
+    if (!kIsWeb) return false;
+    final host = Uri.base.host.toLowerCase();
+    if (host.isEmpty) return false;
+    if (host == 'localhost' || host == '127.0.0.1' || host == '::1') {
+      return false;
+    }
+    final canonical = Uri.parse(productionWebUrl).host.toLowerCase();
+    if (host == canonical) return false;
+    return wrongProductionWebHosts.contains(host);
+  }
+
+  static String wrongHostRedirectUrl({String path = '/home'}) {
+    final p = Uri.base.path.isNotEmpty ? Uri.base.path : path;
+    final q = Uri.base.query.isNotEmpty ? '?${Uri.base.query}' : '';
+    final h = Uri.base.fragment.isNotEmpty ? '#${Uri.base.fragment}' : '';
+    return '$productionWebUrl$p$q$h';
+  }
+
   /// Vercel web builds: set `API_BASE_URL` in project env (see `scripts/vercel-flutter-build.sh`).
   /// If `POST /v1/me/bootstrap-workspace` returns **404**, the client is not hitting the
   /// current backend process (wrong port, stale uvicorn) — fix the URL and restart the API;

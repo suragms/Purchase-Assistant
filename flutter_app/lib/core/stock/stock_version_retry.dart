@@ -133,7 +133,18 @@ Future<T> runWithStockVersionRetry<T>({
         rethrow;
       }
       if (isLast) {
-        throw stale;
+        try {
+          return await operation(
+            await refreshVersion?.call() ?? stale.currentVersion,
+            force: true,
+          );
+        } catch (e2) {
+          final integrity2 = parseStockIntegrityError(e2);
+          if (integrity2 != null) throw integrity2;
+          final stale2 = parseStaleStockConflict(e2);
+          if (stale2 != null) throw stale2;
+          rethrow;
+        }
       }
       version = await refreshVersion?.call() ?? stale.currentVersion;
     }
