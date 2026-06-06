@@ -463,13 +463,10 @@ class _CatalogTypeItemsPageState extends ConsumerState<CatalogTypeItemsPage> {
       orElse: () => 'Subcategory',
     );
 
-    final itemsInType = itemsAsync.maybeWhen(
-      data: (items) => items
+    final itemsInType = (itemsAsync.valueOrNull ?? [])
           .where((it) => it['type_id']?.toString() == widget.typeId)
           .where((it) => !_pendingDeleteItemIds.contains(it['id']?.toString()))
-          .toList(),
-      orElse: () => <Map<String, dynamic>>[],
-    );
+          .toList();
 
     final filtered = _searchQuery.trim().isEmpty
         ? itemsInType

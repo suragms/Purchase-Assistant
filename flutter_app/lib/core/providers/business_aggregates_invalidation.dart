@@ -127,6 +127,21 @@ void invalidateCatalogItemSaveSurfaces(
   bumpBusinessDataWriteRevision(ref);
 }
 
+/// After catalog item create — refresh lists without home/reports storm.
+void invalidateCatalogCreateSurfaces(dynamic ref, {String? itemId}) {
+  invalidateCatalogSurfacesLight(ref);
+  ref.invalidate(categoryTypesIndexProvider);
+  if (itemId != null && itemId.isNotEmpty) {
+    invalidateWarehouseItemSurfacesLight(ref, itemId: itemId);
+    emitBusinessWriteEvent(
+      ref,
+      kind: 'stock',
+      affectedItemIds: {itemId},
+    );
+  }
+  bumpBusinessDataWriteRevision(ref);
+}
+
 void invalidateWorkspaceSeedData(dynamic ref) {
   ref.invalidate(suppliersListProvider);
   ref.invalidate(brokersListProvider);

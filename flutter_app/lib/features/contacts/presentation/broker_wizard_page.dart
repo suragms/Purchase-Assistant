@@ -13,6 +13,7 @@ import '../../../core/providers/contacts_hub_provider.dart';
 import '../../../core/providers/business_aggregates_invalidation.dart';
 import '../../../core/providers/suppliers_list_provider.dart';
 import '../../../core/providers/trade_purchases_provider.dart';
+import '../../../core/widgets/async_value_form.dart';
 import '../../../core/widgets/form_feedback.dart';
 import '../../../core/widgets/form_field_scroll.dart';
 import '../../../core/widgets/friendly_load_error.dart';
@@ -675,9 +676,10 @@ class _BrokerWizardPageState extends ConsumerState<BrokerWizardPage> {
           ],
         ),
         const SizedBox(height: 8),
-        suppliersAsync.when(
-          loading: () => const LinearProgressIndicator(),
-          error: (_, __) => FriendlyLoadError(
+        suppliersAsync.whenForm(
+          initialLoading: () => const LinearProgressIndicator(),
+          reloadingBanner: (_) => formReloadBanner(),
+          error: (e, __) => FriendlyLoadError(
             message: 'Could not load suppliers',
             onRetry: () => ref.invalidate(suppliersListProvider),
           ),
@@ -729,9 +731,9 @@ class _BrokerWizardPageState extends ConsumerState<BrokerWizardPage> {
           onChanged: (v) => _runItemSearch(v),
         ),
         const SizedBox(height: 8),
-        cats.when(
-          loading: () => const LinearProgressIndicator(),
-          error: (_, __) => const SizedBox.shrink(),
+        cats.whenForm(
+          initialLoading: () => const LinearProgressIndicator(),
+          reloadingBanner: (_) => formReloadBanner(),
           data: (rows) => Wrap(
             spacing: 8,
             runSpacing: 8,

@@ -8,6 +8,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/auth/auth_error_messages.dart';
 import '../../../core/auth/session_notifier.dart';
 import '../../../core/errors/user_facing_errors.dart';
+import '../../../core/widgets/async_value_form.dart';
 import '../../../core/widgets/hexa_error_card.dart';
 import '../../../core/providers/catalog_providers.dart';
 import '../../../core/router/navigation_ext.dart';
@@ -281,8 +282,9 @@ class _BatchItemCreatePageState extends ConsumerState<BatchItemCreatePage> {
                       ],
                     ),
                     const SizedBox(height: 8),
-                    catsAsync.when(
-                      loading: () => const LinearProgressIndicator(),
+                    catsAsync.whenForm(
+                      initialLoading: () => const LinearProgressIndicator(),
+                      reloadingBanner: (_) => formReloadBanner(),
                       error: (e, st) {
                         logSilencedApiError(e, st);
                         return InlineLoadError(
@@ -323,8 +325,8 @@ class _BatchItemCreatePageState extends ConsumerState<BatchItemCreatePage> {
                       },
                     ),
                     const SizedBox(height: 8),
-                    typesAsync.when(
-                      loading: () => line.categoryId == null
+                    typesAsync.whenForm(
+                      initialLoading: () => line.categoryId == null
                           ? const SizedBox.shrink()
                           : const LinearProgressIndicator(),
                       error: (e, st) {

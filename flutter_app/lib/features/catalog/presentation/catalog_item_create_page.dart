@@ -8,12 +8,12 @@ import 'package:go_router/go_router.dart';
 import '../../../core/router/navigation_ext.dart';
 import '../../../core/auth/session_notifier.dart';
 import '../../../core/errors/user_facing_errors.dart';
+import '../../../core/providers/business_aggregates_invalidation.dart';
 import '../../../core/providers/brokers_list_provider.dart';
 import '../../../core/providers/catalog_providers.dart';
-import '../../../core/providers/home_dashboard_provider.dart';
-import '../../../core/providers/stock_providers.dart';
 import '../../../core/providers/suppliers_list_provider.dart';
 import '../../../core/unit_engine/stock_tracking_profile.dart';
+import '../../../core/widgets/async_value_form.dart';
 import '../../../shared/widgets/inline_search_field.dart';
 import '../../../shared/widgets/packaging_type_selector.dart';
 
@@ -336,12 +336,11 @@ class _CatalogItemCreatePageState extends ConsumerState<CatalogItemCreatePage> {
     _popPage(false);
   }
 
-  void _invalidateAfterCreate() {
-    ref.invalidate(catalogItemsListProvider);
-    ref.invalidate(categoryTypesIndexProvider);
-    ref.invalidate(homeDashboardDataProvider);
-    ref.invalidate(stockListProvider);
-    ref.invalidate(bulkStockListProvider);
+  void _invalidateAfterCreate(String itemId) {
+    invalidateCatalogCreateSurfaces(
+      ref,
+      itemId: itemId.isNotEmpty ? itemId : null,
+    );
   }
 
   void _resetForAddMore() {
@@ -444,9 +443,8 @@ class _CatalogItemCreatePageState extends ConsumerState<CatalogItemCreatePage> {
           ).timeout(const Duration(seconds: 45));
 
       if (!mounted) return;
-      _invalidateAfterCreate();
-
       final newId = created['id']?.toString() ?? '';
+      _invalidateAfterCreate(newId);
       if (addMore) {
         setState(() {
           _saving = false;
@@ -541,10 +539,9 @@ class _CatalogItemCreatePageState extends ConsumerState<CatalogItemCreatePage> {
                 child: ListView(
                   padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
                   children: [
-                    typesAsync.when(
-                      loading: () => const LinearProgressIndicator(),
-                      error: (_, __) =>
-                          const Text('Could not load subcategories.'),
+                    typesAsync.whenForm(
+                      initialLoading: () => const LinearProgressIndicator(),
+                      reloadingBanner: (_) => formReloadBanner(),
                       data: (types) {
                         if (types.isEmpty) {
                           return const Text(
@@ -557,7 +554,7 @@ class _CatalogItemCreatePageState extends ConsumerState<CatalogItemCreatePage> {
                             const Text('Subcategory *'),
                             const SizedBox(height: 6),
                             InlineSearchField(
-                              key: ValueKey('ci_type_${types.length}_$_typeId'),
+                              key: ValueKey('ci_type_$_typeId'),
                               items: _typeItems(types),
                               controller: _typeSearchCtrl,
                               placeholder: 'Search subcategory…',
@@ -647,9 +644,9 @@ class _CatalogItemCreatePageState extends ConsumerState<CatalogItemCreatePage> {
     AsyncValue<List<Map<String, dynamic>>> brokersAsync,
   ) {
     return [
-      suppliersAsync.when(
-        loading: () => const LinearProgressIndicator(),
-        error: (_, __) => const SizedBox.shrink(),
+      suppliersAsync.whenForm(
+        initialLoading: () => const SizedBox.shrink(),
+        reloadingBanner: (_) => formReloadBanner(),
         data: (sups) {
           if (sups.isEmpty) return const SizedBox.shrink();
           return Column(
@@ -670,7 +667,7 @@ class _CatalogItemCreatePageState extends ConsumerState<CatalogItemCreatePage> {
               ),
               const SizedBox(height: 6),
               InlineSearchField(
-                key: ValueKey('ci_sup_${sups.length}_$_supplierId'),
+                key: ValueKey('ci_sup_$_supplierId'),
                 items: _supplierItems(sups),
                 controller: _supplierSearchCtrl,
                 placeholder: 'Search supplier…',
@@ -681,9 +678,8 @@ class _CatalogItemCreatePageState extends ConsumerState<CatalogItemCreatePage> {
           );
         },
       ),
-      brokersAsync.when(
-        loading: () => const SizedBox.shrink(),
-        error: (_, __) => const SizedBox.shrink(),
+      brokersAsync.whenForm(
+        initialLoading: () => const SizedBox.shrink(),
         data: (rows) {
           if (rows.isEmpty) return const SizedBox.shrink();
           return Column(
@@ -704,7 +700,7 @@ class _CatalogItemCreatePageState extends ConsumerState<CatalogItemCreatePage> {
               ),
               const SizedBox(height: 6),
               InlineSearchField(
-                key: ValueKey('ci_bro_${rows.length}_$_brokerId'),
+                key: ValueKey('ci_bro_$_brokerId'),
                 items: _brokerItems(rows),
                 controller: _brokerSearchCtrl,
                 placeholder: 'Search broker…',

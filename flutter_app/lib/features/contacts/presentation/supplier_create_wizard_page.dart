@@ -18,6 +18,7 @@ import '../../../core/providers/purchase_prefill_provider.dart';
 import '../../../core/providers/suppliers_list_provider.dart';
 import '../../../core/providers/trade_purchases_provider.dart';
 import '../../../core/widgets/form_feedback.dart';
+import '../../../core/widgets/async_value_form.dart';
 import '../../../shared/widgets/keyboard_safe_form_viewport.dart';
 
 const _kDraftKey = 'supplier_create_wizard_draft_v1';
@@ -877,9 +878,9 @@ class _SupplierCreateWizardPageState
           label: const Text('Create new broker'),
         ),
         const SizedBox(height: 12),
-        brokers.when(
-          loading: () => const LinearProgressIndicator(),
-          error: (_, __) => const Text('Could not load brokers'),
+        brokers.whenForm(
+          initialLoading: () => const LinearProgressIndicator(),
+          reloadingBanner: (_) => formReloadBanner(),
           data: (rows) {
             if (rows.isEmpty) {
               return const Text('No brokers yet — create one above.');
@@ -934,8 +935,9 @@ class _SupplierCreateWizardPageState
         _stepHeader('Categories & items'),
         const Text('Preferred categories'),
         const SizedBox(height: 8),
-        cats.when(
-          loading: () => const LinearProgressIndicator(),
+        cats.whenForm(
+          initialLoading: () => const LinearProgressIndicator(),
+          reloadingBanner: (_) => formReloadBanner(),
           error: (_, __) => Padding(
             padding: const EdgeInsets.symmetric(vertical: 8),
             child: Text(
@@ -981,16 +983,10 @@ class _SupplierCreateWizardPageState
           const SizedBox(height: 8),
           ..._categoryIds.map((cid) {
             final asyncTypes = ref.watch(categoryTypesListProvider(cid));
-            return asyncTypes.when(
-              loading: () => const Padding(
+            return asyncTypes.whenForm(
+              initialLoading: () => const Padding(
                 padding: EdgeInsets.all(8),
                 child: LinearProgressIndicator(),
-              ),
-              error: (_, __) => Text(
-                'Could not load types for a selected category.',
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: Theme.of(context).colorScheme.error,
-                    ),
               ),
               data: (types) {
                 if (types.isEmpty) return const SizedBox.shrink();
@@ -1075,9 +1071,8 @@ class _SupplierCreateWizardPageState
               },
             );
           }),
-        recent.when(
-          loading: () => const SizedBox.shrink(),
-          error: (_, __) => const SizedBox.shrink(),
+        recent.whenForm(
+          initialLoading: () => const SizedBox.shrink(),
           data: (rows) {
             if (rows.isEmpty) return const SizedBox.shrink();
             return Column(

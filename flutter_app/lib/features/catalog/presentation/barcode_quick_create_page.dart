@@ -8,6 +8,7 @@ import '../../../core/providers/business_aggregates_invalidation.dart';
 import '../../../core/providers/catalog_providers.dart';
 import '../../../core/services/duplicate_detection_service.dart';
 import '../../../core/utils/item_code_format.dart';
+import '../../../core/widgets/async_value_form.dart';
 import '../../../shared/widgets/inline_search_field.dart';
 
 /// Minimal item create after unknown barcode scan (no supplier/broker/HSN).
@@ -130,10 +131,9 @@ class _BarcodeQuickCreatePageState extends ConsumerState<BarcodeQuickCreatePage>
                 ? double.tryParse(_kgCtrl.text.trim())
                 : null,
           );
-      invalidateWarehouseSurfaces(ref);
-      ref.invalidate(catalogItemsListProvider);
-      if (!mounted) return;
       final id = created['id']?.toString() ?? '';
+      invalidateCatalogCreateSurfaces(ref, itemId: id.isNotEmpty ? id : null);
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Saved $name'),
@@ -201,9 +201,9 @@ class _BarcodeQuickCreatePageState extends ConsumerState<BarcodeQuickCreatePage>
               ),
             ],
             const SizedBox(height: 12),
-            typesAsync.when(
-              loading: () => const LinearProgressIndicator(),
-              error: (_, __) => const Text('Could not load subcategories'),
+            typesAsync.whenForm(
+              initialLoading: () => const LinearProgressIndicator(),
+              reloadingBanner: (_) => formReloadBanner(),
               data: (types) => InlineSearchField(
                 controller: _typeSearchCtrl,
                 placeholder: 'Subcategory *',

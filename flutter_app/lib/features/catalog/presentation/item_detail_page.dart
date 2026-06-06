@@ -10,6 +10,7 @@ import '../../../core/providers/item_detail_providers.dart';
 import '../../../core/providers/stock_providers.dart' show stockItemDetailProvider;
 import '../../../core/providers/trade_purchases_provider.dart';
 import '../../../core/theme/hexa_colors.dart';
+import '../../../core/widgets/async_value_form.dart';
 import '../../../core/widgets/friendly_load_error.dart';
 import '../../../core/auth/session_notifier.dart' show sessionProvider;
 import '../../../core/router/post_auth_route.dart' show sessionIsStaff;
@@ -50,67 +51,83 @@ class ItemDetailPage extends ConsumerWidget {
     });
 
     final bundleAsync = ref.watch(itemDetailBundleProvider(itemId));
+    final cachedBundle = bundleAsync.valueOrNull;
     final gutter = HexaResponsive.pageGutter(context, operational: true);
     final desktop = HexaBreakpoints.isDesktop(context);
+
+    Widget buildDetail(ItemDetailBundle bundle, {bool refreshing = false}) {
+      final item = bundle.catalogItem;
+      final stock = bundle.stockDetail;
+      final name = (item['name']?.toString() ?? '').trim();
+      final code = (item['item_code']?.toString() ?? '').trim();
+      final cat = (stock['category_name']?.toString() ??
+              item['category_name']?.toString() ??
+              '')
+          .trim();
+      final sub = (stock['subcategory_name']?.toString() ??
+              item['type_name']?.toString() ??
+              '')
+          .trim();
+      final categoryLabel = [cat, sub].where((s) => s.isNotEmpty).join(' · ');
+
+      Future<void> doRefresh() async {
+        ref.invalidate(itemDetailBundleProvider(itemId));
+      }
+
+      Widget content;
+      if (desktop) {
+        content = RefreshIndicator(
+          onRefresh: doRefresh,
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(gutter, 8, gutter, 16),
+            child: HexaResponsiveCenter(
+              maxWidth: HexaResponsive.maxContentWidth,
+              padding: EdgeInsets.zero,
+              child: _DesktopItemLayout(
+                itemId: itemId,
+                name: name.isNotEmpty ? name : (code.isNotEmpty ? code : 'Item'),
+                code: code.isNotEmpty ? code : null,
+                categoryLabel: categoryLabel,
+                onMore: () => _showMore(context, ref, item),
+              ),
+            ),
+          ),
+        );
+      } else {
+        content = _ItemDetailMobileScroll(
+          itemId: itemId,
+          name: name.isNotEmpty ? name : (code.isNotEmpty ? code : 'Item'),
+          code: code.isNotEmpty ? code : null,
+          categoryLabel: categoryLabel,
+          gutter: gutter,
+          onRefresh: doRefresh,
+          onMore: () => _showMore(context, ref, item),
+        );
+      }
+
+      if (!refreshing) return content;
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          formReloadBanner(),
+          Expanded(child: content),
+        ],
+      );
+    }
 
     return Scaffold(
       backgroundColor: HexaColors.brandBackground,
       body: SafeArea(
-        child: bundleAsync.when(
-          loading: () => const Center(child: CircularProgressIndicator()),
+        child: bundleAsync.whenForm(
+          initialLoading: () => const Center(child: CircularProgressIndicator()),
           error: (e, __) => FriendlyLoadError(
             message: 'Could not load item. Tap to retry.',
             onRetry: () => ref.invalidate(itemDetailBundleProvider(itemId)),
           ),
-          data: (bundle) {
-            final item = bundle.catalogItem;
-            final stock = bundle.stockDetail;
-            final name = (item['name']?.toString() ?? '').trim();
-            final code = (item['item_code']?.toString() ?? '').trim();
-            final cat = (stock['category_name']?.toString() ??
-                    item['category_name']?.toString() ??
-                    '')
-                .trim();
-            final sub = (stock['subcategory_name']?.toString() ??
-                    item['type_name']?.toString() ??
-                    '')
-                .trim();
-            final categoryLabel = [cat, sub].where((s) => s.isNotEmpty).join(' · ');
-
-            Future<void> doRefresh() async {
-              ref.invalidate(itemDetailBundleProvider(itemId));
-            }
-
-            if (desktop) {
-              return RefreshIndicator(
-                onRefresh: doRefresh,
-                child: Padding(
-                  padding: EdgeInsets.fromLTRB(gutter, 8, gutter, 16),
-                  child: HexaResponsiveCenter(
-                    maxWidth: HexaResponsive.maxContentWidth,
-                    padding: EdgeInsets.zero,
-                    child: _DesktopItemLayout(
-                      itemId: itemId,
-                      name: name.isNotEmpty ? name : (code.isNotEmpty ? code : 'Item'),
-                      code: code.isNotEmpty ? code : null,
-                      categoryLabel: categoryLabel,
-                      onMore: () => _showMore(context, ref, item),
-                    ),
-                  ),
-                ),
-              );
-            }
-
-            return _ItemDetailMobileScroll(
-              itemId: itemId,
-              name: name.isNotEmpty ? name : (code.isNotEmpty ? code : 'Item'),
-              code: code.isNotEmpty ? code : null,
-              categoryLabel: categoryLabel,
-              gutter: gutter,
-              onRefresh: doRefresh,
-              onMore: () => _showMore(context, ref, item),
-            );
-          },
+          data: (bundle) => buildDetail(
+            bundle,
+            refreshing: bundleAsync.isLoading && cachedBundle != null,
+          ),
         ),
       ),
       bottomNavigationBar: bundleAsync.hasValue && !bundleAsync.hasError && !desktop

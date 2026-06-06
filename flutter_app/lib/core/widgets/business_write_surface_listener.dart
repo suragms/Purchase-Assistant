@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../providers/business_write_event.dart';
-import '../providers/business_write_revision.dart';
 import '../providers/deferred_invalidation.dart' show deferVoid;
 
 /// Listens for business writes and runs [onRefresh] (post-frame, throttled).
@@ -61,11 +60,6 @@ class _BusinessWriteSurfaceListenerState
       if (next.revision <= (prev?.revision ?? -1)) return;
       if (!_shouldReact(next)) return;
       _maybeRefresh(next);
-    });
-
-    ref.listen<int>(businessDataWriteRevisionProvider, (prev, next) {
-      if (prev == null || next <= prev) return;
-      _maybeRefresh(BusinessWriteEvent(revision: next, kind: 'aggregate'));
     });
 
     return widget.child;
