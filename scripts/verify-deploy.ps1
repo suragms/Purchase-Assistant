@@ -112,6 +112,22 @@ if (-not $shell.Ok) {
 }
 
 Write-Host ""
+Write-Host "=== Vercel index.html guards ===" -ForegroundColor Cyan
+if ($shell.Body) {
+  if ($shell.Body -match 'harisree_sw_purged_v2') {
+    Write-Host "OK: SW purge script present." -ForegroundColor Green
+  } else {
+    Write-Host "FAIL: index.html missing harisree_sw_purged_v2 (blank-screen fix not deployed)." -ForegroundColor Red
+    $ok = $false
+  }
+  if ($shell.Body -match 'purchase-assastant\.vercel\.app') {
+    Write-Host "OK: wrong-host redirect list present." -ForegroundColor Green
+  } else {
+    Write-Host "WARN: index.html may missing typo-domain redirect." -ForegroundColor Yellow
+  }
+}
+
+Write-Host ""
 Write-Host "=== Vercel service worker (must not reload-loop) ===" -ForegroundColor Cyan
 try {
   $swUrl = "$vercelCanonical/flutter_service_worker.js"

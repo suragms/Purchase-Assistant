@@ -24,6 +24,8 @@ import '../../../core/providers/server_notifications_provider.dart';
 import '../../../core/providers/stock_audit_providers.dart';
 import '../../../core/stock/stock_version_retry.dart';
 import '../../../core/theme/hexa_colors.dart';
+import '../../../core/utils/snack.dart';
+import '../../stock/presentation/stock_undo_snackbar.dart';
 import '../../stock/presentation/widgets/stock_update_mode_toggle.dart';
 import 'widgets/scan_item_stock_summary_card.dart';
 
@@ -37,15 +39,25 @@ Future<bool> showWarehouseScanActionSheet({
     context: context,
     compact: true,
     padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-    child: _WarehouseScanActionBody(item: item),
+    child: _WarehouseScanActionBody(
+      item: item,
+      parentRef: ref,
+      parentContext: context,
+    ),
   );
   return saved == true;
 }
 
 class _WarehouseScanActionBody extends ConsumerStatefulWidget {
-  const _WarehouseScanActionBody({required this.item});
+  const _WarehouseScanActionBody({
+    required this.item,
+    required this.parentRef,
+    required this.parentContext,
+  });
 
   final Map<String, dynamic> item;
+  final WidgetRef parentRef;
+  final BuildContext parentContext;
 
   @override
   ConsumerState<_WarehouseScanActionBody> createState() =>
@@ -245,6 +257,7 @@ class _WarehouseScanActionBodyState extends ConsumerState<_WarehouseScanActionBo
 
     if (!mounted) return;
     setState(() => _saving = true);
+    final saveStarted = DateTime.now();
     try {
       final bid = session.primaryBusiness.id;
       final note = _notesCtl.text.trim();
@@ -330,20 +343,35 @@ class _WarehouseScanActionBodyState extends ConsumerState<_WarehouseScanActionBo
       }
 
       if (!mounted) return;
+      final elapsed = DateTime.now().difference(saveStarted);
+      const minLoading = Duration(milliseconds: 300);
+      if (elapsed < minLoading) {
+        await Future<void>.delayed(minLoading - elapsed);
+      }
+      if (!mounted) return;
       await HapticFeedback.mediumImpact();
+      final itemName = _item['name']?.toString() ?? 'Item';
       Navigator.pop(context, true);
       unawaited(_refreshAfterSave());
+      if (widget.parentContext.mounted) {
+        showStockUndoSnackBar(
+          context: widget.parentContext,
+          ref: widget.parentRef,
+          itemId: _itemId,
+          itemName: itemName,
+        );
+      }
     } on StaleStockConflict {
       if (!mounted) return;
       await _refreshItemFromServer();
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(StaleStockConflict.userMessage),
-          duration: Duration(seconds: 5),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+      if (widget.parentContext.mounted) {
+        showTopSnack(
+          widget.parentContext,
+          StaleStockConflict.userMessage,
+          isError: true,
+        );
+      }
     } on DioException catch (e) {
       if (!mounted) return;
       final offline = e.type == DioExceptionType.connectionError ||
@@ -358,28 +386,31 @@ class _WarehouseScanActionBodyState extends ConsumerState<_WarehouseScanActionBo
           notes: _notesCtl.text.trim().isEmpty ? null : _notesCtl.text.trim(),
         );
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Saved offline — will sync when connected')),
-        );
+        if (widget.parentContext.mounted) {
+          showTopSnack(
+            widget.parentContext,
+            'Saved offline — will sync when connected',
+          );
+        }
         Navigator.pop(context, true);
         return;
       }
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(loadStateErrorSubtitle(e)),
-          duration: const Duration(seconds: 5),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+      if (widget.parentContext.mounted) {
+        showTopSnack(
+          widget.parentContext,
+          loadStateErrorSubtitle(e),
+          isError: true,
+        );
+      }
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(loadStateErrorSubtitle(e)),
-          duration: const Duration(seconds: 5),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+      if (widget.parentContext.mounted) {
+        showTopSnack(
+          widget.parentContext,
+          loadStateErrorSubtitle(e),
+          isError: true,
+        );
+      }
     } finally {
       if (mounted) setState(() => _saving = false);
     }

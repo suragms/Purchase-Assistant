@@ -67,6 +67,21 @@ class _StaffShellScreenState extends ConsumerState<StaffShellScreen> {
       ref.read(staffShellCurrentBranchProvider.notifier).state = idx;
     }
     final routePath = GoRouterState.of(context).uri.path;
+    final pathBranch = staffShellBranchIndexForPath(routePath);
+    if (pathBranch != null && pathBranch != idx) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        ref.read(staffShellCurrentBranchProvider.notifier).state = pathBranch;
+        navigationShell.goBranch(pathBranch);
+      });
+    } else if (routePath == '/staff/home' && idx != StaffShellBranch.home) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        ref.read(staffShellCurrentBranchProvider.notifier).state =
+            StaffShellBranch.home;
+        navigationShell.goBranch(StaffShellBranch.home);
+      });
+    }
 
     final sessionHint = ref.watch(apiDegradedProvider);
     final width = MediaQuery.sizeOf(context).width;

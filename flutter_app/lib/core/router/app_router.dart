@@ -80,6 +80,7 @@ import '../../features/stock/presentation/staff_purchase_logs_page.dart';
 import '../../features/stock/presentation/low_stock_dashboard_page.dart';
 import '../../features/stock/presentation/reorder_list_page.dart';
 import '../../features/staff/presentation/staff_shell_screen.dart';
+import '../../features/staff/staff_shell_branch_provider.dart';
 import '../../features/staff/presentation/staff_activity_page.dart';
 import '../../features/staff/presentation/staff_purchase_order_detail_page.dart';
 import '../../features/staff/presentation/staff_pending_deliveries_page.dart';
@@ -1244,6 +1245,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
                 builder: (context, state) => HexaPageErrorBoundary(
                   title: 'Staff home could not load',
                   fallbackRoute: '/staff/home',
+                  shellBranchIndex: StaffShellBranch.home,
                   child: const StaffDashboardPage(),
                 ),
               ),

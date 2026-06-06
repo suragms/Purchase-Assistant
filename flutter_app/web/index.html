@@ -27,7 +27,14 @@
     (function () {
       var host = location.hostname;
       var correct = 'purchase-assiastant.vercel.app';
-      if (host === 'purchase-assistant.vercel.app') {
+      var wrong = {
+        'purchase-assistant.vercel.app': 1,
+        'purchase-assastant.vercel.app': 1,
+        'purchase-assiantant.vercel.app': 1
+      };
+      if (host === correct) return;
+      if (host === 'localhost' || host === '127.0.0.1') return;
+      if (wrong[host]) {
         location.replace(
           'https://' + correct + location.pathname + location.search + location.hash
         );
@@ -145,10 +152,35 @@
     <span>Harisree Warehouse</span>
   </div>
   <div id="wrong-host" role="alert">
-    <p>This link is the wrong Vercel app (blank screen).</p>
+    <p>Wrong link — this hostname causes blank screens and failed saves.</p>
+    <p>Bookmark only:</p>
     <p><a href="https://purchase-assiastant.vercel.app/home">Open Harisree Warehouse</a></p>
   </div>
   <div id="boot" aria-live="polite">Starting…</div>
+  <script>
+    (function () {
+      var host = location.hostname;
+      var correct = 'purchase-assiastant.vercel.app';
+      var wrong = {
+        'purchase-assistant.vercel.app': 1,
+        'purchase-assastant.vercel.app': 1,
+        'purchase-assiantant.vercel.app': 1
+      };
+      if (!wrong[host]) return;
+      var target =
+        'https://' + correct + location.pathname + location.search + location.hash;
+      var wh = document.getElementById('wrong-host');
+      if (wh) {
+        wh.classList.add('show');
+        var link = wh.querySelector('a');
+        if (link) link.href = target;
+      }
+      var splash = document.getElementById('splash');
+      if (splash) splash.style.display = 'none';
+      var boot = document.getElementById('boot');
+      if (boot) boot.style.display = 'none';
+    })();
+  </script>
   <script>
     (function () {
       var boot = document.getElementById('boot');

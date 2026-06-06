@@ -15,6 +15,17 @@ final staffShellCurrentBranchProvider = StateProvider<int>(
   (ref) => StaffShellBranch.home,
 );
 
+/// Maps staff shell route to IndexedStack branch (deep links on web).
+int? staffShellBranchIndexForPath(String path) {
+  if (path.startsWith('/staff/home')) return StaffShellBranch.home;
+  if (path.startsWith('/staff/stock')) return StaffShellBranch.stock;
+  if (path.startsWith('/staff/scan')) return StaffShellBranch.scan;
+  if (path.startsWith('/staff/search')) return StaffShellBranch.search;
+  if (path.startsWith('/staff/deliveries')) return StaffShellBranch.deliveries;
+  if (path.startsWith('/staff/tasks')) return StaffShellBranch.tasks;
+  return null;
+}
+
 /// Whether [branch] is the active staff IndexedStack tab.
 bool staffShellBranchIsVisible(Ref ref, int branch) =>
     ref.watch(staffShellCurrentBranchProvider) == branch;

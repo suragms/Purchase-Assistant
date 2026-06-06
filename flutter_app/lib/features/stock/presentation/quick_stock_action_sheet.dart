@@ -25,7 +25,9 @@ import '../stock_list_row_patch.dart'
 import '../../../core/providers/notification_center_provider.dart';
 import '../../../core/providers/server_notifications_provider.dart';
 import '../../../core/utils/unit_utils.dart';
+import '../../../core/utils/snack.dart';
 import '../../../core/design_system/hexa_responsive.dart';
+import 'stock_undo_snackbar.dart';
 import 'widgets/stock_update_mode_toggle.dart';
 
 const _kReasonChips = <(String label, String type)>[
@@ -51,6 +53,7 @@ Future<bool> showQuickStockActionSheet({
     child: _QuickStockActionBody(
       item: item,
       parentRef: ref,
+      parentContext: context,
       initialMode: initialMode,
       skipInitialRefresh: skipInitialRefresh,
     ),
@@ -62,12 +65,14 @@ class _QuickStockActionBody extends ConsumerStatefulWidget {
   const _QuickStockActionBody({
     required this.item,
     required this.parentRef,
+    required this.parentContext,
     this.initialMode = StockUpdateMode.physical,
     this.skipInitialRefresh = false,
   });
 
   final Map<String, dynamic> item;
   final WidgetRef parentRef;
+  final BuildContext parentContext;
   final StockUpdateMode initialMode;
   final bool skipInitialRefresh;
 
@@ -317,8 +322,14 @@ class _QuickStockActionBodyState extends ConsumerState<_QuickStockActionBody> {
     if (_saving) return;
     if (!mounted) return;
     setState(() => _saving = true);
+    final saveStarted = DateTime.now();
     try {
       final saved = await _persistStock(parsed);
+      final elapsed = DateTime.now().difference(saveStarted);
+      const minLoading = Duration(milliseconds: 300);
+      if (elapsed < minLoading) {
+        await Future<void>.delayed(minLoading - elapsed);
+      }
       if (!mounted) return;
       _applyOptimisticListPatch(saved, parsed);
       unawaited(_afterSaveBackground(parsed));
@@ -326,25 +337,26 @@ class _QuickStockActionBodyState extends ConsumerState<_QuickStockActionBody> {
       await HapticFeedback.mediumImpact();
       if (!context.mounted) return;
       Navigator.of(context).pop(true);
+      if (widget.parentContext.mounted) {
+        showStockUndoSnackBar(
+          context: widget.parentContext,
+          ref: widget.parentRef,
+          itemId: _itemId,
+          itemName: _name,
+        );
+      }
     } catch (e) {
       if (e is StaleStockConflict) {
         if (!mounted) return;
         await _refreshItemFromServer();
       }
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              e is StaleStockConflict
-                  ? StaleStockConflict.userMessage
-                  : e is DioException
-                      ? friendlyApiError(e)
-                      : userFacingError(e),
-            ),
-            duration: const Duration(seconds: 5),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
+      if (widget.parentContext.mounted) {
+        final msg = e is StaleStockConflict
+            ? StaleStockConflict.userMessage
+            : e is DioException
+                ? friendlyApiError(e)
+                : userFacingError(e);
+        showTopSnack(widget.parentContext, msg, isError: true);
       }
     } finally {
       if (mounted) setState(() => _saving = false);
