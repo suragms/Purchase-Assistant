@@ -151,6 +151,10 @@
   <div id="boot" aria-live="polite">Starting…</div>
   <script>
     (function () {
+      var boot = document.getElementById('boot');
+      function setBoot(msg) {
+        if (boot && !boot.classList.contains('boot-error')) boot.textContent = msg;
+      }
       function hideSplash() {
         var el = document.getElementById('splash');
         if (!el || el.dataset.dismissed === '1') return;
@@ -161,9 +165,17 @@
             el.remove();
           } catch (_) {}
         }, 280);
+        if (boot) boot.style.display = 'none';
       }
+      // Only hide splash once Flutter paints — do NOT auto-hide at 15s (caused blank
+      // gray screen on desktop while main.dart.js still loads / API wakes up).
       window.addEventListener('flutter-first-frame', hideSplash);
-      window.setTimeout(hideSplash, 15000);
+      window.setTimeout(function () {
+        setBoot('Loading app (large download on first visit)…');
+      }, 12000);
+      window.setTimeout(function () {
+        setBoot('Still loading — server may be waking up. Please wait…');
+      }, 45000);
     })();
   </script>
   <script>

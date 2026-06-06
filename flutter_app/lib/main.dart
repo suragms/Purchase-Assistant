@@ -200,17 +200,8 @@ class _HexaBootstrapState extends State<_HexaBootstrap> {
         _bootstrapLog('session.restore skipped or failed (non-fatal)');
       }
 
-      if (kIsWeb && kReleaseMode) {
-        try {
-          final api = container.read(hexaApiProvider);
-          await ApiWarmupService.pingHealth(api).timeout(
-            const Duration(seconds: 60),
-          );
-          _bootstrapLog('health/ready OK (web release)');
-        } catch (_) {
-          _bootstrapLog('health ping skipped or timed out (non-fatal)');
-        }
-      }
+      // Health warm-up runs below (non-blocking) so HexaApp mounts immediately on web
+      // release — blocking here left a blank gray page after the HTML splash timed out.
 
       unawaited(() async {
         try {

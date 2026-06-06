@@ -3,10 +3,10 @@ $ErrorActionPreference = "Stop"
 
 $renderHealth = "https://my-purchases-api.onrender.com/health"
 $renderReady = "https://my-purchases-api.onrender.com/health/ready"
-$vercelApps = @(
-  "https://purchase-assistant.vercel.app",
-  "https://purchase-assiastant.vercel.app"
-)
+# Canonical Harisree Flutter web (spelling: assiastant — not assistant).
+$vercelCanonical = "https://purchase-assiastant.vercel.app"
+# Wrong hostname: old React "PurchaseAI" deployment — always blank for Harisree routes.
+$vercelWrongHost = "https://purchase-assistant.vercel.app"
 $expectedAlembic = "060_stock_list_performance_indexes"
 
 function Test-UrlOk {
@@ -20,6 +20,39 @@ function Test-UrlOk {
   } catch {
     Write-Host "FAIL $Url - $($_.Exception.Message)" -ForegroundColor Red
     return @{ Ok = $false; Body = $null }
+  }
+}
+
+function Test-FlutterJsBundle {
+  param([string]$AppBase, [string]$Label, [switch]$Required)
+  Write-Host ""
+  Write-Host "=== Vercel Flutter bundle ($Label) ===" -ForegroundColor Cyan
+  $js = "$AppBase/main.dart.js"
+  try {
+    $head = Invoke-WebRequest -Uri $js -Method Head -UseBasicParsing -TimeoutSec 90
+    $ct = [string]$head.Headers['Content-Type']
+    $len = [string]$head.Headers['Content-Length']
+    Write-Host "HEAD $js -> $($head.StatusCode) type=$ct len=$len"
+    if ($head.StatusCode -ne 200) {
+      if ($Required) { return $false }
+      return $true
+    }
+    if ($ct -notmatch 'javascript') {
+      Write-Host "NOT FLUTTER: main.dart.js is HTML (blank-screen cause on this hostname)." -ForegroundColor Yellow
+      Write-Host "  Use canonical URL: $vercelCanonical" -ForegroundColor Yellow
+      if ($Required) { return $false }
+      return $true
+    }
+    if ($len -and [int64]$len -lt 1000000) {
+      Write-Host "FAIL: main.dart.js too small ($len bytes)." -ForegroundColor Red
+      return $false
+    }
+    Write-Host "OK: Flutter web bundle present." -ForegroundColor Green
+    return $true
+  } catch {
+    Write-Host "FAIL $js - $($_.Exception.Message)" -ForegroundColor Red
+    if ($Required) { return $false }
+    return $true
   }
 }
 
@@ -68,25 +101,13 @@ if (-not $ready.Ok) {
   }
 }
 
-$vercelOk = $false
-foreach ($app in $vercelApps) {
-  $shell = Test-UrlOk -Url $app -Label "Vercel app shell ($app)"
-  if ($shell.Ok) {
-    $vercelOk = $true
-    $js = "$app/main.dart.js"
-    Write-Host ""
-    Write-Host "=== Vercel main.dart.js ===" -ForegroundColor Cyan
-    try {
-      $head = Invoke-WebRequest -Uri $js -Method Head -UseBasicParsing -TimeoutSec 90
-      Write-Host "OK $($head.StatusCode) $js"
-    } catch {
-      Write-Host "FAIL $js - Flutter web build may not be deployed" -ForegroundColor Red
-      $ok = $false
-    }
-  }
-}
-if (-not $vercelOk) {
-  Write-Host "FAIL: no Vercel app URL responded" -ForegroundColor Red
+# Warn if wrong hostname still serves non-Flutter content (common blank-screen mistake).
+Test-FlutterJsBundle -AppBase $vercelWrongHost -Label "wrong host (assistant)" | Out-Null
+
+$shell = Test-UrlOk -Url $vercelCanonical -Label "Vercel canonical shell ($vercelCanonical)"
+if (-not $shell.Ok) {
+  $ok = $false
+} elseif (-not (Test-FlutterJsBundle -AppBase $vercelCanonical -Label "canonical (assiastant)" -Required)) {
   $ok = $false
 }
 
@@ -94,9 +115,11 @@ if (-not $ok) {
   Write-Host ""
   Write-Host "Deploy smoke FAILED." -ForegroundColor Red
   Write-Host "Render dashboard: https://dashboard.render.com/web/srv-d7ea0il8nd3s73e4fvl0/settings" -ForegroundColor Yellow
-  Write-Host "Align service with render.yaml: rootDir=backend, preDeployCommand=alembic upgrade head, healthCheckPath=/health/ready" -ForegroundColor Yellow
+  Write-Host "Vercel: open ONLY $vercelCanonical (not purchase-assistant.vercel.app)." -ForegroundColor Yellow
+  Write-Host "Fix wrong domain: Vercel -> purchase-assistant project -> Settings -> Domains -> Redirect to purchase-assiastant.vercel.app" -ForegroundColor Yellow
   exit 1
 }
 
 Write-Host ""
-Write-Host "Deploy smoke: Render + Vercel look healthy (alembic $expectedAlembic)." -ForegroundColor Green
+Write-Host "Deploy smoke: Render + canonical Vercel Flutter OK (alembic $expectedAlembic)." -ForegroundColor Green
+Write-Host "Bookmark: $vercelCanonical/home" -ForegroundColor Green
