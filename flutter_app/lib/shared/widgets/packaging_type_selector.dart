@@ -44,7 +44,7 @@ class PackagingTypeSelector extends StatelessWidget {
   final String? tinError;
   final String? itemNameForAutofill;
 
-  /// When true, show Loose kg / Bag / Piece first; packet, box, tin under expansion.
+  /// When true, show all unit chips in one row with short labels (kg, bag, pc, …).
   final bool compactLayout;
 
   static const modes = [
@@ -56,14 +56,11 @@ class PackagingTypeSelector extends StatelessWidget {
     StockTrackingMode.piece,
   ];
 
-  static const primaryModes = [
+  /// Compact create form: kg, bag, pc, box, tin (no separate retail packet chip).
+  static const compactModes = [
     StockTrackingMode.looseKg,
     StockTrackingMode.wholesaleBag,
     StockTrackingMode.piece,
-  ];
-
-  static const advancedModes = [
-    StockTrackingMode.retailPacket,
     StockTrackingMode.box,
     StockTrackingMode.tin,
   ];
@@ -96,7 +93,7 @@ class PackagingTypeSelector extends StatelessWidget {
               dense: true,
               leading: const Icon(Icons.lightbulb_outline, size: 20),
               title: Text(
-                'Suggested: ${StockTrackingMode.labelForMode(suggestedMode!)}',
+                'Suggested: ${StockTrackingMode.shortLabelForMode(suggestedMode!)}',
                 style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
               ),
               trailing: TextButton(
@@ -110,32 +107,9 @@ class PackagingTypeSelector extends StatelessWidget {
           ),
         ],
         const SizedBox(height: 8),
-        if (compactLayout) ...[
-          _modeChips(context, primaryModes),
-          if (selectedMode != null &&
-              advancedModes.contains(selectedMode)) ...[
-            const SizedBox(height: 6),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: Chip(
-                label: Text(StockTrackingMode.labelForMode(selectedMode!)),
-                onDeleted: () => onModeChanged(StockTrackingMode.looseKg),
-              ),
-            ),
-          ],
-          ExpansionTile(
-            tilePadding: EdgeInsets.zero,
-            childrenPadding: const EdgeInsets.only(bottom: 8),
-            title: Text(
-              'More unit types',
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    fontWeight: FontWeight.w600,
-                  ),
-            ),
-            subtitle: const Text('Retail packet, box, tin'),
-            children: [_modeChips(context, advancedModes)],
-          ),
-        ] else
+        if (compactLayout)
+          _compactModeChips(context)
+        else
           _modeChips(context, modes),
         const SizedBox(height: 12),
         if (selectedMode == StockTrackingMode.wholesaleBag ||
@@ -195,6 +169,26 @@ class PackagingTypeSelector extends StatelessWidget {
             ),
           ),
         ],
+      ],
+    );
+  }
+
+  Widget _compactModeChips(BuildContext context) {
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        for (final m in compactModes)
+          ChoiceChip(
+            label: Text(StockTrackingMode.shortLabelForMode(m)),
+            selected: m == StockTrackingMode.piece
+                ? StockTrackingMode.isPieceLikeMode(selectedMode)
+                : selectedMode == m,
+            onSelected: (_) {
+              onModeChanged(m);
+              _autofillWeightFromName(m);
+            },
+          ),
       ],
     );
   }

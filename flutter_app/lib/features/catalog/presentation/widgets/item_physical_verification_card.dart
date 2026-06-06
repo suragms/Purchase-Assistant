@@ -39,6 +39,7 @@ class ItemPhysicalVerificationCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final stockAsync = ref.watch(itemDetailStockProvider(itemId));
+    final auditAsync = ref.watch(stockItemAuditProvider(itemId));
     return stockAsync.when(
       loading: () => const SizedBox.shrink(),
       error: (_, __) => Card(
@@ -62,7 +63,11 @@ class ItemPhysicalVerificationCard extends ConsumerWidget {
           ),
         ),
       ),
-      data: (stock) => _buildCard(context, ref, stock),
+      data: (stock) => auditAsync.when(
+        loading: () => _buildCard(context, ref, stock, const []),
+        error: (_, __) => _buildCard(context, ref, stock, const []),
+        data: (audit) => _buildCard(context, ref, stock, audit),
+      ),
     );
   }
 
@@ -70,10 +75,8 @@ class ItemPhysicalVerificationCard extends ConsumerWidget {
     BuildContext context,
     WidgetRef ref,
     Map<String, dynamic> stock,
+    List<Map<String, dynamic>> audit,
   ) {
-    final audit =
-        ref.watch(stockItemAuditProvider(itemId)).valueOrNull ??
-            const <Map<String, dynamic>>[];
     final session = ref.watch(sessionProvider);
     final canVerify = session != null && sessionHasOwnerDashboard(session);
 

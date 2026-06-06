@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -135,7 +137,7 @@ class HomeOwnerDashboardBody extends ConsumerWidget {
           crossAxisSpacing: 8,
           childAspectRatio: context.isDesktopLayout
               ? 2.2
-              : MediaQuery.sizeOf(context).width / 2 / 100,
+              : math.max(1.35, MediaQuery.sizeOf(context).width / 200),
           children: [
             _KpiTile(
               label: 'Purchases',

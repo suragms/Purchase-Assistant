@@ -96,10 +96,12 @@ class _BarcodeQuickCreatePageState extends ConsumerState<BarcodeQuickCreatePage>
         break;
       }
     }
-    if (typeRow == null ||
-        typeRow['name']?.toString().trim() != _typeSearchCtrl.text.trim()) {
+    if (typeRow == null) {
       setState(() => _error = 'Pick a subcategory from search results');
       return;
+    }
+    if (_typeSearchCtrl.text.trim() != typeRow['name']?.toString().trim()) {
+      _typeSearchCtrl.text = typeRow['name']?.toString() ?? '';
     }
     if (_unit == 'bag') {
       final kg = double.tryParse(_kgCtrl.text.trim());
@@ -208,7 +210,10 @@ class _BarcodeQuickCreatePageState extends ConsumerState<BarcodeQuickCreatePage>
                 controller: _typeSearchCtrl,
                 placeholder: 'Subcategory *',
                 items: _typeItems(types),
-                onSelected: (it) => setState(() => _typeId = it.id),
+                onSelected: (it) => setState(() {
+                  _typeId = it.id;
+                  _typeSearchCtrl.text = it.label;
+                }),
               ),
             ),
             const SizedBox(height: 12),

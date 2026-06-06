@@ -61,14 +61,13 @@ bool _homeShellTabVisible(WidgetRef ref, BuildContext context) {
     final shell = StatefulNavigationShell.maybeOf(context);
     if (shell?.currentIndex == ShellBranch.home) return true;
   } catch (_) {}
-  // Fallback when shell index and GoRouter location desync (common on web back).
-  final path = GoRouterState.of(context).uri.path;
+  final path = GoRouter.maybeOf(context)?.state.uri.path ?? '';
   return path == '/home' || path.startsWith('/home/');
 }
 
 /// Owner dashboard root only — not Warehouse activity / breakdown sub-routes.
 bool _isHomeDashboardRoot(BuildContext context) {
-  final path = GoRouterState.of(context).uri.path;
+  final path = GoRouter.maybeOf(context)?.state.uri.path ?? '';
   return path == '/home';
 }
 

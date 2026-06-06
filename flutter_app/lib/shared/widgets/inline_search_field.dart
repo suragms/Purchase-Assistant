@@ -395,14 +395,11 @@ class _InlineSearchFieldState extends State<InlineSearchField> {
                                   ),
                                   itemBuilder: (BuildContext ctx, int i) {
                                     final it = opts[i];
-                                    void commit() {
-                                      _pendingSelection = null;
-                                      _pick(it, keepFocus: false);
-                                    }
-
-                                    return GestureDetector(
-                                      onTapDown: (_) => _pendingSelection = it,
-                                      onTap: commit,
+                                    return Listener(
+                                      onPointerUp: (_) {
+                                        _pendingSelection = null;
+                                        _pick(it, keepFocus: false);
+                                      },
                                       behavior: HitTestBehavior.opaque,
                                       child: ConstrainedBox(
                                         constraints: const BoxConstraints(

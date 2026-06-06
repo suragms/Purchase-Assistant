@@ -74,27 +74,39 @@ class ItemDetailPage extends ConsumerWidget {
         ref.invalidate(itemDetailBundleProvider(itemId));
       }
 
-      Widget content;
+      final Widget scrollBody;
       if (desktop) {
-        content = RefreshIndicator(
+        scrollBody = RefreshIndicator(
           onRefresh: doRefresh,
-          child: Padding(
-            padding: EdgeInsets.fromLTRB(gutter, 8, gutter, 16),
-            child: HexaResponsiveCenter(
-              maxWidth: HexaResponsive.maxContentWidth,
-              padding: EdgeInsets.zero,
-              child: _DesktopItemLayout(
-                itemId: itemId,
-                name: name.isNotEmpty ? name : (code.isNotEmpty ? code : 'Item'),
-                code: code.isNotEmpty ? code : null,
-                categoryLabel: categoryLabel,
-                onMore: () => _showMore(context, ref, item),
-              ),
-            ),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              return SingleChildScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                  child: Padding(
+                    padding: EdgeInsets.fromLTRB(gutter, 8, gutter, 16),
+                    child: HexaResponsiveCenter(
+                      maxWidth: HexaResponsive.maxContentWidth,
+                      padding: EdgeInsets.zero,
+                      child: _DesktopItemLayout(
+                        itemId: itemId,
+                        name: name.isNotEmpty
+                            ? name
+                            : (code.isNotEmpty ? code : 'Item'),
+                        code: code.isNotEmpty ? code : null,
+                        categoryLabel: categoryLabel,
+                        onMore: () => _showMore(context, ref, item),
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            },
           ),
         );
       } else {
-        content = _ItemDetailMobileScroll(
+        scrollBody = _ItemDetailMobileScroll(
           itemId: itemId,
           name: name.isNotEmpty ? name : (code.isNotEmpty ? code : 'Item'),
           code: code.isNotEmpty ? code : null,
@@ -104,6 +116,8 @@ class ItemDetailPage extends ConsumerWidget {
           onMore: () => _showMore(context, ref, item),
         );
       }
+
+      Widget content = SizedBox.expand(child: scrollBody);
 
       if (!refreshing) return content;
       return Column(
@@ -120,10 +134,18 @@ class ItemDetailPage extends ConsumerWidget {
       body: SafeArea(
         child: bundleAsync.whenForm(
           initialLoading: () => const Center(child: CircularProgressIndicator()),
-          error: (e, __) => FriendlyLoadError(
-            message: 'Could not load item. Tap to retry.',
-            onRetry: () => ref.invalidate(itemDetailBundleProvider(itemId)),
-          ),
+          error: (e, __) {
+            if (cachedBundle != null) {
+              return buildDetail(
+                cachedBundle,
+                refreshing: bundleAsync.isLoading,
+              );
+            }
+            return FriendlyLoadError(
+              message: 'Could not load item. Tap to retry.',
+              onRetry: () => ref.invalidate(itemDetailBundleProvider(itemId)),
+            );
+          },
           data: (bundle) => buildDetail(
             bundle,
             refreshing: bundleAsync.isLoading && cachedBundle != null,
@@ -300,7 +322,7 @@ class _DesktopItemLayout extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final session = ref.watch(sessionProvider);
     final isStaff = session != null && sessionIsStaff(session);
-    final tab = GoRouterState.of(context).uri.queryParameters['tab']?.toLowerCase();
+    final tab = _ItemDetailMobileScrollState._tabQuery(context);
     final initialIndex = switch (tab) {
       'purchases' || 'history' || 'purchase' => 1,
       'analytics' || 'price' => 2,
@@ -437,8 +459,7 @@ class _ItemDetailMobileScrollState extends ConsumerState<_ItemDetailMobileScroll
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      final tab =
-          GoRouterState.of(context).uri.queryParameters['tab']?.toLowerCase();
+      final tab = _ItemDetailMobileScrollState._tabQuery(context);
       if (tab != null && tab.isNotEmpty && tab != 'overview') {
         if (mounted) setState(() => _heavySectionsLoaded = true);
       } else {
@@ -450,8 +471,7 @@ class _ItemDetailMobileScrollState extends ConsumerState<_ItemDetailMobileScroll
   }
 
   int _initialTabIndex(bool isStaff) {
-    final tab =
-        GoRouterState.of(context).uri.queryParameters['tab']?.toLowerCase();
+    final tab = _tabQuery(context);
     if (isStaff) {
       if (tab == 'history' ||
           tab == 'stock-history' ||
@@ -470,6 +490,14 @@ class _ItemDetailMobileScrollState extends ConsumerState<_ItemDetailMobileScroll
     }
     if (tab == 'history' || tab == 'stock-history') return 2;
     return 0;
+  }
+
+  static String? _tabQuery(BuildContext context) {
+    return GoRouter.maybeOf(context)
+        ?.state
+        .uri
+        .queryParameters['tab']
+        ?.toLowerCase();
   }
 
   Widget _paddedSection(Widget child) {

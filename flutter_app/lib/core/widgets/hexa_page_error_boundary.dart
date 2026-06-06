@@ -1,18 +1,16 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 
 import '../theme/hexa_colors.dart';
 import '../../features/shell/shell_branch_provider.dart';
 
-/// Page-scoped error boundary — keeps one screen's failure from replacing the
-/// entire app shell (notably Reports on cold web load).
+/// Lightweight shell tab wrapper.
 ///
-/// When [shellBranchIndex] is set, only the **visible** IndexedStack tab
-/// registers [FlutterError.onError]. Otherwise an off-screen Home crash could
-/// surface as "Reports could not load" because lazy branches had not mounted yet.
-class HexaPageErrorBoundary extends ConsumerStatefulWidget {
+/// Previously hijacked [FlutterError.onError] and turned unrelated widget faults
+/// into full-tab "Home could not load" screens. Section failures now use
+/// [ErrorWidget.builder] (`buildHexaLayoutErrorWidget`); API failures use
+/// [FriendlyLoadError] inside each page.
+class HexaPageErrorBoundary extends ConsumerWidget {
   const HexaPageErrorBoundary({
     super.key,
     required this.child,
@@ -28,168 +26,24 @@ class HexaPageErrorBoundary extends ConsumerStatefulWidget {
   final String? subtitle;
   final String fallbackRoute;
   final VoidCallback? onRetry;
-  /// [ShellBranch] index for this tab — limits error capture to the active tab.
+
+  /// When set, off-tab shells return [child] only (IndexedStack keeps pages mounted).
   final int? shellBranchIndex;
 
   @override
-  ConsumerState<HexaPageErrorBoundary> createState() =>
-      _HexaPageErrorBoundaryState();
-}
-
-class _HexaPageErrorBoundaryState extends ConsumerState<HexaPageErrorBoundary> {
-  Object? _error;
-  void Function(FlutterErrorDetails)? _previousOnError;
-  static _HexaPageErrorBoundaryState? _registered;
-
-  bool get _shouldHandleErrors {
-    final idx = widget.shellBranchIndex;
-    if (idx == null) return true;
-    return ref.read(shellCurrentBranchProvider) == idx;
-  }
-
-  void _installHandler() {
-    if (_registered == this) return;
-    _registered?._uninstallHandler();
-    _previousOnError = FlutterError.onError;
-    FlutterError.onError = _onFlutterError;
-    _registered = this;
-  }
-
-  void _uninstallHandler() {
-    if (_registered != this) return;
-    FlutterError.onError = _previousOnError;
-    _previousOnError = null;
-    _registered = null;
-  }
-
-  void _syncErrorHandler() {
-    if (!mounted) return;
-    if (_shouldHandleErrors) {
-      _installHandler();
-    } else {
-      _uninstallHandler();
+  Widget build(BuildContext context, WidgetRef ref) {
+    final idx = shellBranchIndex;
+    if (idx != null && ref.watch(shellCurrentBranchProvider) != idx) {
+      return child;
     }
-  }
-
-  void _onFlutterError(FlutterErrorDetails details) {
-    if (!_shouldHandleErrors) {
-      _previousOnError?.call(details);
-      return;
-    }
-    if (hexaErrorLikelyNonFatal(details)) {
-      _previousOnError?.call(details);
-      return;
-    }
-    if (kDebugMode) {
-      FlutterError.dumpErrorToConsole(details);
-    }
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || !_shouldHandleErrors) return;
-      setState(() => _error = details.exception);
-    });
-  }
-
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _syncErrorHandler());
-  }
-
-  @override
-  void dispose() {
-    _uninstallHandler();
-    super.dispose();
-  }
-
-  void _clearError() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      setState(() => _error = null);
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    ref.listen<int>(shellCurrentBranchProvider, (_, __) {
-      _syncErrorHandler();
-      if (!_shouldHandleErrors && _error != null) {
-        _clearError();
-      }
-    });
-
-    if (_error != null && _shouldHandleErrors) {
-      final detail = _error.toString().split('\n').first;
-      return Material(
-        color: HexaColors.brandBackground,
-        child: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Icon(Icons.warning_amber_rounded,
-                    size: 44, color: Colors.orange),
-                const SizedBox(height: 14),
-                Text(
-                  widget.title,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    fontSize: 17,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  widget.subtitle ??
-                      'Something went wrong loading this screen. If you just opened the app, wait 30 seconds and tap Retry. Sign in again if the problem continues.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: HexaColors.textBody,
-                    height: 1.35,
-                  ),
-                ),
-                if (kDebugMode && detail.isNotEmpty) ...[
-                  const SizedBox(height: 10),
-                  Text(
-                    detail,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(fontSize: 11, color: Colors.black54),
-                  ),
-                ],
-                const SizedBox(height: 16),
-                Wrap(
-                  alignment: WrapAlignment.center,
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    TextButton(
-                      onPressed: () {
-                        _clearError();
-                        widget.onRetry?.call();
-                      },
-                      child: const Text('Retry'),
-                    ),
-                    FilledButton.tonal(
-                      onPressed: () {
-                        _clearError();
-                        if (context.mounted) context.go(widget.fallbackRoute);
-                      },
-                      child: const Text('Go to Home'),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ),
-      );
-    }
-    return widget.child;
+    return ColoredBox(
+      color: HexaColors.brandBackground,
+      child: child,
+    );
   }
 }
 
-/// Shared heuristics for layout/network/transient failures.
+/// Shared heuristics for layout/network/transient failures (legacy callers).
 bool hexaErrorLikelyNonFatal(FlutterErrorDetails details) {
   if (details.silent) return true;
   final s = details.exceptionAsString();
@@ -229,5 +83,8 @@ bool hexaErrorLikelyNonFatal(FlutterErrorDetails details) {
       s.contains('Box not found') ||
       s.contains('modifying a provider') ||
       s.contains('Tried to modify a provider') ||
-      s.contains('Cannot use "ref"');
+      s.contains('Cannot use "ref"') ||
+      s.contains('childAspectRatio') ||
+      s.contains('AssertionError') ||
+      s.contains('is not a subtype of');
 }

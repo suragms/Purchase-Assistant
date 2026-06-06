@@ -71,4 +71,25 @@ class StockTrackingMode {
         return 'Piece';
     }
   }
+
+  /// Short chip label for create/edit unit picker (kg, bag, pc, …).
+  static String shortLabelForMode(String mode) {
+    switch (mode) {
+      case wholesaleBag:
+        return 'bag';
+      case retailPacket:
+        return 'pkt';
+      case looseKg:
+        return 'kg';
+      case box:
+        return 'box';
+      case tin:
+        return 'tin';
+      default:
+        return 'pc';
+    }
+  }
+
+  static bool isPieceLikeMode(String? mode) =>
+      mode == piece || mode == retailPacket;
 }

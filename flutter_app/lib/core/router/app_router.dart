@@ -502,7 +502,11 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           final id = state.pathParameters['itemId']!;
           return iosPushPage(
             key: state.pageKey,
-            child: ItemDetailPage(itemId: id),
+            child: HexaPageErrorBoundary(
+              title: 'Item could not load',
+              shellBranchIndex: null,
+              child: ItemDetailPage(itemId: id),
+            ),
           );
         },
       ),

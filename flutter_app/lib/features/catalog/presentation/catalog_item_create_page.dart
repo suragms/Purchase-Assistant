@@ -16,6 +16,7 @@ import '../../../core/unit_engine/stock_tracking_profile.dart';
 import '../../../core/widgets/async_value_form.dart';
 import '../../../shared/widgets/inline_search_field.dart';
 import '../../../shared/widgets/packaging_type_selector.dart';
+import '../catalog_create_prefs.dart';
 
 /// Simple catalog item create — subcategory, name, unit type, optional more fields.
 class CatalogItemCreatePage extends ConsumerStatefulWidget {
@@ -44,7 +45,6 @@ typedef QuickAddCatalogItemPage = CatalogItemCreatePage;
 
 class _CatalogItemCreatePageState extends ConsumerState<CatalogItemCreatePage> {
   final _nameCtrl = TextEditingController();
-  final _itemCodeCtrl = TextEditingController();
   final _kgCtrl = TextEditingController();
   final _ipbCtrl = TextEditingController();
   final _wptCtrl = TextEditingController();
@@ -97,6 +97,67 @@ class _CatalogItemCreatePageState extends ConsumerState<CatalogItemCreatePage> {
     super.initState();
     _nameCtrl.addListener(_onNameChanged);
     _kgCtrl.addListener(_onKgChanged);
+    _typeSearchCtrl.addListener(_onTypeSearchChanged);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadSavedParty());
+  }
+
+  void _onTypeSearchChanged() {
+    if (_typeId == null) return;
+    final types = ref.read(categoryTypesIndexProvider).valueOrNull ?? [];
+    final row = _rowByTypeId(types, _typeId!);
+    if (row == null) {
+      setState(() => _typeId = null);
+      return;
+    }
+    final picked = row['name']?.toString().trim().toLowerCase() ?? '';
+    final typed = _typeSearchCtrl.text.trim().toLowerCase();
+    if (picked != typed) {
+      setState(() => _typeId = null);
+    }
+  }
+
+  Future<void> _loadSavedParty() async {
+    final session = ref.read(sessionProvider);
+    if (session == null) return;
+    if (widget.defaultSupplierId != null &&
+        widget.defaultSupplierId!.isNotEmpty) {
+      return;
+    }
+    if (widget.defaultBrokerId != null && widget.defaultBrokerId!.isNotEmpty) {
+      return;
+    }
+    final sups = ref.read(suppliersListProvider).valueOrNull;
+    final brokers = ref.read(brokersListProvider).valueOrNull;
+    if (sups == null || brokers == null) return;
+
+    final saved = await CatalogCreatePrefs.load(session.primaryBusiness.id);
+    if (!mounted) return;
+    var changed = false;
+    if (_supplierId == null &&
+        saved.supplierId != null &&
+        saved.supplierId!.isNotEmpty) {
+      for (final s in sups) {
+        if (s['id']?.toString() == saved.supplierId) {
+          _supplierId = saved.supplierId;
+          _supplierSearchCtrl.text = s['name']?.toString() ?? '';
+          changed = true;
+          break;
+        }
+      }
+    }
+    if (_brokerId == null &&
+        saved.brokerId != null &&
+        saved.brokerId!.isNotEmpty) {
+      for (final b in brokers) {
+        if (b['id']?.toString() == saved.brokerId) {
+          _brokerId = saved.brokerId;
+          _brokerSearchCtrl.text = b['name']?.toString() ?? '';
+          changed = true;
+          break;
+        }
+      }
+    }
+    if (changed && mounted) setState(() {});
   }
 
   void _onKgChanged() {
@@ -165,8 +226,8 @@ class _CatalogItemCreatePageState extends ConsumerState<CatalogItemCreatePage> {
     _nameDebounce?.cancel();
     _nameCtrl.removeListener(_onNameChanged);
     _kgCtrl.removeListener(_onKgChanged);
+    _typeSearchCtrl.removeListener(_onTypeSearchChanged);
     _nameCtrl.dispose();
-    _itemCodeCtrl.dispose();
     _kgCtrl.dispose();
     _ipbCtrl.dispose();
     _wptCtrl.dispose();
@@ -277,12 +338,18 @@ class _CatalogItemCreatePageState extends ConsumerState<CatalogItemCreatePage> {
       return false;
     }
     final types = ref.read(categoryTypesIndexProvider).valueOrNull ?? [];
-    final typeRow =
-        _typeId != null ? _rowByTypeId(types, _typeId!) : null;
-    if (typeRow == null ||
-        typeRow['name']?.toString().trim() != _typeSearchCtrl.text.trim()) {
+    if (_typeId == null || _typeId!.isEmpty) {
       setState(() => _error = 'Pick a subcategory from search.');
       return false;
+    }
+    final typeRow = _rowByTypeId(types, _typeId!);
+    if (typeRow == null) {
+      setState(() => _error = 'Pick a subcategory from search.');
+      return false;
+    }
+    final typeName = typeRow['name']?.toString().trim() ?? '';
+    if (_typeSearchCtrl.text.trim() != typeName) {
+      _typeSearchCtrl.text = typeName;
     }
     if (_packagingMode == StockTrackingMode.wholesaleBag) {
       final kg = _parsedKg();
@@ -345,7 +412,6 @@ class _CatalogItemCreatePageState extends ConsumerState<CatalogItemCreatePage> {
 
   void _resetForAddMore() {
     _nameCtrl.clear();
-    _itemCodeCtrl.clear();
     _kgCtrl.clear();
     _ipbCtrl.clear();
     _wptCtrl.clear();
@@ -381,8 +447,7 @@ class _CatalogItemCreatePageState extends ConsumerState<CatalogItemCreatePage> {
           break;
         }
       }
-      if (brow == null ||
-          brow['name']?.toString().trim() != _brokerSearchCtrl.text.trim()) {
+      if (brow == null) {
         setState(() => _error = 'Pick a broker from search or clear broker.');
         return;
       }
@@ -401,7 +466,6 @@ class _CatalogItemCreatePageState extends ConsumerState<CatalogItemCreatePage> {
     }
 
     final hsn = _hsnCtrl.text.trim();
-    final itemCode = _itemCodeCtrl.text.trim().toUpperCase();
     final purchaseText = _purchaseRateCtrl.text.trim();
     final sellingText = _sellingRateCtrl.text.trim();
     final purchaseRate =
@@ -427,7 +491,6 @@ class _CatalogItemCreatePageState extends ConsumerState<CatalogItemCreatePage> {
             defaultSupplierIds: supplierIds,
             defaultBrokerIds: brokerIds,
             hsnCode: hsn.isEmpty ? null : hsn,
-            itemCode: itemCode.isEmpty ? null : itemCode,
             defaultKgPerBag: kgPerBag,
             defaultItemsPerBox:
                 _packagingMode == StockTrackingMode.box && ipb != null && ipb > 0
@@ -444,6 +507,12 @@ class _CatalogItemCreatePageState extends ConsumerState<CatalogItemCreatePage> {
 
       if (!mounted) return;
       final newId = created['id']?.toString() ?? '';
+      final itemCode = created['item_code']?.toString() ?? '';
+      await CatalogCreatePrefs.save(
+        businessId: session.primaryBusiness.id,
+        supplierId: _supplierId,
+        brokerId: _brokerId,
+      );
       _invalidateAfterCreate(newId);
       if (addMore) {
         setState(() {
@@ -451,7 +520,21 @@ class _CatalogItemCreatePageState extends ConsumerState<CatalogItemCreatePage> {
           _resetForAddMore();
         });
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Saved "$name". Add another.')),
+          SnackBar(
+            content: Text(
+              itemCode.isEmpty
+                  ? 'Saved "$name". Add another.'
+                  : 'Saved "$name" · $itemCode. Add another.',
+            ),
+            action: newId.isNotEmpty
+                ? SnackBarAction(
+                    label: 'Print label',
+                    onPressed: () => context.push(
+                      '/barcode/print/${Uri.encodeComponent(newId)}',
+                    ),
+                  )
+                : null,
+          ),
         );
         return;
       }
@@ -466,6 +549,21 @@ class _CatalogItemCreatePageState extends ConsumerState<CatalogItemCreatePage> {
       if (newId.isNotEmpty) {
         _popPage();
         if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                itemCode.isEmpty
+                    ? 'Item "$name" created'
+                    : 'Item "$name" · $itemCode',
+              ),
+              action: SnackBarAction(
+                label: 'Print label',
+                onPressed: () => context.push(
+                  '/barcode/print/${Uri.encodeComponent(newId)}',
+                ),
+              ),
+            ),
+          );
           context.push('/catalog/item/$newId');
         }
         return;
@@ -513,6 +611,13 @@ class _CatalogItemCreatePageState extends ConsumerState<CatalogItemCreatePage> {
         if (types.isEmpty) return;
         final brokers = ref.read(brokersListProvider).valueOrNull ?? [];
         _maybePrefill(types, sups, brokers);
+        unawaited(_loadSavedParty());
+      });
+    });
+    ref.listen(brokersListProvider, (prev, next) {
+      next.whenData((_) {
+        if (!mounted) return;
+        unawaited(_loadSavedParty());
       });
     });
 
@@ -539,6 +644,7 @@ class _CatalogItemCreatePageState extends ConsumerState<CatalogItemCreatePage> {
                 child: ListView(
                   padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
                   children: [
+                    ..._buildPartyFields(suppliersAsync, brokersAsync),
                     typesAsync.whenForm(
                       initialLoading: () => const LinearProgressIndicator(),
                       reloadingBanner: (_) => formReloadBanner(),
@@ -554,11 +660,13 @@ class _CatalogItemCreatePageState extends ConsumerState<CatalogItemCreatePage> {
                             const Text('Subcategory *'),
                             const SizedBox(height: 6),
                             InlineSearchField(
-                              key: ValueKey('ci_type_$_typeId'),
                               items: _typeItems(types),
                               controller: _typeSearchCtrl,
                               placeholder: 'Search subcategory…',
-                              onSelected: (it) => setState(() => _typeId = it.id),
+                              onSelected: (it) => setState(() {
+                                _typeId = it.id;
+                                _typeSearchCtrl.text = it.label;
+                              }),
                             ),
                           ],
                         );
@@ -618,10 +726,8 @@ class _CatalogItemCreatePageState extends ConsumerState<CatalogItemCreatePage> {
                               fontWeight: FontWeight.w700,
                             ),
                       ),
-                      subtitle: const Text(
-                        'Supplier, broker, item code, HSN, rates',
-                      ),
-                      children: _buildMoreOptions(suppliersAsync, brokersAsync),
+                      subtitle: const Text('HSN and rates (item code auto-generated)'),
+                      children: _buildMoreOptions(),
                     ),
                     if (_error != null) ...[
                       const SizedBox(height: 12),
@@ -639,7 +745,7 @@ class _CatalogItemCreatePageState extends ConsumerState<CatalogItemCreatePage> {
     );
   }
 
-  List<Widget> _buildMoreOptions(
+  List<Widget> _buildPartyFields(
     AsyncValue<List<Map<String, dynamic>>> suppliersAsync,
     AsyncValue<List<Map<String, dynamic>>> brokersAsync,
   ) {
@@ -667,13 +773,15 @@ class _CatalogItemCreatePageState extends ConsumerState<CatalogItemCreatePage> {
               ),
               const SizedBox(height: 6),
               InlineSearchField(
-                key: ValueKey('ci_sup_$_supplierId'),
                 items: _supplierItems(sups),
                 controller: _supplierSearchCtrl,
                 placeholder: 'Search supplier…',
-                onSelected: (it) => setState(() => _supplierId = it.id),
+                onSelected: (it) => setState(() {
+                  _supplierId = it.id;
+                  _supplierSearchCtrl.text = it.label;
+                }),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 14),
             ],
           );
         },
@@ -700,27 +808,24 @@ class _CatalogItemCreatePageState extends ConsumerState<CatalogItemCreatePage> {
               ),
               const SizedBox(height: 6),
               InlineSearchField(
-                key: ValueKey('ci_bro_$_brokerId'),
                 items: _brokerItems(rows),
                 controller: _brokerSearchCtrl,
                 placeholder: 'Search broker…',
-                onSelected: (it) => setState(() => _brokerId = it.id),
+                onSelected: (it) => setState(() {
+                  _brokerId = it.id;
+                  _brokerSearchCtrl.text = it.label;
+                }),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 14),
             ],
           );
         },
       ),
-      TextField(
-        controller: _itemCodeCtrl,
-        decoration: const InputDecoration(
-          labelText: 'Item code (optional)',
-          hintText: 'Auto-generated if empty',
-          border: OutlineInputBorder(),
-        ),
-        textCapitalization: TextCapitalization.characters,
-      ),
-      const SizedBox(height: 12),
+    ];
+  }
+
+  List<Widget> _buildMoreOptions() {
+    return [
       TextField(
         controller: _hsnCtrl,
         decoration: const InputDecoration(

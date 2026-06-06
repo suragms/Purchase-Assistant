@@ -38,7 +38,7 @@ Widget buildHexaLayoutErrorWidget(FlutterErrorDetails details) {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      'Check connection and retry, or reload the page.',
+                      'Tap Reload or pull to refresh. If this repeats, sign out and sign in again.',
                       style: TextStyle(
                         fontSize: 11,
                         color: Colors.grey.shade700,
