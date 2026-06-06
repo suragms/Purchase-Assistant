@@ -501,6 +501,7 @@ if settings.app_env.lower() == "production":
     ):
         if _prod_web not in _origins:
             _origins.append(_prod_web)
+logger.info("CORS origins (%d): %s", len(_origins), _origins)
 if not _origins:
     _origins = list(_DEFAULT_LOCAL_CORS_ORIGINS)
 elif settings.app_env.lower() == "development":

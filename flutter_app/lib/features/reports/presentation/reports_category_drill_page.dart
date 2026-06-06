@@ -1,8 +1,10 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
+import '../../../core/auth/auth_error_messages.dart';
 import '../../../core/json_coerce.dart';
 import '../../../core/providers/analytics_breakdown_providers.dart';
 import '../../../core/theme/hexa_colors.dart';
@@ -39,10 +41,16 @@ class ReportsCategoryDrillPage extends ConsumerWidget {
       ),
       body: async.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (_, __) => FriendlyLoadError(
-          message: 'Could not load category detail',
-          onRetry: () => ref.invalidate(analyticsCategoriesTableProvider),
-        ),
+        error: (e, _) {
+          final dio = e is DioException ? e : null;
+          final offline = dio != null && dioIsNetworkError(dio);
+          return FriendlyLoadError(
+            message: offline
+                ? 'Could not load category detail — check connection'
+                : 'Could not load category detail. Server error — tap to retry.',
+            onRetry: () => ref.invalidate(analyticsCategoriesTableProvider),
+          );
+        },
         data: (rows) {
           Map<String, dynamic>? match;
           for (final r in rows) {

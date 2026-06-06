@@ -1,7 +1,9 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/auth/auth_error_messages.dart';
 import '../../../core/providers/operations_providers.dart';
 import '../../../core/widgets/friendly_load_error.dart';
 
@@ -18,9 +20,16 @@ class OperationalReportsSection extends ConsumerWidget {
         padding: const EdgeInsets.all(12),
         child: data.when(
           loading: () => const Center(child: CircularProgressIndicator()),
-          error: (e, _) => FriendlyLoadError(
-            onRetry: () => ref.invalidate(operationalReportsProvider),
-          ),
+          error: (e, _) {
+            final dio = e is DioException ? e : null;
+            final offline = dio != null && dioIsNetworkError(dio);
+            return FriendlyLoadError(
+              message: offline
+                  ? 'Could not load stock operations — check connection'
+                  : 'Could not load stock operations. Server error — tap to retry.',
+              onRetry: () => ref.invalidate(operationalReportsProvider),
+            );
+          },
           data: (m) {
             final dead = (m['dead_stock'] as List?)?.length ?? 0;
             final fast = (m['fast_moving'] as List?)?.length ?? 0;

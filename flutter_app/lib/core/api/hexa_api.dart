@@ -287,7 +287,7 @@ class HexaApi {
     _plain.interceptors.add(
       HexaConnectionTimeoutRetryInterceptor(_plain),
     );
-    _dio.interceptors.add(DioAutoRetryInterceptor(_dio, maxAttempts: 4));
+    _dio.interceptors.add(DioAutoRetryInterceptor(_dio, maxAttempts: 3));
     final banner = _onConnectivityBanner;
     if (banner != null) {
       _dio.interceptors.add(_BusinessConnectivityBannerInterceptor(banner));

@@ -1,6 +1,8 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/auth/auth_error_messages.dart';
 import '../../../../core/json_coerce.dart';
 import '../../../../core/providers/reports_bi_providers.dart';
 import '../../../../core/widgets/friendly_load_error.dart';
@@ -16,10 +18,16 @@ class ReportsMovementTab extends ConsumerWidget {
     final async = ref.watch(reportsMovementSummaryProvider);
     return async.when(
       loading: () => const Center(child: CircularProgressIndicator()),
-      error: (_, __) => FriendlyLoadError(
-        message: 'Unable to load movement analytics',
-        onRetry: () => ref.invalidate(reportsMovementSummaryProvider),
-      ),
+      error: (e, _) {
+        final dio = e is DioException ? e : null;
+        final offline = dio != null && dioIsNetworkError(dio);
+        return FriendlyLoadError(
+          message: offline
+              ? 'Unable to load movement analytics — check connection'
+              : 'Unable to load movement analytics. Server error — tap to retry.',
+          onRetry: () => ref.invalidate(reportsMovementSummaryProvider),
+        );
+      },
       data: (m) {
         final byType = m['by_type'];
         if (byType is! Map || byType.isEmpty) {
