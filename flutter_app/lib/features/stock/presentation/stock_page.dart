@@ -813,11 +813,11 @@ class _StockPageState extends ConsumerState<StockPage>
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
         final incoming = next.value;
-        final ids = <String>[
+        final rows = [
           for (final e in (incoming['items'] as List? ?? []))
-            if (e is Map) e['id']?.toString() ?? '',
-        ].where((id) => id.isNotEmpty);
-        clearStockListRowPatchesForIds(ref, ids);
+            if (e is Map) Map<String, dynamic>.from(e),
+        ];
+        reconcileStockListRowPatches(ref, rows);
         setState(() {
           _loadingMore = false;
           _mergedData = mergeStockListPage(

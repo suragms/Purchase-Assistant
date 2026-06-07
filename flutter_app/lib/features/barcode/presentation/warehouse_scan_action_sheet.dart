@@ -118,9 +118,11 @@ class _WarehouseScanActionBodyState extends ConsumerState<_WarehouseScanActionBo
   }
 
   Future<void> _refreshAfterSave() async {
-    invalidateWarehouseSurfacesLight(ref);
-    invalidateWarehouseItemSurfacesLight(ref, itemId: _itemId);
-    ref.invalidate(activeStockAuditProvider);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      invalidateWarehouseSurfacesLight(ref);
+      invalidateWarehouseItemSurfacesLight(ref, itemId: _itemId);
+      ref.invalidate(activeStockAuditProvider);
+    });
   }
 
   void _pushFromScan(String location) {

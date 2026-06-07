@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -11,7 +13,7 @@ import '../../../../core/design_system/hexa_operational_tokens.dart';
 import '../../../../core/json_coerce.dart';
 import '../../../../core/providers/item_detail_providers.dart';
 import '../../../../core/providers/stock_providers.dart'
-    show stockItemActivityProvider, stockItemAuditProvider;
+    show stockItemActivityProvider, stockItemAuditProvider, stockItemDetailProvider;
 import '../../../../core/theme/hexa_colors.dart';
 
 String stockAdjustmentTypeLabel(String? raw) {
@@ -31,38 +33,91 @@ String stockAdjustmentTypeLabel(String? raw) {
   };
 }
 
-class ItemPhysicalVerificationCard extends ConsumerWidget {
+class ItemPhysicalVerificationCard extends ConsumerStatefulWidget {
   const ItemPhysicalVerificationCard({super.key, required this.itemId});
 
   final String itemId;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final stockAsync = ref.watch(itemDetailStockProvider(itemId));
-    final auditAsync = ref.watch(stockItemAuditProvider(itemId));
+  ConsumerState<ItemPhysicalVerificationCard> createState() =>
+      _ItemPhysicalVerificationCardState();
+}
+
+class _ItemPhysicalVerificationCardState
+    extends ConsumerState<ItemPhysicalVerificationCard> {
+  static const _maxRetries = 3;
+  static const _retryDelay = Duration(milliseconds: 1500);
+
+  int _retryCount = 0;
+  Timer? _retryTimer;
+  bool _retryScheduled = false;
+
+  @override
+  void dispose() {
+    _retryTimer?.cancel();
+    super.dispose();
+  }
+
+  void _scheduleAutoRetry() {
+    if (_retryScheduled || _retryCount >= _maxRetries || !mounted) return;
+    _retryScheduled = true;
+    _retryTimer?.cancel();
+    _retryTimer = Timer(_retryDelay, () {
+      if (!mounted) return;
+      _retryScheduled = false;
+      _retryCount++;
+      ref.invalidate(stockItemDetailProvider(widget.itemId));
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final stockAsync = ref.watch(itemDetailStockProvider(widget.itemId));
+    final auditAsync = ref.watch(stockItemAuditProvider(widget.itemId));
+
+    stockAsync.whenOrNull(
+      data: (_) {
+        if (_retryCount > 0 || _retryScheduled) {
+          _retryCount = 0;
+          _retryScheduled = false;
+          _retryTimer?.cancel();
+        }
+      },
+    );
+
     return stockAsync.when(
       loading: () => const SizedBox.shrink(),
-      error: (_, __) => Card(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Row(
-            children: [
-              const Expanded(
-                child: Text(
-                  'Could not load verification log',
-                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+      error: (_, __) {
+        if (_retryCount < _maxRetries) {
+          _scheduleAutoRetry();
+          return const SizedBox.shrink();
+        }
+        return Card(
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Row(
+              children: [
+                const Expanded(
+                  child: Text(
+                    'Could not load verification log',
+                    style:
+                        TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+                  ),
                 ),
-              ),
-              TextButton(
-                onPressed: () =>
-                    ref.invalidate(itemDetailBundleProvider(itemId)),
-                child: const Text('Retry'),
-              ),
-            ],
+                TextButton(
+                  onPressed: () {
+                    _retryCount = 0;
+                    ref.invalidate(itemDetailBundleProvider(widget.itemId));
+                  },
+                  child: const Text('Retry'),
+                ),
+              ],
+            ),
           ),
-        ),
-      ),
+        );
+      },
       data: (stock) => auditAsync.when(
         loading: () => _buildCard(context, ref, stock, const []),
         error: (_, __) => _buildCard(context, ref, stock, const []),
@@ -188,19 +243,19 @@ class ItemPhysicalVerificationCard extends ConsumerWidget {
     final session = ref.read(sessionProvider);
     if (session == null) return;
     final stock =
-        ref.read(itemDetailStockProvider(itemId)).valueOrNull ??
+        ref.read(itemDetailStockProvider(widget.itemId)).valueOrNull ??
             const <String, dynamic>{};
     try {
       await ref.read(hexaApiProvider).verifyStockCountWithRetry(
             businessId: session.primaryBusiness.id,
-            itemId: itemId,
+            itemId: widget.itemId,
             countedQty: countedQty,
             reason: 'Physical count',
             initialStockVersion: stockVersionFromItem(stock),
           );
-      ref.invalidate(itemDetailBundleProvider(itemId));
-      ref.invalidate(stockItemActivityProvider(itemId));
-      ref.invalidate(stockItemAuditProvider(itemId));
+      ref.invalidate(itemDetailBundleProvider(widget.itemId));
+      ref.invalidate(stockItemActivityProvider(widget.itemId));
+      ref.invalidate(stockItemAuditProvider(widget.itemId));
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Physical count verified')),
@@ -225,4 +280,3 @@ String _fmt(double n) {
   final s = n.toStringAsFixed(n.abs() < 1 ? 2 : 0);
   return s.replaceAll(RegExp(r'\.0+$'), '').replaceAll(RegExp(r'(\.\d*[1-9])0+$'), r'$1');
 }
-

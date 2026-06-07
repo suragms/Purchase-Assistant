@@ -223,6 +223,28 @@ class _InlineSearchFieldState extends State<InlineSearchField> {
     } finally {
       _pickInProgress = false;
     }
+    _afterSelectionFocus(keepFocus: keepFocus);
+  }
+
+  /// RawAutocomplete already wrote [displayStringForOption] — notify parent only.
+  void _commitSelection(InlineSearchItem it, {bool keepFocus = true}) {
+    if (_consumeIfDuplicatePick(it)) return;
+    _pickInProgress = true;
+    if (!mounted) {
+      _pickInProgress = false;
+      return;
+    }
+    setState(() {});
+    try {
+      widget.onSelected(it);
+      HapticFeedback.selectionClick();
+    } finally {
+      _pickInProgress = false;
+    }
+    _afterSelectionFocus(keepFocus: keepFocus);
+  }
+
+  void _afterSelectionFocus({required bool keepFocus}) {
     final next = widget.focusAfterSelection;
     if (next != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -266,7 +288,8 @@ class _InlineSearchFieldState extends State<InlineSearchField> {
             optionsBuilder: (TextEditingValue tev) {
               return _optionsForQuery(tev.text);
             },
-            onSelected: (InlineSearchItem it) => _pick(it, keepFocus: false),
+            onSelected: (InlineSearchItem it) =>
+                _commitSelection(it, keepFocus: false),
             fieldViewBuilder: (
               BuildContext context,
               TextEditingController textEditingController,
@@ -400,7 +423,7 @@ class _InlineSearchFieldState extends State<InlineSearchField> {
                                     return GestureDetector(
                                       onTap: () {
                                         _pendingSelection = null;
-                                        _pick(it, keepFocus: false);
+                                        onSelected(it);
                                         WidgetsBinding.instance
                                             .addPostFrameCallback((_) {
                                           if (mounted) _focus.unfocus();

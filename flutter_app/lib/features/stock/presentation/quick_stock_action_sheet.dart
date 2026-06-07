@@ -340,8 +340,6 @@ class _QuickStockActionBodyState extends ConsumerState<_QuickStockActionBody> {
     if (parsed != null && saveStarted != null) {
       final recovered = await _verifySaveOnServer(parsed);
       if (recovered != null && mounted) {
-        _applyOptimisticListPatch(recovered, parsed);
-        unawaited(_afterSaveBackground(parsed));
         try {
           await _completeSaveSuccess(
             recovered,
@@ -407,7 +405,6 @@ class _QuickStockActionBodyState extends ConsumerState<_QuickStockActionBody> {
     if (!stockSaveErrorWorthServerVerify(error)) return null;
     final fresh = await _verifySaveOnServer(parsed);
     if (fresh == null) return null;
-    _applyOptimisticListPatch(fresh, parsed);
     return fresh;
   }
 
@@ -416,7 +413,6 @@ class _QuickStockActionBodyState extends ConsumerState<_QuickStockActionBody> {
     num parsed, {
     required DateTime saveStarted,
   }) async {
-    unawaited(_afterSaveBackground(parsed));
     try {
       await _completeSaveSuccess(fresh, parsed, saveStarted: saveStarted);
     } catch (e, st) {
@@ -448,7 +444,9 @@ class _QuickStockActionBodyState extends ConsumerState<_QuickStockActionBody> {
       await HapticFeedback.mediumImpact();
     } catch (_) {}
     if (!mounted) return;
+    _applyOptimisticListPatch(saved, parsed);
     Navigator.of(context).pop(true);
+    unawaited(_afterSaveBackground(parsed));
     if (!widget.parentContext.mounted) return;
     showTopSnack(
       widget.parentContext,
@@ -494,20 +492,22 @@ class _QuickStockActionBodyState extends ConsumerState<_QuickStockActionBody> {
   }
 
   void _refreshListInBackground() {
-    invalidateWarehouseSurfacesAfterStockWrite(
-      widget.parentRef,
-      itemId: _itemId,
-    );
-    deferInvalidate(widget.parentRef, homeInventorySummaryProvider);
-    deferInvalidate(widget.parentRef, homeStockAttentionCountProvider);
-    deferInvalidate(widget.parentRef, stockStatusCountsProvider);
-    deferInvalidate(widget.parentRef, stockFilteredStatusCountsProvider);
-    deferInvalidateDelayed(
-      widget.parentRef,
-      itemDetailBundleProvider(_itemId),
-    );
-    deferInvalidateDelayed(widget.parentRef, stockAuditPeriodProvider);
-    deferInvalidateDelayed(widget.parentRef, stockChangesFeedProvider);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      invalidateWarehouseSurfacesAfterStockWrite(
+        widget.parentRef,
+        itemId: _itemId,
+      );
+      deferInvalidate(widget.parentRef, homeInventorySummaryProvider);
+      deferInvalidate(widget.parentRef, homeStockAttentionCountProvider);
+      deferInvalidate(widget.parentRef, stockStatusCountsProvider);
+      deferInvalidate(widget.parentRef, stockFilteredStatusCountsProvider);
+      widget.parentRef.invalidate(stockChangesFeedProvider);
+      deferInvalidateDelayed(
+        widget.parentRef,
+        itemDetailBundleProvider(_itemId),
+      );
+      deferInvalidateDelayed(widget.parentRef, stockAuditPeriodProvider);
+    });
   }
 
   Future<void> _afterSaveBackground(num parsed) async {
@@ -590,9 +590,6 @@ class _QuickStockActionBodyState extends ConsumerState<_QuickStockActionBody> {
           return;
         }
       }
-
-      _applyOptimisticListPatch(saved, parsed);
-      unawaited(_afterSaveBackground(parsed));
 
       try {
         await _completeSaveSuccess(

@@ -70,6 +70,8 @@ class _CatalogItemCreatePageState extends ConsumerState<CatalogItemCreatePage> {
   bool _bagDetectDismissed = false;
   String? _kgFieldError;
   bool _selectingType = false;
+  bool _selectingSupplier = false;
+  bool _selectingBroker = false;
 
   static final _kgInName =
       RegExp(r'(\d+(?:\.\d+)?)\s*kg', caseSensitive: false);
@@ -124,6 +126,7 @@ class _CatalogItemCreatePageState extends ConsumerState<CatalogItemCreatePage> {
   }
 
   Future<void> _loadSavedParty() async {
+    if (_selectingSupplier || _selectingBroker) return;
     final session = ref.read(sessionProvider);
     if (session == null) return;
     if (widget.defaultSupplierId != null &&
@@ -368,6 +371,16 @@ class _CatalogItemCreatePageState extends ConsumerState<CatalogItemCreatePage> {
   }
 
   bool _validate() {
+    if (_supplierId == null && _supplierSearchCtrl.text.trim().isNotEmpty) {
+      setState(() => _error =
+          'Supplier not selected — pick from the dropdown list or clear the field.');
+      return false;
+    }
+    if (_brokerId == null && _brokerSearchCtrl.text.trim().isNotEmpty) {
+      setState(() => _error =
+          'Broker not selected — pick from the dropdown list or clear the field.');
+      return false;
+    }
     if (_nameCtrl.text.trim().isEmpty) {
       setState(() => _error = 'Item name is required.');
       return false;
@@ -726,7 +739,9 @@ class _CatalogItemCreatePageState extends ConsumerState<CatalogItemCreatePage> {
                                   _typeId = it.id;
                                   _typeSearchCtrl.text = it.label;
                                 });
-                                _selectingType = false;
+                                WidgetsBinding.instance.addPostFrameCallback((_) {
+                                  if (mounted) _selectingType = false;
+                                });
                               },
                             ),
                           ],
@@ -776,6 +791,8 @@ class _CatalogItemCreatePageState extends ConsumerState<CatalogItemCreatePage> {
                       weightPerTinController: _wptCtrl,
                       weightError: _kgFieldError,
                       itemNameForAutofill: _nameCtrl.text,
+                      autoFilledWeight:
+                          _bagDetectHint != null && !_bagDetectDismissed,
                     ),
                     const SizedBox(height: 8),
                     ExpansionTile(
@@ -840,11 +857,17 @@ class _CatalogItemCreatePageState extends ConsumerState<CatalogItemCreatePage> {
                 items: _supplierItems(sups),
                 controller: _supplierSearchCtrl,
                 placeholder: 'Search supplier…',
-                onSelected: (it) => setState(() {
-                  _supplierId = it.id;
-                  _supplierSearchCtrl.text = it.label;
-                  _supplierManuallySelected = true;
-                }),
+                onSelected: (it) {
+                  _selectingSupplier = true;
+                  setState(() {
+                    _supplierId = it.id;
+                    _supplierSearchCtrl.text = it.label;
+                    _supplierManuallySelected = true;
+                  });
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    if (mounted) _selectingSupplier = false;
+                  });
+                },
               ),
               const SizedBox(height: 14),
             ],
@@ -877,11 +900,17 @@ class _CatalogItemCreatePageState extends ConsumerState<CatalogItemCreatePage> {
                 items: _brokerItems(rows),
                 controller: _brokerSearchCtrl,
                 placeholder: 'Search broker…',
-                onSelected: (it) => setState(() {
-                  _brokerId = it.id;
-                  _brokerSearchCtrl.text = it.label;
-                  _brokerManuallySelected = true;
-                }),
+                onSelected: (it) {
+                  _selectingBroker = true;
+                  setState(() {
+                    _brokerId = it.id;
+                    _brokerSearchCtrl.text = it.label;
+                    _brokerManuallySelected = true;
+                  });
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    if (mounted) _selectingBroker = false;
+                  });
+                },
               ),
               const SizedBox(height: 14),
             ],

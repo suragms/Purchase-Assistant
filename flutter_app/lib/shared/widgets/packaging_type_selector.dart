@@ -4,7 +4,7 @@ import '../../core/unit_engine/stock_tracking_profile.dart';
 import '../../core/utils/unit_utils.dart';
 
 /// Packaging type picker for catalog create/edit.
-class PackagingTypeSelector extends StatelessWidget {
+class PackagingTypeSelector extends StatefulWidget {
   const PackagingTypeSelector({
     super.key,
     required this.selectedMode,
@@ -16,20 +16,8 @@ class PackagingTypeSelector extends StatelessWidget {
     this.tinError,
     this.itemNameForAutofill,
     this.compactLayout = false,
+    this.autoFilledWeight = false,
   });
-
-  void _autofillWeightFromName(String mode) {
-    if (weightController == null || itemNameForAutofill == null) return;
-    if (mode != StockTrackingMode.wholesaleBag &&
-        mode != StockTrackingMode.retailPacket) {
-      return;
-    }
-    final m = RegExp(r'(\d+(?:\.\d+)?)\s*KG\b', caseSensitive: false)
-        .firstMatch(itemNameForAutofill!);
-    if (m != null && weightController!.text.trim().isEmpty) {
-      weightController!.text = m.group(1) ?? '';
-    }
-  }
 
   final String? selectedMode;
   final ValueChanged<String> onModeChanged;
@@ -42,6 +30,46 @@ class PackagingTypeSelector extends StatelessWidget {
 
   /// When true, show all unit chips in one row with short labels (kg, bag, pc, …).
   final bool compactLayout;
+
+  /// When true and weight field has a positive value, show locked auto-detected kg UI.
+  final bool autoFilledWeight;
+
+  @override
+  State<PackagingTypeSelector> createState() => _PackagingTypeSelectorState();
+}
+
+class _PackagingTypeSelectorState extends State<PackagingTypeSelector> {
+  bool _weightUnlocked = false;
+
+  @override
+  void didUpdateWidget(covariant PackagingTypeSelector oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!widget.autoFilledWeight && oldWidget.autoFilledWeight) {
+      _weightUnlocked = false;
+    }
+  }
+
+  void _autofillWeightFromName(String mode) {
+    if (widget.weightController == null || widget.itemNameForAutofill == null) {
+      return;
+    }
+    if (mode != StockTrackingMode.wholesaleBag &&
+        mode != StockTrackingMode.retailPacket) {
+      return;
+    }
+    final m = RegExp(r'(\d+(?:\.\d+)?)\s*KG\b', caseSensitive: false)
+        .firstMatch(widget.itemNameForAutofill!);
+    if (m != null && widget.weightController!.text.trim().isEmpty) {
+      widget.weightController!.text = m.group(1) ?? '';
+    }
+  }
+
+  bool get _showLockedWeight {
+    if (!widget.autoFilledWeight || _weightUnlocked) return false;
+    if (widget.weightController == null) return false;
+    final w = double.tryParse(widget.weightController!.text.trim());
+    return w != null && w > 0;
+  }
 
   static const modes = [
     StockTrackingMode.looseKg,
@@ -80,7 +108,7 @@ class PackagingTypeSelector extends StatelessWidget {
                 color: Theme.of(context).colorScheme.onSurfaceVariant,
               ),
         ),
-        if (suggestedMode != null) ...[
+        if (widget.suggestedMode != null) ...[
           const SizedBox(height: 8),
           Material(
             color: const Color(0xFFE8F5E9),
@@ -89,13 +117,13 @@ class PackagingTypeSelector extends StatelessWidget {
               dense: true,
               leading: const Icon(Icons.lightbulb_outline, size: 20),
               title: Text(
-                'Suggested: ${StockTrackingMode.shortLabelForMode(suggestedMode!)}',
+                'Suggested: ${StockTrackingMode.shortLabelForMode(widget.suggestedMode!)}',
                 style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
               ),
               trailing: TextButton(
                 onPressed: () {
-                  onModeChanged(suggestedMode!);
-                  _autofillWeightFromName(suggestedMode!);
+                  widget.onModeChanged(widget.suggestedMode!);
+                  _autofillWeightFromName(widget.suggestedMode!);
                 },
                 child: const Text('Use'),
               ),
@@ -103,37 +131,103 @@ class PackagingTypeSelector extends StatelessWidget {
           ),
         ],
         const SizedBox(height: 8),
-        if (compactLayout)
+        if (widget.compactLayout)
           _compactModeChips(context)
         else
           _modeChips(context, modes),
         const SizedBox(height: 12),
-        if (selectedMode == StockTrackingMode.wholesaleBag ||
-            selectedMode == StockTrackingMode.retailPacket) ...[
-          TextField(
-            controller: weightController,
-            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            decoration: InputDecoration(
-              labelText: selectedMode == StockTrackingMode.wholesaleBag
-                  ? 'Kg per bag *'
-                  : 'Kg per packet (optional)',
-              errorText: weightError,
-              border: const OutlineInputBorder(),
+        if (widget.selectedMode == StockTrackingMode.wholesaleBag ||
+            widget.selectedMode == StockTrackingMode.retailPacket) ...[
+          if (_showLockedWeight)
+            Material(
+              color: Theme.of(context).colorScheme.surfaceContainerHighest,
+              borderRadius: BorderRadius.circular(8),
+              child: InkWell(
+                borderRadius: BorderRadius.circular(8),
+                onTap: () => setState(() => _weightUnlocked = true),
+                child: Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.lock_outline,
+                        size: 18,
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              widget.selectedMode ==
+                                      StockTrackingMode.wholesaleBag
+                                  ? 'Kg per bag *'
+                                  : 'Kg per packet',
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .labelMedium
+                                  ?.copyWith(fontWeight: FontWeight.w700),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              'Auto-detected from name',
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodySmall
+                                  ?.copyWith(
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .onSurfaceVariant,
+                                  ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Text(
+                        '${widget.weightController!.text.trim()} kg',
+                        style: const TextStyle(fontWeight: FontWeight.w800),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Tap to edit',
+                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                              color: Theme.of(context).colorScheme.primary,
+                            ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            )
+          else
+            TextField(
+              controller: widget.weightController,
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
+              decoration: InputDecoration(
+                labelText: widget.selectedMode == StockTrackingMode.wholesaleBag
+                    ? 'Kg per bag *'
+                    : 'Kg per packet (optional)',
+                errorText: widget.weightError,
+                border: const OutlineInputBorder(),
+              ),
             ),
-          ),
         ],
-        if (selectedMode == StockTrackingMode.tin) ...[
+        if (widget.selectedMode == StockTrackingMode.tin) ...[
           TextField(
-            controller: weightPerTinController,
-            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            controller: widget.weightPerTinController,
+            keyboardType:
+                const TextInputType.numberWithOptions(decimal: true),
             decoration: InputDecoration(
               labelText: 'Litres / kg per tin (optional)',
-              errorText: tinError,
+              errorText: widget.tinError,
               border: const OutlineInputBorder(),
             ),
           ),
         ],
-        if (preview != null && !compactLayout) ...[
+        if (preview != null && !widget.compactLayout) ...[
           const SizedBox(height: 12),
           Container(
             padding: const EdgeInsets.all(12),
@@ -167,10 +261,10 @@ class PackagingTypeSelector extends StatelessWidget {
           ChoiceChip(
             label: Text(StockTrackingMode.shortLabelForMode(m)),
             selected: m == StockTrackingMode.piece
-                ? StockTrackingMode.isPieceLikeMode(selectedMode)
-                : selectedMode == m,
+                ? StockTrackingMode.isPieceLikeMode(widget.selectedMode)
+                : widget.selectedMode == m,
             onSelected: (_) {
-              onModeChanged(m);
+              widget.onModeChanged(m);
               _autofillWeightFromName(m);
             },
           ),
@@ -186,9 +280,9 @@ class PackagingTypeSelector extends StatelessWidget {
         for (final m in modeList)
           ChoiceChip(
             label: Text(StockTrackingMode.shortLabelForMode(m)),
-            selected: selectedMode == m,
+            selected: widget.selectedMode == m,
             onSelected: (_) {
-              onModeChanged(m);
+              widget.onModeChanged(m);
               _autofillWeightFromName(m);
             },
           ),
@@ -197,12 +291,12 @@ class PackagingTypeSelector extends StatelessWidget {
   }
 
   String? _buildPreview() {
-    if (selectedMode == null) return null;
-    final unit = StockTrackingMode.catalogUnitForMode(selectedMode!);
+    if (widget.selectedMode == null) return null;
+    final unit = StockTrackingMode.catalogUnitForMode(widget.selectedMode!);
     const sampleQty = 100.0;
-    if (selectedMode == StockTrackingMode.wholesaleBag ||
-        selectedMode == StockTrackingMode.retailPacket) {
-      final w = double.tryParse(weightController?.text.trim() ?? '');
+    if (widget.selectedMode == StockTrackingMode.wholesaleBag ||
+        widget.selectedMode == StockTrackingMode.retailPacket) {
+      final w = double.tryParse(widget.weightController?.text.trim() ?? '');
       if (w == null || w <= 0) {
         return 'Enter weight to see total kg equivalent.';
       }
@@ -210,7 +304,7 @@ class PackagingTypeSelector extends StatelessWidget {
       final kg = sampleQty * w;
       return '$primary\n(${formatStockQtyNumber(kg)} kg total)';
     }
-    if (selectedMode == StockTrackingMode.looseKg) {
+    if (widget.selectedMode == StockTrackingMode.looseKg) {
       return '${formatStockQtyNumber(sampleQty)} kg';
     }
     return stockDisplayPrimary(sampleQty, unit);
