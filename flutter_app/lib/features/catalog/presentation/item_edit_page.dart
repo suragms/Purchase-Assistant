@@ -14,6 +14,7 @@ import '../../../core/design_system/hexa_responsive.dart';
 import '../../../core/router/navigation_ext.dart';
 import '../../../core/utils/unit_utils.dart';
 import '../../../core/widgets/friendly_load_error.dart';
+import '../../../shared/widgets/desktop_page_shell.dart';
 import 'widgets/catalog_item_defaults_edit_form.dart';
 
 class ItemEditPage extends ConsumerStatefulWidget {
@@ -261,38 +262,41 @@ class _ItemEditPageState extends ConsumerState<ItemEditPage> {
           ),
         ],
       ),
-      body: showFormSpinner
-          ? const Center(child: CircularProgressIndicator())
-          : itemAsync.when(
-        loading: () {
-          final item = cachedItem;
-          if (item == null) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          _bindControllers(item);
-          return _editForm(
-            item: item,
-            stock: stock,
-            isOwner: isOwner,
-            openingQty: openingQty,
-            refreshing: true,
-          );
-        },
-        error: (_, __) => FriendlyLoadError(
-          message: 'Could not load catalog item',
-          onRetry: () =>
-              ref.invalidate(catalogItemDetailProvider(widget.itemId)),
-        ),
-        data: (item) {
-          _bindControllers(item);
-          return _editForm(
-            item: item,
-            stock: stock,
-            isOwner: isOwner,
-            openingQty: openingQty,
-            refreshing: itemAsync.isLoading && cachedItem != null,
-          );
-        },
+      body: DesktopPageShell(
+        maxContentWidth: 900,
+        child: showFormSpinner
+            ? const Center(child: CircularProgressIndicator())
+            : itemAsync.when(
+                loading: () {
+                  final item = cachedItem;
+                  if (item == null) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+                  _bindControllers(item);
+                  return _editForm(
+                    item: item,
+                    stock: stock,
+                    isOwner: isOwner,
+                    openingQty: openingQty,
+                    refreshing: true,
+                  );
+                },
+                error: (_, __) => FriendlyLoadError(
+                  message: 'Could not load catalog item',
+                  onRetry: () =>
+                      ref.invalidate(catalogItemDetailProvider(widget.itemId)),
+                ),
+                data: (item) {
+                  _bindControllers(item);
+                  return _editForm(
+                    item: item,
+                    stock: stock,
+                    isOwner: isOwner,
+                    openingQty: openingQty,
+                    refreshing: itemAsync.isLoading && cachedItem != null,
+                  );
+                },
+              ),
       ),
     );
   }

@@ -966,6 +966,7 @@ class _StockPageState extends ConsumerState<StockPage>
         tabController: _tabs,
       ),
       body: HexaWebPageFrame(
+        fullWidth: true,
         child: TabBarView(
           controller: _tabs,
           children: [

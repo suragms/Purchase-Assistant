@@ -14,16 +14,21 @@ import '../../../core/json_coerce.dart';
 import '../../../core/providers/business_aggregates_invalidation.dart'
     show invalidateWarehouseSurfacesAfterStockWrite;
 import '../../../core/providers/deferred_invalidation.dart'
-    show deferInvalidateDelayed;
+    show deferInvalidate, deferInvalidateDelayed;
 import '../../../core/providers/item_detail_providers.dart';
 import '../../../core/notifications/local_notifications_service.dart';
 import '../../../core/providers/home_owner_dashboard_providers.dart'
-    show stockAuditPeriodProvider;
+    show
+        homeInventorySummaryProvider,
+        homeStockAttentionCountProvider,
+        stockAuditPeriodProvider;
 import '../../../core/providers/stock_providers.dart'
     show
         applyStockListRowPatch,
         stockChangesFeedProvider,
-        stockListQueryProvider;
+        stockFilteredStatusCountsProvider,
+        stockListQueryProvider,
+        stockStatusCountsProvider;
 import '../stock_list_row_patch.dart'
     show stockListPatchFromPhysicalCount, stockListPatchFromStockDetail;
 import '../../../core/providers/notification_center_provider.dart';
@@ -488,10 +493,13 @@ class _QuickStockActionBodyState extends ConsumerState<_QuickStockActionBody> {
       widget.parentRef,
       itemId: _itemId,
     );
+    deferInvalidate(widget.parentRef, homeInventorySummaryProvider);
+    deferInvalidate(widget.parentRef, homeStockAttentionCountProvider);
+    deferInvalidate(widget.parentRef, stockStatusCountsProvider);
+    deferInvalidate(widget.parentRef, stockFilteredStatusCountsProvider);
     deferInvalidateDelayed(
       widget.parentRef,
       itemDetailBundleProvider(_itemId),
-      delay: const Duration(milliseconds: 1200),
     );
     deferInvalidateDelayed(widget.parentRef, stockAuditPeriodProvider);
     deferInvalidateDelayed(widget.parentRef, stockChangesFeedProvider);

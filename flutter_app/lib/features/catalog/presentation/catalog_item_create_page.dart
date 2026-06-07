@@ -16,6 +16,7 @@ import '../../../core/providers/stock_providers.dart' show bulkStockListProvider
 import '../../../core/unit_engine/stock_tracking_profile.dart';
 import '../../../core/widgets/async_value_form.dart';
 import '../../../shared/widgets/inline_search_field.dart';
+import '../../../shared/widgets/desktop_page_shell.dart';
 import '../../../shared/widgets/packaging_type_selector.dart';
 import '../catalog_create_prefs.dart';
 
@@ -47,7 +48,6 @@ typedef QuickAddCatalogItemPage = CatalogItemCreatePage;
 class _CatalogItemCreatePageState extends ConsumerState<CatalogItemCreatePage> {
   final _nameCtrl = TextEditingController();
   final _kgCtrl = TextEditingController();
-  final _ipbCtrl = TextEditingController();
   final _wptCtrl = TextEditingController();
   final _hsnCtrl = TextEditingController();
   final _purchaseRateCtrl = TextEditingController();
@@ -67,7 +67,6 @@ class _CatalogItemCreatePageState extends ConsumerState<CatalogItemCreatePage> {
   String? _bagDetectHint;
   bool _bagDetectDismissed = false;
   String? _kgFieldError;
-  String? _ipbFieldError;
   bool _selectingType = false;
 
   static final _kgInName =
@@ -200,11 +199,7 @@ class _CatalogItemCreatePageState extends ConsumerState<CatalogItemCreatePage> {
     if (_boxInName.hasMatch(name)) {
       setState(() {
         _packagingMode = StockTrackingMode.box;
-        if (_ipbCtrl.text.trim().isEmpty) {
-          _ipbCtrl.text = '1';
-        }
         _bagDetectHint = 'Default: 1 box = 1 unit';
-        _ipbFieldError = null;
       });
       return;
     }
@@ -231,9 +226,7 @@ class _CatalogItemCreatePageState extends ConsumerState<CatalogItemCreatePage> {
         _kgFieldError = null;
       }
       if (mode == StockTrackingMode.box &&
-          _ipbCtrl.text.trim().isEmpty &&
           _boxInName.hasMatch(_nameCtrl.text)) {
-        _ipbCtrl.text = '1';
         _bagDetectHint = 'Default: 1 box = 1 unit';
       }
       if (mode == StockTrackingMode.wholesaleBag) {
@@ -264,7 +257,6 @@ class _CatalogItemCreatePageState extends ConsumerState<CatalogItemCreatePage> {
     _typeSearchCtrl.removeListener(_onTypeSearchChanged);
     _nameCtrl.dispose();
     _kgCtrl.dispose();
-    _ipbCtrl.dispose();
     _wptCtrl.dispose();
     _hsnCtrl.dispose();
     _purchaseRateCtrl.dispose();
@@ -396,17 +388,6 @@ class _CatalogItemCreatePageState extends ConsumerState<CatalogItemCreatePage> {
         return false;
       }
     }
-    if (_packagingMode == StockTrackingMode.box) {
-      final ipb = double.tryParse(_ipbCtrl.text.trim());
-      if (ipb == null || ipb <= 0) {
-        setState(() {
-          _ipbFieldError = 'Items per box is required';
-          _error =
-              'Enter items per box (use 1 if each box is one unit).';
-        });
-        return false;
-      }
-    }
     if (_packagingMode == StockTrackingMode.tin) {
       final wpt = double.tryParse(_wptCtrl.text.trim());
       if (wpt == null || wpt <= 0) {
@@ -417,7 +398,6 @@ class _CatalogItemCreatePageState extends ConsumerState<CatalogItemCreatePage> {
     setState(() {
       _error = null;
       _kgFieldError = null;
-      _ipbFieldError = null;
     });
     return true;
   }
@@ -468,7 +448,6 @@ class _CatalogItemCreatePageState extends ConsumerState<CatalogItemCreatePage> {
   void _resetForAddMore() {
     _nameCtrl.clear();
     _kgCtrl.clear();
-    _ipbCtrl.clear();
     _wptCtrl.clear();
     _hsnCtrl.clear();
     _purchaseRateCtrl.clear();
@@ -533,8 +512,8 @@ class _CatalogItemCreatePageState extends ConsumerState<CatalogItemCreatePage> {
 
     final defaultUnit = StockTrackingMode.catalogUnitForMode(_packagingMode);
     final kgPerBag = _modeUsesWeightField ? _parsedKg() : null;
-    final ipb = double.tryParse(_ipbCtrl.text.trim());
     final wpt = double.tryParse(_wptCtrl.text.trim());
+    final boxIpb = _packagingMode == StockTrackingMode.box ? 1.0 : null;
 
     try {
       final created = await ref.read(hexaApiProvider).createCatalogItem(
@@ -547,10 +526,7 @@ class _CatalogItemCreatePageState extends ConsumerState<CatalogItemCreatePage> {
             defaultBrokerIds: brokerIds,
             hsnCode: hsn.isEmpty ? null : hsn,
             defaultKgPerBag: kgPerBag,
-            defaultItemsPerBox:
-                _packagingMode == StockTrackingMode.box && ipb != null && ipb > 0
-                    ? ipb
-                    : null,
+            defaultItemsPerBox: boxIpb,
             defaultWeightPerTin:
                 _packagingMode == StockTrackingMode.tin && wpt != null && wpt > 0
                     ? wpt
@@ -707,7 +683,9 @@ class _CatalogItemCreatePageState extends ConsumerState<CatalogItemCreatePage> {
             ),
           ),
         body: SafeArea(
-          child: Column(
+          child: DesktopPageShell(
+            maxContentWidth: 900,
+            child: Column(
             children: [
               Expanded(
                 child: ListView(
@@ -779,16 +757,15 @@ class _CatalogItemCreatePageState extends ConsumerState<CatalogItemCreatePage> {
                     const SizedBox(height: 14),
                     PackagingTypeSelector(
                       compactLayout: true,
+                      showItemsPerBoxField: false,
                       selectedMode: _packagingMode,
                       onModeChanged: _onPackagingModeChanged,
                       suggestedMode: StockTrackingMode.suggestFromName(
                         _nameCtrl.text,
                       ),
                       weightController: _kgCtrl,
-                      itemsPerBoxController: _ipbCtrl,
                       weightPerTinController: _wptCtrl,
                       weightError: _kgFieldError,
-                      boxError: _ipbFieldError,
                       itemNameForAutofill: _nameCtrl.text,
                     ),
                     const SizedBox(height: 8),
@@ -800,7 +777,9 @@ class _CatalogItemCreatePageState extends ConsumerState<CatalogItemCreatePage> {
                               fontWeight: FontWeight.w700,
                             ),
                       ),
-                      subtitle: const Text('HSN and rates (item code auto-generated)'),
+                      subtitle: const Text(
+                        'HSN, rates (item code + barcode auto-generated)',
+                      ),
                       children: _buildMoreOptions(),
                     ),
                     if (_error != null) ...[
@@ -814,6 +793,7 @@ class _CatalogItemCreatePageState extends ConsumerState<CatalogItemCreatePage> {
             ],
           ),
         ),
+      ),
       ),
       ),
     );

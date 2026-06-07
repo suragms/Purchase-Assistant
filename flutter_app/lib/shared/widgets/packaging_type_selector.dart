@@ -18,6 +18,7 @@ class PackagingTypeSelector extends StatelessWidget {
     this.tinError,
     this.itemNameForAutofill,
     this.compactLayout = false,
+    this.showItemsPerBoxField = true,
   });
 
   void _autofillBoxFromName(String mode) {
@@ -58,6 +59,9 @@ class PackagingTypeSelector extends StatelessWidget {
 
   /// When true, show all unit chips in one row with short labels (kg, bag, pc, …).
   final bool compactLayout;
+
+  /// Hide items-per-box input (create form uses silent default of 1).
+  final bool showItemsPerBoxField;
 
   static const modes = [
     StockTrackingMode.looseKg,
@@ -139,7 +143,9 @@ class PackagingTypeSelector extends StatelessWidget {
             ),
           ),
         ],
-        if (selectedMode == StockTrackingMode.box) ...[
+        if (selectedMode == StockTrackingMode.box &&
+            showItemsPerBoxField &&
+            itemsPerBoxController != null) ...[
           TextField(
             controller: itemsPerBoxController,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),

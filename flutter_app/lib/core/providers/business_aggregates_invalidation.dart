@@ -358,16 +358,19 @@ void invalidateWarehouseSurfacesLight(dynamic ref, {String? itemId}) {
   }
 }
 
-/// After stock save — keep optimistic patch visible; defer list refetch ≥1.5s.
+/// After stock save — keep optimistic patch visible; defer list refetch ~400ms.
 void invalidateWarehouseSurfacesAfterStockWrite(dynamic ref, {String? itemId}) {
   if (itemId != null && itemId.isNotEmpty) {
     invalidateWarehouseItemSurfacesLight(ref, itemId: itemId);
   }
-  const listDelay = Duration(milliseconds: 800);
+  ref.invalidate(homeInventorySummaryProvider);
+  ref.invalidate(homeStockAttentionCountProvider);
+  ref.invalidate(stockStatusCountsProvider);
+  ref.invalidate(stockFilteredStatusCountsProvider);
+  const listDelay = Duration(milliseconds: 400);
   deferInvalidateDelayed(ref, stockListProvider, delay: listDelay);
   deferInvalidateDelayed(ref, stockDeliveryIndicatorCountsProvider, delay: listDelay);
   deferInvalidateDelayed(ref, bulkStockListProvider, delay: listDelay);
-  deferInvalidateDelayed(ref, stockStatusCountsProvider, delay: listDelay);
   deferInvalidateDelayed(ref, stockOnHandTotalsProvider, delay: listDelay);
   deferInvalidateDelayed(ref, staffLowStockAlertsProvider, delay: listDelay);
   deferInvalidateDelayed(ref, warehouseAlertsProvider, delay: listDelay);

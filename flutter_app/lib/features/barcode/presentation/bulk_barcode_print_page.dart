@@ -83,6 +83,13 @@ class _BulkBarcodePrintPageState extends ConsumerState<BulkBarcodePrintPage> {
   }
 
   void _toggleSelected(String id, bool on) {
+    if (on && id.isNotEmpty) {
+      final downloaded = ref.read(bulkBarcodeDownloadedIdsProvider);
+      if (downloaded.contains(id)) {
+        _promptReprintAlreadyPrinted(id);
+        return;
+      }
+    }
     final next = Set<String>.from(_selected);
     if (on) {
       next.add(id);
@@ -90,6 +97,47 @@ class _BulkBarcodePrintPageState extends ConsumerState<BulkBarcodePrintPage> {
       next.remove(id);
     }
     _setSelected(next);
+  }
+
+  void _promptReprintAlreadyPrinted(String id) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: const Text('Already printed — print again?'),
+        action: SnackBarAction(
+          label: 'Print again',
+          onPressed: () {
+            final prev = ref.read(bulkBarcodeDownloadedIdsProvider);
+            ref.read(bulkBarcodeDownloadedIdsProvider.notifier).state = {
+              ...prev,
+            }..remove(id);
+            ref.read(bulkPreviewItemIdProvider.notifier).state = id;
+            final desktop =
+                MediaQuery.sizeOf(context).width >= kDesktopMin;
+            if (!desktop) {
+              showHexaBottomSheet<void>(
+                context: context,
+                compact: false,
+                padding: EdgeInsets.zero,
+                child: SizedBox(
+                  height: 280,
+                  child: BulkBarcodePrintPreviewPanel(
+                    denseA4: _denseA4,
+                    useQr: _useQr,
+                    copies: _copies,
+                    selectedCount: 1,
+                    onPreviewAll: () {
+                      Navigator.pop(context);
+                      unawaited(_preview());
+                    },
+                  ),
+                ),
+              );
+            }
+          },
+        ),
+      ),
+    );
   }
 
   /// Large batches: A4 sheet + Code128 + 50 labels per PDF file (web-safe).
@@ -236,18 +284,8 @@ class _BulkBarcodePrintPageState extends ConsumerState<BulkBarcodePrintPage> {
         return;
       }
       allIds = printableIds;
-      if (!effectiveMultiBatch && allIds.length > _kMaxLabelsPerPdf) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              previewMode
-                  ? 'Preview shows the first $_kMaxLabelsPerPdf of ${allIds.length} selected.'
-                  : 'Processing first $_kMaxLabelsPerPdf of ${allIds.length} selected.',
-            ),
-          ),
-        );
-        allIds = allIds.sublist(0, _kMaxLabelsPerPdf);
+      if (allIds.length > _kMaxLabelsPerPdf) {
+        effectiveMultiBatch = true;
       }
 
       final idBatches = effectiveMultiBatch

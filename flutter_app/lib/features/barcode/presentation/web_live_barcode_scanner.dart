@@ -8,6 +8,12 @@ abstract class WebLiveBarcodeScanner {
 
   Future<bool> start(void Function(String code) onDetected);
 
+  /// Pause decode loop but keep camera stream (web singleton).
+  Future<void> pause();
+
+  /// Resume decode after [pause] with the same callback as [start].
+  Future<void> resume(void Function(String code) onDetected);
+
   Future<void> stop();
 
   Widget buildPreview();

@@ -1,24 +1,27 @@
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 
 import 'hexa_responsive.dart';
 
-/// Web desktop: centered content with max width and horizontal padding.
+/// Desktop (web + native): centered content with max width and horizontal padding.
 class HexaWebPageFrame extends StatelessWidget {
   const HexaWebPageFrame({
     super.key,
     required this.child,
     this.maxWidth = HexaResponsive.maxContentWidth,
     this.horizontalPadding = 24,
+    this.fullWidth = false,
   });
 
   final Widget child;
   final double maxWidth;
   final double horizontalPadding;
 
+  /// Master-detail pages (stock list + detail) need full shell width.
+  final bool fullWidth;
+
   @override
   Widget build(BuildContext context) {
-    if (!kIsWeb || !context.isDesktopLayout) {
+    if (fullWidth || !context.isDesktopLayout) {
       return child;
     }
     return LayoutBuilder(

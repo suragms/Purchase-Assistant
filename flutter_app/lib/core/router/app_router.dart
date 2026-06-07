@@ -1261,7 +1261,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
                 name: 'staff_home',
                 builder: (context, state) => HexaPageErrorBoundary(
                   title: 'Staff home could not load',
-                  fallbackRoute: '/staff/home',
+                  fallbackRoute: '/login',
                   shellBranchIndex: StaffShellBranch.home,
                   child: const StaffDashboardPage(),
                 ),

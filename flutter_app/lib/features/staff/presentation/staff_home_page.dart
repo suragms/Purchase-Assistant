@@ -12,7 +12,7 @@ import '../../../core/providers/notifications_provider.dart';
 import '../../../core/providers/staff_home_providers.dart';
 import '../../../core/providers/stock_providers.dart';
 import '../../../core/theme/hexa_colors.dart';
-import '../../../core/widgets/friendly_load_error.dart';
+import '../../../shared/widgets/desktop_page_shell.dart';
 import 'widgets/staff_home_auto_refresh_listener.dart';
 import 'widgets/staff_home_dashboard_widgets.dart';
 import 'widgets/staff_home_pending_delivery_cards.dart';
@@ -190,8 +190,6 @@ class StaffHomePage extends ConsumerWidget {
     final openingCount = ref.watch(staffOpeningStockCountProvider);
     final mismatchAsync = ref.watch(staffStockMismatchCountProvider);
     final mismatchCount = mismatchAsync.valueOrNull ?? 0;
-    final kpisAsync = ref.watch(staffDeliveryPipelineKpisProvider);
-
     final showAttention = (staffHomeShowsPurchaseTools(focus) &&
             pendingDeliveries > 0) ||
         lowCount > 0 ||
@@ -199,15 +197,16 @@ class StaffHomePage extends ConsumerWidget {
         (staffHomeShowsBarcodeTools(focus) && missingCount > 0) ||
         mismatchCount > 0;
 
-    final criticalError = kpisAsync.hasError ? kpisAsync.error : null;
-
     return StaffHomeAutoRefreshListener(
       child: Scaffold(
       backgroundColor: HexaColors.brandBackground,
       body: SafeArea(
         child: RefreshIndicator(
           onRefresh: () async => _invalidateStaffHomeRefresh(ref),
-          child: ListView(
+          child: DesktopPageShell(
+            maxContentWidth: 560,
+            minWidth: 900,
+            child: ListView(
             padding: const EdgeInsets.fromLTRB(
               HexaOp.pageGutter,
               8,
@@ -270,14 +269,6 @@ class StaffHomePage extends ConsumerWidget {
                   ),
                 ],
               ),
-              if (criticalError != null) ...[
-                const SizedBox(height: HexaOp.cardGap),
-                FriendlyLoadError(
-                  message:
-                      'Could not load floor data — pull to retry or sign in again.',
-                  onRetry: () => _invalidateStaffHomeRefresh(ref),
-                ),
-              ],
               const SizedBox(height: HexaOp.cardGap),
               const StaffHomeFloorKpiRow(),
               const SizedBox(height: HexaOp.cardGap),
@@ -432,6 +423,7 @@ class StaffHomePage extends ConsumerWidget {
           ),
         ),
       ),
+    ),
     ),
     );
   }

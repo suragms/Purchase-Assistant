@@ -229,7 +229,9 @@ class _InlineSearchFieldState extends State<InlineSearchField> {
         if (mounted) next.requestFocus();
       });
     } else if (!keepFocus) {
-      _focus.unfocus();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _focus.unfocus();
+      });
     }
   }
 
@@ -395,10 +397,14 @@ class _InlineSearchFieldState extends State<InlineSearchField> {
                                   ),
                                   itemBuilder: (BuildContext ctx, int i) {
                                     final it = opts[i];
-                                    return Listener(
-                                      onPointerUp: (_) {
+                                    return GestureDetector(
+                                      onTap: () {
                                         _pendingSelection = null;
                                         _pick(it, keepFocus: false);
+                                        WidgetsBinding.instance
+                                            .addPostFrameCallback((_) {
+                                          if (mounted) _focus.unfocus();
+                                        });
                                       },
                                       behavior: HitTestBehavior.opaque,
                                       child: ConstrainedBox(

@@ -908,6 +908,7 @@ Future<List<HomeActivityItem>> _fetchHomeWarehouseActivity(
 
 final homeRecentActivityFeedProvider =
     FutureProvider.autoDispose<List<HomeActivityItem>>((ref) async {
+  _providerKeepAlive(ref, const Duration(seconds: 30));
   ref.watch(homePeriodProvider);
   ref.watch(homeCustomDateRangeProvider);
   return _fetchHomeWarehouseActivity(ref, purchaseLimit: 15, maxItems: 15);

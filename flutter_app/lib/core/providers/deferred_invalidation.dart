@@ -13,7 +13,7 @@ void deferInvalidate(dynamic ref, Object provider) {
 void deferInvalidateDelayed(
   dynamic ref,
   Object provider, {
-  Duration delay = const Duration(milliseconds: 1500),
+  Duration delay = const Duration(milliseconds: 400),
 }) {
   SchedulerBinding.instance.addPostFrameCallback((_) {
     Timer(delay, () => ref.invalidate(provider));

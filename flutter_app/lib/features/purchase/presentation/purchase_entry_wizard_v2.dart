@@ -18,6 +18,7 @@ import '../../../core/design_system/hexa_responsive.dart';
 import '../../../core/json_coerce.dart' show coerceToDoubleNullable;
 import '../../../core/models/trade_purchase_models.dart';
 import '../../../core/widgets/form_field_scroll.dart';
+import '../../../core/widgets/friendly_load_error.dart';
 import '../../../core/widgets/hexa_page_error_boundary.dart';
 import '../../../core/providers/brokers_list_provider.dart';
 import '../../../core/utils/currency_utils.dart';
@@ -2763,19 +2764,10 @@ class _PurchaseEntryWizardV2State extends ConsumerState<PurchaseEntryWizardV2>
                   child: LinearProgressIndicator(minHeight: 3),
                 ),
               if (showCatalogErrorStrip)
-                Material(
-                  color: Colors.orange.shade50,
-                  child: Padding(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    child: Text(
+                FriendlyLoadError(
+                  message:
                       'Catalog could not refresh. Check your connection and try again.',
-                      style: TextStyle(
-                        color: Colors.orange.shade900,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ),
+                  onRetry: () => ref.invalidate(catalogItemsListProvider),
                 ),
               Expanded(
                 child: _buildWizardBody(

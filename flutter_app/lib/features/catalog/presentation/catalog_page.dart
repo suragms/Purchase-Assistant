@@ -15,6 +15,7 @@ import '../../../core/theme/hexa_colors.dart';
 import '../../../core/widgets/list_skeleton.dart';
 import '../../../core/widgets/friendly_load_error.dart';
 import '../../../core/widgets/business_write_surface_listener.dart';
+import '../../../shared/widgets/desktop_page_shell.dart';
 import 'widgets/quick_catalog_taxonomy_sheet.dart';
 
 /// Category list (layer 1). Subcategories and items live on deeper routes.
@@ -162,7 +163,9 @@ class _CatalogPageState extends ConsumerState<CatalogPage> {
         icon: const Icon(Icons.add_rounded),
         label: const Text('Add category'),
       ),
-      body: Column(
+      body: DesktopPageShell(
+        maxContentWidth: 900,
+        child: Column(
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
@@ -442,6 +445,7 @@ class _CatalogPageState extends ConsumerState<CatalogPage> {
           ),
         ],
       ),
+    ),
     ),
     );
   }

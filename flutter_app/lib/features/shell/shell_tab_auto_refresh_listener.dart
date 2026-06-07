@@ -49,6 +49,8 @@ class _ShellTabAutoRefreshListenerState
       case ShellBranch.stock:
         ref.invalidate(stockListProvider);
         ref.invalidate(stockStatusCountsProvider);
+        ref.invalidate(stockFilteredStatusCountsProvider);
+        ref.invalidate(stockDeliveryIndicatorCountsProvider);
       case ShellBranch.reports:
         markReportsPurchasesNeedsLiveFetch(ref);
         if (ref.read(shellCurrentBranchProvider) == ShellBranch.reports) {

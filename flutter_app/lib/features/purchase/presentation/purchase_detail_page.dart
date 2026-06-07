@@ -649,6 +649,16 @@ class PurchaseDetailBodyState extends ConsumerState<PurchaseDetailBody> {
     return ref.read(catalogItemsListProvider).valueOrNull ?? const [];
   }
 
+  bool _catalogLoadedForCommit() {
+    final async = ref.read(catalogItemsListProvider);
+    return async.hasValue;
+  }
+
+  bool _catalogLoadingForCommit() {
+    final async = ref.read(catalogItemsListProvider);
+    return async.isLoading && !async.hasValue;
+  }
+
   List<PurchaseStockCommitIssue> _stockCommitIssues(TradePurchase p) {
     return findPurchaseStockCommitIssues(p, _catalogRows());
   }
@@ -997,6 +1007,21 @@ class PurchaseDetailBodyState extends ConsumerState<PurchaseDetailBody> {
 
   Future<void> _commitStock(BuildContext context, TradePurchase p) async {
     if (_deliveryActionInFlight) return;
+    if (_catalogLoadingForCommit()) {
+      showTopSnack(
+        context,
+        'Loading catalog — wait a moment, then try again.',
+      );
+      return;
+    }
+    if (!_catalogLoadedForCommit()) {
+      ref.invalidate(catalogItemsListProvider);
+      showTopSnack(
+        context,
+        'Catalog not loaded — retrying. Try commit again in a moment.',
+      );
+      return;
+    }
     final issues = _stockCommitIssues(p);
     if (issues.isNotEmpty) {
       await _showStockCommitBlockedDialog(context, p, issues);
@@ -1221,6 +1246,11 @@ class PurchaseDetailBodyState extends ConsumerState<PurchaseDetailBody> {
     bool paidPending,
     PurchaseStatus st,
   ) {
+    final catalogAsync = ref.watch(catalogItemsListProvider);
+    final catalogLoadingForCommit =
+        catalogAsync.isLoading && !catalogAsync.hasValue;
+    final canCommitNow = _canCommitStock() && !catalogLoadingForCommit;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -1273,6 +1303,18 @@ class PurchaseDetailBodyState extends ConsumerState<PurchaseDetailBody> {
               return _stockCommitSetupBanner(context, p, issues);
             },
           ),
+          if (catalogLoadingForCommit)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Text(
+                'Loading catalog for commit checks…',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: cs.onSurfaceVariant,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
         ],
         PurchaseDetailDeliveryBanner(
           purchase: p,
@@ -1286,8 +1328,7 @@ class PurchaseDetailBodyState extends ConsumerState<PurchaseDetailBody> {
           onVerify: (_isStaff() || _isOwnerOrManager())
               ? () => _verify(context, p)
               : null,
-          onCommit:
-              _canCommitStock() ? () => _commitStock(context, p) : null,
+          onCommit: canCommitNow ? () => _commitStock(context, p) : null,
           onRevert: _isOwnerOrManager()
               ? () => _revertDelivery(context, p)
               : null,

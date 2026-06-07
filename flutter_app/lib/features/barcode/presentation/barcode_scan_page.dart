@@ -224,7 +224,11 @@ class _BarcodeScanPageState extends ConsumerState<BarcodeScanPage>
     await prefs.setBool(_kCameraPermGrantedKey, true);
   }
 
-  Future<void> _stopWebLiveScanner() async {
+  Future<void> _stopWebLiveScanner({bool fullStop = true}) async {
+    if (!fullStop && kIsWeb && _webLiveScanner != null) {
+      await _webLiveScanner!.pause();
+      return;
+    }
     await _webLiveScanner?.stop();
     _webLiveScanner = null;
     _useWebDetectorPreview = false;
@@ -369,7 +373,7 @@ class _BarcodeScanPageState extends ConsumerState<BarcodeScanPage>
             BarcodeCameraSession.webDetector != null) {
           _webLiveScanner = BarcodeCameraSession.webDetector;
           _useWebDetectorPreview = true;
-          await _webLiveScanner!.start(_onWebBarcodeCode);
+          await _webLiveScanner!.resume(_onWebBarcodeCode);
           if (mounted) {
             setState(() {
               _cameraDenied = false;
@@ -874,6 +878,9 @@ class _BarcodeScanPageState extends ConsumerState<BarcodeScanPage>
     _manualCtrl.dispose();
     _manualFocus.dispose();
     if (kIsWeb) {
+      if (_useWebDetectorPreview && BarcodeCameraSession.webDetector != null) {
+        unawaited(BarcodeCameraSession.webDetector!.pause());
+      }
       _webLiveScanner = null;
       _camera = null;
     } else {

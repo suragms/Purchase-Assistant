@@ -14,8 +14,8 @@ import '../../../core/providers/prefs_provider.dart'
 import '../../../core/router/navigation_ext.dart';
 import '../../../core/router/post_auth_route.dart'
     show sessionCanAdminUsers, sessionIsStaff;
-import '../../../core/design_system/hexa_responsive.dart';
 import '../../../core/theme/theme_context_ext.dart';
+import '../../../shared/widgets/desktop_page_shell.dart';
 import '../widgets/accounts_whatsapp_settings_card.dart';
 import '../widgets/backup_monthly_banner.dart';
 
@@ -352,16 +352,16 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                 ),
                 const VerticalDivider(width: 1),
                 Expanded(
-                  child: HexaResponsiveCenter(
-                    maxWidth: 720,
+                  child: DesktopPageShell(
+                    maxContentWidth: 720,
                     padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
                     child: settingsList,
                   ),
                 ),
               ],
             )
-          : HexaResponsiveCenter(
-              maxWidth: 720,
+          : DesktopPageShell(
+              maxContentWidth: 720,
               padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
               child: settingsList,
             ),
