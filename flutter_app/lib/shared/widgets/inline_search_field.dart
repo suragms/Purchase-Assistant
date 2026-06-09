@@ -1,10 +1,7 @@
 import 'dart:math' as math;
 
-import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-
-import '../../core/widgets/form_field_scroll.dart';
 
 /// A selectable option for [InlineSearchField].
 class InlineSearchItem {
@@ -12,26 +9,13 @@ class InlineSearchItem {
     required this.id,
     required this.label,
     this.subtitle,
-
-    /// Lowercase-ish blob for matching (e.g. name + code + HSN). Display stays [label].
     this.searchText,
-
-    /// Higher sorts earlier when match rank ties (e.g. supplier-linked catalog row).
-    this.sortBoost = 0,
-
-    /// Optional ERP metrics
-    this.pendingBalance,
-    this.lastPurchaseDate,
   });
 
   final String id;
   final String label;
   final String? subtitle;
   final String? searchText;
-  final int sortBoost;
-
-  final double? pendingBalance;
-  final String? lastPurchaseDate;
 
   @override
   bool operator ==(Object other) =>
@@ -42,9 +26,6 @@ class InlineSearchItem {
 }
 
 /// Inline search with [RawAutocomplete] overlay (max height 200, scrollable).
-///
-/// * Enter auto-picks when exactly one option matches the current query.
-/// * Blur auto-picks when typed text matches exactly one item (case-insensitive).
 class InlineSearchField extends StatefulWidget {
   const InlineSearchField({
     super.key,
@@ -82,13 +63,11 @@ class _InlineSearchFieldState extends State<InlineSearchField> {
   FocusNode get _focus => widget.focusNode ?? _ownedFocus;
   bool get _disposeFocus => widget.focusNode == null;
 
-  /// Same group as autocomplete options overlay so taps on suggestions are not "outside".
-  final Object _suggestionTapGroup = Object();
-
   bool _pickInProgress = false;
-  InlineSearchItem? _pendingSelection;
   String? _lastPickFingerprint;
   int _lastPickMs = 0;
+  InlineSearchItem? _pendingSelection;
+  final Object _suggestionTapGroup = Object();
 
   bool get _hasPendingSelection => _pendingSelection != null;
 
@@ -119,10 +98,6 @@ class _InlineSearchFieldState extends State<InlineSearchField> {
       _pick(pending, keepFocus: false);
       return;
     }
-    Future.delayed(const Duration(milliseconds: 150), () {
-      if (!mounted || _focus.hasFocus || _hasPendingSelection) return;
-      setState(() {});
-    });
     if (!_pickInProgress) {
       final q = _ctrl.text.trim().toLowerCase();
       if (q.isNotEmpty) {
@@ -151,44 +126,18 @@ class _InlineSearchFieldState extends State<InlineSearchField> {
     return false;
   }
 
-  int _matchRank(InlineSearchItem it, String q) {
-    final lab = it.label.toLowerCase();
-    final blob = (it.searchText ?? lab).toLowerCase();
-    final sub = (it.subtitle ?? '').toLowerCase();
-    if (lab == q) return 1000;
-    if (lab.startsWith(q)) return 920;
-    for (final token in blob.split(RegExp(r'\s+'))) {
-      if (token == q) return 880;
-      if (token.startsWith(q)) return 860;
-    }
-    if (lab.contains(q)) return 800;
-    if (sub.contains(q)) return 720;
-    if (blob.contains(q)) return 640;
-    return 0;
-  }
-
   Iterable<InlineSearchItem> _optionsForQuery(String raw) {
     final q = raw.trim().toLowerCase();
-    final min = widget.minQueryLength.clamp(0, 64);
-    if (q.isEmpty) {
-      if (min > 0) return const [];
-      final all = widget.items.toList();
-      if (all.length <= 8) return all;
-      return all.take(8);
-    }
-    if (q.length < min) return const [];
-    final matched = <InlineSearchItem>[];
+    final min = widget.minQueryLength.clamp(1, 64);
+    if (q.isEmpty || q.length < min) return const [];
+    final out = <InlineSearchItem>[];
     for (final it in widget.items) {
-      if (_matchRank(it, q) > 0) matched.add(it);
+      if (out.length >= 8) break;
+      final lab = it.label.toLowerCase();
+      final sub = (it.subtitle ?? '').toLowerCase();
+      if (lab.contains(q) || sub.contains(q)) out.add(it);
     }
-    matched.sort((a, b) {
-      final ra = _matchRank(a, q);
-      final rb = _matchRank(b, q);
-      if (ra != rb) return rb.compareTo(ra);
-      return b.sortBoost.compareTo(a.sortBoost);
-    });
-    if (matched.length <= 8) return matched;
-    return matched.take(8);
+    return out;
   }
 
   KeyEventResult _onKey(FocusNode node, KeyEvent event) {
@@ -257,14 +206,11 @@ class _InlineSearchFieldState extends State<InlineSearchField> {
     }
   }
 
-  double _optionsMaxHeight(BuildContext context, int optionCount) {
+  double _optionsMaxHeight(BuildContext context) {
     final mq = MediaQuery.of(context);
-    var usable = mq.size.height - mq.viewInsets.bottom - mq.padding.vertical;
-    if (defaultTargetPlatform == TargetPlatform.iOS) {
-      usable -= kMobileFormKeyboardAccessoryAllowance;
-    }
-    final byCount = optionCount * 56.0 + 48;
-    final v = math.max(120.0, math.min(usable * 0.42, byCount));
+    final usable =
+        mq.size.height - mq.viewInsets.bottom - mq.padding.vertical;
+    final v = math.max(120.0, usable * 0.42);
     return math.min(200.0, v);
   }
 
@@ -273,10 +219,6 @@ class _InlineSearchFieldState extends State<InlineSearchField> {
     final cs = Theme.of(context).colorScheme;
     return TapRegion(
       groupId: _suggestionTapGroup,
-      onTapOutside: (_) {
-        if (_pickInProgress) return;
-        _focus.unfocus();
-      },
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         mainAxisSize: MainAxisSize.min,
@@ -354,145 +296,82 @@ class _InlineSearchFieldState extends State<InlineSearchField> {
             ) {
               final opts = options.toList();
               if (opts.isEmpty) return const SizedBox.shrink();
-              final mq = MediaQuery.of(context);
-              final visibleHeight = mq.size.height - mq.viewInsets.bottom;
-              final fieldBox =
-                  _focus.context?.findRenderObject() as RenderBox?;
-              final panelH = _optionsMaxHeight(context, opts.length);
-              var lift = 0.0;
-              if (fieldBox != null && fieldBox.hasSize) {
-                final bottom =
-                    fieldBox.localToGlobal(Offset.zero).dy + fieldBox.size.height;
-                if (bottom > visibleHeight * 0.6 ||
-                    bottom + panelH > visibleHeight - 8) {
-                  lift = -(panelH + fieldBox.size.height + 8);
-                }
-              }
-              final fieldWidth = fieldBox != null && fieldBox.hasSize
-                  ? fieldBox.size.width
-                  : mq.size.width - 32;
-              return Transform.translate(
-                offset: Offset(0, lift),
+              return TapRegion(
+                groupId: _suggestionTapGroup,
                 child: Align(
                   alignment: Alignment.topLeft,
-                  widthFactor: 0,
-                  heightFactor: 0,
-                  child: TapRegion(
-                    groupId: _suggestionTapGroup,
-                    child: Material(
-                      elevation: 8,
-                      borderRadius: BorderRadius.circular(12),
-                      clipBehavior: Clip.antiAlias,
-                      color: Colors.white,
-                      child: ConstrainedBox(
-                        constraints: BoxConstraints(
-                          maxWidth: fieldWidth,
-                          maxHeight: _optionsMaxHeight(context, opts.length),
+                  widthFactor: 1.0,
+                  heightFactor: 1.0,
+                  child: Material(
+                    elevation: 8,
+                    borderRadius: BorderRadius.circular(12),
+                    clipBehavior: Clip.antiAlias,
+                    color: Colors.white,
+                    child: ConstrainedBox(
+                      constraints: BoxConstraints(
+                        maxHeight: _optionsMaxHeight(context),
+                      ),
+                      child: ListView.separated(
+                        shrinkWrap: true,
+                        padding: EdgeInsets.zero,
+                        physics: const ClampingScrollPhysics(),
+                        itemCount: opts.length,
+                        separatorBuilder: (_, __) => Divider(
+                          height: 1,
+                          thickness: 1,
+                          color: Colors.grey[200],
                         ),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            Align(
-                              alignment: Alignment.centerRight,
-                              child: IconButton(
-                                tooltip: 'Close suggestions',
-                                visualDensity: VisualDensity.compact,
-                                icon: Icon(
-                                  Icons.close_rounded,
-                                  color: cs.onSurfaceVariant,
-                                ),
-                                onPressed: () => _focus.unfocus(),
+                        itemBuilder: (BuildContext ctx, int i) {
+                          final it = opts[i];
+                          return InkWell(
+                            onTapDown: (_) => _pendingSelection = it,
+                            onTapCancel: () => _pendingSelection = null,
+                            onTap: () {
+                              _pendingSelection = null;
+                              onSelected(it);
+                              WidgetsBinding.instance.addPostFrameCallback((_) {
+                                if (mounted) _focus.unfocus();
+                              });
+                            },
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 10,
                               ),
-                            ),
-                            Flexible(
-                              child: Scrollbar(
-                                thumbVisibility: true,
-                                child: ListView.separated(
-                                  shrinkWrap: true,
-                                  padding: EdgeInsets.zero,
-                                  physics: const ClampingScrollPhysics(),
-                                  itemCount: opts.length,
-                                  separatorBuilder: (_, __) => Divider(
-                                    height: 1,
-                                    thickness: 1,
-                                    color: Colors.grey[200],
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    it.label,
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 14,
+                                    ),
                                   ),
-                                  itemBuilder: (BuildContext ctx, int i) {
-                                    final it = opts[i];
-                                    return GestureDetector(
-                                      onTap: () {
-                                        _pendingSelection = null;
-                                        onSelected(it);
-                                        WidgetsBinding.instance
-                                            .addPostFrameCallback((_) {
-                                          if (mounted) _focus.unfocus();
-                                        });
-                                      },
-                                      behavior: HitTestBehavior.opaque,
-                                      child: ConstrainedBox(
-                                        constraints: const BoxConstraints(
-                                          minHeight: 44,
-                                        ),
-                                        child: Padding(
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 12,
-                                            vertical: 10,
-                                          ),
-                                          child: Column(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.start,
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              Text(
-                                                it.label,
-                                                maxLines: 2,
-                                                overflow: TextOverflow.ellipsis,
-                                                style: const TextStyle(
-                                                  fontWeight: FontWeight.w600,
-                                                  fontSize: 14,
-                                                ),
-                                              ),
-                                              if (it.subtitle != null &&
-                                                  it.subtitle!
-                                                      .trim()
-                                                      .isNotEmpty)
-                                                Padding(
-                                                  padding: const EdgeInsets.only(
-                                                      top: 2),
-                                                  child: Text(
-                                                    it.subtitle!,
-                                                    maxLines: 3,
-                                                    overflow:
-                                                        TextOverflow.ellipsis,
-                                                    style: TextStyle(
-                                                      fontSize: 12,
-                                                      fontWeight:
-                                                          FontWeight.w600,
-                                                      height: 1.25,
-                                                      color: Color.lerp(
-                                                        Theme.of(ctx)
-                                                            .colorScheme
-                                                            .onSurface,
-                                                        Theme.of(ctx)
-                                                            .colorScheme
-                                                            .onSurfaceVariant,
-                                                        0.35,
-                                                      ),
-                                                    ),
-                                                  ),
-                                                ),
-                                            ],
-                                          ),
+                                  if (it.subtitle != null &&
+                                      it.subtitle!.trim().isNotEmpty)
+                                    Padding(
+                                      padding: const EdgeInsets.only(top: 2),
+                                      child: Text(
+                                        it.subtitle!,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          color: Theme.of(ctx)
+                                              .colorScheme
+                                              .onSurfaceVariant,
                                         ),
                                       ),
-                                    );
-                                  },
-                                ),
+                                    ),
+                                ],
                               ),
                             ),
-                          ],
-                        ),
+                          );
+                        },
                       ),
                     ),
                   ),

@@ -1,16 +1,12 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:harisree_warehouse/features/stock/stock_list_row_patch.dart';
+import 'package:hexa_purchase_assistant/features/stock/stock_list_row_patch.dart';
 
 void main() {
   test('mergeStockListRowMap merges overlay by id', () {
     final out = mergeStockListRowMap(
       {'id': 'a', 'current_stock': 10, 'physical_stock_qty': 9},
       {
-        'a': {
-          kStockListPatchAtKey: DateTime.utc(2026, 6, 4, 12).toIso8601String(),
-          'physical_stock_qty': 11,
-          'physical_stock_difference_qty': 1,
-        },
+        'a': {'physical_stock_qty': 11, 'physical_stock_difference_qty': 1},
       },
     );
     expect(out['physical_stock_qty'], 11);

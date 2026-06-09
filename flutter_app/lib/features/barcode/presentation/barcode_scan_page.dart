@@ -28,7 +28,6 @@ import '../../../core/router/navigation_ext.dart';
 import '../../../shared/widgets/search_picker_sheet.dart';
 import '../../stock/presentation/stock_sheet_launch.dart';
 import '../../stock/presentation/stock_undo_snackbar.dart';
-import '../../stock/presentation/widgets/stock_update_mode_toggle.dart';
 import '../barcode_camera_session.dart';
 import '../barcode_lookup_cache.dart';
 import '../services/camera_permission_cache.dart';
@@ -38,7 +37,7 @@ import 'barcode_scan_web_stub.dart'
 import 'web_live_barcode_scanner.dart' show WebLiveBarcodeScanner;
 
 const _kMaxRecent = 10;
-const _kDebounceMs = 150;
+const _kDebounceMs = 200;
 const _kCameraPermGrantedKey = 'camera_perm_granted';
 const _kManualSearchDebounceMs = 400;
 /// Primary warehouse formats (fewer = faster decode per frame).
@@ -72,6 +71,7 @@ class _BarcodeScanPageState extends ConsumerState<BarcodeScanPage>
   String _manualQuery = '';
   bool _torch = false;
   bool _busy = false;
+  int _scanGeneration = 0;
   void _setBusy(bool value) {
     if (!mounted) return;
     setState(() {
@@ -94,7 +94,6 @@ class _BarcodeScanPageState extends ConsumerState<BarcodeScanPage>
   bool _cameraPermanent = false;
   Timer? _safariNoDetectTimer;
   bool _safariUploadNudgeShown = false;
-  bool _uploadBannerDismissed = false;
   bool _hadDetectThisVisit = false;
   bool _scanConfirmed = false;
   String? _lookupLabel;
@@ -225,11 +224,7 @@ class _BarcodeScanPageState extends ConsumerState<BarcodeScanPage>
     await prefs.setBool(_kCameraPermGrantedKey, true);
   }
 
-  Future<void> _stopWebLiveScanner({bool fullStop = true}) async {
-    if (!fullStop && kIsWeb && _webLiveScanner != null) {
-      await _webLiveScanner!.pause();
-      return;
-    }
+  Future<void> _stopWebLiveScanner() async {
     await _webLiveScanner?.stop();
     _webLiveScanner = null;
     _useWebDetectorPreview = false;
@@ -250,10 +245,7 @@ class _BarcodeScanPageState extends ConsumerState<BarcodeScanPage>
   void _flashScanConfirmed() {
     if (!mounted) return;
     unawaited(HapticFeedback.mediumImpact());
-    setState(() {
-      _scanConfirmed = true;
-      _uploadBannerDismissed = true;
-    });
+    setState(() => _scanConfirmed = true);
     Future<void>.delayed(const Duration(milliseconds: 150), () {
       if (mounted) setState(() => _scanConfirmed = false);
     });
@@ -377,7 +369,7 @@ class _BarcodeScanPageState extends ConsumerState<BarcodeScanPage>
             BarcodeCameraSession.webDetector != null) {
           _webLiveScanner = BarcodeCameraSession.webDetector;
           _useWebDetectorPreview = true;
-          await _webLiveScanner!.resume(_onWebBarcodeCode);
+          await _webLiveScanner!.start(_onWebBarcodeCode);
           if (mounted) {
             setState(() {
               _cameraDenied = false;
@@ -482,33 +474,30 @@ class _BarcodeScanPageState extends ConsumerState<BarcodeScanPage>
     return true;
   }
 
-  Future<void> _resumeScan() async {
+  Future<void> _resumeScan({int? generation}) async {
+    if (generation != null && generation != _scanGeneration) return;
     if (!mounted) return;
     _setBusy(false);
     _lastCode = null;
     _lastAt = null;
+    await Future<void>.delayed(const Duration(milliseconds: 200));
+    if (!mounted) return;
+    if (generation != null && generation != _scanGeneration) return;
 
     if (_useWebDetectorPreview && _webLiveScanner != null) {
-      await _webLiveScanner!.resume(_onWebBarcodeCode);
-      if (mounted) setState(() {});
-      return;
-    }
-
-    final cam = _camera;
-    if (cam != null) {
+      // BarcodeDetector loop keeps running while _busy blocks new codes.
+    } else if (_camera != null) {
       try {
-        if (!kIsWeb && defaultTargetPlatform != TargetPlatform.iOS) {
-          if (!cam.value.isRunning) {
-            await cam.start();
-          }
+        if (!_camera!.value.isInitialized) {
+          await _initCamera();
+        } else if (!kIsWeb &&
+            defaultTargetPlatform != TargetPlatform.iOS &&
+            !_camera!.value.isRunning) {
+          await _camera!.start();
         }
       } catch (_) {
-        _camera = null;
-        BarcodeCameraSession.mobile = null;
-        unawaited(_initCamera());
+        if (mounted) unawaited(_initCamera());
       }
-    } else if (!kIsWeb) {
-      unawaited(_initCamera());
     }
     if (mounted) setState(() {});
   }
@@ -551,9 +540,7 @@ class _BarcodeScanPageState extends ConsumerState<BarcodeScanPage>
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Barcode $code assigned')),
       );
-      await context
-          .push('/catalog/item/$picked?source=scan')
-          .then((_) => unawaited(_resumeScan()));
+      context.push('/catalog/item/$picked?source=scan');
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -581,9 +568,6 @@ class _BarcodeScanPageState extends ConsumerState<BarcodeScanPage>
         context: context,
         ref: ref,
         item: Map<String, dynamic>.from(row),
-        initialMode: StockUpdateMode.physical,
-        skipActionPicker: true,
-        onPushedRouteReturn: () => unawaited(_resumeScan()),
       );
       if (saved && mounted) {
         ref.invalidate(catalogItemsListProvider);
@@ -594,7 +578,7 @@ class _BarcodeScanPageState extends ConsumerState<BarcodeScanPage>
         );
       }
     } finally {
-      await _resumeScan();
+      if (mounted) await _resumeScan();
     }
   }
 
@@ -690,6 +674,7 @@ class _BarcodeScanPageState extends ConsumerState<BarcodeScanPage>
     final session = ref.read(sessionProvider);
     if (session == null) return;
 
+    final gen = ++_scanGeneration;
     _setBusy(true);
     if (mounted) setState(() => _lookupLabel = code);
 
@@ -733,6 +718,7 @@ class _BarcodeScanPageState extends ConsumerState<BarcodeScanPage>
           skipFreshFetch: true,
         );
         if (saved && mounted) {
+          ref.invalidate(stockListProvider);
           ref.invalidate(stockAuditPeriodProvider);
           if (id.isNotEmpty) {
             ref.invalidate(catalogItemDetailProvider(id));
@@ -754,13 +740,17 @@ class _BarcodeScanPageState extends ConsumerState<BarcodeScanPage>
       if (!mounted) return;
       ScaffoldMessenger.of(context).clearSnackBars();
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Server is starting — retrying in a moment…'),
+        SnackBar(
+          content: const Text(
+            'Server is starting up. Please wait a moment and try again.',
+          ),
+          action: SnackBarAction(
+            label: 'Retry',
+            onPressed: () => _lookupAndNavigate(raw),
+          ),
         ),
       );
-      await Future<void>.delayed(const Duration(seconds: 4));
-      if (!mounted) return;
-      unawaited(_lookupAndNavigate(raw));
+      await _resumeScan();
     } on DioException catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).clearSnackBars();
@@ -779,7 +769,9 @@ class _BarcodeScanPageState extends ConsumerState<BarcodeScanPage>
     } finally {
       if (mounted) {
         setState(() => _lookupLabel = null);
-        _setBusy(false);
+      }
+      if (gen == _scanGeneration && mounted) {
+        await _resumeScan(generation: gen);
       }
     }
   }
@@ -889,6 +881,9 @@ class _BarcodeScanPageState extends ConsumerState<BarcodeScanPage>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    if (BarcodeCameraSession.mobile == _camera) {
+      BarcodeCameraSession.mobile = null;
+    }
     _safariNoDetectTimer?.cancel();
     _manualSearchDebounce?.cancel();
     _scanLineCtrl.dispose();
@@ -896,9 +891,6 @@ class _BarcodeScanPageState extends ConsumerState<BarcodeScanPage>
     _manualCtrl.dispose();
     _manualFocus.dispose();
     if (kIsWeb) {
-      if (_useWebDetectorPreview && BarcodeCameraSession.webDetector != null) {
-        unawaited(BarcodeCameraSession.webDetector!.pause());
-      }
       _webLiveScanner = null;
       _camera = null;
     } else {
@@ -922,14 +914,7 @@ class _BarcodeScanPageState extends ConsumerState<BarcodeScanPage>
             .toDouble();
     final pendingSync = ref.watch(stockOfflinePendingCountProvider);
     final manualMatches = _manualMatches;
-    final showUploadBanner = !_uploadBannerDismissed &&
-        !_cameraInitInFlight &&
-        !_webCameraAwaitingGesture &&
-        (_cameraDenied ||
-            (kIsWeb &&
-                preferUploadBarcodeOnWeb &&
-                !_useWebDetectorPreview &&
-                !_hadDetectThisVisit));
+    final safariUpload = kIsWeb && preferUploadBarcodeOnWeb;
     return Scaffold(
       appBar: AppBar(
         leading: IconButton(
@@ -1008,7 +993,7 @@ class _BarcodeScanPageState extends ConsumerState<BarcodeScanPage>
                         theme: theme,
                         size: size,
                         cameraH: 320,
-                        showUploadBanner: showUploadBanner,
+                        safariUpload: safariUpload,
                         pendingSync: pendingSync,
                       ),
                     ),
@@ -1033,7 +1018,7 @@ class _BarcodeScanPageState extends ConsumerState<BarcodeScanPage>
             theme: theme,
             size: size,
             cameraH: cameraH,
-            showUploadBanner: showUploadBanner,
+            safariUpload: safariUpload,
             pendingSync: pendingSync,
           ),
           _scanManualSection(
@@ -1052,67 +1037,22 @@ class _BarcodeScanPageState extends ConsumerState<BarcodeScanPage>
     required ThemeData theme,
     required Size size,
     required double cameraH,
-    required bool showUploadBanner,
+    required bool safariUpload,
     required int pendingSync,
   }) {
     return [
-          if (showUploadBanner)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
-              child: Material(
-                color: const Color(0xFFFFFBEB),
-                borderRadius: BorderRadius.circular(12),
-                child: Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.fromLTRB(12, 10, 8, 10),
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: const Color(0xFFFCD34D)),
-                  ),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Icon(
-                        Icons.info_outline_rounded,
-                        size: 20,
-                        color: Color(0xFFCA8A04),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            const Text(
-                              'Live camera scanner requires iOS 17+ or Chrome browser. '
-                              'Tap below to photograph the barcode instead.',
-                              style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600,
-                                color: Color(0xFF92400E),
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            Align(
-                              alignment: Alignment.centerLeft,
-                              child: TextButton(
-                                onPressed: _busy ? null : _scanFromImage,
-                                child: const Text('Upload barcode photo'),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      IconButton(
-                        tooltip: 'Dismiss',
-                        visualDensity: VisualDensity.compact,
-                        onPressed: () =>
-                            setState(() => _uploadBannerDismissed = true),
-                        icon: const Icon(Icons.close_rounded, size: 18),
-                      ),
-                    ],
-                  ),
-                ),
+          if (safariUpload)
+            MaterialBanner(
+              content: const Text(
+                'Live camera scan needs iOS 17 or newer in Safari. '
+                'Upload a barcode photo or use manual search below.',
               ),
+              actions: [
+                TextButton(
+                  onPressed: _busy ? null : _scanFromImage,
+                  child: const Text('Upload photo'),
+                ),
+              ],
             ),
           if (pendingSync > 0)
             MaterialBanner(

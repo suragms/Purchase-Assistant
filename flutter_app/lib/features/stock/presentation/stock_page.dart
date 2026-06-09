@@ -8,7 +8,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:share_plus/share_plus.dart';
 
-import '../../../core/auth/auth_error_messages.dart';
 import '../../../core/auth/auth_failure_policy.dart';
 import '../../../core/auth/provider_api_guard.dart';
 import '../../../core/auth/session_notifier.dart';
@@ -48,30 +47,6 @@ import 'widgets/stock_warehouse_filter_sheet.dart'
 import 'widgets/stock_delivery_filter_chips.dart';
 import 'widgets/stock_status_quick_chips.dart';
 import 'widgets/stock_row_metrics.dart';
-
-String _activeStockFilterLabel({
-  required StockDeliveryFilter deliveryFilter,
-  required int filterCount,
-  required StockListQuery listQ,
-}) {
-  final parts = <String>[];
-  if (deliveryFilter == StockDeliveryFilter.pending) {
-    parts.add('Pending truck');
-  } else if (deliveryFilter == StockDeliveryFilter.delivered) {
-    parts.add('Delivered');
-  }
-  if (listQ.q.trim().isNotEmpty) {
-    parts.add('Search “${listQ.q.trim()}”');
-  }
-  if (listQ.status != 'all') {
-    parts.add('Status: ${listQ.status}');
-  }
-  if (filterCount > 0) {
-    parts.add('$filterCount warehouse filter${filterCount == 1 ? '' : 's'}');
-  }
-  if (parts.isEmpty) return 'Filter active — showing a subset of stock';
-  return 'Filter active — ${parts.join(' · ')}';
-}
 
 enum StockPageMode { auto, staff, owner }
 
@@ -140,12 +115,7 @@ class _StockPageState extends ConsumerState<StockPage>
     });
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      if (widget.initialTab == null) {
-        ref.read(stockDeliveryFilterProvider.notifier).state =
-            StockDeliveryFilter.all;
-      }
-      if (!_scroll.hasClients) return;
+      if (!mounted || !_scroll.hasClients) return;
       final saved = ref.read(stockListScrollOffsetProvider);
       if (saved > 0) {
         final max = _scroll.position.maxScrollExtent;
@@ -203,8 +173,6 @@ class _StockPageState extends ConsumerState<StockPage>
   Future<void> _retryStockAfterAuthOrApiBlock() async {
     ref.read(authApiGateProvider.notifier).reset();
     ref.read(authSessionExpiredProvider.notifier).clear();
-    ref.read(authRefreshInFlightProvider.notifier).state = false;
-    ref.read(authResumeGateProvider.notifier).state = false;
     final session = ref.read(sessionProvider);
     try {
       await ref
@@ -292,10 +260,8 @@ class _StockPageState extends ConsumerState<StockPage>
         q.copyWith(page: q.page + 1);
   }
 
-  List<Map<String, dynamic>> _prepareItems(
-    List<Map<String, dynamic>> raw, {
-    Map<String, Map<String, dynamic>> patches = const {},
-  }) {
+  List<Map<String, dynamic>> _prepareItems(List<Map<String, dynamic>> raw) {
+    final patches = ref.watch(stockListRowPatchProvider);
     if (patches.isNotEmpty) {
       raw = raw
           .map((m) => row_patch.mergeStockListRowMap(m, patches))
@@ -304,7 +270,7 @@ class _StockPageState extends ConsumerState<StockPage>
     final op = ref.read(stockOperationalFiltersProvider);
     final q = ref.read(stockListQueryProvider);
     final deliveryFilter = ref.read(stockDeliveryFilterProvider);
-    var items = filterStockListClient(raw, op, query: q);
+    var items = filterStockListClient(raw, op);
     if (deliveryFilter != StockDeliveryFilter.all) {
       items = items
           .where(
@@ -345,10 +311,7 @@ class _StockPageState extends ConsumerState<StockPage>
       for (final e in (data['items'] as List? ?? []))
         if (e is Map) Map<String, dynamic>.from(e),
     ];
-    final items = _prepareItems(
-      raw,
-      patches: ref.read(stockListRowPatchProvider),
-    );
+    final items = _prepareItems(raw);
     if (items.isEmpty) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -404,10 +367,7 @@ class _StockPageState extends ConsumerState<StockPage>
       for (final e in (data['items'] as List? ?? []))
         if (e is Map) Map<String, dynamic>.from(e),
     ];
-    final rows = _prepareItems(
-      raw,
-      patches: ref.read(stockListRowPatchProvider),
-    );
+    final rows = _prepareItems(raw);
     if (rows.isEmpty) return;
     String esc(String s) => '"${s.replaceAll('"', '""')}"';
     final b = StringBuffer();
@@ -474,30 +434,31 @@ class _StockPageState extends ConsumerState<StockPage>
 
   Map<String, dynamic>? _selectedItem(List<Map<String, dynamic>> items) {
     final id = ref.read(stockSelectedItemIdProvider);
-    if (id == null || id.isEmpty) return null;
+    if (id == null || id.isEmpty) {
+      return items.isNotEmpty ? items.first : null;
+    }
     for (final row in items) {
       if (row['id']?.toString() == id) return row;
     }
-    return null;
+    return items.isNotEmpty ? items.first : null;
   }
 
   Widget _buildListBody({
     required Map<String, dynamic> data,
     required bool isReloading,
-    required Map<String, Map<String, dynamic>> rowPatches,
   }) {
     final raw = [
       for (final e in (data['items'] as List? ?? []))
         if (e is Map) Map<String, dynamic>.from(e),
     ];
-    final items = _prepareItems(raw, patches: rowPatches);
+    final items = _prepareItems(raw);
     final deliveryCounts =
         ref.watch(stockDeliveryIndicatorCountsProvider).valueOrNull ??
             StockRowMetrics.countDeliveryIndicators(raw);
     final deliveryFilter = ref.watch(stockDeliveryFilterProvider);
     final listQ = ref.watch(stockListQueryProvider);
     final chipCounts =
-        ref.watch(stockFilteredStatusCountsProvider).valueOrNull ?? const {};
+        ref.watch(stockStatusCountsProvider).valueOrNull ?? const {};
     final chipAll = chipCounts['all'] ?? 0;
     final total = coerceToInt(data['total']);
     final maxPage = stockListMaxPage(total, listQ.perPage);
@@ -508,6 +469,17 @@ class _StockPageState extends ConsumerState<StockPage>
     final desktop =
         MediaQuery.sizeOf(context).width >= kDesktopMin;
     final selected = desktop ? _selectedItem(items) : null;
+    if (desktop && items.isNotEmpty) {
+      final sid = selected?['id']?.toString();
+      if (sid != null &&
+          ref.read(stockSelectedItemIdProvider) != sid) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            ref.read(stockSelectedItemIdProvider.notifier).state = sid;
+          }
+        });
+      }
+    }
 
     final listSlivers = <Widget>[
       SliverToBoxAdapter(
@@ -536,67 +508,6 @@ class _StockPageState extends ConsumerState<StockPage>
             deliveredCount: deliveryCounts.delivered,
             onSelected: (f) =>
                 ref.read(stockDeliveryFilterProvider.notifier).state = f,
-          ),
-        ),
-      if (deliveryFilter != StockDeliveryFilter.all || filterCount > 0)
-        SliverToBoxAdapter(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(12, 4, 12, 4),
-            child: Material(
-              color: const Color(0xFFFFF7ED),
-              borderRadius: BorderRadius.circular(10),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                child: Row(
-                  children: [
-                    const Icon(
-                      Icons.filter_alt_outlined,
-                      size: 18,
-                      color: Color(0xFFEA580C),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        _activeStockFilterLabel(
-                          deliveryFilter: deliveryFilter,
-                          filterCount: filterCount,
-                          listQ: listQ,
-                        ),
-                        style: const TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
-                          color: Color(0xFF9A3412),
-                        ),
-                      ),
-                    ),
-                    TextButton(
-                      onPressed: () {
-                        ref.read(stockDeliveryFilterProvider.notifier).state =
-                            StockDeliveryFilter.all;
-                        if (filterCount > 0) {
-                          ref
-                              .read(stockListQueryProvider.notifier)
-                              .state = listQ.copyWith(
-                            status: 'all',
-                            subcategory: '',
-                            supplier: '',
-                            q: '',
-                            page: 1,
-                          );
-                          ref
-                              .read(stockOperationalFiltersProvider.notifier)
-                              .state = const StockOperationalFilters();
-                          _searchCtrl.clear();
-                        }
-                        _resetMerged();
-                        ref.invalidate(stockListProvider);
-                      },
-                      child: const Text('Clear'),
-                    ),
-                  ],
-                ),
-              ),
-            ),
           ),
         ),
       if (items.isNotEmpty) ...[
@@ -750,12 +661,8 @@ class _StockPageState extends ConsumerState<StockPage>
 
   @override
   Widget build(BuildContext context) {
-    // FIX 6: watch patches in build() so list rebuilds on optimistic row updates
-    final rowPatches = ref.watch(stockListRowPatchProvider);
-
     ref.listen(businessWriteEventProvider, (prev, next) {
       if (prev == null || prev.revision == next.revision) return;
-      if (next.kind != 'purchase' && next.kind != 'stock') return;
       ref.invalidate(stockChangesFeedProvider);
       if (next.affectedItemIds.isEmpty) {
         ref.invalidate(stockListProvider);
@@ -789,13 +696,11 @@ class _StockPageState extends ConsumerState<StockPage>
       }
     });
 
-    ref.listen<bool>(authBlockApiRequestsProvider, (prev, blocked) {
-      if (prev == true && blocked == false && mounted) {
+    ref.listen<bool>(auth401CircuitOpenProvider, (prev, next) {
+      if (next && mounted) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (!mounted) return;
-          _resetMerged();
-          ref.invalidate(stockListProvider);
-          ref.invalidate(stockStatusCountsProvider);
+          context.go('/login');
         });
       }
     });
@@ -846,51 +751,28 @@ class _StockPageState extends ConsumerState<StockPage>
     final showDebounceProgress = _debounce?.isActive ?? false;
 
     final authExpired = ref.watch(authSessionExpiredProvider);
-    final authGate = ref.watch(authApiGateProvider);
-    final authCircuit = authGate.circuitOpen;
-    final authRefreshBusy = ref.watch(authRefreshInFlightProvider);
-    final authResumeBusy = ref.watch(authResumeGateProvider);
-    final authRestoring = (authGate.suspended || authRefreshBusy || authResumeBusy) &&
-        !authExpired &&
-        !authCircuit;
+    final authCircuit = ref.watch(auth401CircuitOpenProvider);
     final sessionForAuth = ref.watch(sessionProvider);
     final apiDegraded = ref.watch(apiDegradedProvider);
-    final authBlocked = authExpired || (authCircuit && sessionForAuth == null);
-    final authRecovery = authCircuit && sessionForAuth != null;
+    final authBlocked = authExpired ||
+        authCircuit ||
+        (sessionForAuth == null && !listAsync.isLoading);
     final apiLikelyDown = apiDegraded != null &&
         !apiDegraded.toLowerCase().contains('session');
 
     Widget body;
-    if (authRestoring && sessionForAuth != null) {
-      body = Column(
-        children: [
-          const LinearProgressIndicator(minHeight: 2),
-          Expanded(
-            child: Center(
-              child: Text(
-                'Restoring your session…',
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: const Color(0xFF64748B),
-                      fontWeight: FontWeight.w600,
-                    ),
-              ),
-            ),
-          ),
-        ],
-      );
-    } else if (authBlocked) {
+    if (authBlocked) {
+      final stillSignedIn = sessionForAuth != null;
       body = FriendlyLoadError(
-        message: 'Session expired',
-        subtitle:
-            'Your sign-in is no longer valid. Tap Retry to sign in again and load stock.',
-        onRetry: () => unawaited(_retryStockAfterAuthOrApiBlock()),
-      );
-    } else if (authRecovery) {
-      body = FriendlyLoadError(
-        message: apiLikelyDown ? 'Cloud API unavailable' : 'Connection paused',
-        subtitle: apiLikelyDown
+        message: apiLikelyDown && stillSignedIn
+            ? 'Cloud API unavailable'
+            : 'Sign in to load stock',
+        subtitle: apiLikelyDown && stillSignedIn
             ? apiDegraded
-            : 'Auth was interrupted. Tap Retry to reload stock.',
+            : stillSignedIn
+                ? 'Requests were blocked after auth errors. Tap Retry — '
+                    'sign in again only if Retry does not load stock.'
+                : 'Warehouse list needs a valid session. Sign in and try again.',
         onRetry: () => unawaited(_retryStockAfterAuthOrApiBlock()),
       );
     } else if (data == null && listAsync.isLoading) {
@@ -900,53 +782,26 @@ class _StockPageState extends ConsumerState<StockPage>
       final blocked = err is StockListFetchBlockedException
           ? err.reason
           : null;
-      if (isStockListTransientBlock(err) && sessionForAuth != null) {
-        body = Column(
-          children: [
-            const LinearProgressIndicator(minHeight: 2),
-            Expanded(
-              child: Center(
-                child: Text(
-                  blocked == 'tab_not_visible'
-                      ? 'Stock list paused — switch back to this tab…'
-                      : 'Connecting to cloud…',
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: const Color(0xFF64748B),
-                        fontWeight: FontWeight.w600,
-                      ),
-                ),
-              ),
-            ),
-          ],
-        );
-      } else {
-        final isAuth = isStockListAuthFailure(err) ||
-            (err is DioException && err.response?.statusCode == 401);
-        final dio = err is DioException ? err : null;
-        final serverError = !isAuth &&
-            dio != null &&
-            dio.response != null &&
-            !dioIsNetworkError(dio);
-        body = FriendlyLoadError(
-          message: isAuth
-              ? 'Sign in to load stock'
-              : serverError
-                  ? 'Could not load stock. Server error — tap to retry.'
-                  : 'Unable to load stock',
-          subtitle: isAuth
-              ? 'Warehouse list needs a valid session. Sign in and try again.'
-              : blocked == 'tab_not_visible'
-                  ? 'Stock list paused while another tab is open. Switch back to Stock and tap Retry.'
-                  : null,
-          onRetry: () => unawaited(_retryStockAfterAuthOrApiBlock()),
-        );
-      }
-    } else if (data != null) {
-      body = _buildListBody(
-        data: data,
-        isReloading: isReloading,
-        rowPatches: rowPatches,
+      final isAuth = isStockListAuthFailure(err) ||
+          (err is DioException && err.response?.statusCode == 401);
+      body = FriendlyLoadError(
+        message: isAuth ? 'Sign in to load stock' : 'Unable to load stock',
+        subtitle: isAuth
+            ? 'Warehouse list needs a valid session. Sign in and try again.'
+            : blocked == 'tab_not_visible'
+                ? 'Stock list paused while another tab is open. Switch back to Stock and tap Retry.'
+                : null,
+        onRetry: () {
+          if (isAuth) {
+            ref.read(authApiGateProvider.notifier).reset();
+          }
+          _resetMerged();
+          ref.invalidate(stockListProvider);
+          ref.invalidate(stockStatusCountsProvider);
+        },
       );
+    } else if (data != null) {
+      body = _buildListBody(data: data, isReloading: isReloading);
     } else {
       body = const ListSkeleton(rowCount: 12);
     }
@@ -982,7 +837,6 @@ class _StockPageState extends ConsumerState<StockPage>
         tabController: _tabs,
       ),
       body: HexaWebPageFrame(
-        fullWidth: true,
         child: TabBarView(
           controller: _tabs,
           children: [

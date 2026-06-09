@@ -7,37 +7,25 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/auth/auth_error_messages.dart';
 import '../../../core/auth/session_notifier.dart';
-import '../../../core/auth/session_permissions.dart';
-import '../../../core/stock/stock_save_recovery.dart';
 import '../../../core/stock/stock_version_retry.dart';
 import '../../../core/errors/user_facing_errors.dart';
 import '../../../core/json_coerce.dart';
 import '../../../core/providers/business_aggregates_invalidation.dart'
     show invalidateWarehouseSurfacesAfterStockWrite;
-import '../../../core/providers/deferred_invalidation.dart'
-    show deferInvalidate, deferInvalidateDelayed;
-import '../../../core/providers/item_detail_providers.dart';
 import '../../../core/notifications/local_notifications_service.dart';
-import '../../../core/providers/home_owner_dashboard_providers.dart'
-    show
-        homeInventorySummaryProvider,
-        homeStockAttentionCountProvider,
-        stockAuditPeriodProvider;
+import '../../../core/providers/home_owner_dashboard_providers.dart';
+import '../../../core/providers/staff_home_providers.dart';
 import '../../../core/providers/stock_providers.dart'
     show
         applyStockListRowPatch,
         stockChangesFeedProvider,
-        stockFilteredStatusCountsProvider,
-        stockListQueryProvider,
-        stockStatusCountsProvider;
+        stockListQueryProvider;
 import '../stock_list_row_patch.dart'
     show stockListPatchFromPhysicalCount, stockListPatchFromStockDetail;
 import '../../../core/providers/notification_center_provider.dart';
 import '../../../core/providers/server_notifications_provider.dart';
 import '../../../core/utils/unit_utils.dart';
-import '../../../core/utils/snack.dart';
 import '../../../core/design_system/hexa_responsive.dart';
-import 'stock_undo_snackbar.dart';
 import 'widgets/stock_update_mode_toggle.dart';
 
 const _kReasonChips = <(String label, String type)>[
@@ -63,7 +51,6 @@ Future<bool> showQuickStockActionSheet({
     child: _QuickStockActionBody(
       item: item,
       parentRef: ref,
-      parentContext: context,
       initialMode: initialMode,
       skipInitialRefresh: skipInitialRefresh,
     ),
@@ -75,14 +62,12 @@ class _QuickStockActionBody extends ConsumerStatefulWidget {
   const _QuickStockActionBody({
     required this.item,
     required this.parentRef,
-    required this.parentContext,
     this.initialMode = StockUpdateMode.physical,
     this.skipInitialRefresh = false,
   });
 
   final Map<String, dynamic> item;
   final WidgetRef parentRef;
-  final BuildContext parentContext;
   final StockUpdateMode initialMode;
   final bool skipInitialRefresh;
 
@@ -94,8 +79,7 @@ class _QuickStockActionBody extends ConsumerStatefulWidget {
 class _QuickStockActionBodyState extends ConsumerState<_QuickStockActionBody> {
   bool _saving = false;
   bool _patchApplied = false;
-  bool _saveBlockedUntilRetry = false;
-  int _refreshGeneration = 0;
+  Map<String, dynamic>? _preSaveItemSnapshot;
   late Map<String, dynamic> _item;
   late final TextEditingController _qtyCtrl;
   late final TextEditingController _notesCtrl;
@@ -105,7 +89,6 @@ class _QuickStockActionBodyState extends ConsumerState<_QuickStockActionBody> {
   late StockUpdateMode _mode;
   String? _qtyError;
   String? _reasonError;
-  String? _saveError;
 
   @override
   void initState() {
@@ -148,13 +131,12 @@ class _QuickStockActionBodyState extends ConsumerState<_QuickStockActionBody> {
   Future<bool> _refreshItemFromServer() async {
     final session = ref.read(sessionProvider);
     if (session == null) return false;
-    final gen = ++_refreshGeneration;
     try {
       final fresh = await ref.read(hexaApiProvider).getStockItem(
             businessId: session.primaryBusiness.id,
             itemId: _itemId,
           );
-      if (!mounted || gen != _refreshGeneration || _saving) return false;
+      if (!mounted) return false;
       await _applyFreshItem(fresh);
       return true;
     } catch (_) {
@@ -163,10 +145,6 @@ class _QuickStockActionBodyState extends ConsumerState<_QuickStockActionBody> {
   }
 
   void _onModeChanged(StockUpdateMode mode) {
-    final session = ref.read(sessionProvider);
-    final privileged =
-        session != null && sessionIsPrivilegedStockRole(session);
-    if (!privileged && mode == StockUpdateMode.system) return;
     setState(() {
       _mode = mode;
       _current = _seedQtyForMode(mode);
@@ -201,28 +179,22 @@ class _QuickStockActionBodyState extends ConsumerState<_QuickStockActionBody> {
   void _revalidateQty() {
     if (!mounted) return;
     final next = _qtyErrorText();
-    setState(() {
-      _qtyError = next;
-      if (_saveBlockedUntilRetry && next == null) {
-        _saveBlockedUntilRetry = false;
-        _saveError = null;
-      }
-    });
+    setState(() => _qtyError = next);
   }
 
   bool get _canSave {
     final parsedQty = _parseEnteredQty();
     return !_saving &&
-        !_saveBlockedUntilRetry &&
         parsedQty != null &&
         (_mode == StockUpdateMode.physical ||
             (_reasonType != null && _reasonType!.isNotEmpty));
   }
 
   void _onSavePressed() {
-    if (_saving) return;
     FocusScope.of(context).unfocus();
-    unawaited(_save());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) unawaited(_save());
+    });
   }
 
   @override
@@ -254,11 +226,7 @@ class _QuickStockActionBodyState extends ConsumerState<_QuickStockActionBody> {
         '${diff.abs() > 0.001 ? ' ($sign${formatStockQtyForUnit(_unit, diff)} diff)' : ''}';
   }
 
-  Future<Map<String, dynamic>?> _persistStock(
-    num parsed, {
-    required String idempotencyKey,
-    bool force = false,
-  }) async {
+  Future<Map<String, dynamic>?> _persistStock(num parsed) async {
     final session = ref.read(sessionProvider);
     if (session == null) return null;
     final note = _notesCtrl.text.trim();
@@ -266,26 +234,14 @@ class _QuickStockActionBodyState extends ConsumerState<_QuickStockActionBody> {
     final api = ref.read(hexaApiProvider);
     final bid = session.primaryBusiness.id;
     if (_mode == StockUpdateMode.system) {
-      final detail = force
-          ? await api.patchStockItem(
-              businessId: bid,
-              itemId: _itemId,
-              newQty: parsed,
-              adjustmentType: _reasonType ?? 'correction',
-              reason: note.isNotEmpty ? '$reasonLabel — $note' : reasonLabel,
-              lastSeenStockVersion: _stockVersion(),
-              idempotencyKey: idempotencyKey,
-              force: true,
-            )
-          : await api.patchStockItemWithRetry(
-              businessId: bid,
-              itemId: _itemId,
-              newQty: parsed,
-              adjustmentType: _reasonType ?? 'correction',
-              reason: note.isNotEmpty ? '$reasonLabel — $note' : reasonLabel,
-              initialStockVersion: _stockVersion(),
-              idempotencyKey: idempotencyKey,
-            );
+      final detail = await api.patchStockItemWithRetry(
+        businessId: bid,
+        itemId: _itemId,
+        newQty: parsed,
+        adjustmentType: _reasonType ?? 'correction',
+        reason: note.isNotEmpty ? '$reasonLabel — $note' : reasonLabel,
+        initialStockVersion: _stockVersion(),
+      );
       if (!mounted) return null;
       ref.invalidate(appNotificationsListProvider);
       ref.invalidate(notificationCenterCoordinatorProvider);
@@ -302,170 +258,7 @@ class _QuickStockActionBodyState extends ConsumerState<_QuickStockActionBody> {
     );
   }
 
-  String _messageForSaveError(Object e) {
-    if (e is StaleStockConflict) {
-      if (e.currentStock != null && e.currentStock!.isNotEmpty) {
-        return 'Stock was updated: current is ${e.currentStock}. Review and retry.';
-      }
-      return StaleStockConflict.userMessage;
-    }
-    if (e is StockIntegrityError) return StockIntegrityError.userMessage;
-    if (e is DioException) {
-      final detail = e.response?.data;
-      if (detail is Map) {
-        final code = detail['code']?.toString();
-        final rawDetail = detail['detail'];
-        if (code == 'opening_stock_locked' ||
-            rawDetail
-                ?.toString()
-                .toLowerCase()
-                .contains('opening stock is locked') ==
-                true) {
-          return 'Opening stock is locked — only the owner can adjust this item.';
-        }
-      } else if (detail is String &&
-          detail.toLowerCase().contains('opening stock is locked')) {
-        return 'Opening stock is locked — only the owner can adjust this item.';
-      }
-      return friendlyApiError(e);
-    }
-    return userFacingError(e);
-  }
-
-  Future<bool> _showSaveError(
-    Object e, {
-    num? parsed,
-    DateTime? saveStarted,
-  }) async {
-    if (parsed != null && saveStarted != null) {
-      final recovered = await _verifySaveOnServer(parsed);
-      if (recovered != null && mounted) {
-        try {
-          await _completeSaveSuccess(
-            recovered,
-            parsed,
-            saveStarted: saveStarted,
-          );
-        } catch (err, st) {
-          logSilencedApiError(err, st);
-          if (mounted) Navigator.of(context).pop(true);
-          if (widget.parentContext.mounted) {
-            showTopSnack(
-              widget.parentContext,
-              _mode == StockUpdateMode.system
-                  ? 'System stock saved — $_name'
-                  : 'Physical count saved — $_name',
-            );
-          }
-        }
-        return true;
-      }
-    }
-    final msg = _messageForSaveError(e);
-    if (mounted) {
-      setState(() {
-        _saveError = msg;
-        _saveBlockedUntilRetry = true;
-      });
-    }
-    if (widget.parentContext.mounted) {
-      showTopSnack(widget.parentContext, msg, isError: true);
-    }
-    return false;
-  }
-
-  bool _persistLooksSuccessful(Map<String, dynamic>? saved, num parsed) {
-    if (saved == null) return false;
-    if (_mode == StockUpdateMode.physical) {
-      return saved.isNotEmpty;
-    }
-    return saved['current_stock'] != null || saved.isNotEmpty;
-  }
-
-  Future<Map<String, dynamic>?> _verifySaveOnServer(num parsed) async {
-    final session = ref.read(sessionProvider);
-    if (session == null || _itemId.isEmpty) return null;
-    try {
-      return await verifyStockSaveApplied(
-        api: ref.read(hexaApiProvider),
-        businessId: session.primaryBusiness.id,
-        itemId: _itemId,
-        expectedQty: parsed,
-        systemLedger: _mode == StockUpdateMode.system,
-      );
-    } catch (_) {
-      return null;
-    }
-  }
-
-  Future<Map<String, dynamic>?> _tryRecoverAmbiguousSave(
-    num parsed,
-    Object error,
-  ) async {
-    if (!stockSaveErrorWorthServerVerify(error)) return null;
-    final fresh = await _verifySaveOnServer(parsed);
-    if (fresh == null) return null;
-    return fresh;
-  }
-
-  Future<void> _finishRecoveredSave(
-    Map<String, dynamic> fresh,
-    num parsed, {
-    required DateTime saveStarted,
-  }) async {
-    try {
-      await _completeSaveSuccess(fresh, parsed, saveStarted: saveStarted);
-    } catch (e, st) {
-      logSilencedApiError(e, st);
-      if (mounted) Navigator.of(context).pop(true);
-      if (widget.parentContext.mounted) {
-        showTopSnack(
-          widget.parentContext,
-          _mode == StockUpdateMode.system
-              ? 'System stock saved — $_name'
-              : 'Physical count saved — $_name',
-        );
-      }
-    }
-  }
-
-  Future<void> _completeSaveSuccess(
-    Map<String, dynamic> saved,
-    num parsed, {
-    required DateTime saveStarted,
-  }) async {
-    final elapsed = DateTime.now().difference(saveStarted);
-    const minLoading = Duration(milliseconds: 300);
-    if (elapsed < minLoading) {
-      await Future<void>.delayed(minLoading - elapsed);
-    }
-    if (!mounted) return;
-    try {
-      await HapticFeedback.mediumImpact();
-    } catch (_) {}
-    if (!mounted) return;
-    _applyOptimisticListPatch(saved, parsed);
-    Navigator.of(context).pop(true);
-    unawaited(_afterSaveBackground(parsed));
-    if (!widget.parentContext.mounted) return;
-    showTopSnack(
-      widget.parentContext,
-      _mode == StockUpdateMode.system
-          ? 'System stock saved — $_name'
-          : 'Physical count saved — $_name',
-    );
-    if (_mode == StockUpdateMode.system) {
-      showStockUndoSnackBar(
-        context: widget.parentContext,
-        ref: widget.parentRef,
-        itemId: _itemId,
-        itemName: _name,
-      );
-    }
-  }
-
   void _applyOptimisticListPatch(Map<String, dynamic>? saved, num parsed) {
-    if (_patchApplied) return;
     if (_itemId.isEmpty) return;
     final system = coerceToDouble(_item['current_stock']);
     var patch = _mode == StockUpdateMode.physical
@@ -491,39 +284,44 @@ class _QuickStockActionBodyState extends ConsumerState<_QuickStockActionBody> {
     applyStockListRowPatch(widget.parentRef, itemId: _itemId, patch: patch);
   }
 
-  void _refreshListInBackground() {
+  void _rollbackOptimisticPatch() {
+    if (!_patchApplied || _preSaveItemSnapshot == null || _itemId.isEmpty) {
+      return;
+    }
+    final snap = _preSaveItemSnapshot!;
+    final system = coerceToDouble(snap['current_stock']);
+    final phys = coerceToDoubleNullable(snap['physical_stock_qty']);
+    final patch = <String, dynamic>{
+      'current_stock': system,
+      if (phys != null) 'physical_stock_qty': phys,
+      if (phys != null) 'physical_stock_difference_qty': phys - system,
+    };
+    applyStockListRowPatch(widget.parentRef, itemId: _itemId, patch: patch);
+    _patchApplied = false;
+  }
+
+  void _refreshCountsOnly() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       invalidateWarehouseSurfacesAfterStockWrite(
         widget.parentRef,
         itemId: _itemId,
+        deferFullList: true,
       );
-      deferInvalidate(widget.parentRef, homeInventorySummaryProvider);
-      deferInvalidate(widget.parentRef, homeStockAttentionCountProvider);
-      deferInvalidate(widget.parentRef, stockStatusCountsProvider);
-      deferInvalidate(widget.parentRef, stockFilteredStatusCountsProvider);
       widget.parentRef.invalidate(stockChangesFeedProvider);
-      deferInvalidateDelayed(
-        widget.parentRef,
-        itemDetailBundleProvider(_itemId),
-      );
-      deferInvalidateDelayed(widget.parentRef, stockAuditPeriodProvider);
+      widget.parentRef.invalidate(stockAuditPeriodProvider);
     });
   }
 
   Future<void> _afterSaveBackground(num parsed) async {
-    try {
-      _refreshListInBackground();
-      final reorder = coerceToDouble(_item['reorder_level']);
-      if (reorder > 0 && parsed <= reorder) {
-        final unitLabel = _unit.isNotEmpty ? _unit.toUpperCase() : '';
-        await LocalNotificationsService.instance.showLowStockItem(
-          itemName: _name,
-          detail:
-              '${formatStockQtyForUnit(_unit, parsed.toDouble())} $unitLabel (reorder ${formatStockQtyForUnit(_unit, reorder)})',
-        );
-      }
-    } catch (_) {
-      // Best-effort background refresh — save already succeeded.
+    _refreshCountsOnly();
+    final reorder = coerceToDouble(_item['reorder_level']);
+    if (reorder > 0 && parsed <= reorder) {
+      final unitLabel = _unit.isNotEmpty ? _unit.toUpperCase() : '';
+      await LocalNotificationsService.instance.showLowStockItem(
+        itemName: _name,
+        detail:
+            '${formatStockQtyForUnit(_unit, parsed.toDouble())} $unitLabel (reorder ${formatStockQtyForUnit(_unit, reorder)})',
+      );
     }
   }
 
@@ -545,87 +343,42 @@ class _QuickStockActionBodyState extends ConsumerState<_QuickStockActionBody> {
     final parsed = _parseEnteredQty()!;
     if (_saving) return;
     if (!mounted) return;
-    final saveStarted = DateTime.now();
-    final idempotencyKey = 'stock-$_itemId-${saveStarted.microsecondsSinceEpoch}';
-    ++_refreshGeneration;
+    _preSaveItemSnapshot = Map<String, dynamic>.from(_item);
     setState(() {
       _saving = true;
-      _saveError = null;
-      _saveBlockedUntilRetry = false;
       _patchApplied = false;
     });
-
-    Map<String, dynamic>? saved;
+    _applyOptimisticListPatch(null, parsed);
     try {
-      try {
-        saved = await _persistStock(
-          parsed,
-          idempotencyKey: idempotencyKey,
-        );
-      } on StaleStockConflict {
+      final saved = await _persistStock(parsed);
+      if (!mounted) return;
+      _applyOptimisticListPatch(saved, parsed);
+      unawaited(_afterSaveBackground(parsed));
+      if (!context.mounted) return;
+      await HapticFeedback.mediumImpact();
+      if (!context.mounted) return;
+      Navigator.of(context).pop(true);
+    } catch (e) {
+      _rollbackOptimisticPatch();
+      if (e is StaleStockConflict) {
         if (!mounted) return;
         await _refreshItemFromServer();
-        if (!mounted) return;
-        saved = await _persistStock(
-          parsed,
-          idempotencyKey: idempotencyKey,
-          force: true,
-        );
       }
-
-      if (!mounted) return;
-      if (!_persistLooksSuccessful(saved, parsed)) {
-        final recovered = await _verifySaveOnServer(parsed);
-        if (recovered != null) {
-          saved = recovered;
-        } else {
-          final recoveredViaError = await _showSaveError(
-            StateError(
-              'Could not confirm save. Check stock list and retry if needed.',
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              e is StaleStockConflict
+                  ? StaleStockConflict.userMessage
+                  : e is DioException
+                      ? friendlyApiError(e)
+                      : userFacingError(e),
             ),
-            parsed: parsed,
-            saveStarted: saveStarted,
-          );
-          if (recoveredViaError) return;
-          return;
-        }
-      }
-
-      try {
-        await _completeSaveSuccess(
-          saved!,
-          parsed,
-          saveStarted: saveStarted,
+            duration: const Duration(seconds: 5),
+            behavior: SnackBarBehavior.floating,
+          ),
         );
-      } catch (e, st) {
-        logSilencedApiError(e, st);
-        if (mounted) Navigator.of(context).pop(true);
-        if (widget.parentContext.mounted) {
-          showTopSnack(
-            widget.parentContext,
-            _mode == StockUpdateMode.system
-                ? 'System stock saved — $_name'
-                : 'Physical count saved — $_name',
-          );
-        }
       }
-    } catch (e, st) {
-      final recovered = await _tryRecoverAmbiguousSave(parsed, e);
-      if (recovered != null) {
-        await _finishRecoveredSave(
-          recovered,
-          parsed,
-          saveStarted: saveStarted,
-        );
-        return;
-      }
-      logSilencedApiError(e, st);
-      final recoveredViaError = await _showSaveError(
-        e,
-        parsed: parsed,
-        saveStarted: saveStarted,
-      );
-      if (recoveredViaError) return;
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -635,15 +388,8 @@ class _QuickStockActionBodyState extends ConsumerState<_QuickStockActionBody> {
   Widget build(BuildContext context) {
     final canSave = _canSave;
     final stockLabel = stockDisplayPrimary(_current, _unit);
-    final enteredQty = _parseEnteredQty();
-    final editingLabel = enteredQty != null
-        ? stockDisplayPrimary(enteredQty, _unit)
-        : stockLabel;
     final lastPhysical = _lastPhysicalLabel;
     final systemQty = coerceToDouble(_item['current_stock']);
-    final session = ref.watch(sessionProvider);
-    final privileged =
-        session != null && sessionIsPrivilegedStockRole(session);
 
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -682,9 +428,7 @@ class _QuickStockActionBodyState extends ConsumerState<_QuickStockActionBody> {
                       : 'System now: ',
                 ),
                 TextSpan(
-                  text: _mode == StockUpdateMode.physical
-                      ? editingLabel
-                      : stockLabel,
+                  text: stockLabel,
                   style: TextStyle(
                     fontWeight: FontWeight.w900,
                     color: _mode == StockUpdateMode.physical
@@ -731,28 +475,10 @@ class _QuickStockActionBodyState extends ConsumerState<_QuickStockActionBody> {
             ),
           ],
           const SizedBox(height: 10),
-          if (privileged)
-            StockUpdateModeToggle(
-              mode: _mode,
-              onChanged: _onModeChanged,
-            )
-          else
-            Container(
-              padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 10),
-              decoration: BoxDecoration(
-                color: const Color(0xFFECFDF5),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: const Color(0xFF6EE7B7)),
-              ),
-              child: const Text(
-                'Physical count — floor observation only. System stock unchanged.',
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                  color: Color(0xFF065F46),
-                ),
-              ),
-            ),
+          StockUpdateModeToggle(
+            mode: _mode,
+            onChanged: _onModeChanged,
+          ),
           const SizedBox(height: 4),
           Text(
             stockUpdateModeHint(_mode),
@@ -766,6 +492,7 @@ class _QuickStockActionBodyState extends ConsumerState<_QuickStockActionBody> {
           const SizedBox(height: 6),
           TextField(
             controller: _qtyCtrl,
+            autofocus: true,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
             textInputAction: TextInputAction.done,
             inputFormatters: [
@@ -831,61 +558,25 @@ class _QuickStockActionBodyState extends ConsumerState<_QuickStockActionBody> {
             ),
           ),
           const SizedBox(height: 16),
-          if (_saveError != null) ...[
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Icon(
-                  Icons.error_outline,
-                  color: Color(0xFFB91C1C),
-                  size: 18,
-                ),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: Text(
-                    _saveError!,
-                    style: const TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: Color(0xFFB91C1C),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            if (_saveBlockedUntilRetry) ...[
-              const SizedBox(height: 8),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: TextButton(
-                  onPressed: _saving
-                      ? null
-                      : () => setState(() {
-                            _saveBlockedUntilRetry = false;
-                            _saveError = null;
-                          }),
-                  child: const Text('Retry save'),
-                ),
-              ),
-            ],
-            const SizedBox(height: 10),
-          ],
           SizedBox(
             height: 48,
-            child: FilledButton(
-              onPressed: (_saving || _saveBlockedUntilRetry) ? null : _onSavePressed,
-              child: _saving
-                  ? const SizedBox(
-                      width: 22,
-                      height: 22,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : Text(
-                      _mode == StockUpdateMode.system
-                          ? 'SAVE SYSTEM STOCK'
-                          : 'SAVE PHYSICAL COUNT',
-                      style: const TextStyle(fontWeight: FontWeight.w900),
-                    ),
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              child: FilledButton(
+                onPressed: canSave && !_saving ? _onSavePressed : null,
+                child: _saving
+                    ? const SizedBox(
+                        width: 22,
+                        height: 22,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : Text(
+                        _mode == StockUpdateMode.system
+                            ? 'SAVE SYSTEM STOCK'
+                            : 'SAVE PHYSICAL COUNT',
+                        style: const TextStyle(fontWeight: FontWeight.w900),
+                      ),
+              ),
             ),
           ),
         ],

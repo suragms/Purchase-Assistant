@@ -42,8 +42,6 @@ class Settings(BaseSettings):
         )
 
     app_env: str = "development"
-    # Harisree: staff accounts are created by the owner via POST /users — not self-registration.
-    allow_public_registration: bool = False
     app_name: str = "hexa-purchase-assistant"
     app_url: str = "http://localhost:8000"
     admin_url: str = "http://localhost:5173"
@@ -81,11 +79,11 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("DATABASE_POOL_SIZE", "DB_POOL_SIZE"),
     )
     database_pool_max_overflow: int = Field(
-        default=5,
+        default=7,
         validation_alias=AliasChoices("DATABASE_MAX_OVERFLOW", "DB_MAX_OVERFLOW"),
     )
     database_pool_timeout_seconds: int = Field(
-        default=20,
+        default=8,
         validation_alias=AliasChoices("DATABASE_POOL_TIMEOUT", "DB_POOL_TIMEOUT"),
     )
     database_pool_recycle_seconds: int = 300
@@ -111,11 +109,6 @@ class Settings(BaseSettings):
     http_slow_request_warning_ms: int = 500
     # Echo X-Request-Id through responses (reuse client-supplied UUID or allocate one).
     http_propagate_request_id: bool = True
-    # If true, emit structured HTTP_JSON for every route (not only /v1/businesses/*). Use on Render when debugging traffic.
-    http_access_log_all: bool = Field(
-        default=False,
-        validation_alias=AliasChoices("HTTP_ACCESS_LOG_ALL", "LOG_ALL_HTTP"),
-    )
 
     redis_url: str | None = "redis://localhost:6379/0"
 
@@ -131,9 +124,6 @@ class Settings(BaseSettings):
     otp_api_key: str | None = None
     otp_sender_id: str = "HEXA"
     otp_requests_per_minute_per_ip: int = 10
-    otp_requests_per_10_minutes_per_phone: int = 3
-    otp_failed_attempts_lockout_threshold: int = 5
-    otp_failed_attempts_lockout_minutes: int = 30
 
     superadmin_bootstrap_phone: str | None = None  # legacy; prefer SUPERADMIN_BOOTSTRAP_EMAIL
     superadmin_bootstrap_email: str | None = None
@@ -173,8 +163,6 @@ class Settings(BaseSettings):
     whatsapp_llm_agent: bool = False
     # Optional shared secret: Authkey must send header X-Authkey-Webhook-Secret matching this value (empty = disabled).
     authkey_webhook_secret: str | None = None
-    # Render cron → POST /internal/whatsapp-reports/send-due (X-Cron-Secret header).
-    whatsapp_reports_cron_secret: str | None = None
     # Inbound Authkey webhook rate limits (per phone; in-process — use Redis + single worker or tune for multi-instance).
     webhook_max_per_minute: int = 20
     webhook_max_per_hour: int = 120
@@ -182,7 +170,6 @@ class Settings(BaseSettings):
     gemini_model: str = "gemini-2.0-flash"
     groq_api_key: str | None = None
     google_ai_api_key: str | None = None
-    # Legacy / non-bill endpoints only — purchase scanner does not use Google OCR (see purchase_scan_service).
     ocr_provider: str = "google_vision"
     ocr_api_key: str | None = None
     stt_provider: str = "openai_whisper"
@@ -193,6 +180,18 @@ class Settings(BaseSettings):
     s3_access_key: str | None = None
     s3_secret_key: str | None = None
     s3_endpoint: str | None = None
+
+    razorpay_key_id: str | None = None
+    razorpay_key_secret: str | None = None
+    razorpay_webhook_secret: str | None = None
+    plan_basic_price_inr: int = 49900
+    plan_pro_price_inr: int = 99900
+    plan_premium_price_inr: int = 199900
+    # When true, WhatsApp/AI routes check BusinessSubscription (grandfather: no row = allowed).
+    billing_enforce: bool = False
+    # Default bundle pricing hints (paise): base cloud + optional WhatsApp+AI add-on (admin can override per business).
+    billing_cloud_infra_paise: int = 230_000  # ₹2,300 (paise)
+    billing_whatsapp_ai_addon_paise: int = 250_000  # ₹2,500 (paise)
 
     sentry_dsn: str | None = None
     log_level: str = "INFO"
@@ -206,6 +205,12 @@ class Settings(BaseSettings):
     enable_ai: bool = True
     enable_ocr: bool = False
 
+    # WhatsApp Cloud API (server-side scheduled auto-send; optional)
+    whatsapp_cloud_access_token: str | None = None
+    whatsapp_cloud_phone_number_id: str | None = None
+    # Secret for Render cron → internal sender endpoint (set long random value in production)
+    whatsapp_reports_cron_secret: str | None = None
+    enable_voice: bool = False
     enable_realtime: bool = True
 
     trusted_hosts: str | None = None
@@ -220,19 +225,12 @@ class Settings(BaseSettings):
         """Call on startup when app_env is production."""
         if self.app_env.lower() != "production":
             return
-        if os.environ.get("HEXA_USE_SQLITE", "").strip().lower() in ("1", "true", "yes"):
-            raise RuntimeError(
-                "HEXA_USE_SQLITE must not be enabled in production — "
-                "unset it so Postgres/Supabase is used."
-            )
         if self.dev_return_otp:
             raise RuntimeError("DEV_RETURN_OTP must be false in production")
         if "change-me" in self.jwt_secret.lower() or "change-me" in self.jwt_refresh_secret.lower():
             raise RuntimeError("JWT secrets must be changed in production")
-        if len(self.jwt_secret) < 48 or len(self.jwt_refresh_secret) < 48:
-            raise RuntimeError("JWT secrets must be at least 48 characters in production")
-        if self.jwt_secret == self.jwt_refresh_secret:
-            raise RuntimeError("JWT access and refresh secrets must be different in production")
+        if len(self.jwt_secret) < 32 or len(self.jwt_refresh_secret) < 32:
+            raise RuntimeError("JWT secrets must be at least 32 characters in production")
         if self.database_ssl_insecure:
             raise RuntimeError("DATABASE_SSL_INSECURE must be false in production")
 

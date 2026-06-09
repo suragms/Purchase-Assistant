@@ -32,29 +32,37 @@ final tradePurchaseDetailProvider =
   ref.keepAlive();
   final session = ref.watch(sessionProvider);
   if (session == null) throw StateError('no session');
-  try {
-    final m = await ref
-        .read(hexaApiProvider)
-        .getTradePurchase(
-          businessId: session.primaryBusiness.id,
-          purchaseId: purchaseId,
-        )
-        .timeout(kTradePurchaseDetailFetchTimeout);
-    final purchase = TradePurchase.fromJson(m);
-    if (purchase.statusEnum == PurchaseStatus.deleted) {
-      throw const TradePurchaseUnavailableError();
+  for (var attempt = 0; attempt < 3; attempt++) {
+    try {
+      final m = await ref
+          .read(hexaApiProvider)
+          .getTradePurchase(
+            businessId: session.primaryBusiness.id,
+            purchaseId: purchaseId,
+          )
+          .timeout(kTradePurchaseDetailFetchTimeout);
+      final purchase = TradePurchase.fromJson(m);
+      if (purchase.statusEnum == PurchaseStatus.deleted) {
+        throw const TradePurchaseUnavailableError();
+      }
+      return purchase;
+    } on TradePurchaseUnavailableError {
+      rethrow;
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 404) {
+        throw const TradePurchaseUnavailableError();
+      }
+      rethrow;
+    } on TimeoutException {
+      if (attempt == 2) {
+        throw Exception(
+          'Could not load purchase in time — check your connection and try again.',
+        );
+      }
+      await Future<void>.delayed(
+        Duration(milliseconds: 800 * (attempt + 1)),
+      );
     }
-    return purchase;
-  } on TradePurchaseUnavailableError {
-    rethrow;
-  } on DioException catch (e) {
-    if (e.response?.statusCode == 404) {
-      throw const TradePurchaseUnavailableError();
-    }
-    rethrow;
-  } on TimeoutException {
-    throw Exception(
-      'Could not load purchase in time — check your connection and try again.',
-    );
   }
+  throw StateError('unreachable');
 });

@@ -8,13 +8,16 @@ import 'catalog_providers.dart';
 import 'stock_providers.dart';
 
 Future<T> _fetchWithRetry<T>(Future<T> Function() load) async {
-  try {
-    return await load();
-  } catch (e, st) {
-    logSilencedApiError(e, st);
-    await Future<void>.delayed(const Duration(seconds: 1));
-    return await load();
+  for (var i = 0; i < 3; i++) {
+    try {
+      return await load();
+    } catch (e, st) {
+      logSilencedApiError(e, st);
+      if (i == 2) rethrow;
+      await Future<void>.delayed(Duration(milliseconds: 600 * (i + 1)));
+    }
   }
+  throw StateError('Unreachable');
 }
 
 class ItemDetailBundle {
@@ -66,7 +69,6 @@ final itemDetailBundleProvider =
     );
   }
 
-  // Re-fetch when staff/owner stock or catalog writes bust leaf providers.
   ref.watch(catalogItemDetailProvider(itemId));
   ref.watch(stockItemDetailProvider(itemId));
   ref.watch(stockItemActivityProvider(itemId));

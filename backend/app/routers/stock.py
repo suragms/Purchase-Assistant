@@ -1,4 +1,6 @@
 import asyncio
+import hashlib
+import json
 import logging
 import uuid
 from collections import defaultdict
@@ -7,7 +9,8 @@ from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi.responses import JSONResponse, Response
 from sqlalchemy import case, desc, func, literal, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -15,7 +18,6 @@ from sqlalchemy.orm import selectinload
 from app.database import get_db
 
 logger = logging.getLogger(__name__)
-
 from app.deps import get_current_user, require_membership, require_permission, require_role
 from app.services.staff_audit import log_staff_activity, log_staff_activity_best_effort
 from app.services.notification_emitter import CATEGORY_STAFF
@@ -107,7 +109,6 @@ from app.services.stock_movement_service import (
     StaleStockVersionError,
     apply_stock_movement,
     apply_stock_movement_with_retry,
-    staff_activity_type_for_stock_kind,
 )
 from app.services.realtime_events import publish_business_event
 from app.services.notification_emitter import publish_notification_changed
@@ -1154,6 +1155,7 @@ async def stock_totals(
 
 @router.get("/list", response_model=StockListOut)
 async def list_stock(
+    request: Request,
     business_id: uuid.UUID,
     db: Annotated[AsyncSession, Depends(get_db)],
     _m: Annotated[Membership, Depends(require_membership)],
@@ -1328,7 +1330,16 @@ async def list_stock(
                 last_movement_at=movement_at_map.get(item.id),
             )
         )
-    return StockListOut(items=items, total=total, page=page, per_page=per_page)
+    out = StockListOut(items=items, total=total, page=page, per_page=per_page)
+    payload = out.model_dump(mode="json")
+    body = json.dumps(payload, sort_keys=True, default=str).encode()
+    etag = '"' + hashlib.md5(body).hexdigest()[:16] + '"'
+    if request.headers.get("if-none-match") == etag:
+        return Response(status_code=304, headers={"ETag": etag})
+    return JSONResponse(
+        content=payload,
+        headers={"ETag": etag, "Cache-Control": "private, max-age=0"},
+    )
 
 
 @router.get("/delivery-indicator-counts", response_model=StockDeliveryIndicatorCountsOut)
@@ -3149,6 +3160,42 @@ async def get_stock_intelligence(
     )
 
 
+@router.get("/item/{item_id}/summary")
+async def get_stock_item_summary(
+    business_id: uuid.UUID,
+    item_id: uuid.UUID,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    _m: Annotated[Membership, Depends(require_membership)],
+):
+    """Lightweight row fields for list patch reconciliation after a stock write."""
+    r = await db.execute(
+        select(CatalogItem).where(
+            CatalogItem.id == item_id,
+            CatalogItem.business_id == business_id,
+            CatalogItem.deleted_at.is_(None),
+        )
+    )
+    item = r.scalar_one_or_none()
+    if not item:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Item not found")
+    phys = (await _latest_physical_count_map(db, business_id, [item_id])).get(item_id)
+    cur = catalog_stock_qty(item)
+    phys_qty = phys.counted_qty if phys else None
+    spec_diff = phys.difference_qty if phys else None
+    if spec_diff is None and phys_qty is not None:
+        spec_diff = phys_qty - cur
+    updated_at = item.last_stock_updated_at or item.updated_at
+    return {
+        "id": str(item.id),
+        "current_stock": float(cur),
+        "physical_stock_qty": float(phys_qty) if phys_qty is not None else None,
+        "physical_stock_difference_qty": float(spec_diff) if spec_diff is not None else None,
+        "physical_stock_counted_at": phys.counted_at.isoformat() if phys and phys.counted_at else None,
+        "stock_version": getattr(item, "stock_version", None),
+        "updated_at": updated_at.isoformat() if updated_at else None,
+    }
+
+
 @router.get("/{item_id}", response_model=StockDetailOut)
 async def get_stock_item(
     business_id: uuid.UUID,
@@ -3399,7 +3446,7 @@ async def record_physical_stock_count(
         db,
         business_id=business_id,
         user=user,
-        action_type=staff_activity_type_for_stock_kind("physical_count"),
+        action_type="PHYSICAL_STOCK_COUNT",
         item_id=item_id,
         item_name=item.name,
         before_data={"system_qty": float(system_qty)},
@@ -3674,44 +3721,28 @@ async def patch_stock_item(
         if str(e) == "Item not found":
             raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Item not found") from e
         raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
-    try:
-        await maybe_notify_stock_variance(
-            db,
-            business_id=business_id,
-            item_id=item_id,
-            adjustment_type=body.adjustment_type,
-            new_qty=result.movement.qty_after,
-            triggered_by_user_id=user.id,
-        )
-    except Exception:
-        logger.warning(
-            "stock variance notification skipped | business_id=%s item_id=%s",
-            business_id,
-            item_id,
-            exc_info=True,
-        )
+    await maybe_notify_stock_variance(
+        db,
+        business_id=business_id,
+        item_id=item_id,
+        adjustment_type=body.adjustment_type,
+        new_qty=result.movement.qty_after,
+        triggered_by_user_id=user.id,
+    )
     item = result.item
     unit = catalog_stock_unit(item) or item.default_unit or ""
-    try:
-        await maybe_notify_staff_system_stock_edit(
-            db,
-            business_id=business_id,
-            item_id=item_id,
-            item_name=item.name,
-            unit=unit,
-            old_qty=result.movement.qty_before,
-            new_qty=result.movement.qty_after,
-            actor_user_id=user.id,
-            actor_display=_user_display(user),
-            actor_role=_membership.role or "",
-        )
-    except Exception:
-        logger.warning(
-            "staff stock edit notification skipped | business_id=%s item_id=%s",
-            business_id,
-            item_id,
-            exc_info=True,
-        )
+    await maybe_notify_staff_system_stock_edit(
+        db,
+        business_id=business_id,
+        item_id=item_id,
+        item_name=item.name,
+        unit=unit,
+        old_qty=result.movement.qty_before,
+        new_qty=result.movement.qty_after,
+        actor_user_id=user.id,
+        actor_display=_user_display(user),
+        actor_role=_membership.role or "",
+    )
     await db.commit()
     publish_business_event(
         business_id,

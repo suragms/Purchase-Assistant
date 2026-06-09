@@ -12,6 +12,3 @@ Future<String?> decodeBarcodeFromImageBytes(List<int> bytes) =>
 
 WebLiveBarcodeScanner? createWebLiveBarcodeScanner() =>
     stub.createWebLiveBarcodeScanner();
-
-Future<void> disposeSharedWebBarcodeScanner() =>
-    stub.disposeSharedWebBarcodeScanner();

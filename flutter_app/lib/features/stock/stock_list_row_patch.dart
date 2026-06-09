@@ -53,7 +53,8 @@ Map<String, dynamic> mergeStockListRowMap(
   if (id == null || id.isEmpty) return row;
   final patch = patches[id];
   if (patch == null || patch.isEmpty) return row;
-  if (serverRowNewerThanPatch(row, patch)) return row;
+  final hasTimestamp = patch.containsKey(kStockListPatchAtKey);
+  if (hasTimestamp && serverRowNewerThanPatch(row, patch)) return row;
   final visible = Map<String, dynamic>.from(patch)
     ..remove(kStockListPatchAtKey);
   if (visible.isEmpty) return row;

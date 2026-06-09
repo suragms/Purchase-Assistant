@@ -5,22 +5,14 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../api/hexa_api.dart';
-import '../auth/provider_api_guard.dart';
-import '../auth/session_notifier.dart'
-    show activeSessionProvider, hexaApiProvider;
-import 'stock_list_exceptions.dart';
-import '../../features/shell/shell_branch_provider.dart';
-import '../../features/staff/staff_shell_branch_provider.dart';
-import '../json_coerce.dart';
-import '../utils/stock_audit_rows.dart';
-import 'analytics_kpi_provider.dart' show analyticsDateRangeProvider;
-import 'app_period_provider.dart';
-import 'home_breakdown_tab_providers.dart' show homeDateRangeForWatch;
-import 'home_dashboard_provider.dart';
+import '../auth/session_notifier.dart';
 import '../../features/stock/stock_list_row_patch.dart'
     show kStockListPatchAtKey, serverRowNewerThanPatch;
+import 'analytics_kpi_provider.dart' show analyticsDateRangeProvider;
+import 'app_period_provider.dart';
+import 'home_dashboard_provider.dart';
 
-void providerKeepAlive(Ref ref, Duration ttl) {
+void _providerKeepAlive(Ref ref, Duration ttl) {
   final link = ref.keepAlive();
   final timer = Timer(ttl, link.close);
   ref.onDispose(timer.cancel);
@@ -94,68 +86,12 @@ class StockListQuery {
       purchasedInPeriod: purchasedInPeriod ?? this.purchasedInPeriod,
     );
   }
-
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is StockListQuery &&
-          runtimeType == other.runtimeType &&
-          page == other.page &&
-          perPage == other.perPage &&
-          q == other.q &&
-          category == other.category &&
-          subcategory == other.subcategory &&
-          supplier == other.supplier &&
-          status == other.status &&
-          sort == other.sort &&
-          includePeriod == other.includePeriod &&
-          periodStart == other.periodStart &&
-          periodEnd == other.periodEnd &&
-          purchasedInPeriod == other.purchasedInPeriod;
-
-  @override
-  int get hashCode => Object.hash(
-        page,
-        perPage,
-        q,
-        category,
-        subcategory,
-        supplier,
-        status,
-        sort,
-        includePeriod,
-        periodStart,
-        periodEnd,
-        purchasedInPeriod,
-      );
-}
-
-/// Home out-of-stock strip — small scoped list (not the stock page query).
-const kHomeOutOfStockListQuery = StockListQuery(
-  status: 'out',
-  perPage: 8,
-  page: 1,
-  sort: 'stock_asc',
-);
-
-bool _stockOwnerOrStaffTabVisible(Ref ref) {
-  if (shellBranchIsVisible(ref, ShellBranch.stock)) return true;
-  if (staffShellBranchIsVisible(ref, StaffShellBranch.stock)) return true;
-  return false;
-}
-
-/// Stock list API when owner/staff Stock tab is visible, or Home OOS strip query.
-bool _stockListFetchAllowed(Ref ref, StockListQuery query) {
-  if (providerSkipApi(ref)) return false;
-  if (_stockOwnerOrStaffTabVisible(ref)) return true;
-  return shellBranchIsVisible(ref, ShellBranch.home) &&
-      query == kHomeOutOfStockListQuery;
 }
 
 /// Item drill-down: period purchases, variance, recent lines.
 final stockItemIntelligenceProvider = FutureProvider.autoDispose
     .family<Map<String, dynamic>, String>((ref, itemId) async {
-  final session = ref.watch(activeSessionProvider);
+  final session = ref.watch(sessionProvider);
   if (session == null) return {};
   final range = ref.watch(stockListQueryProvider);
   return ref.read(hexaApiProvider).getStockIntelligence(
@@ -168,7 +104,7 @@ final stockItemIntelligenceProvider = FutureProvider.autoDispose
 
 final stockItemActivityProvider = FutureProvider.autoDispose
     .family<Map<String, dynamic>, String>((ref, itemId) async {
-  final session = ref.watch(activeSessionProvider);
+  final session = ref.watch(sessionProvider);
   if (session == null) return {};
   return ref.read(hexaApiProvider).getStockItemActivity(
         businessId: session.primaryBusiness.id,
@@ -181,19 +117,10 @@ final stockListQueryProvider =
 
 /// Stock list period chips (Today / Week / Month / Year).
 final stockPagePeriodProvider =
-    StateProvider<HomePeriod>((_) => HomePeriod.month);
+    StateProvider<HomePeriod>((_) => HomePeriod.allTime);
 
 /// Tablet/desktop split pane selection.
 final stockSelectedItemIdProvider = StateProvider<String?>((ref) => null);
-
-/// Saved scroll offset for stock list — restored when returning from detail.
-final stockListScrollOffsetProvider = StateProvider<double>((ref) => 0);
-
-enum StockDeliveryFilter { all, pending, delivered }
-
-/// Client-side delivery truck filter on stock list.
-final stockDeliveryFilterProvider =
-    StateProvider<StockDeliveryFilter>((ref) => StockDeliveryFilter.all);
 
 /// Client-side filters shared by stock + bulk print.
 class StockOperationalFilters {
@@ -214,27 +141,6 @@ class StockOperationalFilters {
 
   /// Empty = all units; else match `unit` field lowercased.
   final String unit;
-
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is StockOperationalFilters &&
-          missingBarcodeOnly == other.missingBarcodeOnly &&
-          missingItemCodeOnly == other.missingItemCodeOnly &&
-          reorderOnly == other.reorderOnly &&
-          evictionOnly == other.evictionOnly &&
-          purchasedInPeriodOnly == other.purchasedInPeriodOnly &&
-          unit == other.unit;
-
-  @override
-  int get hashCode => Object.hash(
-        missingBarcodeOnly,
-        missingItemCodeOnly,
-        reorderOnly,
-        evictionOnly,
-        purchasedInPeriodOnly,
-        unit,
-      );
 
   StockOperationalFilters copyWith({
     bool? missingBarcodeOnly,
@@ -287,8 +193,8 @@ int countOperationalActiveFilters(
 /// On-hand warehouse totals (bags/kg/boxes/tins). Never pass period — that returns purchases.
 final stockOnHandTotalsProvider =
     FutureProvider.autoDispose<Map<String, dynamic>>((ref) async {
-  providerKeepAlive(ref, const Duration(minutes: 3));
-  final session = ref.watch(activeSessionProvider);
+  _providerKeepAlive(ref, const Duration(minutes: 3));
+  final session = ref.watch(sessionProvider);
   if (session == null) return {};
   return ref.read(hexaApiProvider).getStockTotals(
         businessId: session.primaryBusiness.id,
@@ -299,8 +205,8 @@ final stockOnHandTotalsProvider =
 final stockTotalsProvider =
     FutureProvider.autoDispose.family<Map<String, dynamic>, AppPeriod>(
   (ref, period) async {
-    providerKeepAlive(ref, const Duration(minutes: 3));
-    final session = ref.watch(activeSessionProvider);
+    _providerKeepAlive(ref, const Duration(minutes: 3));
+    final session = ref.watch(sessionProvider);
     if (session == null) return {};
     return ref.read(hexaApiProvider).getStockTotals(
           businessId: session.primaryBusiness.id,
@@ -310,82 +216,65 @@ final stockTotalsProvider =
   },
 );
 
-/// Stock audit events for the stock page **Changes** / **Movement** tabs (newest first).
+/// Stock audit events for the stock page **Changes** tab (newest first).
 final stockChangesFeedProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
-  providerKeepAlive(ref, const Duration(minutes: 2));
-  final session = ref.watch(activeSessionProvider);
+  _providerKeepAlive(ref, const Duration(minutes: 2));
+  final session = ref.watch(sessionProvider);
   if (session == null) return [];
-  final period = ref.watch(stockPagePeriodProvider);
-  final bid = session.primaryBusiness.id;
-  final api = ref.read(hexaApiProvider);
-  final q = homeDateRangeForWatch(period, null);
-  final results = await Future.wait([
-    api.listStockAuditRecent(
-      businessId: bid,
-      limit: HexaApi.stockAuditRecentMaxLimit,
-    ),
-    api.listTradePurchases(
-      businessId: bid,
-      limit: 80,
-      offset: 0,
-      status: 'all',
-      purchaseFrom: q.from,
-      purchaseTo: q.to,
-    ),
-  ]);
-  final audits = filterStockAuditRowsByHomePeriod(
-    (results[0] as List).map((e) => Map<String, dynamic>.from(e as Map)).toList(),
-    period,
+  ref.watch(stockPagePeriodProvider);
+  final rows = await ref.read(hexaApiProvider).listStockAuditRecent(
+        businessId: session.primaryBusiness.id,
+        limit: HexaApi.stockAuditRecentMaxLimit,
+      );
+  final period = ref.read(stockPagePeriodProvider);
+  final range = homePeriodRange(period, now: DateTime.now());
+  final from = DateTime(range.start.year, range.start.month, range.start.day);
+  final end = DateTime(
+    range.end.year,
+    range.end.month,
+    range.end.day,
+    23,
+    59,
+    59,
   );
-  final bills = mapPurchasesToStockAuditRows(
-    (results[1] as List).map((e) => Map<String, dynamic>.from(e as Map)).toList(),
-  );
-  final billsInPeriod = filterStockAuditRowsByHomePeriod(bills, period);
-  return sortStockAuditRowsNewestFirst([...audits, ...billsInPeriod]);
+  final out = <Map<String, dynamic>>[];
+  for (final raw in rows) {
+    final m = Map<String, dynamic>.from(raw);
+    final at = DateTime.tryParse(
+          m['created_at']?.toString() ?? m['audited_at']?.toString() ?? '',
+        ) ??
+        DateTime.tryParse(m['on']?.toString() ?? '');
+    if (at == null) continue;
+    if (at.isBefore(from) || at.isAfter(end)) continue;
+    out.add(m);
+  }
+  out.sort((a, b) {
+    final ta = DateTime.tryParse(a['created_at']?.toString() ?? '') ??
+        DateTime.fromMillisecondsSinceEpoch(0);
+    final tb = DateTime.tryParse(b['created_at']?.toString() ?? '') ??
+        DateTime.fromMillisecondsSinceEpoch(0);
+    return tb.compareTo(ta);
+  });
+  return out;
 });
 
-/// Cache key for `/stock/list` — query + operational filters (server-side).
-class StockListCacheKey {
-  const StockListCacheKey(this.query, this.op, this.businessId);
-
-  final StockListQuery query;
-  final StockOperationalFilters op;
-  final String businessId;
-
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is StockListCacheKey &&
-          query == other.query &&
-          op == other.op &&
-          businessId == other.businessId;
-
-  @override
-  int get hashCode => Object.hash(query, op, businessId);
-}
-
-/// Shared GET `/stock/list` cache — dedupes home + stock page watchers (30s TTL).
-final stockListCacheProvider = FutureProvider.autoDispose
-    .family<Map<String, dynamic>, StockListCacheKey>((ref, key) async {
-  final query = key.query;
-  final op = key.op;
-  providerKeepAlive(ref, const Duration(minutes: 3));
-  if (!_stockListFetchAllowed(ref, query)) {
-    throw const StockListFetchBlockedException('tab_not_visible');
-  }
-  if (providerSkipApi(ref)) {
-    throw const StockListFetchBlockedException('api_gate');
-  }
-  final session = ref.watch(activeSessionProvider);
+final stockListProvider = FutureProvider.autoDispose((ref) async {
+  final keepAlive = ref.keepAlive();
+  final timer = Timer(const Duration(seconds: 90), keepAlive.close);
+  ref.onDispose(timer.cancel);
+  final session = ref.watch(sessionProvider);
+  final query = ref.watch(stockListQueryProvider);
   if (session == null) {
-    throw const StockListFetchBlockedException('no_session');
-  }
-  if (session.primaryBusiness.id != key.businessId) {
-    throw const StockListFetchBlockedException('business_mismatch');
+    return <String, dynamic>{
+      'items': <dynamic>[],
+      'total': 0,
+      'page': 1,
+      'per_page': query.perPage,
+    };
   }
   return ref.read(hexaApiProvider).listStock(
-        businessId: key.businessId,
+        businessId: session.primaryBusiness.id,
         page: query.page,
         perPage: query.perPage,
         q: query.q,
@@ -396,41 +285,70 @@ final stockListCacheProvider = FutureProvider.autoDispose
         includePeriod: query.includePeriod,
         periodStart: query.periodStart,
         periodEnd: query.periodEnd,
-        purchasedInPeriod: query.purchasedInPeriod,
-        missingBarcode: op.missingBarcodeOnly,
-        missingItemCode: op.missingItemCodeOnly,
-        reorderOnly: op.reorderOnly,
-        unit: op.unit,
+        purchasedInPeriod: query.purchasedInPeriod ||
+            ref.read(stockOperationalFiltersProvider).purchasedInPeriodOnly,
       );
 });
 
-/// Stock page list — reads [stockListCacheProvider] for the active [stockListQueryProvider].
-final stockListProvider = FutureProvider.autoDispose((ref) async {
-  providerKeepAlive(ref, const Duration(minutes: 3));
-  final session = ref.watch(activeSessionProvider);
-  if (session == null || providerSkipApi(ref)) {
-    throw const StockListFetchBlockedException('no_session');
-  }
+/// Loads **all** stock rows matching [stockListQueryProvider] filters (paged API calls).
+/// Used by bulk barcode print so the list is not limited to the stock screen page size.
+/// Selected catalog item ids for bulk barcode PDF (stable across list rebuilds).
+final bulkBarcodeSelectionProvider = StateProvider<Set<String>>((ref) => {});
+
+/// Item ids successfully downloaded/printed this session (bulk barcode page).
+final bulkBarcodeDownloadedIdsProvider =
+    StateProvider<Set<String>>((ref) => {});
+
+final bulkStockListProvider =
+    FutureProvider.autoDispose<Map<String, dynamic>>((ref) async {
+  final session = ref.watch(sessionProvider);
   final query = ref.watch(stockListQueryProvider);
-  final op = ref.watch(stockOperationalFiltersProvider);
-  final purchasedInPeriod = query.purchasedInPeriod || op.purchasedInPeriodOnly;
-  final effective = purchasedInPeriod == query.purchasedInPeriod
-      ? query
-      : query.copyWith(purchasedInPeriod: purchasedInPeriod);
-  final data = await ref.watch(
-    stockListCacheProvider(
-      StockListCacheKey(effective, op, session.primaryBusiness.id),
-    ).future,
-  );
-  final raw = data['items'];
-  if (raw is List) {
-    final rows = [
-      for (final e in raw)
-        if (e is Map) Map<String, dynamic>.from(e),
-    ];
-    reconcileStockListRowPatches(ref, rows);
+  if (session == null) {
+    return {'items': <Map<String, dynamic>>[], 'total': 0, 'loaded': 0};
   }
-  return data;
+  final api = ref.read(hexaApiProvider);
+  // Smaller pages on web: large JSON over HTTP/3 (QUIC) often trips
+  // ERR_QUIC_PROTOCOL_ERROR on flaky networks / Render cold paths.
+  final pageSize = kIsWeb ? 100 : 500;
+  var page = 1;
+  final merged = <Map<String, dynamic>>[];
+  var total = 0;
+  while (page <= 40) {
+    try {
+      final res = await api.listStock(
+        businessId: session.primaryBusiness.id,
+        page: page,
+        perPage: pageSize,
+        q: query.q,
+        category: query.category,
+        subcategory: query.subcategory,
+        status: query.status,
+        sort: query.sort,
+        includePeriod: query.includePeriod,
+        periodStart: query.periodStart,
+        periodEnd: query.periodEnd,
+      );
+      total = (res['total'] as num?)?.toInt() ?? 0;
+      final raw = (res['items'] as List?) ?? const [];
+      if (raw.isEmpty) break;
+      for (final e in raw) {
+        if (e is Map) merged.add(Map<String, dynamic>.from(e));
+      }
+      if (merged.length >= total) break;
+      page++;
+    } on DioException {
+      if (merged.isNotEmpty) {
+        return {
+          'items': merged,
+          'total': total > 0 ? total : merged.length,
+          'loaded': merged.length,
+          'partial': true,
+        };
+      }
+      rethrow;
+    }
+  }
+  return {'items': merged, 'total': total, 'loaded': merged.length};
 });
 
 /// Optimistic list-row overlays until the next `/stock/list` fetch replaces them.
@@ -490,115 +408,11 @@ void clearStockListRowPatchesForIds(
   });
 }
 
-/// Server-side pending/delivered truck counts (refreshed on period change + 30s poll).
-final stockDeliveryIndicatorCountsProvider = FutureProvider.autoDispose<
-    ({int pending, int delivered})>((ref) async {
-  providerKeepAlive(ref, const Duration(seconds: 25));
-  final session = ref.watch(activeSessionProvider);
-  if (session == null || providerSkipApi(ref)) {
-    return (pending: 0, delivered: 0);
-  }
-  final query = ref.watch(stockListQueryProvider);
-  final op = ref.watch(stockOperationalFiltersProvider);
-  final counts = await ref.read(hexaApiProvider).stockDeliveryIndicatorCounts(
-        businessId: session.primaryBusiness.id,
-        q: query.q,
-        category: query.category,
-        subcategory: query.subcategory,
-        status: query.status,
-        sort: query.sort,
-        includePeriod: query.includePeriod,
-        periodStart: query.periodStart,
-        periodEnd: query.periodEnd,
-        missingBarcode: op.missingBarcodeOnly,
-        missingItemCode: op.missingItemCodeOnly,
-        reorderOnly: op.reorderOnly,
-        unit: op.unit,
-      );
-  return (
-    pending: coerceToInt(counts['pending']),
-    delivered: coerceToInt(counts['delivered']),
-  );
-});
-
-/// Loads **all** stock rows matching [stockListQueryProvider] filters (paged API calls).
-/// Used by bulk barcode print so the list is not limited to the stock screen page size.
-/// Selected catalog item ids for bulk barcode PDF (stable across list rebuilds).
-final bulkBarcodeSelectionProvider = StateProvider<Set<String>>((ref) => {});
-
-/// Item ids successfully downloaded/printed this session (bulk barcode page).
-final bulkBarcodeDownloadedIdsProvider =
-    StateProvider<Set<String>>((ref) => {});
-
-final bulkStockListProvider =
-    FutureProvider.autoDispose<Map<String, dynamic>>((ref) async {
-  providerKeepAlive(ref, const Duration(minutes: 3));
-  final session = ref.watch(activeSessionProvider);
-  final query = ref.watch(stockListQueryProvider);
-  final op = ref.watch(stockOperationalFiltersProvider);
-  if (session == null) {
-    return {'items': <Map<String, dynamic>>[], 'total': 0, 'loaded': 0};
-  }
-  final api = ref.read(hexaApiProvider);
-  final purchasedInPeriod = query.purchasedInPeriod || op.purchasedInPeriodOnly;
-  // Smaller pages on web: large JSON over HTTP/3 (QUIC) often trips
-  // ERR_QUIC_PROTOCOL_ERROR on flaky networks / Render cold paths.
-  final pageSize = kIsWeb ? 100 : 500;
-  var page = 1;
-  final merged = <Map<String, dynamic>>[];
-  var total = 0;
-  while (page <= 40) {
-    try {
-      final res = await api.listStock(
-        businessId: session.primaryBusiness.id,
-        page: page,
-        perPage: pageSize,
-        q: query.q,
-        category: query.category,
-        subcategory: query.subcategory,
-        status: query.status,
-        sort: query.sort,
-        includePeriod: query.includePeriod,
-        periodStart: query.periodStart,
-        periodEnd: query.periodEnd,
-        purchasedInPeriod: purchasedInPeriod,
-        missingBarcode: op.missingBarcodeOnly,
-        missingItemCode: op.missingItemCodeOnly,
-        reorderOnly: op.reorderOnly,
-        unit: op.unit,
-      );
-      total = (res['total'] as num?)?.toInt() ?? 0;
-      final raw = (res['items'] as List?) ?? const [];
-      if (raw.isEmpty) break;
-      for (final e in raw) {
-        if (e is Map) merged.add(Map<String, dynamic>.from(e));
-      }
-      if (merged.length >= total) break;
-      page++;
-    } on DioException {
-      if (merged.isNotEmpty) {
-        return {
-          'items': merged,
-          'total': total > 0 ? total : merged.length,
-          'loaded': merged.length,
-          'partial': true,
-        };
-      }
-      rethrow;
-    }
-  }
-  return {'items': merged, 'total': total, 'loaded': merged.length};
-});
-
 /// Stock row + recent purchases for catalog item detail / sheets.
 final stockItemDetailProvider =
     FutureProvider.autoDispose.family<Map<String, dynamic>, String>(
   (ref, itemId) async {
-    final keepAlive = ref.keepAlive();
-    final timer = Timer(const Duration(seconds: 30), keepAlive.close);
-    ref.onDispose(timer.cancel);
-
-    final session = ref.watch(activeSessionProvider);
+    final session = ref.watch(sessionProvider);
     if (session == null) return {};
     try {
       return await ref.read(hexaApiProvider).getStockItem(
@@ -615,7 +429,7 @@ final stockItemDetailProvider =
 final stockItemAuditProvider =
     FutureProvider.autoDispose.family<List<Map<String, dynamic>>, String>(
   (ref, itemId) async {
-    final session = ref.watch(activeSessionProvider);
+    final session = ref.watch(sessionProvider);
     if (session == null) return [];
     return ref.read(hexaApiProvider).listStockAuditForItem(
           businessId: session.primaryBusiness.id,
@@ -627,38 +441,27 @@ final stockItemAuditProvider =
 /// Status bucket counts for stock filter chips (authoritative server summary).
 final stockStatusCountsProvider =
     FutureProvider.autoDispose<Map<String, int>>((ref) async {
-  final bundled = homeBundledStockStatusCounts(ref);
-  if (bundled != null && bundled.isNotEmpty) return bundled;
   final keepAlive = ref.keepAlive();
   final timer = Timer(const Duration(minutes: 2), keepAlive.close);
   ref.onDispose(timer.cancel);
-  if (providerSkipApi(ref)) {
-    throw const StockListFetchBlockedException('api_gate');
-  }
-  if (!_stockOwnerOrStaffTabVisible(ref) &&
-      !shellBranchIsVisible(ref, ShellBranch.home)) {
-    return {};
-  }
-  final session = ref.watch(activeSessionProvider);
-  if (session == null) {
-    throw const StockListFetchBlockedException('no_session');
-  }
+  final session = ref.watch(sessionProvider);
+  if (session == null) return {};
   final api = ref.read(hexaApiProvider);
   final bid = session.primaryBusiness.id;
 
   final summary = await api.getStockAlertsSummary(businessId: bid);
-  final allTotal = coerceToIntNullable(summary['total_items']);
-  final outCount = coerceToInt(summary['active_out_of_stock']) > 0
-      ? coerceToInt(summary['active_out_of_stock'])
-      : coerceToInt(summary['out_of_stock']);
+  final allTotal = (summary['total_items'] as num?)?.toInt();
+  final outCount = (summary['active_out_of_stock'] as num?)?.toInt() ??
+      (summary['out_of_stock'] as num?)?.toInt() ??
+      0;
   if (allTotal != null && allTotal > 0) {
     return {
       'all': allTotal,
-      'low': coerceToInt(summary['low_stock']),
-      'critical': coerceToInt(summary['critical_stock']),
+      'low': (summary['low_stock'] as num?)?.toInt() ?? 0,
+      'critical': (summary['critical_stock'] as num?)?.toInt() ?? 0,
       'out': outCount,
-      'missing_code': coerceToInt(summary['missing_item_code']),
-      'missing_barcode': coerceToInt(summary['missing_barcode']),
+      'missing_code': (summary['missing_item_code'] as num?)?.toInt() ?? 0,
+      'missing_barcode': (summary['missing_barcode'] as num?)?.toInt() ?? 0,
     };
   }
 
@@ -670,108 +473,12 @@ final stockStatusCountsProvider =
     sort: 'recent',
   );
   return {
-    'all': coerceToInt(res['total']),
-    'low': coerceToInt(summary['low_stock']),
-    'critical': coerceToInt(summary['critical_stock']),
+    'all': (res['total'] as num?)?.toInt() ?? 0,
+    'low': (summary['low_stock'] as num?)?.toInt() ?? 0,
+    'critical': (summary['critical_stock'] as num?)?.toInt() ?? 0,
     'out': outCount,
-    'missing_code': coerceToInt(summary['missing_item_code']),
-    'missing_barcode': coerceToInt(summary['missing_barcode']),
-  };
-});
-
-bool stockListHasScopedFilters(StockListQuery q, StockOperationalFilters op) {
-  return q.subcategory.isNotEmpty ||
-      q.category.isNotEmpty ||
-      q.supplier.isNotEmpty ||
-      q.q.trim().isNotEmpty ||
-      q.purchasedInPeriod ||
-      op.purchasedInPeriodOnly ||
-      op.missingBarcodeOnly ||
-      op.missingItemCodeOnly ||
-      op.reorderOnly ||
-      op.evictionOnly ||
-      op.unit.isNotEmpty ||
-      q.status != 'all';
-}
-
-Future<int> _stockListTotalForStatus({
-  required HexaApi api,
-  required String businessId,
-  required StockListQuery query,
-  required StockOperationalFilters op,
-  required String status,
-}) async {
-  final purchasedInPeriod = query.purchasedInPeriod || op.purchasedInPeriodOnly;
-  final res = await api.listStock(
-    businessId: businessId,
-    page: 1,
-    perPage: 1,
-    q: query.q,
-    category: query.category,
-    subcategory: query.subcategory,
-    status: status,
-    sort: query.sort,
-    includePeriod: query.includePeriod,
-    periodStart: query.periodStart,
-    periodEnd: query.periodEnd,
-    purchasedInPeriod: purchasedInPeriod,
-    missingBarcode: op.missingBarcodeOnly,
-    missingItemCode: op.missingItemCodeOnly,
-    reorderOnly: op.reorderOnly,
-    unit: op.unit,
-  );
-  return coerceToInt(res['total']);
-}
-
-/// Chip badge counts using the same filters as the active stock list query.
-final stockFilteredStatusCountsProvider =
-    FutureProvider.autoDispose<Map<String, int>>((ref) async {
-  providerKeepAlive(ref, const Duration(seconds: 45));
-  if (providerSkipApi(ref)) return {};
-  final session = ref.watch(activeSessionProvider);
-  if (session == null) return {};
-  final query = ref.watch(stockListQueryProvider);
-  final op = ref.watch(stockOperationalFiltersProvider);
-  if (!stockListHasScopedFilters(query, op)) {
-    return ref.watch(stockStatusCountsProvider).valueOrNull ?? {};
-  }
-  final api = ref.read(hexaApiProvider);
-  final bid = session.primaryBusiness.id;
-  final results = await Future.wait([
-    _stockListTotalForStatus(
-      api: api,
-      businessId: bid,
-      query: query,
-      op: op,
-      status: 'all',
-    ),
-    _stockListTotalForStatus(
-      api: api,
-      businessId: bid,
-      query: query,
-      op: op,
-      status: 'low',
-    ),
-    _stockListTotalForStatus(
-      api: api,
-      businessId: bid,
-      query: query,
-      op: op,
-      status: 'critical',
-    ),
-    _stockListTotalForStatus(
-      api: api,
-      businessId: bid,
-      query: query,
-      op: op,
-      status: 'out',
-    ),
-  ]);
-  return {
-    'all': results[0],
-    'low': results[1],
-    'critical': results[2],
-    'out': results[3],
+    'missing_code': (summary['missing_item_code'] as num?)?.toInt() ?? 0,
+    'missing_barcode': (summary['missing_barcode'] as num?)?.toInt() ?? 0,
   };
 });
 
@@ -815,8 +522,8 @@ Future<List<Map<String, dynamic>>> _fetchStockListAllPages({
 
 final lowStockByCategoryProvider =
     FutureProvider.autoDispose<LowStockByCategoryMap>((ref) async {
-  providerKeepAlive(ref, const Duration(minutes: 2));
-  final session = ref.watch(activeSessionProvider);
+  _providerKeepAlive(ref, const Duration(minutes: 2));
+  final session = ref.watch(sessionProvider);
   if (session == null) return {};
   final api = ref.read(hexaApiProvider);
   final bid = session.primaryBusiness.id;
@@ -833,27 +540,26 @@ final lowStockByCategoryProvider =
       '${range.start.year}-${range.start.month.toString().padLeft(2, '0')}-${range.start.day.toString().padLeft(2, '0')}';
   final periodEnd =
       '${range.end.year}-${range.end.month.toString().padLeft(2, '0')}-${range.end.day.toString().padLeft(2, '0')}';
-  // Server-side shortage filter (low + critical + out) — much smaller than status=all.
   final lowRows = await _fetchStockListAllPages(
     api: api,
     businessId: bid,
-    status: 'shortage',
+    status: 'all',
     includePeriod: true,
     periodStart: periodStart,
     periodEnd: periodEnd,
-  ).timeout(
-    const Duration(seconds: 25),
-    onTimeout: () {
-      throw TimeoutException('Low stock list fetch timed out after 25 seconds');
-    },
   );
-  final merged = <Map<String, dynamic>>[];
+  final byId = <String, Map<String, dynamic>>{};
   for (final item in lowRows) {
+    final status = (item['stock_status']?.toString() ?? '').toLowerCase();
+    if (status != 'low' && status != 'out') continue;
     final id = item['id']?.toString();
     if (id != null && id.isNotEmpty) {
-      merged.add(item);
+      byId[id] = item;
+    } else {
+      byId['_${byId.length}'] = item;
     }
   }
+  final merged = byId.values.toList();
 
   final result = <String, Map<String, List<Map<String, dynamic>>>>{};
   for (final item in merged) {
@@ -943,8 +649,8 @@ final openingStockSetupQueryProvider =
 /// Server-backed list: summary + rows.
 final openingStockSetupProvider = FutureProvider.autoDispose<Map<String, dynamic>>(
   (ref) async {
-    providerKeepAlive(ref, const Duration(minutes: 2));
-    final session = ref.watch(activeSessionProvider);
+    _providerKeepAlive(ref, const Duration(minutes: 2));
+    final session = ref.watch(sessionProvider);
     if (session == null) {
       return {
         'summary': {},
@@ -982,11 +688,11 @@ final openingStockBulkSelectionProvider = StateProvider<Set<String>>(
 /// Items missing opening stock (home banners + critical alerts).
 final openingStockMissingProvider =
     FutureProvider.autoDispose<Map<String, dynamic>>((ref) async {
-  providerKeepAlive(ref, const Duration(minutes: 2));
-  if (providerSkipApi(ref)) {
+  _providerKeepAlive(ref, const Duration(minutes: 2));
+  final session = ref.watch(sessionProvider);
+  if (session == null) {
     return {'items': <Map<String, dynamic>>[], 'missing_count': 0};
   }
-  final session = ref.watch(activeSessionProvider)!;
   return ref.read(hexaApiProvider).getMissingOpeningStock(
         businessId: session.primaryBusiness.id,
       );

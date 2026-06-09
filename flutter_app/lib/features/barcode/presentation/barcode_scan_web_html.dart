@@ -25,54 +25,26 @@ bool get isSafariBrowser {
 
 int? _iosMajorVersionFromUserAgent() {
   final ua = html.window.navigator.userAgent;
-  // FIX 5: iPhone and iPad OS strings
-  final match = RegExp(r'(?:iPhone |CPU )OS (\d+)[_\.]').firstMatch(ua);
-  if (match != null) return int.tryParse(match.group(1) ?? '');
-  final versionMatch = RegExp(r'Version/(\d+)').firstMatch(ua);
-  if (versionMatch != null && isSafariBrowser) {
-    return int.tryParse(versionMatch.group(1) ?? '');
-  }
-  return null;
+  final match = RegExp(r'OS (\d+)_').firstMatch(ua);
+  if (match == null) return null;
+  return int.tryParse(match.group(1) ?? '');
 }
 
 /// Upload-only fallback when live camera is unreliable (old iOS or no APIs).
 bool get preferUploadBarcodeOnWeb {
-  // FIX 5: use live camera when BarcodeDetector is present
   if (barcodeDetectorAvailable) return false;
   if (isSafariBrowser) {
     final iosMajor = _iosMajorVersionFromUserAgent();
-    if (iosMajor == null) return false;
-    return iosMajor < 17;
+    if (iosMajor != null && iosMajor >= 17) return false;
+    return true;
   }
   return false;
 }
 
-/// Singleton web scanner — keeps getUserMedia stream alive across scan routes.
-abstract final class HexaWebLiveBarcodeScanner {
-  static WebLiveBarcodeScanner? _shared;
-
-  static WebLiveBarcodeScanner get shared {
-    _shared ??= _WebBarcodeDetectorScanner();
-    return _shared!;
-  }
-
-  /// Tear down platform view — call when scan route is permanently disposed.
-  static Future<void> disposeShared() async {
-    final s = _shared;
-    _shared = null;
-    if (s is _WebBarcodeDetectorScanner) {
-      await s.dispose();
-    }
-  }
-}
-
 WebLiveBarcodeScanner? createWebLiveBarcodeScanner() {
   if (!barcodeDetectorAvailable) return null;
-  return HexaWebLiveBarcodeScanner.shared;
+  return _WebBarcodeDetectorScanner();
 }
-
-Future<void> disposeSharedWebBarcodeScanner() =>
-    HexaWebLiveBarcodeScanner.disposeShared();
 
 Future<String?> decodeBarcodeFromImageBytes(List<int> bytes) async {
   if (!barcodeDetectorAvailable) return null;
@@ -140,7 +112,6 @@ String? _firstCodeFromDetectResults(List<dynamic> results) {
 
 class _WebBarcodeDetectorScanner implements WebLiveBarcodeScanner {
   static int _nextViewId = 0;
-  static const _detectIntervalMs = 150;
 
   html.VideoElement? _video;
   html.MediaStream? _stream;
@@ -148,7 +119,6 @@ class _WebBarcodeDetectorScanner implements WebLiveBarcodeScanner {
   Timer? _detectTimer;
   void Function(String code)? _onDetected;
   bool _active = false;
-  bool _paused = false;
   bool _detectInFlight = false;
   late final String _viewType;
   bool _viewRegistered = false;
@@ -182,40 +152,15 @@ class _WebBarcodeDetectorScanner implements WebLiveBarcodeScanner {
     return HtmlElementView(viewType: _viewType);
   }
 
-  void _startDetectLoop() {
-    _detectTimer?.cancel();
-    _detectTimer = Timer.periodic(
-      const Duration(milliseconds: _detectIntervalMs),
-      (_) => unawaited(_detectOnce()),
-    );
-  }
-
-  @override
-  Future<void> pause() async {
-    _paused = true;
-    _detectTimer?.cancel();
-    _detectTimer = null;
-    _onDetected = null;
-    _detectInFlight = false;
-  }
-
-  @override
-  Future<void> resume(void Function(String code) onDetected) async {
-    if (!_active || _stream == null || _video == null) {
-      await start(onDetected);
-      return;
-    }
-    _paused = false;
-    _onDetected = onDetected;
-    _startDetectLoop();
-  }
-
   @override
   Future<bool> start(void Function(String code) onDetected) async {
     if (_active && _stream != null && _video != null) {
-      _paused = false;
       _onDetected = onDetected;
-      _startDetectLoop();
+      _detectTimer?.cancel();
+      _detectTimer = Timer.periodic(
+        const Duration(milliseconds: 280),
+        (_) => unawaited(_detectOnce()),
+      );
       return true;
     }
     await stop();
@@ -231,11 +176,11 @@ class _WebBarcodeDetectorScanner implements WebLiveBarcodeScanner {
         'audio': false,
       });
       _stream = stream;
-      _video ??= html.VideoElement()
+      _video = html.VideoElement()
         ..autoplay = true
         ..muted = true
-        ..setAttribute('playsinline', 'true');
-      _video!.srcObject = stream;
+        ..setAttribute('playsinline', 'true')
+        ..srcObject = stream;
 
       await _video!.onLoadedMetadata.first.timeout(const Duration(seconds: 8));
       await _video!.play();
@@ -248,8 +193,10 @@ class _WebBarcodeDetectorScanner implements WebLiveBarcodeScanner {
 
       _registerViewIfNeeded();
       _active = true;
-      _paused = false;
-      _startDetectLoop();
+      _detectTimer = Timer.periodic(
+        const Duration(milliseconds: 280),
+        (_) => unawaited(_detectOnce()),
+      );
       return true;
     } catch (_) {
       await stop();
@@ -258,11 +205,7 @@ class _WebBarcodeDetectorScanner implements WebLiveBarcodeScanner {
   }
 
   Future<void> _detectOnce() async {
-    if (!_active ||
-        _paused ||
-        _detectInFlight ||
-        _video == null ||
-        _detector == null) {
+    if (!_active || _detectInFlight || _video == null || _detector == null) {
       return;
     }
     _detectInFlight = true;
@@ -283,7 +226,6 @@ class _WebBarcodeDetectorScanner implements WebLiveBarcodeScanner {
   @override
   Future<void> stop() async {
     _active = false;
-    _paused = false;
     _detectTimer?.cancel();
     _detectTimer = null;
     _detectInFlight = false;
@@ -298,14 +240,8 @@ class _WebBarcodeDetectorScanner implements WebLiveBarcodeScanner {
 
     if (_video != null) {
       _video!.srcObject = null;
-      // Keep element alive so HtmlElementView can reuse on next start().
+      _video!.remove();
+      _video = null;
     }
-  }
-
-  Future<void> dispose() async {
-    await stop();
-    _video?.remove();
-    _video = null;
-    _viewRegistered = false;
   }
 }

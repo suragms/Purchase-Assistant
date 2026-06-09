@@ -9,7 +9,6 @@ import '../../../core/design_system/hexa_ds_tokens.dart';
 import '../../../core/json_coerce.dart';
 import '../../../core/providers/operations_providers.dart';
 import '../../../core/providers/stock_providers.dart';
-import '../../../core/router/navigation_ext.dart';
 import '../../../core/router/post_auth_route.dart';
 import '../../../core/utils/unit_utils.dart';
 import '../../../core/widgets/friendly_load_error.dart';
@@ -67,7 +66,7 @@ class StockItemIntelligencePage extends ConsumerWidget {
         title: const Text('Item detail', style: TextStyle(fontSize: 18)),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_rounded),
-          onPressed: () => context.popOrGo('/stock/item/$itemId'),
+          onPressed: () => context.pop(),
         ),
       ),
       body: body,

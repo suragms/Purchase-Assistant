@@ -8,17 +8,15 @@ import 'package:go_router/go_router.dart';
 import '../../../core/router/navigation_ext.dart';
 import '../../../core/auth/session_notifier.dart';
 import '../../../core/errors/user_facing_errors.dart';
-import '../../../core/providers/business_aggregates_invalidation.dart';
 import '../../../core/providers/brokers_list_provider.dart';
 import '../../../core/providers/catalog_providers.dart';
+import '../../../core/providers/home_dashboard_provider.dart';
+import '../../../core/providers/stock_providers.dart';
 import '../../../core/providers/suppliers_list_provider.dart';
-import '../../../core/providers/stock_providers.dart' show bulkStockListProvider;
 import '../../../core/unit_engine/stock_tracking_profile.dart';
-import '../../../core/widgets/async_value_form.dart';
-import '../../../shared/widgets/inline_search_field.dart';
-import '../../../shared/widgets/desktop_page_shell.dart';
-import '../../../shared/widgets/packaging_type_selector.dart';
 import '../catalog_create_prefs.dart';
+import '../../../shared/widgets/inline_search_field.dart';
+import '../../../shared/widgets/packaging_type_selector.dart';
 
 /// Simple catalog item create — subcategory, name, unit type, optional more fields.
 class CatalogItemCreatePage extends ConsumerStatefulWidget {
@@ -47,7 +45,9 @@ typedef QuickAddCatalogItemPage = CatalogItemCreatePage;
 
 class _CatalogItemCreatePageState extends ConsumerState<CatalogItemCreatePage> {
   final _nameCtrl = TextEditingController();
+  final _itemCodeCtrl = TextEditingController();
   final _kgCtrl = TextEditingController();
+  final _ipbCtrl = TextEditingController();
   final _wptCtrl = TextEditingController();
   final _hsnCtrl = TextEditingController();
   final _purchaseRateCtrl = TextEditingController();
@@ -72,11 +72,13 @@ class _CatalogItemCreatePageState extends ConsumerState<CatalogItemCreatePage> {
   bool _selectingType = false;
   bool _selectingSupplier = false;
   bool _selectingBroker = false;
+  final _typeFocus = FocusNode();
+  final _nameFocus = FocusNode();
+  final _supplierFocus = FocusNode();
+  final _brokerFocus = FocusNode();
 
   static final _kgInName =
       RegExp(r'(\d+(?:\.\d+)?)\s*kg', caseSensitive: false);
-  static final _boxInName =
-      RegExp(r'\b(?:box|ctn)\b', caseSensitive: false);
 
   String _packageTypeForMode(String mode) {
     switch (mode) {
@@ -187,32 +189,23 @@ class _CatalogItemCreatePageState extends ConsumerState<CatalogItemCreatePage> {
 
   void _applyBagDetectionFromName() {
     if (!mounted || _bagDetectDismissed) return;
-    final name = _nameCtrl.text;
-    final kgMatch = _kgInName.firstMatch(name);
-    if (kgMatch != null) {
-      final kg = kgMatch.group(1) ?? '';
-      if (kg.isNotEmpty) {
-        setState(() {
-          _packagingMode = StockTrackingMode.wholesaleBag;
-          if (_kgCtrl.text.trim().isEmpty) {
-            _kgCtrl.text = kg;
-          }
-          _bagDetectHint = 'Detected: $kg kg/bag ✓';
-          _kgFieldError = null;
-        });
-        return;
+    final match = _kgInName.firstMatch(_nameCtrl.text);
+    if (match == null) {
+      if (_bagDetectHint != null) {
+        setState(() => _bagDetectHint = null);
       }
-    }
-    if (_boxInName.hasMatch(name)) {
-      setState(() {
-        _packagingMode = StockTrackingMode.box;
-        _bagDetectHint = 'Default: 1 box = 1 unit';
-      });
       return;
     }
-    if (_bagDetectHint != null) {
-      setState(() => _bagDetectHint = null);
-    }
+    final kg = match.group(1) ?? '';
+    if (kg.isEmpty) return;
+    setState(() {
+      _packagingMode = StockTrackingMode.wholesaleBag;
+      if (_kgCtrl.text.trim().isEmpty) {
+        _kgCtrl.text = kg;
+      }
+      _bagDetectHint = 'Detected bag item · $kg kg per bag';
+      _kgFieldError = null;
+    });
   }
 
   void _dismissBagDetection() {
@@ -232,22 +225,8 @@ class _CatalogItemCreatePageState extends ConsumerState<CatalogItemCreatePage> {
         _kgCtrl.clear();
         _kgFieldError = null;
       }
-      if (mode == StockTrackingMode.box &&
-          _boxInName.hasMatch(_nameCtrl.text)) {
-        _bagDetectHint = 'Default: 1 box = 1 unit';
-      }
-      if (mode == StockTrackingMode.wholesaleBag) {
-        final m = _kgInName.firstMatch(_nameCtrl.text);
-        if (m != null && _kgCtrl.text.trim().isEmpty) {
-          _kgCtrl.text = m.group(1) ?? '';
-          _bagDetectHint = 'Detected: ${_kgCtrl.text} kg/bag ✓';
-        }
-      }
       _bagDetectDismissed = true;
-      if (mode != StockTrackingMode.box &&
-          mode != StockTrackingMode.wholesaleBag) {
-        _bagDetectHint = null;
-      }
+      _bagDetectHint = null;
     });
   }
 
@@ -262,8 +241,14 @@ class _CatalogItemCreatePageState extends ConsumerState<CatalogItemCreatePage> {
     _nameCtrl.removeListener(_onNameChanged);
     _kgCtrl.removeListener(_onKgChanged);
     _typeSearchCtrl.removeListener(_onTypeSearchChanged);
+    _typeFocus.dispose();
+    _nameFocus.dispose();
+    _supplierFocus.dispose();
+    _brokerFocus.dispose();
     _nameCtrl.dispose();
+    _itemCodeCtrl.dispose();
     _kgCtrl.dispose();
+    _ipbCtrl.dispose();
     _wptCtrl.dispose();
     _hsnCtrl.dispose();
     _purchaseRateCtrl.dispose();
@@ -282,8 +267,7 @@ class _CatalogItemCreatePageState extends ConsumerState<CatalogItemCreatePage> {
     if (_prefilled) return;
     _prefilled = true;
     if (widget.defaultSupplierId != null &&
-        widget.defaultSupplierId!.isNotEmpty &&
-        !_supplierManuallySelected) {
+        widget.defaultSupplierId!.isNotEmpty) {
       for (final s in sups) {
         if (s['id']?.toString() == widget.defaultSupplierId) {
           _supplierId = widget.defaultSupplierId;
@@ -292,9 +276,7 @@ class _CatalogItemCreatePageState extends ConsumerState<CatalogItemCreatePage> {
         }
       }
     }
-    if (widget.defaultBrokerId != null &&
-        widget.defaultBrokerId!.isNotEmpty &&
-        !_brokerManuallySelected) {
+    if (widget.defaultBrokerId != null && widget.defaultBrokerId!.isNotEmpty) {
       for (final b in brokers) {
         if (b['id']?.toString() == widget.defaultBrokerId) {
           _brokerId = widget.defaultBrokerId;
@@ -302,13 +284,6 @@ class _CatalogItemCreatePageState extends ConsumerState<CatalogItemCreatePage> {
           break;
         }
       }
-    }
-    if (!_supplierManuallySelected &&
-        _supplierId == null &&
-        _supplierSearchCtrl.text.isEmpty &&
-        sups.length == 1) {
-      _supplierId = sups.first['id']?.toString();
-      _supplierSearchCtrl.text = sups.first['name']?.toString() ?? '';
     }
     final presetType = widget.presetTypeId;
     if (presetType != null && presetType.isNotEmpty) {
@@ -386,18 +361,12 @@ class _CatalogItemCreatePageState extends ConsumerState<CatalogItemCreatePage> {
       return false;
     }
     final types = ref.read(categoryTypesIndexProvider).valueOrNull ?? [];
-    if (_typeId == null || _typeId!.isEmpty) {
+    final typeRow =
+        _typeId != null ? _rowByTypeId(types, _typeId!) : null;
+    if (typeRow == null ||
+        typeRow['name']?.toString().trim() != _typeSearchCtrl.text.trim()) {
       setState(() => _error = 'Pick a subcategory from search.');
       return false;
-    }
-    final typeRow = _rowByTypeId(types, _typeId!);
-    if (typeRow == null) {
-      setState(() => _error = 'Pick a subcategory from search.');
-      return false;
-    }
-    final typeName = typeRow['name']?.toString().trim() ?? '';
-    if (_typeSearchCtrl.text.trim() != typeName) {
-      _typeSearchCtrl.text = typeName;
     }
     if (_packagingMode == StockTrackingMode.wholesaleBag) {
       final kg = _parsedKg();
@@ -406,13 +375,6 @@ class _CatalogItemCreatePageState extends ConsumerState<CatalogItemCreatePage> {
           _kgFieldError = 'Kg per bag is required';
           _error = 'Enter kg per bag.';
         });
-        return false;
-      }
-    }
-    if (_packagingMode == StockTrackingMode.tin) {
-      final wpt = double.tryParse(_wptCtrl.text.trim());
-      if (wpt == null || wpt <= 0) {
-        setState(() => _error = 'Enter litres/kg per tin.');
         return false;
       }
     }
@@ -433,42 +395,22 @@ class _CatalogItemCreatePageState extends ConsumerState<CatalogItemCreatePage> {
   }
 
   Future<void> _exit() async {
-    if (_saving) {
-      final ok = await showDialog<bool>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Text('Cancel save?'),
-          content: const Text(
-            'Item save is still in progress. Close anyway?',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Keep waiting'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Close'),
-            ),
-          ],
-        ),
-      );
-      if (ok != true) return;
-    }
     _popPage(false);
   }
 
-  void _invalidateAfterCreate(String itemId) {
-    invalidateCatalogCreateSurfaces(
-      ref,
-      itemId: itemId.isNotEmpty ? itemId : null,
-    );
+  void _invalidateAfterCreate() {
+    ref.invalidate(catalogItemsListProvider);
+    ref.invalidate(categoryTypesIndexProvider);
+    ref.invalidate(homeDashboardDataProvider);
+    ref.invalidate(stockListProvider);
     ref.invalidate(bulkStockListProvider);
   }
 
   void _resetForAddMore() {
     _nameCtrl.clear();
+    _itemCodeCtrl.clear();
     _kgCtrl.clear();
+    _ipbCtrl.clear();
     _wptCtrl.clear();
     _hsnCtrl.clear();
     _purchaseRateCtrl.clear();
@@ -481,6 +423,8 @@ class _CatalogItemCreatePageState extends ConsumerState<CatalogItemCreatePage> {
   }
 
   Future<void> _submit({required bool addMore}) async {
+    await Future<void>.delayed(const Duration(milliseconds: 32));
+    if (!mounted) return;
     if (!_validate()) return;
 
     final name = _nameCtrl.text.trim().toUpperCase();
@@ -502,7 +446,8 @@ class _CatalogItemCreatePageState extends ConsumerState<CatalogItemCreatePage> {
           break;
         }
       }
-      if (brow == null) {
+      if (brow == null ||
+          brow['name']?.toString().trim() != _brokerSearchCtrl.text.trim()) {
         setState(() => _error = 'Pick a broker from search or clear broker.');
         return;
       }
@@ -521,6 +466,7 @@ class _CatalogItemCreatePageState extends ConsumerState<CatalogItemCreatePage> {
     }
 
     final hsn = _hsnCtrl.text.trim();
+    final itemCode = _itemCodeCtrl.text.trim().toUpperCase();
     final purchaseText = _purchaseRateCtrl.text.trim();
     final sellingText = _sellingRateCtrl.text.trim();
     final purchaseRate =
@@ -533,8 +479,8 @@ class _CatalogItemCreatePageState extends ConsumerState<CatalogItemCreatePage> {
 
     final defaultUnit = StockTrackingMode.catalogUnitForMode(_packagingMode);
     final kgPerBag = _modeUsesWeightField ? _parsedKg() : null;
+    final ipb = double.tryParse(_ipbCtrl.text.trim());
     final wpt = double.tryParse(_wptCtrl.text.trim());
-    final boxIpb = _packagingMode == StockTrackingMode.box ? 1.0 : null;
 
     try {
       final created = await ref.read(hexaApiProvider).createCatalogItem(
@@ -546,8 +492,12 @@ class _CatalogItemCreatePageState extends ConsumerState<CatalogItemCreatePage> {
             defaultSupplierIds: supplierIds,
             defaultBrokerIds: brokerIds,
             hsnCode: hsn.isEmpty ? null : hsn,
+            itemCode: itemCode.isEmpty ? null : itemCode,
             defaultKgPerBag: kgPerBag,
-            defaultItemsPerBox: boxIpb,
+            defaultItemsPerBox:
+                _packagingMode == StockTrackingMode.box && ipb != null && ipb > 0
+                    ? ipb
+                    : null,
             defaultWeightPerTin:
                 _packagingMode == StockTrackingMode.tin && wpt != null && wpt > 0
                     ? wpt
@@ -555,81 +505,38 @@ class _CatalogItemCreatePageState extends ConsumerState<CatalogItemCreatePage> {
             defaultLandingCost: purchaseRate,
             defaultSellingCost: sellingRate,
             packageType: _packageTypeForMode(_packagingMode),
-          ).timeout(const Duration(seconds: 45));
+          );
 
       if (!mounted) return;
-      final newId = created['id']?.toString() ?? '';
-      final itemCode = created['item_code']?.toString() ?? '';
-      final existingBarcode = created['barcode']?.toString() ?? '';
-      if (newId.isNotEmpty &&
-          itemCode.isNotEmpty &&
-          existingBarcode.isEmpty) {
-        try {
-          await ref.read(hexaApiProvider).patchCatalogItemBarcode(
-                businessId: session.primaryBusiness.id,
-                itemId: newId,
-                barcode: itemCode,
-              );
-        } catch (_) {
-          // Non-fatal — item created; barcode can be assigned later.
-        }
-      }
+      _invalidateAfterCreate();
       await CatalogCreatePrefs.save(
         businessId: session.primaryBusiness.id,
         supplierId: _supplierId,
         brokerId: _brokerId,
       );
-      _invalidateAfterCreate(newId);
+
+      final newId = created['id']?.toString() ?? '';
       if (addMore) {
         setState(() {
           _saving = false;
           _resetForAddMore();
         });
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              itemCode.isEmpty
-                  ? 'Saved "$name". Add another.'
-                  : 'Saved "$name" · $itemCode. Add another.',
-            ),
-            action: newId.isNotEmpty
-                ? SnackBarAction(
-                    label: 'Print label',
-                    onPressed: () => context.push(
-                      '/barcode/print/${Uri.encodeComponent(newId)}',
-                    ),
-                  )
-                : null,
-          ),
+          SnackBar(content: Text('Saved "$name". Add another.')),
         );
         return;
       }
 
       await HapticFeedback.mediumImpact();
       if (!mounted) return;
-      setState(() => _saving = false);
       if (widget.returnResultOnSave && newId.isNotEmpty) {
         _popPage(<String, dynamic>{'id': newId, 'name': name});
         return;
       }
       if (newId.isNotEmpty) {
         _popPage();
+        await Future<void>.delayed(const Duration(milliseconds: 400));
         if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                itemCode.isEmpty
-                    ? 'Item "$name" created'
-                    : 'Item "$name" · $itemCode',
-              ),
-              action: SnackBarAction(
-                label: 'Print label',
-                onPressed: () => context.push(
-                  '/barcode/print/${Uri.encodeComponent(newId)}',
-                ),
-              ),
-            ),
-          );
           context.push('/catalog/item/$newId');
         }
         return;
@@ -640,12 +547,6 @@ class _CatalogItemCreatePageState extends ConsumerState<CatalogItemCreatePage> {
           SnackBar(content: Text('Item "$name" created')),
         );
       }
-    } on TimeoutException {
-      if (!mounted) return;
-      setState(() {
-        _saving = false;
-        _error = 'Save timed out. Check connection and try again.';
-      });
     } catch (e, st) {
       logSilencedApiError(e, st);
       if (!mounted) return;
@@ -670,24 +571,16 @@ class _CatalogItemCreatePageState extends ConsumerState<CatalogItemCreatePage> {
         _maybePrefill(types, sups, brokers);
       });
     });
-    ref.listen(suppliersListProvider, (prev, next) {
-      next.whenData((sups) {
-        if (!mounted || _prefilled) return;
-        final types = ref.read(categoryTypesIndexProvider).valueOrNull ?? [];
-        if (types.isEmpty) return;
-        final brokers = ref.read(brokersListProvider).valueOrNull ?? [];
-        _maybePrefill(types, sups, brokers);
-        if (!_supplierManuallySelected) {
-          unawaited(_loadSavedParty());
-        }
+    if (!_prefilled) {
+      typesAsync.whenData((types) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted || _prefilled) return;
+          final sups = ref.read(suppliersListProvider).valueOrNull ?? [];
+          final brokers = ref.read(brokersListProvider).valueOrNull ?? [];
+          _maybePrefill(types, sups, brokers);
+        });
       });
-    });
-    ref.listen(brokersListProvider, (prev, next) {
-      next.whenData((_) {
-        if (!mounted || _brokerManuallySelected) return;
-        unawaited(_loadSavedParty());
-      });
-    });
+    }
 
     return PopScope(
       canPop: false,
@@ -695,29 +588,25 @@ class _CatalogItemCreatePageState extends ConsumerState<CatalogItemCreatePage> {
         if (didPop) return;
         await _exit();
       },
-      child: SizedBox.expand(
-        child: Scaffold(
-          resizeToAvoidBottomInset: true,
-          appBar: AppBar(
-            title: const Text('New item'),
-            leading: IconButton(
-              icon: const Icon(Icons.close_rounded),
-              onPressed: () => unawaited(_exit()),
-            ),
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('New item'),
+          leading: IconButton(
+            icon: const Icon(Icons.close_rounded),
+            onPressed: _saving ? null : () => unawaited(_exit()),
           ),
+        ),
         body: SafeArea(
-          child: DesktopPageShell(
-            maxContentWidth: 900,
-            child: Column(
+          child: Column(
             children: [
               Expanded(
                 child: ListView(
                   padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
                   children: [
-                    ..._buildPartyFields(suppliersAsync, brokersAsync),
-                    typesAsync.whenForm(
-                      initialLoading: () => const LinearProgressIndicator(),
-                      reloadingBanner: (_) => formReloadBanner(),
+                    typesAsync.when(
+                      loading: () => const LinearProgressIndicator(),
+                      error: (_, __) =>
+                          const Text('Could not load subcategories.'),
                       data: (types) {
                         if (types.isEmpty) {
                           return const Text(
@@ -730,8 +619,11 @@ class _CatalogItemCreatePageState extends ConsumerState<CatalogItemCreatePage> {
                             const Text('Subcategory *'),
                             const SizedBox(height: 6),
                             InlineSearchField(
+                              key: ValueKey('ci_type_${types.length}_$_typeId'),
                               items: _typeItems(types),
                               controller: _typeSearchCtrl,
+                              focusNode: _typeFocus,
+                              focusAfterSelection: _nameFocus,
                               placeholder: 'Search subcategory…',
                               onSelected: (it) {
                                 _selectingType = true;
@@ -740,7 +632,9 @@ class _CatalogItemCreatePageState extends ConsumerState<CatalogItemCreatePage> {
                                   _typeSearchCtrl.text = it.label;
                                 });
                                 WidgetsBinding.instance.addPostFrameCallback((_) {
-                                  if (mounted) _selectingType = false;
+                                  if (mounted) {
+                                    setState(() => _selectingType = false);
+                                  }
                                 });
                               },
                             ),
@@ -751,12 +645,19 @@ class _CatalogItemCreatePageState extends ConsumerState<CatalogItemCreatePage> {
                     const SizedBox(height: 14),
                     TextField(
                       controller: _nameCtrl,
+                      focusNode: _nameFocus,
                       decoration: const InputDecoration(
                         labelText: 'Item name *',
                         hintText: 'e.g. ULUVA 30 KG',
                         border: OutlineInputBorder(),
                       ),
                       textCapitalization: TextCapitalization.characters,
+                      textInputAction: TextInputAction.done,
+                      onSubmitted: (_) {
+                        if (_validate()) {
+                          unawaited(_submit(addMore: false));
+                        }
+                      },
                     ),
                     if (_bagDetectHint != null) ...[
                       const SizedBox(height: 8),
@@ -788,6 +689,7 @@ class _CatalogItemCreatePageState extends ConsumerState<CatalogItemCreatePage> {
                         _nameCtrl.text,
                       ),
                       weightController: _kgCtrl,
+                      itemsPerBoxController: _ipbCtrl,
                       weightPerTinController: _wptCtrl,
                       weightError: _kgFieldError,
                       itemNameForAutofill: _nameCtrl.text,
@@ -804,9 +706,9 @@ class _CatalogItemCreatePageState extends ConsumerState<CatalogItemCreatePage> {
                             ),
                       ),
                       subtitle: const Text(
-                        'HSN, rates (item code + barcode auto-generated)',
+                        'Supplier, broker, item code, HSN, rates',
                       ),
-                      children: _buildMoreOptions(),
+                      children: _buildMoreOptions(suppliersAsync, brokersAsync),
                     ),
                     if (_error != null) ...[
                       const SizedBox(height: 12),
@@ -820,21 +722,25 @@ class _CatalogItemCreatePageState extends ConsumerState<CatalogItemCreatePage> {
           ),
         ),
       ),
-      ),
-      ),
     );
   }
 
-  List<Widget> _buildPartyFields(
+  List<Widget> _buildMoreOptions(
     AsyncValue<List<Map<String, dynamic>>> suppliersAsync,
     AsyncValue<List<Map<String, dynamic>>> brokersAsync,
   ) {
     return [
-      suppliersAsync.whenForm(
-        initialLoading: () => const SizedBox.shrink(),
-        reloadingBanner: (_) => formReloadBanner(),
+      suppliersAsync.when(
+        loading: () => const LinearProgressIndicator(),
+        error: (_, __) => const SizedBox.shrink(),
         data: (sups) {
           if (sups.isEmpty) return const SizedBox.shrink();
+          if (sups.length == 1 &&
+              _supplierId == null &&
+              _supplierSearchCtrl.text.isEmpty) {
+            _supplierId = sups.first['id']?.toString();
+            _supplierSearchCtrl.text = sups.first['name']?.toString() ?? '';
+          }
           return Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -854,8 +760,11 @@ class _CatalogItemCreatePageState extends ConsumerState<CatalogItemCreatePage> {
               ),
               const SizedBox(height: 6),
               InlineSearchField(
+                key: ValueKey('ci_sup_${sups.length}_$_supplierId'),
                 items: _supplierItems(sups),
                 controller: _supplierSearchCtrl,
+                focusNode: _supplierFocus,
+                focusAfterSelection: _brokerFocus,
                 placeholder: 'Search supplier…',
                 onSelected: (it) {
                   _selectingSupplier = true;
@@ -865,17 +774,20 @@ class _CatalogItemCreatePageState extends ConsumerState<CatalogItemCreatePage> {
                     _supplierManuallySelected = true;
                   });
                   WidgetsBinding.instance.addPostFrameCallback((_) {
-                    if (mounted) _selectingSupplier = false;
+                    if (mounted) {
+                      setState(() => _selectingSupplier = false);
+                    }
                   });
                 },
               ),
-              const SizedBox(height: 14),
+              const SizedBox(height: 12),
             ],
           );
         },
       ),
-      brokersAsync.whenForm(
-        initialLoading: () => const SizedBox.shrink(),
+      brokersAsync.when(
+        loading: () => const SizedBox.shrink(),
+        error: (_, __) => const SizedBox.shrink(),
         data: (rows) {
           if (rows.isEmpty) return const SizedBox.shrink();
           return Column(
@@ -897,8 +809,10 @@ class _CatalogItemCreatePageState extends ConsumerState<CatalogItemCreatePage> {
               ),
               const SizedBox(height: 6),
               InlineSearchField(
+                key: ValueKey('ci_bro_${rows.length}_$_brokerId'),
                 items: _brokerItems(rows),
                 controller: _brokerSearchCtrl,
+                focusNode: _brokerFocus,
                 placeholder: 'Search broker…',
                 onSelected: (it) {
                   _selectingBroker = true;
@@ -908,20 +822,27 @@ class _CatalogItemCreatePageState extends ConsumerState<CatalogItemCreatePage> {
                     _brokerManuallySelected = true;
                   });
                   WidgetsBinding.instance.addPostFrameCallback((_) {
-                    if (mounted) _selectingBroker = false;
+                    if (mounted) {
+                      setState(() => _selectingBroker = false);
+                    }
                   });
                 },
               ),
-              const SizedBox(height: 14),
+              const SizedBox(height: 12),
             ],
           );
         },
       ),
-    ];
-  }
-
-  List<Widget> _buildMoreOptions() {
-    return [
+      TextField(
+        controller: _itemCodeCtrl,
+        decoration: const InputDecoration(
+          labelText: 'Item code (optional)',
+          hintText: 'Auto-generated if empty',
+          border: OutlineInputBorder(),
+        ),
+        textCapitalization: TextCapitalization.characters,
+      ),
+      const SizedBox(height: 12),
       TextField(
         controller: _hsnCtrl,
         decoration: const InputDecoration(
