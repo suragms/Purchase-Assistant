@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -14,6 +15,7 @@ import '../../../core/providers/home_dashboard_provider.dart';
 import '../../../core/providers/stock_providers.dart';
 import '../../../core/providers/suppliers_list_provider.dart';
 import '../../../core/unit_engine/stock_tracking_profile.dart';
+import '../../purchase/presentation/widgets/party_inline_suggest_field.dart';
 import '../catalog_create_prefs.dart';
 import '../../../shared/widgets/inline_search_field.dart';
 import '../../../shared/widgets/packaging_type_selector.dart';
@@ -108,7 +110,103 @@ class _CatalogItemCreatePageState extends ConsumerState<CatalogItemCreatePage> {
     _nameCtrl.addListener(_onNameChanged);
     _kgCtrl.addListener(_onKgChanged);
     _typeSearchCtrl.addListener(_onTypeSearchChanged);
-    WidgetsBinding.instance.addPostFrameCallback((_) => _loadSavedParty());
+    _supplierSearchCtrl.addListener(_onSupplierSearchChanged);
+    _brokerSearchCtrl.addListener(_onBrokerSearchChanged);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadSavedParty();
+      _maybeAutoPickSingleSupplier();
+    });
+  }
+
+  void _onSupplierSearchChanged() {
+    if (_selectingSupplier) return;
+    if (_supplierId == null) return;
+    final sups = ref.read(suppliersListProvider).valueOrNull ?? [];
+    for (final s in sups) {
+      if (s['id']?.toString() == _supplierId) {
+        final picked = s['name']?.toString().trim().toLowerCase() ?? '';
+        final typed = _supplierSearchCtrl.text.trim().toLowerCase();
+        if (picked == typed) return;
+        break;
+      }
+    }
+    setState(() {
+      _supplierId = null;
+      _supplierManuallySelected = false;
+    });
+  }
+
+  void _onBrokerSearchChanged() {
+    if (_selectingBroker) return;
+    if (_brokerId == null) return;
+    final brokers = ref.read(brokersListProvider).valueOrNull ?? [];
+    for (final b in brokers) {
+      if (b['id']?.toString() == _brokerId) {
+        final picked = b['name']?.toString().trim().toLowerCase() ?? '';
+        final typed = _brokerSearchCtrl.text.trim().toLowerCase();
+        if (picked == typed) return;
+        break;
+      }
+    }
+    setState(() {
+      _brokerId = null;
+      _brokerManuallySelected = false;
+    });
+  }
+
+  void _maybeAutoPickSingleSupplier() {
+    if (_supplierId != null || _supplierSearchCtrl.text.isNotEmpty) return;
+    final sups = ref.read(suppliersListProvider).valueOrNull;
+    if (sups == null || sups.length != 1) return;
+    final row = sups.first;
+    final id = row['id']?.toString() ?? '';
+    if (id.isEmpty) return;
+    setState(() {
+      _supplierId = id;
+      _supplierSearchCtrl.text = row['name']?.toString() ?? '';
+    });
+  }
+
+  void _onSupplierPicked(InlineSearchItem it) {
+    if (it.id.isEmpty) return;
+    _selectingSupplier = true;
+    setState(() {
+      _supplierId = it.id;
+      _supplierSearchCtrl.text = it.label;
+      _supplierManuallySelected = true;
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) setState(() => _selectingSupplier = false);
+    });
+  }
+
+  void _onBrokerPicked(InlineSearchItem it) {
+    if (it.id.isEmpty) return;
+    _selectingBroker = true;
+    setState(() {
+      _brokerId = it.id;
+      _brokerSearchCtrl.text = it.label;
+      _brokerManuallySelected = true;
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) setState(() => _selectingBroker = false);
+    });
+  }
+
+  void _clearSupplier() {
+    setState(() {
+      _supplierId = null;
+      _supplierSearchCtrl.clear();
+      _supplierManuallySelected = false;
+    });
+  }
+
+  void _clearBroker() {
+    setState(() {
+      _brokerId = null;
+      _brokerSearchCtrl.clear();
+      _brokerManuallySelected = false;
+    });
   }
 
   void _onTypeSearchChanged() {
@@ -241,6 +339,8 @@ class _CatalogItemCreatePageState extends ConsumerState<CatalogItemCreatePage> {
     _nameCtrl.removeListener(_onNameChanged);
     _kgCtrl.removeListener(_onKgChanged);
     _typeSearchCtrl.removeListener(_onTypeSearchChanged);
+    _supplierSearchCtrl.removeListener(_onSupplierSearchChanged);
+    _brokerSearchCtrl.removeListener(_onBrokerSearchChanged);
     _typeFocus.dispose();
     _nameFocus.dispose();
     _supplierFocus.dispose();
@@ -401,6 +501,8 @@ class _CatalogItemCreatePageState extends ConsumerState<CatalogItemCreatePage> {
   void _invalidateAfterCreate() {
     ref.invalidate(catalogItemsListProvider);
     ref.invalidate(categoryTypesIndexProvider);
+    ref.invalidate(suppliersListProvider);
+    ref.invalidate(brokersListProvider);
     ref.invalidate(homeDashboardDataProvider);
     ref.invalidate(stockListProvider);
     ref.invalidate(bulkStockListProvider);
@@ -547,6 +649,44 @@ class _CatalogItemCreatePageState extends ConsumerState<CatalogItemCreatePage> {
           SnackBar(content: Text('Item "$name" created')),
         );
       }
+    } on DioException catch (e, st) {
+      logSilencedApiError(e, st);
+      if (!mounted) return;
+      if (e.response?.statusCode == 409) {
+        final body = e.response?.data;
+        String? existingId;
+        if (body is Map) {
+          final detail = body['detail'];
+          if (detail is Map) {
+            existingId = detail['existing_item_id']?.toString();
+          }
+          existingId ??= body['existing_item_id']?.toString();
+        }
+        setState(() {
+          _saving = false;
+          _error = existingId != null && existingId.isNotEmpty
+              ? 'Item already exists. Open it from Catalog or change the name.'
+              : 'An item with this name already exists in this subcategory.';
+        });
+        if (existingId != null &&
+            existingId.isNotEmpty &&
+            context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Text('Item already exists'),
+              action: SnackBarAction(
+                label: 'View',
+                onPressed: () => context.push('/catalog/item/$existingId'),
+              ),
+            ),
+          );
+        }
+        return;
+      }
+      setState(() {
+        _saving = false;
+        _error = 'Unable to save item. ${userFacingError(e)}';
+      });
     } catch (e, st) {
       logSilencedApiError(e, st);
       if (!mounted) return;
@@ -732,53 +872,48 @@ class _CatalogItemCreatePageState extends ConsumerState<CatalogItemCreatePage> {
     return [
       suppliersAsync.when(
         loading: () => const LinearProgressIndicator(),
-        error: (_, __) => const SizedBox.shrink(),
+        error: (_, __) => Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              'Could not load suppliers.',
+              style: TextStyle(color: Theme.of(context).colorScheme.error),
+            ),
+            TextButton(
+              onPressed: () => ref.invalidate(suppliersListProvider),
+              child: const Text('Retry'),
+            ),
+          ],
+        ),
         data: (sups) {
-          if (sups.isEmpty) return const SizedBox.shrink();
-          if (sups.length == 1 &&
-              _supplierId == null &&
-              _supplierSearchCtrl.text.isEmpty) {
-            _supplierId = sups.first['id']?.toString();
-            _supplierSearchCtrl.text = sups.first['name']?.toString() ?? '';
+          if (sups.isEmpty) {
+            return const Padding(
+              padding: EdgeInsets.only(bottom: 12),
+              child: Text('No suppliers yet — add in Contacts.'),
+            );
           }
+          final supplierLock = (_supplierId != null && _supplierId!.isNotEmpty)
+              ? _supplierSearchCtrl.text.trim()
+              : null;
           return Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Row(
-                children: [
-                  const Expanded(child: Text('Supplier (optional)')),
-                  if (_supplierId != null && _supplierId!.isNotEmpty)
-                    TextButton(
-                      onPressed: () => setState(() {
-                        _supplierId = null;
-                        _supplierSearchCtrl.clear();
-                        _supplierManuallySelected = false;
-                      }),
-                      child: const Text('Clear'),
-                    ),
-                ],
-              ),
+              const Text('Supplier (optional)'),
               const SizedBox(height: 6),
-              InlineSearchField(
-                key: ValueKey('ci_sup_${sups.length}_$_supplierId'),
-                items: _supplierItems(sups),
+              PartyInlineSuggestField(
                 controller: _supplierSearchCtrl,
                 focusNode: _supplierFocus,
+                hintText: 'Search supplier by name…',
+                minQueryLength: 1,
+                maxMatches: 8,
+                dense: true,
+                suggestionsAsOverlay: true,
+                lockedSelectionLabel: supplierLock,
+                onLockedSelectionClear: _clearSupplier,
                 focusAfterSelection: _brokerFocus,
-                placeholder: 'Search supplier…',
-                onSelected: (it) {
-                  _selectingSupplier = true;
-                  setState(() {
-                    _supplierId = it.id;
-                    _supplierSearchCtrl.text = it.label;
-                    _supplierManuallySelected = true;
-                  });
-                  WidgetsBinding.instance.addPostFrameCallback((_) {
-                    if (mounted) {
-                      setState(() => _selectingSupplier = false);
-                    }
-                  });
-                },
+                debugLabel: 'catalog_create_supplier',
+                items: _supplierItems(sups),
+                onSelected: _onSupplierPicked,
               ),
               const SizedBox(height: 12),
             ],
@@ -787,46 +922,42 @@ class _CatalogItemCreatePageState extends ConsumerState<CatalogItemCreatePage> {
       ),
       brokersAsync.when(
         loading: () => const SizedBox.shrink(),
-        error: (_, __) => const SizedBox.shrink(),
+        error: (_, __) => Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              'Could not load brokers.',
+              style: TextStyle(color: Theme.of(context).colorScheme.error),
+            ),
+            TextButton(
+              onPressed: () => ref.invalidate(brokersListProvider),
+              child: const Text('Retry'),
+            ),
+          ],
+        ),
         data: (rows) {
           if (rows.isEmpty) return const SizedBox.shrink();
+          final brokerLock = (_brokerId != null && _brokerId!.isNotEmpty)
+              ? _brokerSearchCtrl.text.trim()
+              : null;
           return Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Row(
-                children: [
-                  const Expanded(child: Text('Broker (optional)')),
-                  if (_brokerId != null && _brokerId!.isNotEmpty)
-                    TextButton(
-                      onPressed: () => setState(() {
-                        _brokerId = null;
-                        _brokerSearchCtrl.clear();
-                        _brokerManuallySelected = false;
-                      }),
-                      child: const Text('Clear'),
-                    ),
-                ],
-              ),
+              const Text('Broker (optional)'),
               const SizedBox(height: 6),
-              InlineSearchField(
-                key: ValueKey('ci_bro_${rows.length}_$_brokerId'),
-                items: _brokerItems(rows),
+              PartyInlineSuggestField(
                 controller: _brokerSearchCtrl,
                 focusNode: _brokerFocus,
-                placeholder: 'Search broker…',
-                onSelected: (it) {
-                  _selectingBroker = true;
-                  setState(() {
-                    _brokerId = it.id;
-                    _brokerSearchCtrl.text = it.label;
-                    _brokerManuallySelected = true;
-                  });
-                  WidgetsBinding.instance.addPostFrameCallback((_) {
-                    if (mounted) {
-                      setState(() => _selectingBroker = false);
-                    }
-                  });
-                },
+                hintText: 'Search broker…',
+                minQueryLength: 0,
+                maxMatches: 8,
+                dense: true,
+                suggestionsAsOverlay: true,
+                lockedSelectionLabel: brokerLock,
+                onLockedSelectionClear: _clearBroker,
+                debugLabel: 'catalog_create_broker',
+                items: _brokerItems(rows),
+                onSelected: _onBrokerPicked,
               ),
               const SizedBox(height: 12),
             ],

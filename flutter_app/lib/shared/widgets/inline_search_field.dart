@@ -175,10 +175,15 @@ class _InlineSearchFieldState extends State<InlineSearchField> {
     _afterSelectionFocus(keepFocus: keepFocus);
   }
 
-  /// RawAutocomplete already wrote [displayStringForOption] — notify parent only.
+  /// Tap path: mirror [_pick] so controller text commits even if RawAutocomplete races.
   void _commitSelection(InlineSearchItem it, {bool keepFocus = true}) {
     if (_consumeIfDuplicatePick(it)) return;
     _pickInProgress = true;
+    final label = it.label;
+    _ctrl.value = TextEditingValue(
+      text: label,
+      selection: TextSelection.collapsed(offset: label.length),
+    );
     if (!mounted) {
       _pickInProgress = false;
       return;

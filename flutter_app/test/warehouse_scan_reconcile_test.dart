@@ -1,10 +1,10 @@
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:harisree_warehouse/features/barcode/presentation/warehouse_scan_action_sheet.dart';
+import 'package:harisree_warehouse/core/utils/unit_utils.dart';
 
 void main() {
-  test('formatQty rounds whole numbers', () {
-    expect(formatQty(10), '10');
-    expect(formatQty(10.5), '10.5');
+  test('formatStockQtyForUnit rounds bag whole numbers', () {
+    expect(formatStockQtyForUnit('bag', 10), '10');
+    expect(formatStockQtyForUnit('bag', 10.5), '11');
   });
 }

@@ -101,6 +101,7 @@ void invalidateWarehouseItemSurfacesLight(dynamic ref, {required String itemId})
 
 /// Background/realtime: refresh stock + alerts (immediate full list refetch).
 void invalidateWarehouseSurfacesLight(dynamic ref, {String? itemId}) {
+  clearStockListEtagCache(ref);
   ref.invalidate(stockListProvider);
   ref.invalidate(bulkStockListProvider);
   ref.invalidate(stockStatusCountsProvider);
@@ -117,6 +118,7 @@ void invalidateWarehouseSurfacesAfterStockWrite(
   String? itemId,
   bool deferFullList = true,
 }) {
+  clearStockListEtagCache(ref);
   if (itemId != null && itemId.isNotEmpty) {
     invalidateWarehouseItemSurfacesLight(ref, itemId: itemId);
   }
@@ -125,9 +127,22 @@ void invalidateWarehouseSurfacesAfterStockWrite(
   ref.invalidate(staffTodayActivityProvider);
   ref.invalidate(staffTodaySummaryProvider);
   if (deferFullList) {
-    const listDelay = Duration(seconds: 5);
+    const listDelay = Duration(seconds: 3);
     deferInvalidateDelayed(ref, stockListProvider, delay: listDelay);
     deferInvalidateDelayed(ref, bulkStockListProvider, delay: listDelay);
     deferInvalidateDelayed(ref, stockOnHandTotalsProvider, delay: listDelay);
+  } else {
+    ref.invalidate(stockListProvider);
+    ref.invalidate(bulkStockListProvider);
+    ref.invalidate(stockOnHandTotalsProvider);
   }
+}
+
+/// Undo, bulk archive, offline replay — immediate list + detail refresh.
+void invalidateWarehouseSurfaces(dynamic ref, {String? itemId}) {
+  invalidateWarehouseSurfacesAfterStockWrite(
+    ref,
+    itemId: itemId,
+    deferFullList: false,
+  );
 }

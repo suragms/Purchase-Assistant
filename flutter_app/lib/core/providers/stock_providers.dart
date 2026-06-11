@@ -6,8 +6,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../api/hexa_api.dart';
 import '../auth/session_notifier.dart';
+import '../errors/user_facing_errors.dart';
 import '../../features/stock/stock_list_row_patch.dart'
-    show kStockListPatchAtKey, serverRowNewerThanPatch;
+    show
+        kStockListPatchAtKey,
+        serverRowNewerThanPatch,
+        stockListPatchFromStockDetail;
 import 'analytics_kpi_provider.dart' show analyticsDateRangeProvider;
 import 'app_period_provider.dart';
 import 'home_dashboard_provider.dart';
@@ -114,6 +118,18 @@ final stockItemActivityProvider = FutureProvider.autoDispose
 
 final stockListQueryProvider =
     StateProvider<StockListQuery>((_) => const StockListQuery());
+
+/// Last successful `/stock/list` ETag + body (page 1, current query fingerprint).
+final stockListEtagProvider = StateProvider<String?>((ref) => null);
+final stockListCachedBodyProvider =
+    StateProvider<Map<String, dynamic>?>((ref) => null);
+final stockListCacheQueryKeyProvider = StateProvider<String?>((ref) => null);
+
+void clearStockListEtagCache(dynamic ref) {
+  ref.read(stockListEtagProvider.notifier).state = null;
+  ref.read(stockListCachedBodyProvider.notifier).state = null;
+  ref.read(stockListCacheQueryKeyProvider.notifier).state = null;
+}
 
 /// Stock list period chips (Today / Week / Month / Year).
 final stockPagePeriodProvider =
@@ -273,7 +289,16 @@ final stockListProvider = FutureProvider.autoDispose((ref) async {
       'per_page': query.perPage,
     };
   }
-  return ref.read(hexaApiProvider).listStock(
+  final queryKey =
+      '${query.page}|${query.perPage}|${query.q}|${query.category}|${query.subcategory}|'
+      '${query.status}|${query.sort}|${query.includePeriod}|${query.periodStart}|'
+      '${query.periodEnd}|${query.purchasedInPeriod}';
+  final cachedKey = ref.read(stockListCacheQueryKeyProvider);
+  final cachedBody = ref.read(stockListCachedBodyProvider);
+  final etag = ref.read(stockListEtagProvider);
+  final useEtag = query.page == 1 && cachedKey == queryKey && etag != null;
+
+  final res = await ref.read(hexaApiProvider).listStock(
         businessId: session.primaryBusiness.id,
         page: query.page,
         perPage: query.perPage,
@@ -287,7 +312,21 @@ final stockListProvider = FutureProvider.autoDispose((ref) async {
         periodEnd: query.periodEnd,
         purchasedInPeriod: query.purchasedInPeriod ||
             ref.read(stockOperationalFiltersProvider).purchasedInPeriodOnly,
+        ifNoneMatch: useEtag ? etag : null,
       );
+
+  if (res['_not_modified'] == true && cachedBody != null) {
+    return cachedBody;
+  }
+
+  final next = Map<String, dynamic>.from(res)..remove('_etag');
+  final newEtag = res['_etag']?.toString();
+  if (query.page == 1 && newEtag != null && newEtag.isNotEmpty) {
+    ref.read(stockListEtagProvider.notifier).state = newEtag;
+    ref.read(stockListCachedBodyProvider.notifier).state = next;
+    ref.read(stockListCacheQueryKeyProvider.notifier).state = queryKey;
+  }
+  return next;
 });
 
 /// Loads **all** stock rows matching [stockListQueryProvider] filters (paged API calls).
@@ -406,6 +445,33 @@ void clearStockListRowPatchesForIds(
     }
     return next;
   });
+}
+
+/// Realtime single-item refresh: fetch one row and patch list cache (no full list refetch).
+Future<void> patchStockItemInCache(
+  dynamic ref, {
+  required String itemId,
+}) async {
+  if (itemId.isEmpty) return;
+  final session = ref.read(sessionProvider);
+  if (session == null) return;
+  try {
+    final detail = await ref.read(hexaApiProvider).getStockItem(
+          businessId: session.primaryBusiness.id,
+          itemId: itemId,
+        );
+    final patch = stockListPatchFromStockDetail(detail);
+    if (patch.isNotEmpty) {
+      applyStockListRowPatch(ref, itemId: itemId, patch: patch);
+    }
+    ref.invalidate(stockItemDetailProvider(itemId));
+    ref.invalidate(stockItemIntelligenceProvider(itemId));
+    ref.invalidate(stockItemActivityProvider(itemId));
+  } catch (e, st) {
+    logSilencedApiError(e, st);
+    ref.invalidate(stockItemDetailProvider(itemId));
+    ref.invalidate(stockItemActivityProvider(itemId));
+  }
 }
 
 /// Stock row + recent purchases for catalog item detail / sheets.

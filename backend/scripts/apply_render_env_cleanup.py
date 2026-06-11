@@ -42,6 +42,8 @@ KEYS_TO_SET = {
     "API_READ_BUDGET_SECONDS": "6",
     "AUTO_STOCK_BACKFILL_ON_START": "false",
     "CORS_ORIGINS": "https://purchase-assiastant.vercel.app",
+    "DATABASE_POOL_SIZE": "5",
+    "DATABASE_MAX_OVERFLOW": "10",
     "DATABASE_SSL_INSECURE": "false",
     "DATABASE_SSL_SKIP_VERIFY": "true",
     "DEV_RETURN_OTP": "false",
@@ -124,8 +126,24 @@ def _list_env_vars() -> dict[str, str]:
     return out
 
 
+def _enable_auto_deploy() -> None:
+    status, body = _request(
+        "PATCH",
+        f"https://api.render.com/v1/services/{SERVICE_ID}",
+        {"autoDeploy": "yes", "branch": "main"},
+    )
+    print(f"autoDeploy=yes: HTTP {status}")
+    if status >= 400:
+        print(body[:500])
+
+
 def main() -> None:
     svc = _get_json(f"https://api.render.com/v1/services/{SERVICE_ID}")
+    auto = (svc.get("autoDeploy") or svc.get("serviceDetails", {}).get("autoDeploy") or "")
+    print(f"autoDeploy before={auto!r}")
+    if str(auto).lower() not in ("yes", "true"):
+        _enable_auto_deploy()
+
     suspended = (svc.get("suspended") or "").strip()
     print(f"service suspended={suspended!r}")
     if suspended == "suspended":

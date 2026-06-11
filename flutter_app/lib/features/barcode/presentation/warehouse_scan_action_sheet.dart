@@ -21,6 +21,7 @@ import '../../../core/providers/notification_center_provider.dart';
 import '../../../core/providers/server_notifications_provider.dart';
 import '../../../core/providers/stock_audit_providers.dart';
 import '../../../core/stock/stock_version_retry.dart';
+import '../../../core/utils/unit_utils.dart';
 import '../../../core/theme/hexa_colors.dart';
 import '../../stock/presentation/widgets/stock_update_mode_toggle.dart';
 import 'widgets/scan_item_stock_summary_card.dart';
@@ -70,9 +71,7 @@ class _WarehouseScanActionBodyState extends ConsumerState<_WarehouseScanActionBo
     final cur = privileged
         ? coerceToDouble(_item['current_stock'])
         : (phys ?? coerceToDouble(_item['current_stock']));
-    _qtyCtl.text = cur == cur.roundToDouble()
-        ? '${cur.round()}'
-        : cur.toStringAsFixed(1);
+    _qtyCtl.text = formatStockQtyForUnit(_unit, cur);
   }
 
   Future<void> _refreshItemFromServer() async {
@@ -520,7 +519,7 @@ class _WarehouseScanActionBodyState extends ConsumerState<_WarehouseScanActionBo
                 const SizedBox(width: 6),
                 Expanded(
                   child: Text(
-                    'Last Purchased: ${formatQty(lpQty)} ${lpUnit.toUpperCase()}'
+                    'Last Purchased: ${formatStockQtyForUnit(lpUnit, lpQty)} ${lpUnit.toUpperCase()}'
                     '${supplier.isNotEmpty ? ' from $supplier' : ''}'
                     '${lpDate != null ? ' (${ScanItemStockSummaryCard.daysAgoLabel(lpDate)})' : ''}',
                     style: const TextStyle(
@@ -575,7 +574,7 @@ class _WarehouseScanActionBodyState extends ConsumerState<_WarehouseScanActionBo
               onPressed: () {
                 final c = _enteredQty ?? _systemQty;
                 final next = (c - 1).clamp(0, double.infinity);
-                _qtyCtl.text = formatQty(next.toDouble());
+                _qtyCtl.text = _formatQty(next.toDouble());
                 setState(() {});
               },
               icon: const Icon(Icons.remove_circle_outline),
@@ -601,7 +600,7 @@ class _WarehouseScanActionBodyState extends ConsumerState<_WarehouseScanActionBo
               visualDensity: VisualDensity.compact,
               onPressed: () {
                 final c = _enteredQty ?? _systemQty;
-                _qtyCtl.text = formatQty(c + 1);
+                _qtyCtl.text = _formatQty(c + 1);
                 setState(() {});
               },
               icon: const Icon(Icons.add_circle_outline),
@@ -693,8 +692,7 @@ class _WarehouseScanActionBodyState extends ConsumerState<_WarehouseScanActionBo
     );
   }
 
-  String _formatQty(double q) =>
-      q == q.roundToDouble() ? '${q.round()}' : q.toStringAsFixed(1);
+  String _formatQty(double q) => formatStockQtyForUnit(_unit, q);
 
   Widget _actionTile({
     required IconData icon,
@@ -738,5 +736,3 @@ class _WarehouseScanActionBodyState extends ConsumerState<_WarehouseScanActionBo
   }
 }
 
-String formatQty(double q) =>
-    q == q.roundToDouble() ? '${q.round()}' : q.toStringAsFixed(1);

@@ -2341,6 +2341,45 @@ def _staff_activity_event(ev: StaffActivityLog, *, actor_role: str | None) -> St
     )
 
 
+async def _activity_stock_item_header(
+    db: AsyncSession,
+    business_id: uuid.UUID,
+    item_id: uuid.UUID,
+) -> StockDetailOut:
+    """Lightweight catalog row for activity response (client also fetches full stock detail)."""
+    r = await db.execute(
+        select(CatalogItem, ItemCategory.name, CategoryType.name)
+        .join(ItemCategory, CatalogItem.category_id == ItemCategory.id)
+        .outerjoin(CategoryType, CatalogItem.type_id == CategoryType.id)
+        .where(
+            CatalogItem.id == item_id,
+            CatalogItem.business_id == business_id,
+            CatalogItem.deleted_at.is_(None),
+        )
+    )
+    row = r.one_or_none()
+    if row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Item not found")
+    catalog_item, category_name, subcategory_name = row
+    supplier_name = await _supplier_name(db, catalog_item)
+    phys = (await _latest_physical_count_map(db, business_id, [item_id])).get(item_id)
+    phys_qty = phys.counted_qty if phys else None
+    spec_diff = phys.difference_qty if phys else None
+    if spec_diff is None and phys_qty is not None:
+        spec_diff = phys_qty - catalog_stock_qty(catalog_item)
+    list_row = _item_to_list_row(
+        catalog_item,
+        category_name,
+        subcategory_name,
+        supplier_name,
+        physical_stock_qty=phys_qty,
+        physical_stock_difference_qty=spec_diff,
+        physical_stock_counted_at=phys.counted_at if phys else None,
+        physical_stock_counted_by=phys.counted_by_name if phys else None,
+    )
+    return StockDetailOut(**list_row.model_dump(), recent_purchases=[])
+
+
 @router.get("/{item_id}/activity", response_model=StockItemActivityOut)
 async def stock_item_activity(
     business_id: uuid.UUID,
@@ -2351,7 +2390,7 @@ async def stock_item_activity(
     offset: int = Query(0, ge=0, le=5000),
     kind: str | None = Query(None, description="Comma-separated movement kinds filter (purchase,physical_count,damage,correction,sale,transfer,staff_purchase_log,staff_activity_log)."),
 ):
-    item = await get_stock_item(business_id, item_id, db, membership)
+    item = await _activity_stock_item_header(db, business_id, item_id)
     kinds = [k.strip() for k in (kind or "").split(",") if k.strip()]
     movement_q = (
         select(StockMovement)

@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/auth/provider_api_guard.dart';
 import '../../core/providers/business_aggregates_invalidation.dart';
+import '../../core/providers/stock_providers.dart' show patchStockItemInCache;
 import '../../core/providers/business_write_revision.dart';
 import '../../core/providers/home_owner_dashboard_providers.dart'
     show homeInventorySummaryProvider, homeRecentActivityFeedProvider;
@@ -91,7 +92,7 @@ class _ShellRealtimeListenerState extends ConsumerState<ShellRealtimeListener> {
   void _applyWarehouseSignal(RealtimeInvalidationSignal signal) {
     final ids = signal.affectedItemIds.where((id) => id.isNotEmpty).toSet();
     if (ids.length == 1) {
-      patchStockItemInCache(ref, ids.first, const {});
+      unawaited(patchStockItemInCache(ref, itemId: ids.first));
     } else if (ids.isEmpty) {
       invalidateWarehouseSurfacesLight(ref);
     } else {

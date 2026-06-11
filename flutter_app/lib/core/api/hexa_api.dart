@@ -2610,6 +2610,7 @@ class HexaApi {
   }
 
   /// Stock list with filters (server-side pagination).
+  /// Pass [ifNoneMatch] for ETag revalidation; 304 returns `{'_not_modified': true}`.
   Future<Map<String, dynamic>> listStock({
     required String businessId,
     int page = 1,
@@ -2628,6 +2629,7 @@ class HexaApi {
     bool missingItemCode = false,
     bool reorderOnly = false,
     String unit = '',
+    String? ifNoneMatch,
   }) async {
     final res = await _dio.get<Map<String, dynamic>>(
       '/v1/businesses/$businessId/stock/list',
@@ -2655,14 +2657,29 @@ class HexaApi {
           'date_to': periodEnd,
         },
       },
+      options: Options(
+        headers: {
+          if (ifNoneMatch != null && ifNoneMatch.isNotEmpty)
+            'If-None-Match': ifNoneMatch,
+        },
+        validateStatus: (code) => code != null && (code < 400 || code == 304),
+      ),
     );
-    return res.data ??
+    if (res.statusCode == 304) {
+      return const {'_not_modified': true};
+    }
+    final data = res.data ??
         <String, dynamic>{
           'items': <dynamic>[],
           'total': 0,
           'page': page,
           'per_page': perPage,
         };
+    final etag = res.headers.value('etag');
+    if (etag != null && etag.isNotEmpty) {
+      data['_etag'] = etag;
+    }
+    return data;
   }
 
   /// Pending/delivered truck counts for stock list filters (full catalog slice).

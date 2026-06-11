@@ -11,7 +11,7 @@ import '../../../../core/design_system/hexa_operational_tokens.dart';
 import '../../../../core/design_system/hexa_responsive.dart';
 import '../../../../core/json_coerce.dart';
 import '../../../../core/providers/business_aggregates_invalidation.dart'
-    show invalidateWarehouseSurfacesLight;
+    show invalidateWarehouseSurfacesAfterStockWrite;
 import '../../../../core/providers/stock_providers.dart'
     show applyStockListRowPatch;
 import '../../../../core/utils/unit_utils.dart';
@@ -97,7 +97,7 @@ class _ScanStockResultBodyState extends ConsumerState<_ScanStockResultBody> {
         itemId: id,
         patch: stockListPatchFromStockDetail(saved, fallbackQty: newQty),
       );
-      invalidateWarehouseSurfacesLight(ref, itemId: id);
+      invalidateWarehouseSurfacesAfterStockWrite(ref, itemId: id);
       if (!mounted) return;
       setState(() => _current = newQty);
       await HapticFeedback.lightImpact();

@@ -75,42 +75,49 @@ final itemDetailBundleProvider =
 
   Object? catalogError;
   Map<String, dynamic> catalog = {};
-  try {
-    catalog = Map<String, dynamic>.from(
-      await _fetchWithRetry(
-        () => ref.read(catalogItemDetailProvider(itemId).future),
-      ),
-    );
-  } catch (e, st) {
-    logSilencedApiError(e, st);
-    catalogError = e;
-  }
-
   Object? stockError;
   Map<String, dynamic> stock = {};
-  try {
-    stock = Map<String, dynamic>.from(
-      await _fetchWithRetry(
-        () => ref.read(stockItemDetailProvider(itemId).future),
-      ),
-    );
-  } catch (e, st) {
-    logSilencedApiError(e, st);
-    stockError = e;
-  }
-
   Object? activityError;
   Map<String, dynamic> activity = {};
-  try {
-    activity = Map<String, dynamic>.from(
-      await _fetchWithRetry(
-        () => ref.read(stockItemActivityProvider(itemId).future),
-      ),
-    );
-  } catch (e, st) {
-    logSilencedApiError(e, st);
-    activityError = e;
-  }
+
+  await Future.wait<void>([
+    () async {
+      try {
+        catalog = Map<String, dynamic>.from(
+          await _fetchWithRetry(
+            () => ref.read(catalogItemDetailProvider(itemId).future),
+          ),
+        );
+      } catch (e, st) {
+        logSilencedApiError(e, st);
+        catalogError = e;
+      }
+    }(),
+    () async {
+      try {
+        stock = Map<String, dynamic>.from(
+          await _fetchWithRetry(
+            () => ref.read(stockItemDetailProvider(itemId).future),
+          ),
+        );
+      } catch (e, st) {
+        logSilencedApiError(e, st);
+        stockError = e;
+      }
+    }(),
+    () async {
+      try {
+        activity = Map<String, dynamic>.from(
+          await _fetchWithRetry(
+            () => ref.read(stockItemActivityProvider(itemId).future),
+          ),
+        );
+      } catch (e, st) {
+        logSilencedApiError(e, st);
+        activityError = e;
+      }
+    }(),
+  ]);
 
   return ItemDetailBundle(
     catalogItem: catalog,

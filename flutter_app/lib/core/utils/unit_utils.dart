@@ -36,11 +36,34 @@ bool isKgStockUnit(String? unit) {
   return u == 'kg' || u == 'kilogram' || u == 'kilograms';
 }
 
+bool _isDiscreteStockUnit(String? unit) {
+  final u = (unit ?? '').trim().toLowerCase();
+  if (u.isEmpty) return false;
+  return u == 'bag' ||
+      u == 'bags' ||
+      u == 'sack' ||
+      u == 'box' ||
+      u == 'boxes' ||
+      u == 'tin' ||
+      u == 'tins' ||
+      u == 'piece' ||
+      u == 'pieces' ||
+      u == 'pkt' ||
+      u == 'packet';
+}
+
 /// Warehouse list qty: integers for bag/box/tin/piece; up to 2 decimals for kg only.
 String formatStockQtyForUnit(String? unit, double n) {
   if (!n.isFinite) return '—';
   if (isKgStockUnit(unit)) {
     return formatStockQtyNumber(n);
+  }
+  if (_isDiscreteStockUnit(unit)) {
+    final rounded = n.roundToDouble();
+    return rounded.toInt().toString().replaceAllMapped(
+          RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
+          (m) => '${m[1]},',
+        );
   }
   return formatStockQtyNumber(n);
 }
