@@ -1510,6 +1510,7 @@ class HexaApi {
         if (missingQty != null && missingQty > 0) 'missing_qty': missingQty,
         if (brokerConfirmed == true) 'broker_confirmed': true,
       },
+      options: _stockWriteOptions,
     );
     return Map<String, dynamic>.from(res.data ?? {});
   }
@@ -1634,6 +1635,7 @@ class HexaApi {
         'lines': lines,
         if (notes != null && notes.trim().isNotEmpty) 'notes': notes.trim(),
       },
+      options: _stockWriteOptions,
     );
     return res.data ?? {};
   }
@@ -3173,6 +3175,7 @@ class HexaApi {
         if (periodEnd != null && periodEnd.isNotEmpty) 'period_end': periodEnd,
         if (notes != null && notes.trim().isNotEmpty) 'notes': notes.trim(),
       },
+      options: _stockWriteOptions,
     );
     return res.data ?? {};
   }

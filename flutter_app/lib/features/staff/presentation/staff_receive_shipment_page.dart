@@ -11,6 +11,7 @@ import '../../../core/auth/auth_error_messages.dart';
 import '../../../core/models/trade_purchase_models.dart';
 import '../../../core/providers/business_aggregates_invalidation.dart'
     show invalidateStaffDeliverySurfaces, syncPurchaseStockAfterVerify;
+import '../../../core/providers/api_degraded_provider.dart';
 import '../../../core/theme/hexa_colors.dart';
 import '../../../core/utils/delivery_offline_actions.dart';
 import '../../../core/utils/snack.dart';
@@ -137,6 +138,7 @@ class _StaffReceiveShipmentPageState
           lines: lineMaps,
         );
         invalidateStaffDeliverySurfaces(ref);
+        ref.read(apiDegradedProvider.notifier).clear();
         if (verified && mounted) {
           showTopSnack(
             context,
@@ -163,6 +165,7 @@ class _StaffReceiveShipmentPageState
         verifyResponse: body,
       );
       invalidateStaffDeliverySurfaces(ref);
+      ref.read(apiDegradedProvider.notifier).clear();
       if (mounted) {
         showTopSnack(
           context,

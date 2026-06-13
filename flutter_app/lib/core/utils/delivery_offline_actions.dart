@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../auth/auth_error_messages.dart' show shouldQueueScanOffline;
 import '../auth/session_notifier.dart';
 import '../services/offline_store.dart';
+import 'delivery_write_resilience.dart';
 
 /// Mark purchase arrived — queue when warehouse has no connectivity.
 Future<({bool queued, Map<String, dynamic>? body})> markPurchaseArrivedResilient({
@@ -18,16 +19,23 @@ Future<({bool queued, Map<String, dynamic>? body})> markPurchaseArrivedResilient
   bool? brokerConfirmed,
 }) async {
   try {
-    final body = await ref.read(hexaApiProvider).arrivePurchase(
-          businessId: businessId,
-          purchaseId: purchaseId,
-          notes: notes,
-          truckNumber: truckNumber,
-          driverContact: driverContact,
-          damageQty: damageQty,
-          missingQty: missingQty,
-          brokerConfirmed: brokerConfirmed,
-        );
+    final body = await resilientPurchaseWrite<Map<String, dynamic>>(
+      write: () => ref.read(hexaApiProvider).arrivePurchase(
+            businessId: businessId,
+            purchaseId: purchaseId,
+            notes: notes,
+            truckNumber: truckNumber,
+            driverContact: driverContact,
+            damageQty: damageQty,
+            missingQty: missingQty,
+            brokerConfirmed: brokerConfirmed,
+          ),
+      ref: ref,
+      businessId: businessId,
+      purchaseId: purchaseId,
+      reconcileSuccess: purchasePassedArriveGate,
+      mapReconciled: (p) => p,
+    );
     return (queued: false, body: Map<String, dynamic>.from(body));
   } on DioException catch (e) {
     if (!shouldQueueScanOffline(e)) rethrow;
@@ -58,11 +66,18 @@ Future<Map<String, dynamic>> verifyPurchaseDeliveryAsOrdered({
           'return_qty': 0,
         },
   ];
-  final body = await ref.read(hexaApiProvider).verifyPurchaseDelivery(
-        businessId: businessId,
-        purchaseId: purchaseId,
-        lines: payload,
-        notes: notes,
-      );
+  final body = await resilientPurchaseWrite<Map<String, dynamic>>(
+    write: () => ref.read(hexaApiProvider).verifyPurchaseDelivery(
+          businessId: businessId,
+          purchaseId: purchaseId,
+          lines: payload,
+          notes: notes,
+        ),
+    ref: ref,
+    businessId: businessId,
+    purchaseId: purchaseId,
+    reconcileSuccess: purchasePassedVerifyGate,
+    mapReconciled: (p) => p,
+  );
   return Map<String, dynamic>.from(body);
 }

@@ -6,7 +6,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../auth/auth_failure_policy.dart';
 import '../auth/session_notifier.dart' show activeSessionProvider, hexaApiProvider, sessionProvider;
 import '../../features/shell/shell_branch_provider.dart';
-import '../../features/staff/staff_shell_branch_provider.dart';
 import '../models/trade_purchase_models.dart';
 import '../auth/provider_api_guard.dart';
 import 'analytics_kpi_provider.dart' show analyticsDateRangeProvider;
@@ -154,10 +153,6 @@ final staffTradePurchasesForAlertsProvider =
   final session = ref.watch(activeSessionProvider);
   if (session == null) return [];
   if (session.primaryBusiness.role.toLowerCase() != 'staff') return [];
-  if (!staffShellBranchIsVisible(ref, StaffShellBranch.home) &&
-      !staffShellBranchIsVisible(ref, StaffShellBranch.deliveries)) {
-    return [];
-  }
   return ref.read(hexaApiProvider).listTradePurchases(
         businessId: session.primaryBusiness.id,
         limit: kTradePurchasesAlertFetchLimit,
