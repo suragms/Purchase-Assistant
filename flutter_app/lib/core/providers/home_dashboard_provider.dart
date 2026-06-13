@@ -675,6 +675,7 @@ String _mapDashboardDioBanner(DioException e) {
     }
     return 'Service temporarily unavailable';
   }
+  if (sc == 429) return 'Too many requests — wait a moment';
   if (sc != null && sc >= 500) return 'Temporary server issue';
   return 'Updating data...';
 }
@@ -843,7 +844,7 @@ Future<HomeDashboardPayload> _homeDashboardPullFresh({
 
   try {
     final overviewSw = Stopwatch()..start();
-    final snap = await api
+    Future<Map<String, dynamic>> loadOverview() => api
         .reportsHomeOverview(
           businessId: bid,
           from: from,
@@ -857,6 +858,14 @@ Future<HomeDashboardPayload> _homeDashboardPullFresh({
           const Duration(seconds: 12),
           onTimeout: () => throw TimeoutException('reportsHomeOverview'),
         );
+    Map<String, dynamic> snap;
+    try {
+      snap = await loadOverview();
+    } on DioException catch (e) {
+      if (e.response?.statusCode != 429) rethrow;
+      await Future<void>.delayed(const Duration(seconds: 2));
+      snap = await loadOverview();
+    }
     if (snap['_not_modified'] == true) {
       final cached = _homeOverviewSnapMemory[dedupeKey];
       if (cached != null) {

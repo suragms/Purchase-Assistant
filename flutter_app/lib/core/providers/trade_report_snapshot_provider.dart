@@ -1,9 +1,12 @@
 import 'dart:async';
 
+import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
+import '../auth/provider_api_guard.dart';
 import '../auth/session_notifier.dart' show activeSessionProvider, hexaApiProvider;
+import '../../features/shell/shell_branch_provider.dart';
 import 'analytics_kpi_provider.dart' show analyticsDateRangeProvider;
 
 /// Shared trade report rows for Home shell + Analytics breakdown tabs.
@@ -34,8 +37,42 @@ TradeReportRangeKey tradeReportRangeKeyForAnalytics(Ref ref) {
 }
 
 const Duration _tradeReportSnapshotKeepAlive = Duration(minutes: 3);
+const Duration _tradeReport429RetryDelay = Duration(seconds: 2);
 
 final Map<String, Future<TradeReportSnapshot>> _tradeReportInflight = {};
+
+Future<TradeReportSnapshot> _fetchTradeReportSnapshotOnce(
+  Ref ref,
+  TradeReportRangeKey range,
+) async {
+  final api = ref.read(hexaApiProvider);
+  final bid = ref.read(activeSessionProvider)!.primaryBusiness.id;
+  final out = await Future.wait([
+    api.tradeReportTypes(
+      businessId: bid,
+      from: range.from,
+      to: range.to,
+    ),
+    api.tradeReportSuppliers(
+      businessId: bid,
+      from: range.from,
+      to: range.to,
+    ),
+    api.tradeReportItems(
+      businessId: bid,
+      from: range.from,
+      to: range.to,
+    ),
+  ]).timeout(const Duration(seconds: 32));
+  return TradeReportSnapshot(
+    types: List<Map<String, dynamic>>.from(out[0]),
+    suppliers: List<Map<String, dynamic>>.from(out[1]),
+    items: List<Map<String, dynamic>>.from(out[2]),
+  );
+}
+
+bool _isReportsRateLimited(Object error) =>
+    error is DioException && error.response?.statusCode == 429;
 
 Future<TradeReportSnapshot> fetchTradeReportSnapshot(
   Ref ref,
@@ -50,32 +87,17 @@ Future<TradeReportSnapshot> fetchTradeReportSnapshot(
       final link = ref.keepAlive();
       final timer = Timer(_tradeReportSnapshotKeepAlive, link.close);
       ref.onDispose(timer.cancel);
-      final api = ref.read(hexaApiProvider);
-      final bid = session.primaryBusiness.id;
       try {
-        final out = await Future.wait([
-          api.tradeReportTypes(
-            businessId: bid,
-            from: range.from,
-            to: range.to,
-          ),
-          api.tradeReportSuppliers(
-            businessId: bid,
-            from: range.from,
-            to: range.to,
-          ),
-          api.tradeReportItems(
-            businessId: bid,
-            from: range.from,
-            to: range.to,
-          ),
-        ]).timeout(const Duration(seconds: 32));
-        return TradeReportSnapshot(
-          types: List<Map<String, dynamic>>.from(out[0]),
-          suppliers: List<Map<String, dynamic>>.from(out[1]),
-          items: List<Map<String, dynamic>>.from(out[2]),
-        );
+        try {
+          return await _fetchTradeReportSnapshotOnce(ref, range);
+        } on DioException catch (e) {
+          if (!_isReportsRateLimited(e)) rethrow;
+          await Future<void>.delayed(_tradeReport429RetryDelay);
+          return await _fetchTradeReportSnapshotOnce(ref, range);
+        }
       } on TimeoutException {
+        return TradeReportSnapshot.empty;
+      } on DioException {
         return TradeReportSnapshot.empty;
       } finally {
         _tradeReportInflight.remove(dedupeKey);
@@ -87,6 +109,11 @@ Future<TradeReportSnapshot> fetchTradeReportSnapshot(
 /// Single SSOT fetch keyed by analytics date range (Home + Reports share this).
 final tradeReportSnapshotProvider =
     FutureProvider.autoDispose<TradeReportSnapshot>((ref) async {
+  if (providerSkipApi(ref)) return TradeReportSnapshot.empty;
+  final branch = ref.watch(shellCurrentBranchProvider);
+  if (branch != ShellBranch.reports) {
+    return TradeReportSnapshot.empty;
+  }
   final range = tradeReportRangeKeyForAnalytics(ref);
   return fetchTradeReportSnapshot(ref, range);
 });

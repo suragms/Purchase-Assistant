@@ -16,6 +16,7 @@ import 'home_dashboard_provider.dart'
     show
         homeActivityFeedFetchEnabledProvider,
         homeDashboardDataProvider,
+        homeOverviewSnapForKey,
         homeTabHasOperationalBundle,
         homePeriodProvider,
         homeCustomDateRangeProvider,
@@ -55,6 +56,10 @@ Future<Map<String, dynamic>> _fetchOwnerOverviewSnapshot({
     return Future.value(<String, dynamic>{});
   }
   final key = _ownerOverviewKey(businessId, from, to);
+  final shared = homeOverviewSnapForKey(key);
+  if (shared != null) {
+    return Future.value(Map<String, dynamic>.from(shared));
+  }
   final fetchedAt = _ownerOverviewFetchedAt[key];
   if (fetchedAt != null &&
       DateTime.now().difference(fetchedAt) < _ownerOverviewTtl) {

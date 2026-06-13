@@ -1,10 +1,13 @@
 import 'dart:async';
 
+import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../json_coerce.dart';
 import 'package:intl/intl.dart';
 
+import '../../features/shell/shell_branch_provider.dart';
+import '../auth/provider_api_guard.dart';
 import '../auth/session_notifier.dart' show activeSessionProvider, hexaApiProvider;
 import 'analytics_kpi_provider.dart';
 import 'trade_report_snapshot_provider.dart';
@@ -25,6 +28,8 @@ typedef AnalyticsDailyProfitPoint = ({DateTime day, double profit});
 final analyticsDailyProfitProvider =
     FutureProvider.autoDispose<List<AnalyticsDailyProfitPoint>>((ref) async {
   _keepAnalyticsAlive(ref);
+  if (providerSkipApi(ref)) return [];
+  if (!shellBranchIsVisible(ref, ShellBranch.reports)) return [];
   final session = ref.watch(activeSessionProvider);
   final range = ref.watch(analyticsDateRangeProvider);
   if (session == null) return [];
@@ -33,11 +38,12 @@ final analyticsDailyProfitProvider =
   final fmt = DateFormat('yyyy-MM-dd');
   final fromS = fmt.format(start);
   final toS = fmt.format(end);
-  final raw = await ref.read(hexaApiProvider).tradeReportDailyProfit(
-        businessId: session.primaryBusiness.id,
-        from: fromS,
-        to: toS,
-      );
+  try {
+    final raw = await ref.read(hexaApiProvider).tradeReportDailyProfit(
+          businessId: session.primaryBusiness.id,
+          from: fromS,
+          to: toS,
+        );
   final byDay = <String, double>{};
   for (final row in raw) {
     final ds = row['d']?.toString();
@@ -51,48 +57,80 @@ final analyticsDailyProfitProvider =
     out.add((day: d, profit: byDay[key] ?? 0));
   }
   return out;
+  } on DioException catch (e) {
+    if (e.response?.statusCode == 429) return [];
+    rethrow;
+  }
 });
 
 final analyticsItemsTableProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
   _keepAnalyticsAlive(ref);
+  if (providerSkipApi(ref)) return [];
+  if (!shellBranchIsVisible(ref, ShellBranch.reports)) return [];
   final session = ref.watch(activeSessionProvider);
   if (session == null) return [];
-  final snap = await ref.watch(tradeReportSnapshotProvider.future);
-  return snap.items;
+  try {
+    final snap = await ref.watch(tradeReportSnapshotProvider.future);
+    return snap.items;
+  } on DioException catch (e) {
+    if (e.response?.statusCode == 429) return [];
+    rethrow;
+  }
 });
 
 final analyticsCategoriesTableProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
   _keepAnalyticsAlive(ref);
+  if (providerSkipApi(ref)) return [];
+  if (!shellBranchIsVisible(ref, ShellBranch.reports)) return [];
   final session = ref.watch(activeSessionProvider);
   final range = ref.watch(analyticsDateRangeProvider);
   if (session == null) return [];
   final fmt = DateFormat('yyyy-MM-dd');
-  return ref.read(hexaApiProvider).tradeReportCategories(
-        businessId: session.primaryBusiness.id,
-        from: fmt.format(range.from),
-        to: fmt.format(range.to),
-      );
+  try {
+    return await ref.read(hexaApiProvider).tradeReportCategories(
+          businessId: session.primaryBusiness.id,
+          from: fmt.format(range.from),
+          to: fmt.format(range.to),
+        );
+  } on DioException catch (e) {
+    if (e.response?.statusCode == 429) return [];
+    rethrow;
+  }
 });
 
 /// Trade-backed subcategory (CategoryType) rows — use for Home donut + subcategory view.
 final analyticsTypesTableProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
   _keepAnalyticsAlive(ref);
+  if (providerSkipApi(ref)) return [];
+  if (!shellBranchIsVisible(ref, ShellBranch.reports)) return [];
   final session = ref.watch(activeSessionProvider);
   if (session == null) return [];
-  final snap = await ref.watch(tradeReportSnapshotProvider.future);
-  return snap.types;
+  try {
+    final snap = await ref.watch(tradeReportSnapshotProvider.future);
+    return snap.types;
+  } on DioException catch (e) {
+    if (e.response?.statusCode == 429) return [];
+    rethrow;
+  }
 });
 
 final analyticsSuppliersTableProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
   _keepAnalyticsAlive(ref);
+  if (providerSkipApi(ref)) return [];
+  if (!shellBranchIsVisible(ref, ShellBranch.reports)) return [];
   final session = ref.watch(activeSessionProvider);
   if (session == null) return [];
-  final snap = await ref.watch(tradeReportSnapshotProvider.future);
-  return snap.suppliers;
+  try {
+    final snap = await ref.watch(tradeReportSnapshotProvider.future);
+    return snap.suppliers;
+  } on DioException catch (e) {
+    if (e.response?.statusCode == 429) return [];
+    rethrow;
+  }
 });
 
 final analyticsBrokersTableProvider =

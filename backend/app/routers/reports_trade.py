@@ -38,7 +38,8 @@ from app.services.stock_inventory import compute_inventory_summary
 
 logger = logging.getLogger(__name__)
 
-_reports_read_limiter = SlidingWindowLimiter(max_requests=60, window_seconds=60.0)
+# SPA Home + Reports can legitimately fan out many GETs on tab open (parallel breakdown rows).
+_reports_read_limiter = SlidingWindowLimiter(max_requests=480, window_seconds=60.0)
 
 
 async def enforce_reports_read_rate_limit(request: Request) -> None:
@@ -46,10 +47,12 @@ async def enforce_reports_read_rate_limit(request: Request) -> None:
         return
     client = request.client
     ip = client.host if client else "unknown"
-    if not _reports_read_limiter.allow(f"reports-read:{ip}"):
+    biz = str(request.path_params.get("business_id") or "anon")
+    if not _reports_read_limiter.allow(f"reports-read:{biz}:{ip}"):
         raise HTTPException(
             status.HTTP_429_TOO_MANY_REQUESTS,
             detail="rate_limit_exceeded",
+            headers={"Retry-After": "5"},
         )
 
 
