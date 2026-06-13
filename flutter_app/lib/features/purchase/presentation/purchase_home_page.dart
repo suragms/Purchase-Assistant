@@ -1065,7 +1065,6 @@ class _PurchaseHomePageState extends ConsumerState<PurchaseHomePage> {
     final undeliveredSort = ref.watch(purchaseHistoryUndeliveredSortProvider);
     final searchQ = ref.watch(purchaseHistorySearchProvider);
     final localWip = ref.watch(purchaseLocalWipDraftForHistoryProvider);
-    ref.watch(catalogItemsListProvider);
     final narrowHeader = MediaQuery.sizeOf(context).width < 520;
 
     return Scaffold(
@@ -2529,7 +2528,6 @@ class _PurchaseHistoryFullscreenSearchPageState
 
   @override
   Widget build(BuildContext context) {
-    ref.watch(catalogItemsListProvider);
     final range = ref.watch(analyticsDateRangeProvider);
     final inferred = _purchaseHistInferPreset(range);
     if (inferred != _preset && inferred != _HistPeriodPreset.custom) {

@@ -1,6 +1,14 @@
 # Purchase Assistant — Living task board
 
-**Last updated:** 2026-06-13 (BUG-016/017 stock + iOS barcode; Alembic 061 on Render)
+**Last updated:** 2026-06-06 (full-app latency reduction P0–P2)
+
+## Performance phases (2026-06-06)
+
+- [x] **PERF-P0** Quick stock save: `invalidateStockRowSaveSurfaces` (light reconcile, reorder-only aggregate storm); contacts search 300ms debounce; shell tab refresh gated by stock list TTL / home soft refresh / reports 3min; analytics providers keepAlive 3min; foreground+realtime warehouse dedupe (8s global guard)
+- [x] **PERF-P1** Tiered `invalidateStockRowSaveSurfaces` + migrate quick stock / scan sheets; `lastWarehouseGlobalInvalidateAtProvider`
+- [x] **PERF-P2** Backend: `purchased_in_period` SQL whitelist pagination (no 10k Python filter); batch `_last_purchase_expected_qty_map`; Alembic **062** trade report indexes; stock list keepAlive aligned to 3min TTL; home pending delivery reads `home_operational` bundle; purchase history drops eager `catalogItemsListProvider`
+- [ ] **PERF-P3** Per-tab polish follow-ups (catalog type-items pagination, settings export `_busy` audit) — incremental PRs
+- [ ] **Alembic 062 on Render** — apply `062_trade_report_indexes` before expecting `/health/ready` `schema_ok` with new head
 
 ## Production bugs (2026-06-01)
 
@@ -27,7 +35,7 @@
 
 ## Live DB (Render harisree-db 2026-06-13)
 
-- [x] **Alembic head:** `061_catalog_unit_simplify` (applied on Render via `backend/scripts/apply_render_upgrade_061.py`; `/health/ready` → `schema_ok: true`)
+- [x] **Alembic head (code):** `062_trade_report_indexes` (Render still on **061** until ops apply 062)
 - [x] **Full audit pass (2026-06-05):** purchase race guards, duplicate line/share guards, barcode desktop split + web camera gesture, advisory locks, structured 409 stock conflicts, keepalive 8min+retry, activity WhatsApp dedupe
 
 ## Manual QA handoff (post-deploy)

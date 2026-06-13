@@ -13,7 +13,7 @@ import '../../../core/services/offline_store.dart';
 import '../../../core/errors/errors.dart';
 import '../../../core/json_coerce.dart';
 import '../../../core/providers/business_aggregates_invalidation.dart'
-    show invalidateWarehouseSurfacesAfterStockWrite;
+    show invalidateStockRowSaveSurfaces;
 import '../../../core/providers/stock_providers.dart' show applyStockListRowPatch;
 import '../../stock/stock_list_row_patch.dart'
     show stockListPatchFromPhysicalCount, stockListPatchFromStockDetail;
@@ -92,11 +92,7 @@ class _WarehouseScanActionBodyState extends ConsumerState<_WarehouseScanActionBo
 
   Future<void> _refreshAfterSave() async {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      invalidateWarehouseSurfacesAfterStockWrite(
-        ref,
-        itemId: _itemId,
-        deferFullList: true,
-      );
+      invalidateStockRowSaveSurfaces(ref, itemId: _itemId);
       ref.invalidate(activeStockAuditProvider);
     });
   }

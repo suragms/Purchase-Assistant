@@ -240,8 +240,22 @@ final homeLowStockAttentionCountProvider = Provider.autoDispose<int>((ref) {
   return ref.watch(homeStockAttentionCountProvider).valueOrNull ?? 0;
 });
 
-/// Pending delivery: warehouse summary + delivery pipeline (max of both).
+/// Pending delivery: operational bundle + delivery pipeline (max of both).
 final homePendingDeliveryCountProvider = Provider.autoDispose<int>((ref) {
+  if (homeTabHasOperationalBundle(ref)) {
+    final fromOperational = ref
+            .watch(homeDashboardDataProvider)
+            .snapshot
+            .data
+            .operational
+            ?.warehouseAlerts
+            .pendingDeliveries ??
+        0;
+    final fromPipeline = deliveryPipelinePendingCount(
+      ref.watch(deliveryPipelineProvider).valueOrNull,
+    );
+    return fromOperational > fromPipeline ? fromOperational : fromPipeline;
+  }
   final fromWarehouse =
       ref.watch(warehouseAlertsProvider).valueOrNull?.pendingDeliveries ?? 0;
   final fromPipeline = deliveryPipelinePendingCount(

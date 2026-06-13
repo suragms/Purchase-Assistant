@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
@@ -41,6 +43,9 @@ class AnalyticsKpi {
 
 final analyticsKpiProvider =
     FutureProvider.autoDispose<AnalyticsKpi>((ref) async {
+  final link = ref.keepAlive();
+  final t = Timer(const Duration(minutes: 3), link.close);
+  ref.onDispose(t.cancel);
   final session = ref.watch(sessionProvider);
   final range = ref.watch(analyticsDateRangeProvider);
   if (session == null) {

@@ -6,6 +6,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../auth/auth_failure_policy.dart';
 import '../auth/session_notifier.dart' show sessionProvider;
 import '../providers/business_aggregates_invalidation.dart';
+import '../providers/business_write_revision.dart'
+    show markWarehouseGlobalInvalidated, warehouseGlobalInvalidateRecently;
 import '../providers/realtime_events_provider.dart';
 import '../services/backup_auto_service.dart';
 import 'app_foreground_provider.dart';
@@ -100,6 +102,10 @@ class _AppForegroundListenerState extends ConsumerState<AppForegroundListener>
       _lastForegroundRefreshAt = now;
       // Always refresh staff/warehouse summaries on resume (light invalidation).
       invalidateStaffDeliverySurfacesLight(ref);
+      if (warehouseGlobalInvalidateRecently(ref)) {
+        ref.invalidate(realtimeInvalidationProvider);
+        return;
+      }
       if (_lastWarehouseInvalidateAt != null &&
           now.difference(_lastWarehouseInvalidateAt!) <
               const Duration(seconds: 30)) {
@@ -107,6 +113,7 @@ class _AppForegroundListenerState extends ConsumerState<AppForegroundListener>
         return;
       }
       _lastWarehouseInvalidateAt = now;
+      markWarehouseGlobalInvalidated(ref);
       invalidateWarehouseSurfacesLight(ref);
       ref.invalidate(realtimeInvalidationProvider);
       unawaited(maybeRunDailyAutoBackup(ref));

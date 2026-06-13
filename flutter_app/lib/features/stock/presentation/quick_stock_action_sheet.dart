@@ -12,7 +12,7 @@ import '../../../core/stock/stock_version_retry.dart';
 import '../../../core/errors/user_facing_errors.dart';
 import '../../../core/json_coerce.dart';
 import '../../../core/providers/business_aggregates_invalidation.dart'
-    show invalidateWarehouseSurfacesAfterStockWrite;
+    show invalidateStockRowSaveSurfaces;
 import '../../../core/notifications/local_notifications_service.dart';
 import '../../../core/providers/stock_providers.dart'
     show
@@ -314,20 +314,18 @@ class _QuickStockActionBodyState extends ConsumerState<_QuickStockActionBody> {
     _patchApplied = false;
   }
 
-  void _refreshBackgroundReconcile() {
+  Future<void> _afterSaveBackground(num parsed) async {
+    final reorder = coerceToDouble(_item['reorder_level']);
+    final crossedReorder = reorder > 0 && parsed <= reorder;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      invalidateWarehouseSurfacesAfterStockWrite(
+      invalidateStockRowSaveSurfaces(
         widget.parentRef,
-        deferFullList: false,
-        light: false,
+        itemId: _itemId,
+        immediateListReconcile: true,
+        reorderAlert: crossedReorder,
       );
     });
-  }
-
-  Future<void> _afterSaveBackground(num parsed) async {
-    _refreshBackgroundReconcile();
-    final reorder = coerceToDouble(_item['reorder_level']);
-    if (reorder > 0 && parsed <= reorder) {
+    if (crossedReorder) {
       final unitLabel = _unit.isNotEmpty ? _unit.toUpperCase() : '';
       await LocalNotificationsService.instance.showLowStockItem(
         itemName: _name,

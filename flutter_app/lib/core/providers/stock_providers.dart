@@ -9,6 +9,7 @@ import '../auth/provider_api_guard.dart';
 import '../auth/session_notifier.dart';
 import '../errors/user_facing_errors.dart';
 import '../json_coerce.dart';
+import '../navigation/surface_refresh_policy.dart' show kStockListCacheTtl;
 import '../../features/stock/stock_list_row_patch.dart'
     show
         kStockListPatchAtKey,
@@ -154,10 +155,14 @@ final stockListCachedBodyProvider =
     StateProvider<Map<String, dynamic>?>((ref) => null);
 final stockListCacheQueryKeyProvider = StateProvider<String?>((ref) => null);
 
+/// Last successful stock list fetch (page 1 ETag path) — gates shell tab refresh.
+final stockListLastFetchedAtProvider = StateProvider<DateTime?>((ref) => null);
+
 void clearStockListEtagCache(dynamic ref) {
   ref.read(stockListEtagProvider.notifier).state = null;
   ref.read(stockListCachedBodyProvider.notifier).state = null;
   ref.read(stockListCacheQueryKeyProvider.notifier).state = null;
+  ref.read(stockListLastFetchedAtProvider.notifier).state = null;
 }
 
 /// Stock list period chips (Today / Week / Month / Year).
@@ -338,7 +343,7 @@ final stockChangesFeedProvider =
 
 final stockListProvider = FutureProvider.autoDispose((ref) async {
   final keepAlive = ref.keepAlive();
-  final timer = Timer(const Duration(seconds: 90), keepAlive.close);
+  final timer = Timer(kStockListCacheTtl, keepAlive.close);
   ref.onDispose(timer.cancel);
   final session = ref.watch(sessionProvider);
   final query = ref.watch(stockListQueryProvider);
@@ -386,6 +391,9 @@ final stockListProvider = FutureProvider.autoDispose((ref) async {
     ref.read(stockListEtagProvider.notifier).state = newEtag;
     ref.read(stockListCachedBodyProvider.notifier).state = next;
     ref.read(stockListCacheQueryKeyProvider.notifier).state = queryKey;
+    ref.read(stockListLastFetchedAtProvider.notifier).state = DateTime.now();
+  } else if (query.page == 1 && res['_not_modified'] != true) {
+    ref.read(stockListLastFetchedAtProvider.notifier).state = DateTime.now();
   }
   return next;
 });

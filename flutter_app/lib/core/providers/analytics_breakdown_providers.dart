@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../json_coerce.dart';
@@ -6,6 +8,14 @@ import 'package:intl/intl.dart';
 import '../auth/session_notifier.dart' show activeSessionProvider, hexaApiProvider;
 import 'analytics_kpi_provider.dart';
 
+const Duration _analyticsProviderKeepAlive = Duration(minutes: 3);
+
+void _keepAnalyticsAlive(Ref ref) {
+  final link = ref.keepAlive();
+  final t = Timer(_analyticsProviderKeepAlive, link.close);
+  ref.onDispose(t.cancel);
+}
+
 /// One calendar day of summed line profit (for Overview trend chart).
 typedef AnalyticsDailyProfitPoint = ({DateTime day, double profit});
 
@@ -13,6 +23,7 @@ typedef AnalyticsDailyProfitPoint = ({DateTime day, double profit});
 /// Uses `GET …/reports/trade-daily-profit` (server line-profit SSOT).
 final analyticsDailyProfitProvider =
     FutureProvider.autoDispose<List<AnalyticsDailyProfitPoint>>((ref) async {
+  _keepAnalyticsAlive(ref);
   final session = ref.watch(activeSessionProvider);
   final range = ref.watch(analyticsDateRangeProvider);
   if (session == null) return [];
@@ -43,6 +54,7 @@ final analyticsDailyProfitProvider =
 
 final analyticsItemsTableProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
+  _keepAnalyticsAlive(ref);
   final session = ref.watch(activeSessionProvider);
   final range = ref.watch(analyticsDateRangeProvider);
   if (session == null) return [];
@@ -56,6 +68,7 @@ final analyticsItemsTableProvider =
 
 final analyticsCategoriesTableProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
+  _keepAnalyticsAlive(ref);
   final session = ref.watch(activeSessionProvider);
   final range = ref.watch(analyticsDateRangeProvider);
   if (session == null) return [];
@@ -70,6 +83,7 @@ final analyticsCategoriesTableProvider =
 /// Trade-backed subcategory (CategoryType) rows — use for Home donut + subcategory view.
 final analyticsTypesTableProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
+  _keepAnalyticsAlive(ref);
   final session = ref.watch(activeSessionProvider);
   final range = ref.watch(analyticsDateRangeProvider);
   if (session == null) return [];
@@ -83,6 +97,7 @@ final analyticsTypesTableProvider =
 
 final analyticsSuppliersTableProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
+  _keepAnalyticsAlive(ref);
   final session = ref.watch(activeSessionProvider);
   final range = ref.watch(analyticsDateRangeProvider);
   if (session == null) return [];
@@ -96,6 +111,7 @@ final analyticsSuppliersTableProvider =
 
 final analyticsBrokersTableProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
+  _keepAnalyticsAlive(ref);
   final session = ref.watch(activeSessionProvider);
   final range = ref.watch(analyticsDateRangeProvider);
   if (session == null) return [];

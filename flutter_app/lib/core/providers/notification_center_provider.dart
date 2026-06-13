@@ -15,9 +15,11 @@ final notificationCenterCoordinatorProvider =
   if (providerSkipApi(ref)) return;
 
   ref.watch(appNotificationsListProvider);
-  ref.watch(warehouseAlertsProvider);
-
   final onHome = ref.watch(shellCurrentBranchProvider) == ShellBranch.home;
+  if (!onHome) {
+    ref.watch(warehouseAlertsProvider);
+  }
+
   if (onHome) return;
 
   final timer = Timer.periodic(const Duration(seconds: 120), (_) {

@@ -114,6 +114,7 @@ from app.services.realtime_events import publish_business_event
 from app.services.notification_emitter import publish_notification_changed
 from app.services.stock_variance_notifications import (
     _last_purchase_expected_qty,
+    _last_purchase_expected_qty_map,
     maybe_notify_staff_system_stock_edit,
     maybe_notify_stock_variance,
 )
@@ -579,6 +580,41 @@ async def _staff_quick_purchased_map(
     return {row[0]: Decimal(row[1] or 0) for row in r.all()}
 
 
+async def _catalog_item_ids_purchased_in_period(
+    db: AsyncSession,
+    business_id: uuid.UUID,
+    period_start: date,
+    period_end: date,
+) -> set[uuid.UUID]:
+    """Distinct catalog items with trade or staff quick purchase qty in period."""
+    trade_r = await db.execute(
+        select(TradePurchaseLine.catalog_item_id.distinct())
+        .join(TradePurchase, TradePurchaseLine.trade_purchase_id == TradePurchase.id)
+        .where(
+            TradePurchase.business_id == business_id,
+            TradePurchase.purchase_date >= period_start,
+            TradePurchase.purchase_date <= period_end,
+            TradePurchase.status.notin_(("cancelled", "deleted")),
+            TradePurchase.delivery_status.in_(
+                ("stock_committed", "partial", "staff_verified")
+            ),
+            TradePurchaseLine.catalog_item_id.isnot(None),
+        )
+    )
+    ids = {row[0] for row in trade_r.all() if row[0] is not None}
+    start_dt = datetime.combine(period_start, time.min, tzinfo=timezone.utc)
+    end_dt = datetime.combine(period_end, time.max, tzinfo=timezone.utc)
+    staff_r = await db.execute(
+        select(StaffPurchaseLog.item_id.distinct()).where(
+            StaffPurchaseLog.business_id == business_id,
+            StaffPurchaseLog.created_at >= start_dt,
+            StaffPurchaseLog.created_at <= end_dt,
+        )
+    )
+    ids.update(row[0] for row in staff_r.all() if row[0] is not None)
+    return ids
+
+
 async def _period_usage_map(
     db: AsyncSession,
     business_id: uuid.UUID,
@@ -707,6 +743,7 @@ async def _query_items(
     missing_item_code: bool = False,
     reorder_only: bool = False,
     unit: str = "",
+    whitelist_ids: set[uuid.UUID] | None = None,
 ):
     stmt = (
         select(CatalogItem, ItemCategory.name, CategoryType.name)
@@ -717,6 +754,10 @@ async def _query_items(
             CatalogItem.deleted_at.is_(None),
         )
     )
+    if whitelist_ids is not None:
+        if not whitelist_ids:
+            return 0, []
+        stmt = stmt.where(CatalogItem.id.in_(whitelist_ids))
     if q.strip():
         like = f"%{q.strip().lower()}%"
         stmt = stmt.where(
@@ -1189,7 +1230,10 @@ async def list_stock(
         "unit": unit,
     }
     if purchased_in_period and include_period and ps and pe:
-        _, all_rows = await _query_items(
+        purchased_ids = await _catalog_item_ids_purchased_in_period(
+            db, business_id, ps, pe
+        )
+        total, rows = await _query_items(
             db,
             business_id,
             q=q,
@@ -1197,22 +1241,18 @@ async def list_stock(
             subcategory=subcategory,
             status_val=status,
             sort=sort,
-            page=1,
-            per_page=10000,
+            page=page,
+            per_page=per_page,
+            whitelist_ids=purchased_ids,
             **op_kwargs,
         )
-        all_ids = [item.id for item, _, _ in all_rows]
-        period_map_all = await _period_purchased_map(
-            db, business_id, all_ids, ps, pe
+        period_map_all = (
+            await _period_purchased_map(
+                db, business_id, [item.id for item, _, _ in rows], ps, pe
+            )
+            if rows
+            else {}
         )
-        filtered = [
-            row
-            for row in all_rows
-            if period_map_all.get(row[0].id, Decimal(0)) > 0
-        ]
-        total = len(filtered)
-        start = (page - 1) * per_page
-        rows = filtered[start : start + per_page]
     else:
         total, rows = await _query_items(
             db,
@@ -1665,13 +1705,21 @@ async def _adjustments_to_out(
         )
     )
     items = {i.id: i for i in ir.scalars().all()}
+    variance_ids = {
+        log.item_id
+        for log in logs
+        if log.adjustment_type in ("verification", "correction", "manual")
+    }
+    expected_map = await _last_purchase_expected_qty_map(
+        db, business_id, variance_ids
+    )
     out: list[StockAdjustmentOut] = []
     for log in logs:
         item = items.get(log.item_id)
         var_exp: Decimal | None = None
         var_delta: Decimal | None = None
         if log.adjustment_type in ("verification", "correction", "manual"):
-            exp = await _last_purchase_expected_qty(db, business_id, log.item_id)
+            exp = expected_map.get(log.item_id)
             if exp is not None:
                 var_exp = exp
                 var_delta = log.new_qty - exp

@@ -39,6 +39,28 @@ class _ShellTabAutoRefreshListenerState
         reason != 'remote') {
       return;
     }
+    switch (branch) {
+      case ShellBranch.home:
+        if (reason != 'remote' &&
+            !shouldSoftRefreshHomeSurfaces(_lastTabRefresh[branch])) {
+          return;
+        }
+      case ShellBranch.stock:
+        final stockFetched = ref.read(stockListLastFetchedAtProvider);
+        if (reason != 'remote' &&
+            stockFetched != null &&
+            now.difference(stockFetched) < kStockListCacheTtl) {
+          return;
+        }
+      case ShellBranch.reports:
+        if (reason != 'remote' &&
+            last != null &&
+            now.difference(last) < const Duration(minutes: 3)) {
+          return;
+        }
+      default:
+        break;
+    }
     _lastTabRefresh[branch] = now;
     switch (branch) {
       case ShellBranch.home:

@@ -26,18 +26,36 @@ _VARIANCE_MIN_RATIO = Decimal("0.02")
 async def _last_purchase_expected_qty(
     db: AsyncSession, business_id: uuid.UUID, item_id: uuid.UUID
 ) -> Decimal | None:
+    m = await _last_purchase_expected_qty_map(db, business_id, {item_id})
+    return m.get(item_id)
+
+
+async def _last_purchase_expected_qty_map(
+    db: AsyncSession,
+    business_id: uuid.UUID,
+    item_ids: set[uuid.UUID],
+) -> dict[uuid.UUID, Decimal]:
+    """Latest purchase adjustment qty per item (batch — avoids N+1 in audit feeds)."""
+    if not item_ids:
+        return {}
     r = await db.execute(
-        select(StockAdjustmentLog.new_qty)
+        select(
+            StockAdjustmentLog.item_id,
+            StockAdjustmentLog.new_qty,
+            StockAdjustmentLog.updated_at,
+        )
         .where(
             StockAdjustmentLog.business_id == business_id,
-            StockAdjustmentLog.item_id == item_id,
+            StockAdjustmentLog.item_id.in_(item_ids),
             StockAdjustmentLog.adjustment_type == "purchase",
         )
-        .order_by(desc(StockAdjustmentLog.updated_at))
-        .limit(1)
+        .order_by(StockAdjustmentLog.item_id, desc(StockAdjustmentLog.updated_at))
     )
-    row = r.scalar_one_or_none()
-    return Decimal(row) if row is not None else None
+    out: dict[uuid.UUID, Decimal] = {}
+    for item_id, new_qty, _ in r.all():
+        if item_id not in out:
+            out[item_id] = Decimal(new_qty)
+    return out
 
 
 def _is_material_variance(expected: Decimal, found: Decimal) -> bool:

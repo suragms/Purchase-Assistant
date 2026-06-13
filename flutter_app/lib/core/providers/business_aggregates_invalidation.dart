@@ -335,6 +335,7 @@ void applyStockListRowPatchAndEmit(
 
 /// Background/realtime/home poll: refresh stock + alerts only (no KPI storm).
 void invalidateWarehouseSurfacesLight(dynamic ref, {String? itemId}) {
+  markWarehouseGlobalInvalidated(ref);
   // Keep [stockListCacheProvider] entries alive so Stock tab does not flash
   // empty on every write/realtime tick — list re-reads cache when query matches.
   ref.invalidate(stockListProvider);
@@ -358,6 +359,37 @@ void invalidateWarehouseSurfacesLight(dynamic ref, {String? itemId}) {
   }
 }
 
+/// Tiered stock row save — patch overlay + list reconcile without financial KPI storm.
+void invalidateStockRowSaveSurfaces(
+  dynamic ref, {
+  required String itemId,
+  bool reorderAlert = false,
+  bool deferFullList = true,
+  bool immediateListReconcile = false,
+}) {
+  if (itemId.isNotEmpty) {
+    invalidateWarehouseItemSurfacesLight(ref, itemId: itemId);
+  }
+  ref.invalidate(stockStatusCountsProvider);
+  ref.invalidate(stockFilteredStatusCountsProvider);
+  if (immediateListReconcile) {
+    ref.invalidate(stockListProvider);
+  } else if (deferFullList) {
+    deferInvalidateDelayed(
+      ref,
+      stockListProvider,
+      delay: const Duration(milliseconds: 500),
+    );
+  }
+  if (reorderAlert) {
+    ref.invalidate(homeInventorySummaryProvider);
+    ref.invalidate(homeStockAttentionCountProvider);
+    ref.invalidate(staffLowStockAlertsProvider);
+    ref.invalidate(warehouseAlertsProvider);
+    invalidateBusinessAggregates(ref);
+  }
+}
+
 /// After stock save — keep optimistic patch visible; defer full list refetch.
 ///
 /// [light]: quick row edit from stock list — skip item-detail/home/bulk refetch
@@ -368,6 +400,15 @@ void invalidateWarehouseSurfacesAfterStockWrite(
   bool deferFullList = true,
   bool light = false,
 }) {
+  if (light && itemId != null && itemId.isNotEmpty) {
+    invalidateStockRowSaveSurfaces(
+      ref,
+      itemId: itemId,
+      deferFullList: deferFullList,
+      immediateListReconcile: !deferFullList,
+    );
+    return;
+  }
   if (!light) {
     if (itemId != null && itemId.isNotEmpty) {
       invalidateWarehouseItemSurfacesLight(ref, itemId: itemId);

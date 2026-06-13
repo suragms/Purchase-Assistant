@@ -8,7 +8,7 @@ See also: [migrations_and_backfill.md](../docs/migrations_and_backfill.md), [ale
 
 ---
 
-## A — Alembic chain (001 → 061, head)
+## A — Alembic chain (001 → 062, head)
 
 Revisions **026** and **027** are absent in git (jump **025** → **028**). Do not renumber production revisions.
 
@@ -70,7 +70,8 @@ Revisions **026** and **027** are absent in git (jump **025** → **028**). Do n
 | 058 | `barcode_lookup_indexes` | Barcode lookup performance indexes |
 | 059 | `staff_activity_action_types_v2` | Extend `staff_activity_log` action_type CHECK |
 | 060 | `stock_list_performance_indexes` | Stock list / low-stock / movement performance indexes |
-| 061 | `catalog_unit_simplify` | Canonical KG/BAG/BOX/TIN/PC unit profiles (data backfill) (**head**) |
+| 061 | `catalog_unit_simplify` | Canonical KG/BAG/BOX/TIN/PC unit profiles (data backfill) |
+| 062 | `trade_report_indexes` | Trade report + purchased-in-period query indexes (**head**) |
 
 Inspect live chain: `cd backend && python -m alembic heads` (production target: Render `harisree-db`, not Supabase)
 

@@ -398,6 +398,7 @@ class _ContactsPageState extends ConsumerState<ContactsPage>
   final _searchCtrl = TextEditingController();
   final _searchFocus = FocusNode();
   String _searchQuery = '';
+  Timer? _searchDebounce;
   static const _searchMinLen = 1;
 
   void _onTabChanged() {
@@ -416,6 +417,7 @@ class _ContactsPageState extends ConsumerState<ContactsPage>
 
   @override
   void dispose() {
+    _searchDebounce?.cancel();
     _tabController.removeListener(_onTabChanged);
     _searchCtrl.dispose();
     _searchFocus.dispose();
@@ -424,9 +426,13 @@ class _ContactsPageState extends ConsumerState<ContactsPage>
   }
 
   void _scheduleSearch(String raw) {
-    final t = raw.trim();
-    if (t == _searchQuery) return;
-    setState(() => _searchQuery = t);
+    _searchDebounce?.cancel();
+    _searchDebounce = Timer(const Duration(milliseconds: 300), () {
+      if (!mounted) return;
+      final t = raw.trim();
+      if (t == _searchQuery) return;
+      setState(() => _searchQuery = t);
+    });
   }
 
   bool get _isSearching => _searchQuery.length >= _searchMinLen;
