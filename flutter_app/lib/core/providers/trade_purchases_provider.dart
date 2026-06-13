@@ -8,6 +8,7 @@ import '../auth/session_notifier.dart' show activeSessionProvider, hexaApiProvid
 import '../../features/shell/shell_branch_provider.dart';
 import '../models/trade_purchase_models.dart';
 import '../auth/provider_api_guard.dart';
+import 'api_read_snapshots.dart';
 import 'analytics_kpi_provider.dart' show analyticsDateRangeProvider;
 import '../utils/line_display.dart';
 
@@ -60,6 +61,7 @@ String? _tradeListApiStatus(String primaryRaw, String? secondaryRaw) {
 
 /// Bust list + catalog-intel snapshots together.
 void invalidateTradePurchaseCaches(dynamic ref) {
+  bustTradePurchasesRecentSnapshot(ref);
   ref.invalidate(tradePurchasesListProvider);
   ref.invalidate(tradePurchasesForAlertsProvider);
   ref.invalidate(staffTradePurchasesForAlertsProvider);
@@ -68,6 +70,7 @@ void invalidateTradePurchaseCaches(dynamic ref) {
 
 /// Same as [invalidateTradePurchaseCaches] for use after async gaps where [WidgetRef] may be disposed.
 void invalidateTradePurchaseCachesFromContainer(ProviderContainer container) {
+  container.invalidate(tradePurchasesRecentSnapshotProvider);
   container.invalidate(tradePurchasesListProvider);
   container.invalidate(tradePurchasesForAlertsProvider);
   container.invalidate(staffTradePurchasesForAlertsProvider);
@@ -126,21 +129,13 @@ final purchaseHistoryDateToProvider =
 
 /// Unfiltered list for due/overdue alert derivation (ignores history tab filters).
 final tradePurchasesForAlertsProvider =
-    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
-  final link = ref.keepAlive();
-  final t = Timer(const Duration(minutes: 8), link.close);
-  ref.onDispose(t.cancel);
-  if (providerSkipApi(ref)) return [];
+    Provider.autoDispose<AsyncValue<List<Map<String, dynamic>>>>((ref) {
+  if (providerSkipApi(ref)) return const AsyncValue.data([]);
   final branch = ref.watch(shellCurrentBranchProvider);
   if (branch != ShellBranch.home && branch != ShellBranch.history) {
-    return [];
+    return const AsyncValue.data([]);
   }
-  final session = ref.watch(activeSessionProvider);
-  if (session == null) return [];
-  return ref.read(hexaApiProvider).listTradePurchases(
-        businessId: session.primaryBusiness.id,
-        limit: kTradePurchasesAlertFetchLimit,
-      );
+  return ref.watch(tradePurchasesRecentSnapshotProvider);
 });
 
 /// Staff home + deliveries — not gated on owner [ShellBranch.home].
@@ -451,18 +446,13 @@ final tradePurchasesForItemParsedProvider =
       );
 });
 
-/// Trade list for catalog item intel — full list, not tied to History tab filters.
+/// Trade list for catalog item intel — shares [tradePurchasesRecentSnapshotProvider].
 final tradePurchasesCatalogIntelProvider =
-    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
-  final link = ref.keepAlive();
-  final t = Timer(const Duration(minutes: 8), link.close);
-  ref.onDispose(t.cancel);
-  final session = ref.watch(sessionProvider);
-  if (session == null) return [];
-  return ref.read(hexaApiProvider).listTradePurchases(
-        businessId: session.primaryBusiness.id,
-        limit: kTradePurchasesAlertFetchLimit,
-      );
+    Provider.autoDispose<AsyncValue<List<Map<String, dynamic>>>>((ref) {
+  if (providerSkipApi(ref)) return const AsyncValue.data([]);
+  final session = ref.watch(activeSessionProvider);
+  if (session == null) return const AsyncValue.data([]);
+  return ref.watch(tradePurchasesRecentSnapshotProvider);
 });
 
 final tradePurchasesCatalogIntelParsedProvider =

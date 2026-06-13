@@ -10,6 +10,7 @@ import '../auth/session_notifier.dart';
 import '../errors/user_facing_errors.dart';
 import '../json_coerce.dart';
 import '../navigation/surface_refresh_policy.dart' show kStockListCacheTtl;
+import 'api_read_snapshots.dart';
 import '../../features/stock/stock_list_row_patch.dart'
     show
         kStockListPatchAtKey,
@@ -300,16 +301,14 @@ final stockTotalsProvider =
 );
 
 /// Stock audit events for the stock page **Changes** tab (newest first).
+/// Reads [stockAuditRecentSnapshotProvider] — no extra HTTP when home already loaded audit.
 final stockChangesFeedProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
   _providerKeepAlive(ref, const Duration(minutes: 2));
   final session = ref.watch(sessionProvider);
   if (session == null) return [];
   ref.watch(stockPagePeriodProvider);
-  final rows = await ref.read(hexaApiProvider).listStockAuditRecent(
-        businessId: session.primaryBusiness.id,
-        limit: HexaApi.stockAuditRecentMaxLimit,
-      );
+  final rows = await ref.watch(stockAuditRecentSnapshotProvider.future);
   final period = ref.read(stockPagePeriodProvider);
   final range = homePeriodRange(period, now: DateTime.now());
   final from = DateTime(range.start.year, range.start.month, range.start.day);

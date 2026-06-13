@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../features/shell/shell_branch_provider.dart';
-import '../api/hexa_api.dart';
 import '../auth/provider_api_guard.dart';
 import '../auth/session_notifier.dart' show activeSessionProvider, hexaApiProvider;
 import '../json_coerce.dart';
@@ -23,6 +22,7 @@ import 'home_dashboard_provider.dart'
         HomeDashboardData,
         homeDashboardDataFromApiSnapshot,
         homePeriodRange;
+import 'api_read_snapshots.dart';
 import 'delivery_pipeline_provider.dart';
 import 'notifications_provider.dart' show mergedNotificationFeedProvider;
 import 'warehouse_alerts_provider.dart';
@@ -168,7 +168,8 @@ final homeInventorySummaryProvider =
   }
 });
 
-/// Today-only dashboard row for the owner home stats strip (not tied to [homePeriodProvider]).
+/// Today-only dashboard row — unused; period stats come from [homeDashboardDataProvider].
+@Deprecated('Use homeDashboardDataProvider with HomePeriod.today')
 final homeTodayDashboardDataProvider =
     FutureProvider.autoDispose<HomeDashboardData>((ref) async {
   _providerKeepAlive(ref, const Duration(minutes: 2));
@@ -299,17 +300,17 @@ final stockLowTopHomeProvider =
   ];
 });
 
-final stockAuditRecentHomeProvider =
+/// Stock adjustments for the global [homePeriodProvider] window (client-filtered).
+final stockAuditPeriodProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
+  _providerKeepAlive(ref, const Duration(minutes: 2));
   final session = ref.watch(activeSessionProvider);
   if (session == null) return [];
-  return ref.read(hexaApiProvider).listStockAuditRecent(
-        businessId: session.primaryBusiness.id,
-        limit: 8,
-      );
+  ref.watch(homePeriodProvider);
+  ref.watch(homeCustomDateRangeProvider);
+  final rows = await ref.watch(stockAuditRecentSnapshotProvider.future);
+  return _filterAuditsToHomePeriod(ref, rows);
 });
-
-/// Stock adjustments for a single **local** calendar day (stock **Today** tab).
 final stockAuditDayProvider = FutureProvider.autoDispose
     .family<List<Map<String, dynamic>>, DateTime>((ref, day) async {
   _providerKeepAlive(ref, const Duration(minutes: 2));
@@ -320,10 +321,7 @@ final stockAuditDayProvider = FutureProvider.autoDispose
   final api = ref.read(hexaApiProvider);
   final dayStr = _apiDate(d);
   final results = await Future.wait([
-    api.listStockAuditRecent(
-      businessId: bid,
-      limit: HexaApi.stockAuditRecentMaxLimit,
-    ),
+    ref.watch(stockAuditRecentSnapshotProvider.future),
     api.listTradePurchases(
       businessId: bid,
       limit: 40,
@@ -342,21 +340,6 @@ final stockAuditDayProvider = FutureProvider.autoDispose
   );
   final billsToday = filterStockAuditRowsOnLocalDay(purchases, d);
   return sortStockAuditRowsNewestFirst([...audits, ...billsToday]);
-});
-
-/// Stock adjustments for the global [homePeriodProvider] window (client-filtered).
-final stockAuditPeriodProvider =
-    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
-  _providerKeepAlive(ref, const Duration(minutes: 2));
-  final session = ref.watch(activeSessionProvider);
-  if (session == null) return [];
-  ref.watch(homePeriodProvider);
-  ref.watch(homeCustomDateRangeProvider);
-  final rows = await ref.read(hexaApiProvider).listStockAuditRecent(
-        businessId: session.primaryBusiness.id,
-        limit: 80,
-      );
-  return _filterAuditsToHomePeriod(ref, rows);
 });
 
 /// Period-scoped overview for category pills (reuses dashboard cache when possible).
@@ -765,7 +748,8 @@ Future<List<HomeActivityItem>> _fetchHomeWarehouseActivity(
   late final List<Map<String, dynamic>> auditRows;
   late final List<Map<String, dynamic>> staffPurchases;
   try {
-    final results = await Future.wait([
+    final auditFuture = ref.read(stockAuditRecentSnapshotProvider.future);
+    final results = await Future.wait<dynamic>([
       api.listTradePurchases(
         businessId: bid,
         limit: purchaseLimit,
@@ -774,18 +758,17 @@ Future<List<HomeActivityItem>> _fetchHomeWarehouseActivity(
         purchaseFrom: q.from,
         purchaseTo: q.to,
       ),
-      api.listStockAuditRecent(
-        businessId: bid,
-        limit: 80,
-      ),
+      auditFuture,
       api.listStaffPurchaseLogs(
         businessId: bid,
         limit: 30,
       ),
     ]).timeout(feedTimeout);
-    purchases = results[0];
-    auditRows = results[1];
-    staffPurchases = results[2];
+    purchases = List<Map<String, dynamic>>.from(results[0] as List);
+    auditRows = (results[1] as List)
+        .map((e) => Map<String, dynamic>.from(e as Map))
+        .toList();
+    staffPurchases = List<Map<String, dynamic>>.from(results[2] as List);
   } on TimeoutException {
     throw Exception('Recent changes timed out. Pull to refresh.');
   }

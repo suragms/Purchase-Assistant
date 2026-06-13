@@ -6,6 +6,7 @@ import 'home_breakdown_tab_providers.dart';
 import 'home_dashboard_provider.dart';
 import 'home_owner_dashboard_providers.dart';
 import 'analytics_breakdown_providers.dart';
+import 'api_read_snapshots.dart';
 import 'business_write_event.dart';
 import 'business_write_revision.dart';
 import 'analytics_kpi_provider.dart';
@@ -253,13 +254,14 @@ void invalidatePurchaseWorkspace(
   invalidateWarehouseSurfacesLight(ref);
   for (final id in ids) {
     if (id.isEmpty) continue;
-    invalidateWarehouseSurfacesLight(ref, itemId: id);
+    invalidateWarehouseItemSurfacesLight(ref, itemId: id);
   }
   emitBusinessWriteEvent(ref, kind: 'purchase', affectedItemIds: ids);
   invalidateBusinessAggregates(ref);
 }
 
 void _invalidateStockAuditFeeds(dynamic ref) {
+  bustStockAuditRecentSnapshot(ref);
   ref.invalidate(stockChangesFeedProvider);
   ref.invalidate(stockAuditPeriodProvider);
   ref.invalidate(homeRecentActivityFeedProvider);
