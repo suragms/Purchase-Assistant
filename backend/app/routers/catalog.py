@@ -139,16 +139,69 @@ def _normalize_package_type(v: str | None) -> str | None:
         return None
     m = v.strip().upper()
     alias = {
-        "RETAIL_PACKET": "RETAIL_PACKET",
+        "RETAIL_PACKET": "PIECE",
         "WHOLESALE_BAG": "SACK",
         "SACK": "SACK",
+        "BAG": "SACK",
         "LOOSE_KG": "LOOSE",
         "LOOSE": "LOOSE",
         "BOX": "BOX",
+        "CARTON": "BOX",
+        "CASE": "BOX",
         "TIN": "TIN",
+        "CAN": "TIN",
         "PIECE": "PIECE",
+        "PCS": "PIECE",
     }
     return alias.get(m, m)
+
+
+def _parse_kg_from_item_name(name: str) -> float | None:
+    m = re.search(r"(\d+(?:\.\d+)?)\s*kg\b", name or "", re.I)
+    if not m:
+        return None
+    try:
+        v = float(m.group(1))
+        return v if v > 0 else None
+    except (TypeError, ValueError):
+        return None
+
+
+def _apply_canonical_unit_profile(item: CatalogItem, unit: str) -> None:
+    """Align stock_unit / display_unit with warehouse 5-unit SSOT on create."""
+    from decimal import Decimal as _Dec
+
+    u = (unit or "").strip().lower()
+    if u == "bag":
+        item.package_type = item.package_type or "SACK"
+        item.stock_unit = "BAG"
+        item.display_unit = "BAG"
+        item.selling_unit = "BAG"
+        if item.default_kg_per_bag is not None:
+            item.package_size = _Dec(str(item.default_kg_per_bag))
+            item.package_measurement = "KG"
+        item.validation_status = "unit_profile_verified"
+    elif u == "kg":
+        item.package_type = item.package_type or "LOOSE"
+        item.stock_unit = "KG"
+        item.display_unit = "KG"
+        item.selling_unit = "KG"
+    elif u == "box":
+        item.package_type = item.package_type or "BOX"
+        item.stock_unit = "BOX"
+        item.display_unit = "BOX"
+    elif u == "tin":
+        item.package_type = item.package_type or "TIN"
+        item.stock_unit = "TIN"
+        item.display_unit = "TIN"
+    elif u == "piece":
+        item.package_type = item.package_type or "PIECE"
+        item.stock_unit = "PIECE"
+        item.display_unit = "PC"
+        item.selling_unit = "PCS"
+        if item.default_kg_per_bag is not None:
+            item.package_size = _Dec(str(item.default_kg_per_bag))
+            item.package_measurement = "KG"
 
 
 class CatalogItemCreate(BaseModel):
@@ -200,7 +253,14 @@ class CatalogItemCreate(BaseModel):
         u = self.default_unit
         if u == "bag":
             if self.default_kg_per_bag is None:
-                raise ValueError("default_kg_per_bag is required when default_unit is bag")
+                parsed = _parse_kg_from_item_name(self.name)
+                if parsed is not None:
+                    self.default_kg_per_bag = parsed
+            if self.default_kg_per_bag is None:
+                raise ValueError(
+                    "default_kg_per_bag is required when default_unit is bag "
+                    "(include weight in name e.g. SUGAR 50KG)"
+                )
         elif u == "piece" and self.default_kg_per_bag is not None:
             if self.default_kg_per_bag <= 0:
                 raise ValueError("weight per packet must be positive")
@@ -2041,24 +2101,7 @@ async def create_catalog_item(
     normalized_pt = _normalize_package_type(body.package_type)
     if normalized_pt:
         i.package_type = normalized_pt
-    if u == "piece" and dkg:
-        from decimal import Decimal as _Dec
-
-        i.package_type = "RETAIL_PACKET"
-        i.package_size = _Dec(str(dkg))
-        i.package_measurement = "KG"
-        i.stock_unit = "PIECE"
-        i.selling_unit = "PCS"
-        i.validation_status = "unit_profile_verified"
-    elif u == "bag" and dkg:
-        from decimal import Decimal as _Dec
-
-        i.package_type = "SACK"
-        i.package_size = _Dec(str(dkg))
-        i.package_measurement = "KG"
-        i.stock_unit = "BAG"
-        i.selling_unit = "BAG"
-        i.validation_status = "unit_profile_verified"
+    _apply_canonical_unit_profile(i, u)
     db.add(i)
     await db.flush()
     crn0 = await db.execute(

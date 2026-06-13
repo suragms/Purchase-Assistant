@@ -21,7 +21,7 @@ import '../catalog_create_prefs.dart';
 import '../../../shared/widgets/inline_search_field.dart';
 import '../../../shared/widgets/packaging_type_selector.dart';
 
-/// Simple catalog item create — subcategory, name, unit type, optional more fields.
+/// Simple catalog item create — supplier, broker, name, unit, optional more fields.
 class CatalogItemCreatePage extends ConsumerStatefulWidget {
   const CatalogItemCreatePage({
     super.key,
@@ -49,9 +49,6 @@ typedef QuickAddCatalogItemPage = CatalogItemCreatePage;
 class _CatalogItemCreatePageState extends ConsumerState<CatalogItemCreatePage> {
   final _nameCtrl = TextEditingController();
   final _itemCodeCtrl = TextEditingController();
-  final _kgCtrl = TextEditingController();
-  final _ipbCtrl = TextEditingController();
-  final _wptCtrl = TextEditingController();
   final _hsnCtrl = TextEditingController();
   final _purchaseRateCtrl = TextEditingController();
   final _sellingRateCtrl = TextEditingController();
@@ -65,25 +62,21 @@ class _CatalogItemCreatePageState extends ConsumerState<CatalogItemCreatePage> {
   String? _supplierDisplayName;
   String? _brokerDisplayName;
   String _packagingMode = StockTrackingMode.looseKg;
+  bool _unitManuallySelected = false;
   bool _saving = false;
   String? _error;
   bool _prefilled = false;
   bool _supplierManuallySelected = false;
   bool _brokerManuallySelected = false;
   Timer? _nameDebounce;
-  String? _bagDetectHint;
-  bool _bagDetectDismissed = false;
-  String? _kgFieldError;
   bool _selectingType = false;
   bool _selectingSupplier = false;
   bool _selectingBroker = false;
+  bool _typeIdManuallySelected = false;
   final _typeFocus = FocusNode();
   final _nameFocus = FocusNode();
   final _supplierFocus = FocusNode();
   final _brokerFocus = FocusNode();
-
-  static final _kgInName =
-      RegExp(r'(\d+(?:\.\d+)?)\s*kg', caseSensitive: false);
 
   String _packageTypeForMode(String mode) {
     switch (mode) {
@@ -96,22 +89,17 @@ class _CatalogItemCreatePageState extends ConsumerState<CatalogItemCreatePage> {
       case StockTrackingMode.tin:
         return 'TIN';
       case StockTrackingMode.piece:
-        return 'PIECE';
-      case StockTrackingMode.retailPacket:
       default:
-        return 'RETAIL_PACKET';
+        return 'PIECE';
     }
   }
 
-  bool get _modeUsesWeightField =>
-      _packagingMode == StockTrackingMode.wholesaleBag ||
-      _packagingMode == StockTrackingMode.retailPacket;
+  double? _parsedKgFromName() => StockTrackingMode.parseKgFromName(_nameCtrl.text);
 
   @override
   void initState() {
     super.initState();
     _nameCtrl.addListener(_onNameChanged);
-    _kgCtrl.addListener(_onKgChanged);
     _typeSearchCtrl.addListener(_onTypeSearchChanged);
     _supplierSearchCtrl.addListener(_onSupplierSearchChanged);
     _brokerSearchCtrl.addListener(_onBrokerSearchChanged);
@@ -295,74 +283,45 @@ class _CatalogItemCreatePageState extends ConsumerState<CatalogItemCreatePage> {
       }
     }
     if (changed && mounted) setState(() {});
-  }
-
-  void _onKgChanged() {
-    if (!mounted) return;
-    if (_kgFieldError != null) {
-      setState(() => _kgFieldError = null);
+    final types = ref.read(categoryTypesIndexProvider).valueOrNull ?? [];
+    if (!_typeIdManuallySelected &&
+        _typeId == null &&
+        saved.typeId != null &&
+        saved.typeId!.isNotEmpty &&
+        types.isNotEmpty) {
+      final row = _rowByTypeId(types, saved.typeId!);
+      if (row != null) {
+        _typeId = saved.typeId;
+        _typeSearchCtrl.text = row['name']?.toString() ?? '';
+        if (mounted) setState(() {});
+      }
     }
   }
 
   void _onNameChanged() {
     _nameDebounce?.cancel();
     _nameDebounce =
-        Timer(const Duration(milliseconds: 300), _applyBagDetectionFromName);
+        Timer(const Duration(milliseconds: 300), _applyUnitFromName);
   }
 
-  void _applyBagDetectionFromName() {
-    if (!mounted || _bagDetectDismissed) return;
-    final match = _kgInName.firstMatch(_nameCtrl.text);
-    if (match == null) {
-      if (_bagDetectHint != null) {
-        setState(() => _bagDetectHint = null);
-      }
-      return;
-    }
-    final kg = match.group(1) ?? '';
-    if (kg.isEmpty) return;
-    setState(() {
-      _packagingMode = StockTrackingMode.wholesaleBag;
-      if (_kgCtrl.text.trim().isEmpty) {
-        _kgCtrl.text = kg;
-      }
-      _bagDetectHint = 'Detected bag item · $kg kg per bag';
-      _kgFieldError = null;
-    });
-  }
-
-  void _dismissBagDetection() {
-    setState(() {
-      _bagDetectDismissed = true;
-      _bagDetectHint = null;
-    });
+  void _applyUnitFromName() {
+    if (!mounted || _unitManuallySelected) return;
+    final suggested = StockTrackingMode.suggestFromName(_nameCtrl.text);
+    if (suggested == null || suggested == _packagingMode) return;
+    setState(() => _packagingMode = suggested);
   }
 
   void _onPackagingModeChanged(String mode) {
     setState(() {
-      final wasWeight = _modeUsesWeightField;
       _packagingMode = mode;
-      final isWeight = mode == StockTrackingMode.wholesaleBag ||
-          mode == StockTrackingMode.retailPacket;
-      if (wasWeight && !isWeight) {
-        _kgCtrl.clear();
-        _kgFieldError = null;
-      }
-      _bagDetectDismissed = true;
-      _bagDetectHint = null;
+      _unitManuallySelected = true;
     });
-  }
-
-  double? _parsedKg() {
-    final v = double.tryParse(_kgCtrl.text.trim());
-    return (v != null && v > 0) ? v : null;
   }
 
   @override
   void dispose() {
     _nameDebounce?.cancel();
     _nameCtrl.removeListener(_onNameChanged);
-    _kgCtrl.removeListener(_onKgChanged);
     _typeSearchCtrl.removeListener(_onTypeSearchChanged);
     _supplierSearchCtrl.removeListener(_onSupplierSearchChanged);
     _brokerSearchCtrl.removeListener(_onBrokerSearchChanged);
@@ -372,9 +331,6 @@ class _CatalogItemCreatePageState extends ConsumerState<CatalogItemCreatePage> {
     _brokerFocus.dispose();
     _nameCtrl.dispose();
     _itemCodeCtrl.dispose();
-    _kgCtrl.dispose();
-    _ipbCtrl.dispose();
-    _wptCtrl.dispose();
     _hsnCtrl.dispose();
     _purchaseRateCtrl.dispose();
     _sellingRateCtrl.dispose();
@@ -492,23 +448,19 @@ class _CatalogItemCreatePageState extends ConsumerState<CatalogItemCreatePage> {
         _typeId != null ? _rowByTypeId(types, _typeId!) : null;
     if (typeRow == null ||
         typeRow['name']?.toString().trim() != _typeSearchCtrl.text.trim()) {
-      setState(() => _error = 'Pick a subcategory from search.');
+      setState(() => _error =
+          'Pick a subcategory in More options (required once).');
       return false;
     }
-    if (_packagingMode == StockTrackingMode.wholesaleBag) {
-      final kg = _parsedKg();
+    if (StockTrackingMode.isBagMode(_packagingMode)) {
+      final kg = _parsedKgFromName();
       if (kg == null) {
-        setState(() {
-          _kgFieldError = 'Kg per bag is required';
-          _error = 'Enter kg per bag.';
-        });
+        setState(() => _error =
+            'Bag items need weight in the name (e.g. SUGAR 50KG).');
         return false;
       }
     }
-    setState(() {
-      _error = null;
-      _kgFieldError = null;
-    });
+    setState(() => _error = null);
     return true;
   }
 
@@ -528,8 +480,6 @@ class _CatalogItemCreatePageState extends ConsumerState<CatalogItemCreatePage> {
   void _invalidateAfterCreate() {
     ref.invalidate(catalogItemsListProvider);
     ref.invalidate(categoryTypesIndexProvider);
-    ref.invalidate(suppliersListProvider);
-    ref.invalidate(brokersListProvider);
     ref.invalidate(homeDashboardDataProvider);
     ref.invalidate(stockListProvider);
     ref.invalidate(bulkStockListProvider);
@@ -538,16 +488,11 @@ class _CatalogItemCreatePageState extends ConsumerState<CatalogItemCreatePage> {
   void _resetForAddMore() {
     _nameCtrl.clear();
     _itemCodeCtrl.clear();
-    _kgCtrl.clear();
-    _ipbCtrl.clear();
-    _wptCtrl.clear();
     _hsnCtrl.clear();
     _purchaseRateCtrl.clear();
     _sellingRateCtrl.clear();
     _packagingMode = StockTrackingMode.looseKg;
-    _bagDetectDismissed = false;
-    _bagDetectHint = null;
-    _kgFieldError = null;
+    _unitManuallySelected = false;
     _error = null;
   }
 
@@ -613,9 +558,9 @@ class _CatalogItemCreatePageState extends ConsumerState<CatalogItemCreatePage> {
         : const <String>[];
 
     final defaultUnit = StockTrackingMode.catalogUnitForMode(_packagingMode);
-    final kgPerBag = _modeUsesWeightField ? _parsedKg() : null;
-    final ipb = double.tryParse(_ipbCtrl.text.trim());
-    final wpt = double.tryParse(_wptCtrl.text.trim());
+    final kgPerBag = StockTrackingMode.isBagMode(_packagingMode)
+        ? _parsedKgFromName()
+        : null;
 
     try {
       final created = await ref.read(hexaApiProvider).createCatalogItem(
@@ -629,14 +574,6 @@ class _CatalogItemCreatePageState extends ConsumerState<CatalogItemCreatePage> {
             hsnCode: hsn.isEmpty ? null : hsn,
             itemCode: itemCode.isEmpty ? null : itemCode,
             defaultKgPerBag: kgPerBag,
-            defaultItemsPerBox:
-                _packagingMode == StockTrackingMode.box && ipb != null && ipb > 0
-                    ? ipb
-                    : null,
-            defaultWeightPerTin:
-                _packagingMode == StockTrackingMode.tin && wpt != null && wpt > 0
-                    ? wpt
-                    : null,
             defaultLandingCost: purchaseRate,
             defaultSellingCost: sellingRate,
             packageType: _packageTypeForMode(_packagingMode),
@@ -648,6 +585,7 @@ class _CatalogItemCreatePageState extends ConsumerState<CatalogItemCreatePage> {
         businessId: session.primaryBusiness.id,
         supplierId: _supplierId,
         brokerId: _brokerId,
+        typeId: _typeId,
       );
 
       final newId = created['id']?.toString() ?? '';
@@ -776,52 +714,14 @@ class _CatalogItemCreatePageState extends ConsumerState<CatalogItemCreatePage> {
                 child: ListView(
                   padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
                   children: [
-                    typesAsync.when(
-                      loading: () => const LinearProgressIndicator(),
-                      error: (_, __) =>
-                          const Text('Could not load subcategories.'),
-                      data: (types) {
-                        if (types.isEmpty) {
-                          return const Text(
-                            'No subcategories — add in Catalog first.',
-                          );
-                        }
-                        return Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            const Text('Subcategory *'),
-                            const SizedBox(height: 6),
-                            InlineSearchField(
-                              key: ValueKey('ci_type_${types.length}_$_typeId'),
-                              items: _typeItems(types),
-                              controller: _typeSearchCtrl,
-                              focusNode: _typeFocus,
-                              focusAfterSelection: _nameFocus,
-                              placeholder: 'Search subcategory…',
-                              onSelected: (it) {
-                                _selectingType = true;
-                                setState(() {
-                                  _typeId = it.id;
-                                  _typeSearchCtrl.text = it.label;
-                                });
-                                WidgetsBinding.instance.addPostFrameCallback((_) {
-                                  if (mounted) {
-                                    setState(() => _selectingType = false);
-                                  }
-                                });
-                              },
-                            ),
-                          ],
-                        );
-                      },
-                    ),
+                    ..._buildPartyFields(suppliersAsync, brokersAsync),
                     const SizedBox(height: 14),
                     TextField(
                       controller: _nameCtrl,
                       focusNode: _nameFocus,
                       decoration: const InputDecoration(
                         labelText: 'Item name *',
-                        hintText: 'e.g. ULUVA 30 KG',
+                        hintText: 'e.g. SUGAR 50KG',
                         border: OutlineInputBorder(),
                       ),
                       textCapitalization: TextCapitalization.characters,
@@ -832,41 +732,10 @@ class _CatalogItemCreatePageState extends ConsumerState<CatalogItemCreatePage> {
                         }
                       },
                     ),
-                    if (_bagDetectHint != null) ...[
-                      const SizedBox(height: 8),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              _bagDetectHint!,
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                                color: Theme.of(context).colorScheme.primary,
-                              ),
-                            ),
-                          ),
-                          TextButton(
-                            onPressed: _dismissBagDetection,
-                            child: const Text('Change'),
-                          ),
-                        ],
-                      ),
-                    ],
                     const SizedBox(height: 14),
                     PackagingTypeSelector(
                       selectedMode: _packagingMode,
                       onModeChanged: _onPackagingModeChanged,
-                      suggestedMode: StockTrackingMode.suggestFromName(
-                        _nameCtrl.text,
-                      ),
-                      weightController: _kgCtrl,
-                      itemsPerBoxController: _ipbCtrl,
-                      weightPerTinController: _wptCtrl,
-                      weightError: _kgFieldError,
-                      itemNameForAutofill: _nameCtrl.text,
-                      autoFilledWeight:
-                          _bagDetectHint != null && !_bagDetectDismissed,
                     ),
                     const SizedBox(height: 8),
                     ExpansionTile(
@@ -877,10 +746,12 @@ class _CatalogItemCreatePageState extends ConsumerState<CatalogItemCreatePage> {
                               fontWeight: FontWeight.w700,
                             ),
                       ),
-                      subtitle: const Text(
-                        'Supplier, broker, item code, HSN, rates',
+                      subtitle: Text(
+                        _typeId == null
+                            ? 'Subcategory, item code, HSN, rates'
+                            : 'Subcategory, item code, HSN, rates',
                       ),
-                      children: _buildMoreOptions(suppliersAsync, brokersAsync),
+                      children: _buildMoreOptions(typesAsync),
                     ),
                     if (_error != null) ...[
                       const SizedBox(height: 12),
@@ -897,7 +768,7 @@ class _CatalogItemCreatePageState extends ConsumerState<CatalogItemCreatePage> {
     );
   }
 
-  List<Widget> _buildMoreOptions(
+  List<Widget> _buildPartyFields(
     AsyncValue<List<Map<String, dynamic>>> suppliersAsync,
     AsyncValue<List<Map<String, dynamic>>> brokersAsync,
   ) {
@@ -989,9 +860,53 @@ class _CatalogItemCreatePageState extends ConsumerState<CatalogItemCreatePage> {
                 suggestionsAsOverlay: true,
                 lockedSelectionLabel: brokerLock,
                 onLockedSelectionClear: _clearBroker,
+                focusAfterSelection: _nameFocus,
                 debugLabel: 'catalog_create_broker',
                 items: _brokerItems(rows),
                 onSelected: _onBrokerPicked,
+              ),
+              const SizedBox(height: 4),
+            ],
+          );
+        },
+      ),
+    ];
+  }
+
+  List<Widget> _buildMoreOptions(
+    AsyncValue<List<Map<String, dynamic>>> typesAsync,
+  ) {
+    return [
+      typesAsync.when(
+        loading: () => const LinearProgressIndicator(),
+        error: (_, __) =>
+            const Text('Could not load subcategories.'),
+        data: (types) {
+          if (types.isEmpty) {
+            return const Text('No subcategories — add in Catalog first.');
+          }
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text('Subcategory *'),
+              const SizedBox(height: 6),
+              InlineSearchField(
+                key: ValueKey('ci_type_${types.length}_$_typeId'),
+                items: _typeItems(types),
+                controller: _typeSearchCtrl,
+                focusNode: _typeFocus,
+                placeholder: 'Search subcategory…',
+                onSelected: (it) {
+                  _selectingType = true;
+                  _typeIdManuallySelected = true;
+                  setState(() {
+                    _typeId = it.id;
+                    _typeSearchCtrl.text = it.label;
+                  });
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    if (mounted) setState(() => _selectingType = false);
+                  });
+                },
               ),
               const SizedBox(height: 12),
             ],

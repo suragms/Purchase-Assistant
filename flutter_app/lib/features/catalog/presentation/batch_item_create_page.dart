@@ -16,23 +16,16 @@ import '../../../core/unit_engine/stock_tracking_profile.dart';
 import '../../../shared/widgets/packaging_type_selector.dart';
 
 class _BatchLine {
-  _BatchLine()
-      : name = TextEditingController(),
-        kgPerBag = TextEditingController(),
-        weightPerTin = TextEditingController();
+  _BatchLine() : name = TextEditingController();
 
   final TextEditingController name;
   String? categoryId;
   String? typeId;
   String unit = 'kg';
-  String packagingMode = StockTrackingMode.retailPacket;
-  final TextEditingController kgPerBag;
-  final TextEditingController weightPerTin;
+  String packagingMode = StockTrackingMode.looseKg;
 
   void dispose() {
     name.dispose();
-    kgPerBag.dispose();
-    weightPerTin.dispose();
   }
 }
 
@@ -62,26 +55,8 @@ class _BatchItemCreatePageState extends ConsumerState<BatchItemCreatePage> {
       case StockTrackingMode.tin:
         return 'TIN';
       case StockTrackingMode.piece:
+      default:
         return 'PIECE';
-      case StockTrackingMode.retailPacket:
-      default:
-        return 'RETAIL_PACKET';
-    }
-  }
-
-  String _modeForUnit(String unit) {
-    switch (unit) {
-      case 'bag':
-        return StockTrackingMode.wholesaleBag;
-      case 'kg':
-        return StockTrackingMode.looseKg;
-      case 'box':
-        return StockTrackingMode.box;
-      case 'tin':
-        return StockTrackingMode.tin;
-      case 'piece':
-      default:
-        return StockTrackingMode.retailPacket;
     }
   }
 
@@ -123,20 +98,13 @@ class _BatchItemCreatePageState extends ConsumerState<BatchItemCreatePage> {
         return;
       }
       final u = l.unit;
-      final kg = double.tryParse(l.kgPerBag.text.trim());
-      final wpt = double.tryParse(l.weightPerTin.text.trim());
+      final kg = u == 'bag' ? StockTrackingMode.parseKgFromName(name) : null;
       if (u == 'bag' && (kg == null || kg <= 0)) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Enter kg per bag for "$name".')),
-          );
-        }
-        return;
-      }
-      if (u == 'tin' && (wpt == null || wpt <= 0)) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Enter weight per tin for "$name".')),
+            SnackBar(
+              content: Text('Bag items need weight in name (e.g. 50KG): "$name".'),
+            ),
           );
         }
         return;
@@ -147,8 +115,6 @@ class _BatchItemCreatePageState extends ConsumerState<BatchItemCreatePage> {
         'default_unit': u,
         'package_type': _packageTypeForMode(l.packagingMode),
         if (u == 'bag') 'default_kg_per_bag': kg,
-        if (u == 'box') 'default_items_per_box': 1,
-        if (u == 'tin') 'default_weight_per_tin': wpt,
         'default_supplier_ids': [sid],
       });
     }
@@ -366,6 +332,17 @@ class _BatchItemCreatePageState extends ConsumerState<BatchItemCreatePage> {
                         labelText: 'Item name *',
                         border: OutlineInputBorder(),
                       ),
+                      onChanged: (_) {
+                        final suggested =
+                            StockTrackingMode.suggestFromName(line.name.text);
+                        if (suggested != null) {
+                          setState(() {
+                            line.packagingMode = suggested;
+                            line.unit =
+                                StockTrackingMode.catalogUnitForMode(suggested);
+                          });
+                        }
+                      },
                     ),
                     const SizedBox(height: 8),
                     PackagingTypeSelector(
@@ -373,53 +350,8 @@ class _BatchItemCreatePageState extends ConsumerState<BatchItemCreatePage> {
                       onModeChanged: (m) => setState(() {
                         line.packagingMode = m;
                         line.unit = StockTrackingMode.catalogUnitForMode(m);
-                        line.kgPerBag.clear();
-                        line.weightPerTin.clear();
                       }),
-                      weightController: line.kgPerBag,
                     ),
-                    const SizedBox(height: 8),
-                    Wrap(
-                      spacing: 6,
-                      runSpacing: 6,
-                      children: [
-                        for (final u in ['kg', 'bag', 'box', 'tin', 'piece'])
-                          ChoiceChip(
-                            label: Text(u),
-                            selected: line.unit == u,
-                            onSelected: (_) => setState(() {
-                              line.unit = u;
-                              line.packagingMode = _modeForUnit(u);
-                              line.kgPerBag.clear();
-                              line.weightPerTin.clear();
-                            }),
-                          ),
-                      ],
-                    ),
-                    if (line.unit == 'bag') ...[
-                      const SizedBox(height: 8),
-                      TextField(
-                        controller: line.kgPerBag,
-                        keyboardType: const TextInputType.numberWithOptions(
-                            decimal: true),
-                        decoration: const InputDecoration(
-                          labelText: 'Kg per bag *',
-                          border: OutlineInputBorder(),
-                        ),
-                      ),
-                    ],
-                    if (line.unit == 'tin') ...[
-                      const SizedBox(height: 8),
-                      TextField(
-                        controller: line.weightPerTin,
-                        keyboardType: const TextInputType.numberWithOptions(
-                            decimal: true),
-                        decoration: const InputDecoration(
-                          labelText: 'Weight per tin *',
-                          border: OutlineInputBorder(),
-                        ),
-                      ),
-                    ],
                   ],
                 ),
               ),

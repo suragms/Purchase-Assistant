@@ -10,29 +10,50 @@ class StockTrackingMode {
   static const tin = 'tin';
   static const piece = 'piece';
 
-  /// Suggest mode from item name — 5KG/10KG → retail packet, 50KG bulk → bag.
+  /// Five warehouse units shown on create/edit pickers.
+  static const pickerModes = [
+    looseKg,
+    wholesaleBag,
+    box,
+    tin,
+    piece,
+  ];
+
+  static final _kgInName =
+      RegExp(r'(\d+(?:\.\d+)?)\s*KG\b', caseSensitive: false);
+
+  static const _wholesaleKgSizes = {25, 30, 35, 40, 45, 50, 55};
+
+  /// Parse kg weight token from item name (e.g. SUGAR 50KG → 50).
+  static double? parseKgFromName(String rawName) {
+    final m = _kgInName.firstMatch(rawName.trim());
+    if (m == null) return null;
+    final v = double.tryParse(m.group(1) ?? '');
+    if (v == null || v <= 0 || !v.isFinite) return null;
+    return v;
+  }
+
+  /// Silent local unit detect from item name — no API, no UI banner.
   static String? suggestFromName(String rawName, {String? categoryName}) {
     final upper = rawName.toUpperCase().trim();
-    final cat = (categoryName ?? '').toUpperCase();
-    if (upper.contains('LOOSE')) return looseKg;
-    if (RegExp(r'\b(BAG|SACK)\b').hasMatch(upper)) return wholesaleBag;
-    if (upper.contains('TIN') || RegExp(r'\d+\s*LTR').hasMatch(upper)) {
-      return tin;
-    }
-    if (upper.contains('BOX') || upper.contains('CTN')) return box;
-    final kgM = RegExp(r'(\d+(?:\.\d+)?)\s*KG\b', caseSensitive: false)
-        .firstMatch(upper);
+    if (upper.isEmpty) return null;
+
+    if (RegExp(r'\b(BOX|CARTON|CTN)\b').hasMatch(upper)) return box;
+    if (RegExp(r'\bTIN\b').hasMatch(upper)) return tin;
+    if (RegExp(r'\b(PC|PCS|PIECE)\b').hasMatch(upper)) return piece;
+    if (RegExp(r'\b(LOOSE|BULK)\b').hasMatch(upper)) return looseKg;
+
+    final kgM = _kgInName.firstMatch(upper);
     if (kgM != null) {
       final kg = double.tryParse(kgM.group(1) ?? '');
-      if (kg != null) {
-        if ({25, 30, 40, 45, 50, 55}.contains(kg.round())) {
-          return wholesaleBag;
-        }
-        if (kg <= 10) return retailPacket;
+      if (kg != null && _wholesaleKgSizes.contains(kg.round())) {
+        return wholesaleBag;
       }
     }
-    if (RegExp(r'\d+\s*GM\b').hasMatch(upper)) return retailPacket;
-    if (cat.contains('OIL')) return tin;
+    if (RegExp(r'\b(BAG|SACK)\b').hasMatch(upper)) return wholesaleBag;
+    if (RegExp(r'\d+\s*GM\b').hasMatch(upper)) return piece;
+    if (RegExp(r'\d+\s*LTR\b').hasMatch(upper)) return tin;
+
     return null;
   }
 
@@ -58,38 +79,26 @@ class StockTrackingMode {
   static String labelForMode(String mode) {
     switch (mode) {
       case wholesaleBag:
-        return 'Wholesale bag';
+        return 'BAG';
       case retailPacket:
-        return 'Retail packet';
+      case piece:
+        return 'PC';
       case looseKg:
-        return 'Loose KG';
+        return 'KG';
       case box:
-        return 'Box / carton';
+        return 'BOX';
       case tin:
-        return 'Tin';
+        return 'TIN';
       default:
-        return 'Piece';
+        return 'PC';
     }
   }
 
-  /// Short chip label for create/edit unit picker (kg, bag, pc, …).
-  static String shortLabelForMode(String mode) {
-    switch (mode) {
-      case wholesaleBag:
-        return 'bag';
-      case retailPacket:
-        return 'pkt';
-      case looseKg:
-        return 'kg';
-      case box:
-        return 'box';
-      case tin:
-        return 'tin';
-      default:
-        return 'pc';
-    }
-  }
+  /// Short chip label for create/edit unit picker.
+  static String shortLabelForMode(String mode) => labelForMode(mode);
 
   static bool isPieceLikeMode(String? mode) =>
       mode == piece || mode == retailPacket;
+
+  static bool isBagMode(String? mode) => mode == wholesaleBag;
 }
