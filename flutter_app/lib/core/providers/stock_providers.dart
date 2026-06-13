@@ -956,6 +956,9 @@ final openingStockBulkSelectionProvider = StateProvider<Set<String>>(
 /// Items missing opening stock (home banners + critical alerts).
 final openingStockMissingProvider =
     FutureProvider.autoDispose<Map<String, dynamic>>((ref) async {
+  if (!homeOverviewReadyForSatellites(ref)) {
+    return {'items': <Map<String, dynamic>>[], 'missing_count': 0};
+  }
   _providerKeepAlive(ref, const Duration(minutes: 2));
   final session = ref.watch(sessionProvider);
   if (session == null) {

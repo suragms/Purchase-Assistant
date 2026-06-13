@@ -162,7 +162,12 @@ class _StockQuickPurchaseBodyState
             notes: _notesCtrl.text,
             idempotencyKey: _idempotencyKey,
           );
-      invalidateWarehouseSurfaces(ref, itemId: _itemId);
+      invalidateStockRowSaveSurfaces(
+        ref,
+        itemId: _itemId,
+        refreshItemDetail: true,
+      );
+      invalidatePurchaseListSurfacesLight(ref);
       ref.invalidate(stockChangesFeedProvider);
       ref.invalidate(staffTodayActivityProvider);
       ref.invalidate(staffTodayStockWorkProvider);

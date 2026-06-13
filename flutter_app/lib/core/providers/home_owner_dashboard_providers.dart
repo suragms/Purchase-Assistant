@@ -14,11 +14,14 @@ import 'stock_providers.dart'
 import 'home_breakdown_tab_providers.dart';
 import 'home_dashboard_provider.dart'
     show
+        homeActivityFeedFetchEnabledProvider,
         homeDashboardDataProvider,
         homeTabHasOperationalBundle,
         homePeriodProvider,
         homeCustomDateRangeProvider,
         homeStockMovementSectionVisibleProvider,
+        homeLowStockTopFetchEnabledProvider,
+        homeStaffSessionsFetchEnabledProvider,
         HomePeriod,
         HomeDashboardData,
         homeDashboardDataFromApiSnapshot,
@@ -285,6 +288,9 @@ void invalidateHomeStockStatusCounts(Ref ref) {
 /// Top low-stock rows (server sorts by stock vs reorder).
 final stockLowTopHomeProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
+  if (!ref.watch(homeLowStockTopFetchEnabledProvider)) {
+    return [];
+  }
   _providerKeepAlive(ref, const Duration(minutes: 2));
   final session = ref.watch(activeSessionProvider);
   if (session == null) return [];
@@ -375,6 +381,10 @@ final stockVariancesTodayProvider =
 final activeStaffSessionsProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
   _providerKeepAlive(ref, const Duration(minutes: 2));
+  if (shellBranchIsVisible(ref, ShellBranch.home) &&
+      !ref.watch(homeStaffSessionsFetchEnabledProvider)) {
+    return [];
+  }
   final session = ref.watch(activeSessionProvider);
   if (session == null) return [];
   return ref.read(hexaApiProvider).listActiveSessions(
@@ -913,6 +923,9 @@ Future<List<HomeActivityItem>> _fetchHomeWarehouseActivity(
 
 final homeRecentActivityFeedProvider =
     FutureProvider.autoDispose<List<HomeActivityItem>>((ref) async {
+  if (!ref.watch(homeActivityFeedFetchEnabledProvider)) {
+    return const [];
+  }
   _providerKeepAlive(ref, const Duration(seconds: 30));
   ref.watch(homePeriodProvider);
   ref.watch(homeCustomDateRangeProvider);

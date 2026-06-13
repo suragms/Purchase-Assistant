@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import '../../features/shell/shell_branch_provider.dart';
 import '../auth/session_notifier.dart';
 import '../services/offline_store.dart';
 import 'home_breakdown_tab_providers.dart';
@@ -52,10 +53,13 @@ void forceRefreshOwnerHomeDashboard(dynamic ref) {
   ref.invalidate(deliveryPipelineProvider);
 }
 
-/// KPIs and tables that depend on [analyticsDateRangeProvider] and/or entries.
-/// [ref] is any Riverpod `Ref` / `WidgetRef` with `invalidate`.
-void invalidateAnalyticsData(dynamic ref) {
+/// Mark Reports stale without refetching analytics providers off-tab.
+void markReportsDirty(dynamic ref) {
   markReportsPurchasesNeedsLiveFetch(ref);
+}
+
+/// Live refetch of Reports tab providers (call when Reports is visible).
+void invalidateAnalyticsDataLive(dynamic ref) {
   ref.invalidate(analyticsKpiProvider);
   ref.invalidate(analyticsDailyProfitProvider);
   ref.invalidate(analyticsItemsTableProvider);
@@ -70,6 +74,13 @@ void invalidateAnalyticsData(dynamic ref) {
   ref.invalidate(reportsPurchasesPayloadProvider);
   ref.invalidate(reportsPeriodComparisonProvider);
   ref.invalidate(reportsMovementSummaryProvider);
+}
+
+/// KPIs and tables that depend on [analyticsDateRangeProvider] and/or entries.
+/// [ref] is any Riverpod `Ref` / `WidgetRef` with `invalidate`.
+void invalidateAnalyticsData(dynamic ref) {
+  markReportsDirty(ref);
+  invalidateAnalyticsDataLive(ref);
 }
 
 /// After purchases, entries, or other business writes, bust derived KPIs so
@@ -95,16 +106,22 @@ void _doInvalidateBusinessAggregates(dynamic ref) {
       OfflineStore.bustTradeAggregateCachesForBusiness(session.primaryBusiness.id),
     );
   }
-  invalidateAnalyticsData(ref);
+  markReportsDirty(ref);
+  if (shellBranchIsVisible(ref, ShellBranch.reports)) {
+    invalidateAnalyticsDataLive(ref);
+  }
+  final onHome = shellBranchIsVisible(ref, ShellBranch.home);
   final now = DateTime.now();
   final allowDashboardInvalidate = _lastDashboardInvalidateAt == null ||
       now.difference(_lastDashboardInvalidateAt!) >= _dashboardInvalidateMinGap;
-  if (allowDashboardInvalidate) {
+  if (allowDashboardInvalidate && onHome) {
     _lastDashboardInvalidateAt = now;
     ref.invalidate(homeDashboardDataProvider);
     ref.invalidate(homeShellReportsProvider);
   }
-  ref.invalidate(homeInventorySummaryProvider);
+  if (onHome) {
+    ref.invalidate(homeInventorySummaryProvider);
+  }
   invalidateContactsSurfacesLight(ref);
   invalidateCatalogSurfacesLight(ref);
   invalidateTradePurchaseCaches(ref);
@@ -356,6 +373,26 @@ void invalidateWarehouseSurfacesLight(dynamic ref, {String? itemId}) {
   ref.invalidate(lowStockOperationsPageProvider);
   if (itemId != null && itemId.isNotEmpty) {
     invalidateWarehouseItemSurfacesLight(ref, itemId: itemId);
+  }
+}
+
+/// Opening stock bulk/single save — deferred list reconcile without KPI storm.
+void invalidateOpeningStockSaveSurfaces(
+  dynamic ref, {
+  Iterable<String> itemIds = const [],
+}) {
+  deferInvalidateDelayed(
+    ref,
+    stockListProvider,
+    delay: const Duration(milliseconds: 500),
+  );
+  ref.invalidate(stockStatusCountsProvider);
+  ref.invalidate(openingStockSetupProvider);
+  ref.invalidate(openingStockMissingProvider);
+  ref.invalidate(stockChangesFeedProvider);
+  for (final id in itemIds) {
+    if (id.isEmpty) continue;
+    invalidateWarehouseItemSurfacesLight(ref, itemId: id);
   }
 }
 

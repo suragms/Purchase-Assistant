@@ -6,8 +6,15 @@ import 'package:intl/intl.dart';
 import '../../../../core/router/shell_navigation.dart';
 import '../../../../features/shell/shell_branch_provider.dart';
 import '../../../../core/design_system/hexa_ds_tokens.dart';
-import '../../../../core/providers/home_dashboard_provider.dart';
-import '../../../../core/providers/home_owner_dashboard_providers.dart';
+import '../../../../core/providers/home_dashboard_provider.dart'
+    show
+        HomeDashboardData,
+        homeStaffSessionsFetchEnabledProvider;
+import '../../../../core/providers/home_owner_dashboard_providers.dart'
+    show
+        activeStaffSessionsProvider,
+        homeRecentActivityFeedProvider,
+        HomeActivityItem;
 import '../../../../core/theme/hexa_colors.dart';
 import '../../../../core/widgets/section_inline_error.dart';
 import '../../../../shared/widgets/operational_ui.dart';
@@ -189,11 +196,26 @@ class _HomeStatCard extends StatelessWidget {
 }
 
 /// Staff signed in within the last few minutes (server active-sessions).
-class HomeStaffActivitySection extends ConsumerWidget {
+class HomeStaffActivitySection extends ConsumerStatefulWidget {
   const HomeStaffActivitySection({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<HomeStaffActivitySection> createState() =>
+      _HomeStaffActivitySectionState();
+}
+
+class _HomeStaffActivitySectionState extends ConsumerState<HomeStaffActivitySection> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      ref.read(homeStaffSessionsFetchEnabledProvider.notifier).state = true;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final staffAsync = ref.watch(activeStaffSessionsProvider);
 
     return staffAsync.when(

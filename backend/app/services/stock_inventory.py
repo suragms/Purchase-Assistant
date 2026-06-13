@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import and_, case, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import CatalogItem, User
@@ -151,38 +151,80 @@ async def compute_inventory_summary(
     Point-in-time warehouse totals: sum(current_stock * landing rate) and unit buckets.
     Items without a landing rate still count toward unit buckets but not total_value_inr.
     """
-    r = await db.execute(
-        select(CatalogItem).where(
-            CatalogItem.business_id == business_id,
-            CatalogItem.deleted_at.is_(None),
+    unit_expr = func.lower(
+        func.coalesce(
+            CatalogItem.stock_unit,
+            CatalogItem.default_unit,
+            CatalogItem.selling_unit,
+            "",
         )
     )
-    items = list(r.scalars().all())
-    bags = boxes = tins = kg = Decimal(0)
-    total_value = Decimal(0)
-    for item in items:
-        qty = catalog_stock_qty(item)
-        if qty <= 0:
-            continue
-        bucket = catalog_unit_key(item)
-        if bucket == "bags":
-            bags += qty
-        elif bucket == "boxes":
-            boxes += qty
-        elif bucket == "tins":
-            tins += qty
-        else:
-            kg += qty
-        rate = catalog_landing_rate(item)
-        if rate > 0:
-            total_value += qty * rate
+    qty = func.coalesce(CatalogItem.current_stock, 0)
+    rate = case(
+        (
+            func.coalesce(CatalogItem.default_landing_cost, 0) > 0,
+            CatalogItem.default_landing_cost,
+        ),
+        (
+            func.coalesce(CatalogItem.last_purchase_price, 0) > 0,
+            CatalogItem.last_purchase_price,
+        ),
+        else_=0,
+    )
+    active = qty > 0
+    value_line = case(
+        (and_(active, rate > 0), qty * rate),
+        else_=0,
+    )
+    bag_line = case(
+        (and_(active, or_(unit_expr.like("%bag%"), unit_expr.like("%sack%"))), qty),
+        else_=0,
+    )
+    box_line = case(
+        (and_(active, unit_expr.like("%box%")), qty),
+        else_=0,
+    )
+    tin_line = case(
+        (and_(active, unit_expr.like("%tin%")), qty),
+        else_=0,
+    )
+    kg_line = case(
+        (
+            and_(
+                active,
+                ~or_(
+                    unit_expr.like("%bag%"),
+                    unit_expr.like("%sack%"),
+                    unit_expr.like("%box%"),
+                    unit_expr.like("%tin%"),
+                ),
+            ),
+            qty,
+        ),
+        else_=0,
+    )
+    row = (
+        await db.execute(
+            select(
+                func.count().label("item_count"),
+                func.coalesce(func.sum(value_line), 0).label("total_value_inr"),
+                func.coalesce(func.sum(bag_line), 0).label("bags"),
+                func.coalesce(func.sum(box_line), 0).label("boxes"),
+                func.coalesce(func.sum(tin_line), 0).label("tins"),
+                func.coalesce(func.sum(kg_line), 0).label("kg"),
+            ).where(
+                CatalogItem.business_id == business_id,
+                CatalogItem.deleted_at.is_(None),
+            )
+        )
+    ).mappings().one()
     return {
-        "total_value_inr": float(total_value),
-        "bags": float(bags),
-        "boxes": float(boxes),
-        "tins": float(tins),
-        "kg": float(kg),
-        "item_count": len(items),
+        "total_value_inr": float(row["total_value_inr"] or 0),
+        "bags": float(row["bags"] or 0),
+        "boxes": float(row["boxes"] or 0),
+        "tins": float(row["tins"] or 0),
+        "kg": float(row["kg"] or 0),
+        "item_count": int(row["item_count"] or 0),
     }
 
 

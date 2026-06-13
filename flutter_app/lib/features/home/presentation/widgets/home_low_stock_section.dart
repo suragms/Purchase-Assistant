@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/design_system/hexa_ds_tokens.dart';
+import '../../../../core/providers/home_dashboard_provider.dart';
 import '../../../../core/providers/home_owner_dashboard_providers.dart';
 import '../../../../core/widgets/section_inline_error.dart';
 import '../../../../core/router/navigation_ext.dart';
@@ -20,6 +21,15 @@ class HomeLowStockSection extends ConsumerStatefulWidget {
 }
 
 class _HomeLowStockSectionState extends ConsumerState<HomeLowStockSection> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      ref.read(homeLowStockTopFetchEnabledProvider.notifier).state = true;
+    });
+  }
+
   Color _statusColor(String? status) {
     final s = (status ?? '').toLowerCase();
     if (s.contains('critical') || s.contains('out')) {

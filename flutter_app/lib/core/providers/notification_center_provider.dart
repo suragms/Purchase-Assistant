@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../auth/provider_api_guard.dart';
+import 'home_dashboard_provider.dart'
+    show homeTabHasOperationalBundle, homeNotificationsListFetchEnabledProvider;
 import '../../features/shell/shell_branch_provider.dart';
 import 'business_aggregates_invalidation.dart' show invalidateNotificationSurfaces;
 import 'server_notifications_provider.dart';
@@ -14,10 +16,16 @@ final notificationCenterCoordinatorProvider =
     Provider.autoDispose<void>((ref) {
   if (providerSkipApi(ref)) return;
 
-  ref.watch(appNotificationsListProvider);
   final onHome = ref.watch(shellCurrentBranchProvider) == ShellBranch.home;
-  if (!onHome) {
-    ref.watch(warehouseAlertsProvider);
+  final bundleReady = onHome && homeTabHasOperationalBundle(ref);
+  final wantList = ref.watch(homeNotificationsListFetchEnabledProvider);
+
+  if (!onHome || (!bundleReady && !wantList)) {
+    if (!onHome) {
+      ref.watch(warehouseAlertsProvider);
+    }
+  } else if (wantList || !bundleReady) {
+    ref.watch(appNotificationsListProvider);
   }
 
   if (onHome) return;

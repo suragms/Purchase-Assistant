@@ -4,6 +4,8 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/auth/session_notifier.dart';
+import '../../../core/providers/home_dashboard_provider.dart'
+    show homeNotificationsListFetchEnabledProvider;
 import '../../../core/providers/notifications_provider.dart'
     show
         NotificationCategoryFilter,
@@ -36,6 +38,15 @@ class NotificationsPage extends ConsumerStatefulWidget {
 class _NotificationsPageState extends ConsumerState<NotificationsPage> {
   NotificationCategoryFilter _filter = NotificationCategoryFilter.all;
   final _textSearch = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      ref.read(homeNotificationsListFetchEnabledProvider.notifier).state = true;
+    });
+  }
 
   bool get _isStaff {
     final session = ref.read(sessionProvider);

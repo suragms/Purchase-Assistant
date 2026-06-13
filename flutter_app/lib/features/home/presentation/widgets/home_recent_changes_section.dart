@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/design_system/hexa_ds_tokens.dart';
+import '../../../../core/providers/home_dashboard_provider.dart';
 import '../../../../core/providers/home_owner_dashboard_providers.dart';
 import '../../../../core/theme/hexa_colors.dart';
 import '../../../../core/widgets/friendly_load_error.dart';
@@ -10,17 +11,33 @@ import '../../../../shared/widgets/operational_ui.dart';
 import 'home_formatters.dart';
 
 /// Grouped recent purchases + stock changes for the selected period.
-class HomeRecentChangesSection extends ConsumerWidget {
+class HomeRecentChangesSection extends ConsumerStatefulWidget {
   const HomeRecentChangesSection({super.key, this.embedded = false});
 
   final bool embedded;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<HomeRecentChangesSection> createState() =>
+      _HomeRecentChangesSectionState();
+}
+
+class _HomeRecentChangesSectionState
+    extends ConsumerState<HomeRecentChangesSection> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      ref.read(homeActivityFeedFetchEnabledProvider.notifier).state = true;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final feedAsync = ref.watch(homeRecentActivityFeedProvider);
 
     Widget wrapSection({required Widget child, Widget? trailing}) {
-      if (embedded) {
+      if (widget.embedded) {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [

@@ -1,6 +1,9 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../features/shell/shell_branch_provider.dart';
 import '../auth/session_notifier.dart' show activeSessionProvider, hexaApiProvider;
+import 'home_dashboard_provider.dart'
+    show homeOverviewReadyForSatellites, homePendingDamageFetchEnabledProvider;
 
 final purchaseDamageReportsProvider = FutureProvider.autoDispose
     .family<List<Map<String, dynamic>>, String>((ref, purchaseId) async {
@@ -19,6 +22,11 @@ final purchaseDamageReportsProvider = FutureProvider.autoDispose
 
 /// Owner home: pending damage reports awaiting approval.
 final pendingDamageReportsCountProvider = FutureProvider<int>((ref) async {
+  if (shellBranchIsVisible(ref, ShellBranch.home) &&
+      !ref.watch(homePendingDamageFetchEnabledProvider)) {
+    return 0;
+  }
+  if (!homeOverviewReadyForSatellites(ref)) return 0;
   final session = ref.watch(activeSessionProvider);
   if (session == null) return 0;
   final role = session.primaryBusiness.role.toLowerCase();

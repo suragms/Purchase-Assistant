@@ -158,6 +158,8 @@ def test_trade_items_suppliers_categories_endpoints():
     assert hcompact["item_slices"] == []
     assert hcompact["recommendations"] == []
     assert hcompact["consistency"]["portfolio_score"] is None
+    for cat in hcompact.get("categories") or []:
+        assert cat.get("items") == []
 
     ho_shell = client.get(
         f"/v1/businesses/{bid}/reports/home-overview?{q}&compact=true&shell_bundle=true",

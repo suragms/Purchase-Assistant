@@ -3,9 +3,11 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
+import '../../features/shell/shell_branch_provider.dart';
 import '../auth/session_notifier.dart';
 import '../json_coerce.dart';
 import '../utils/report_date_params.dart';
+import 'reports_provider.dart' show reportsPurchasesNeedsLiveFetchProvider;
 
 /// Selected date range for the Analytics tab (`from`/`to` inclusive calendar days).
 /// Default matches Home “Month”: last 30 days through today (`homePeriodRange`).
@@ -50,6 +52,16 @@ final analyticsKpiProvider =
   final range = ref.watch(analyticsDateRangeProvider);
   if (session == null) {
     throw StateError('Not signed in');
+  }
+  final branch = ref.watch(shellCurrentBranchProvider);
+  final needsLive = ref.watch(reportsPurchasesNeedsLiveFetchProvider);
+  if (branch != ShellBranch.reports && !needsLive) {
+    return const AnalyticsKpi(
+      totalPurchase: 0,
+      totalQtyBase: 0,
+      totalProfit: 0,
+      purchaseCount: 0,
+    );
   }
   final api = ref.read(hexaApiProvider);
   final fmt = DateFormat('yyyy-MM-dd');

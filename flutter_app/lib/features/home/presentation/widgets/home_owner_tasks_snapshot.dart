@@ -2,14 +2,31 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../core/providers/home_dashboard_provider.dart'
+    show homeChecklistFetchEnabledProvider;
 import '../../../../core/providers/operations_providers.dart';
 
 /// Top incomplete owner checklist items.
-class HomeOwnerTasksSnapshot extends ConsumerWidget {
+class HomeOwnerTasksSnapshot extends ConsumerStatefulWidget {
   const HomeOwnerTasksSnapshot({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<HomeOwnerTasksSnapshot> createState() =>
+      _HomeOwnerTasksSnapshotState();
+}
+
+class _HomeOwnerTasksSnapshotState extends ConsumerState<HomeOwnerTasksSnapshot> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      ref.read(homeChecklistFetchEnabledProvider.notifier).state = true;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final data = ref.watch(checklistTodayProvider).valueOrNull ?? const <String, dynamic>{};
     final tasks = [
       for (final e in (data['tasks'] as List? ?? const []))

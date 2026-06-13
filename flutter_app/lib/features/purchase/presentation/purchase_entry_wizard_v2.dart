@@ -1872,7 +1872,6 @@ class _PurchaseEntryWizardV2State extends ConsumerState<PurchaseEntryWizardV2>
       if (!mounted) return;
       final draftSnap = ref.read(purchaseDraftProvider);
       final savedItemIds = catalogItemIdsFromTradeJson(saved);
-      invalidatePurchaseWorkspace(ref, affectedItemIds: savedItemIds);
       ref.invalidate(stockAuditPeriodProvider);
       final committed =
           (saved['delivery_status']?.toString() ?? '').toLowerCase() ==
@@ -1894,6 +1893,8 @@ class _PurchaseEntryWizardV2State extends ConsumerState<PurchaseEntryWizardV2>
             body: saved,
           );
         }
+      } else {
+        invalidatePurchaseWorkspace(ref, affectedItemIds: savedItemIds);
       }
       for (final line in draftSnap.lines) {
         final itemId = line.catalogItemId?.trim();

@@ -58,7 +58,14 @@ class HomeOwnerDashboardBody extends ConsumerWidget {
         ],
       );
     }
-    final status = ref.watch(stockStatusCountsProvider).valueOrNull ?? const {};
+    final status = homeTabHasOperationalBundle(ref)
+        ? ref
+            .watch(homeDashboardDataProvider)
+            .snapshot
+            .data
+            .operational!
+            .stockStatusCounts
+        : ref.watch(stockStatusCountsProvider).valueOrNull ?? const {};
     final low = coerceToInt(status['low']) + coerceToInt(status['critical']);
     final out = coerceToInt(status['out']);
     final openingN =

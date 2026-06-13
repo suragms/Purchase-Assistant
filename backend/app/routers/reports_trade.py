@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import uuid
 from collections import OrderedDict
@@ -23,7 +24,7 @@ from app.async_budget import run_read_budget_bounded
 from app.database import get_db
 from app.db_resilience import execute_with_retry
 from app.deps import get_current_user, require_membership, require_role
-from app.http_etag import json_response_with_etag
+from app.http_etag import json_bytes, json_response_with_etag, payload_etag
 from app.middleware.rate_limit import SlidingWindowLimiter
 from app.models import CatalogItem, CategoryType, ItemCategory, Membership, TradePurchase, TradePurchaseLine, User
 from app.models.stock_adjustment import StockAdjustmentLog
@@ -61,8 +62,11 @@ router = APIRouter(
 _trade_line_amount_expr = tq.trade_line_amount_expr
 _trade_purchase_date_filter = tq.trade_purchase_date_filter
 
-_trade_dashboard_ttl_s = 45.0
-_trade_dashboard_cache: dict[tuple[str, str, str, int, bool], tuple[float, dict[str, Any]]] = {}
+_trade_dashboard_ttl_s = 60.0
+_trade_dashboard_cache: dict[
+    tuple[str, str, str, int, bool],
+    tuple[float, dict[str, Any], str, bytes],
+] = {}
 _trade_dashboard_cache_max = 256
 
 _trade_summary_ttl_s = 45.0
@@ -347,12 +351,31 @@ def _snapshot_cache_key(
     )
 
 
+def _store_trade_dashboard_cache(
+    cache_key: tuple[Any, ...],
+    payload: dict[str, Any],
+) -> tuple[float, dict[str, Any], str, bytes]:
+    body = json_bytes(payload)
+    etag = payload_etag(body)
+    entry = (monotonic(), payload, etag, body)
+    _trade_dashboard_cache[cache_key] = entry
+    if len(_trade_dashboard_cache) > _trade_dashboard_cache_max:
+        _trade_dashboard_cache.clear()
+    return entry
+
+
 def _apply_trade_dashboard_compact(payload: dict[str, Any]) -> None:
-    """Trim heavy arrays; summary, categories, unit_totals, suppliers retained."""
+    """Trim heavy arrays; summary + category rollups retained (no line items)."""
     payload["subcategories"] = []
     payload["item_slices"] = []
+    payload["suppliers"] = []
     payload["recommendations"] = []
     payload["consistency"] = {"portfolio_score": None}
+    cats = payload.get("categories")
+    if isinstance(cats, list):
+        for cat in cats:
+            if isinstance(cat, dict):
+                cat["items"] = []
 
 
 def _attach_analytics_panel_blocks(
@@ -583,17 +606,21 @@ async def _compute_trade_dashboard_snapshot_payload(
         .where(bf)
         .group_by(cat_id_key, cn, TradePurchaseLine.item_name)
     )
-    eroll = await execute_with_retry(lambda: db.execute(roll))
-    esum = await execute_with_retry(lambda: db.execute(sum_q))
-    enest = await execute_with_retry(lambda: db.execute(nest_q))
+    eroll, esum, enest = await asyncio.gather(
+        execute_with_retry(lambda: db.execute(roll)),
+        execute_with_retry(lambda: db.execute(sum_q)),
+        execute_with_retry(lambda: db.execute(nest_q)),
+    )
     roll_row = eroll.mappings().one()
     srow = esum.mappings().one()
     flat = enest.mappings().all()
 
-    mapping = await trade_map.item_supplier_broker_rows(db, business_id, date_from, date_to)
-    items = await _fetch_trade_items_breakdown_rows(db, business_id, date_from, date_to)
-    types = await _fetch_trade_types_breakdown_rows(db, business_id, date_from, date_to)
-    suppliers = await _trade_suppliers_rows(db, business_id, date_from, date_to)
+    mapping, items, types, suppliers = await asyncio.gather(
+        trade_map.item_supplier_broker_rows(db, business_id, date_from, date_to),
+        _fetch_trade_items_breakdown_rows(db, business_id, date_from, date_to),
+        _fetch_trade_types_breakdown_rows(db, business_id, date_from, date_to),
+        _trade_suppliers_rows(db, business_id, date_from, date_to),
+    )
     detail, recs = mapping
     total_purchase = float(srow["total_purchase"] or 0)
     total_selling = float(srow["total_selling"] or 0)
@@ -695,10 +722,6 @@ async def _compute_trade_dashboard_snapshot_payload(
             TradePurchase.status.notin_(("deleted", "cancelled")),
         )
     )
-    pending_delivery_count = int(
-        (await execute_with_retry(lambda: db.execute(pend_q))).scalar() or 0
-    )
-
     sup_q = (
         select(func.count(func.distinct(TradePurchase.supplier_id)))
         .select_from(TradePurchase)
@@ -726,13 +749,23 @@ async def _compute_trade_dashboard_snapshot_payload(
             CatalogItem.current_stock < 0,
         )
     )
-    supplier_count = int((await execute_with_retry(lambda: db.execute(sup_q))).scalar() or 0)
-    broker_count = int((await execute_with_retry(lambda: db.execute(bro_q))).scalar() or 0)
-    received_delivery_count = int(
-        (await execute_with_retry(lambda: db.execute(recv_q))).scalar() or 0
-    )
-    negative_stock_count = int(
-        (await execute_with_retry(lambda: db.execute(neg_q))).scalar() or 0
+
+    async def _count_scalar(q) -> int:
+        r = await execute_with_retry(lambda: db.execute(q))
+        return int(r.scalar() or 0)
+
+    (
+        pending_delivery_count,
+        supplier_count,
+        broker_count,
+        received_delivery_count,
+        negative_stock_count,
+    ) = await asyncio.gather(
+        _count_scalar(pend_q),
+        _count_scalar(sup_q),
+        _count_scalar(bro_q),
+        _count_scalar(recv_q),
+        _count_scalar(neg_q),
     )
 
     return {
@@ -818,9 +851,7 @@ async def trade_dashboard_snapshot(
         return _degraded_dashboard_response(cache_key, date_from, date_to, compact=False)
     payload = _strip_degraded_snapshot_fields(dict(maybe))
     _put_dashboard_last_good(cache_key, payload)
-    _trade_dashboard_cache[cache_key] = (now_mono, payload)
-    if len(_trade_dashboard_cache) > _trade_dashboard_cache_max:
-        _trade_dashboard_cache.clear()
+    _store_trade_dashboard_cache(cache_key, payload)
     return payload
 
 
@@ -861,6 +892,8 @@ async def trade_home_overview(
             request,
             cached[1],
             cache_control="private, max-age=60",
+            precomputed_body=cached[3],
+            precomputed_etag=cached[2],
         )
 
     async def compute() -> dict[str, Any]:
@@ -894,13 +927,13 @@ async def trade_home_overview(
         )
     payload = _strip_degraded_snapshot_fields(dict(maybe))
     _put_dashboard_last_good(cache_key, payload)
-    _trade_dashboard_cache[cache_key] = (now_mono, payload)
-    if len(_trade_dashboard_cache) > _trade_dashboard_cache_max:
-        _trade_dashboard_cache.clear()
+    _, _, etag, body = _store_trade_dashboard_cache(cache_key, payload)
     return json_response_with_etag(
         request,
         payload,
         cache_control="private, max-age=60",
+        precomputed_body=body,
+        precomputed_etag=etag,
     )
 
 

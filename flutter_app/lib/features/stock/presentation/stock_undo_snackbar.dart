@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/auth/session_notifier.dart';
 import '../../../core/providers/business_aggregates_invalidation.dart';
-import '../../../core/providers/stock_providers.dart';
 
 /// One-shot undo after a quick stock patch (server validates 15 min / same user).
 void showStockUndoSnackBar({
@@ -26,8 +25,12 @@ void showStockUndoSnackBar({
                   businessId: session.primaryBusiness.id,
                   itemId: itemId,
                 );
-            invalidateWarehouseSurfaces(ref);
-            ref.invalidate(stockListProvider);
+            invalidateStockRowSaveSurfaces(
+              ref,
+              itemId: itemId,
+              immediateListReconcile: true,
+              refreshItemDetail: true,
+            );
             if (context.mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(content: Text('Change undone')),

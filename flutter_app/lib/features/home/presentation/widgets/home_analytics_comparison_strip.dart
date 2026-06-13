@@ -8,11 +8,27 @@ import '../../../../core/theme/hexa_colors.dart';
 import 'home_formatters.dart';
 
 /// Period-over-period comparison chips under analytics summary.
-class HomeAnalyticsComparisonStrip extends ConsumerWidget {
+class HomeAnalyticsComparisonStrip extends ConsumerStatefulWidget {
   const HomeAnalyticsComparisonStrip({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<HomeAnalyticsComparisonStrip> createState() =>
+      _HomeAnalyticsComparisonStripState();
+}
+
+class _HomeAnalyticsComparisonStripState
+    extends ConsumerState<HomeAnalyticsComparisonStrip> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      ref.read(homePriorPeriodFetchEnabledProvider.notifier).state = true;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final dash = ref.watch(homeDashboardDataProvider).snapshot.data;
     final prior = ref.watch(reportsPriorPeriodDeltaProvider).valueOrNull;
     if (dash.isEmpty && prior == null) return const SizedBox.shrink();

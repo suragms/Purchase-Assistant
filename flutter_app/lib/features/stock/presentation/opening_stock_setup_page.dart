@@ -97,10 +97,12 @@ class _OpeningStockSetupPageState
 
     if (ok == true) {
       await _clearSelection();
-      ref.invalidate(openingStockSetupProvider);
-      ref.invalidate(stockListProvider);
-      ref.invalidate(stockStatusCountsProvider);
-      invalidateWarehouseSurfaces(ref);
+      invalidateOpeningStockSaveSurfaces(
+        ref,
+        itemIds: selectedItems
+            .map((it) => it['id']?.toString() ?? '')
+            .where((id) => id.isNotEmpty),
+      );
     }
   }
 
@@ -577,17 +579,12 @@ class _BulkOpeningSetSheetBodyState
         // Keep UI snappy on returns; data refresh happens via invalidations below.
       }
 
-      invalidateWarehouseSurfaces(ref);
-      ref.invalidate(openingStockSetupProvider);
-      ref.invalidate(stockListProvider);
-      ref.invalidate(stockStatusCountsProvider);
-      for (final it in widget.items) {
-        final id = it['id']?.toString();
-        if (id != null && id.isNotEmpty) {
-          ref.invalidate(stockItemDetailProvider(id));
-          ref.invalidate(stockItemActivityProvider(id));
-        }
-      }
+      invalidateOpeningStockSaveSurfaces(
+        ref,
+        itemIds: widget.items
+            .map((it) => it['id']?.toString() ?? '')
+            .where((id) => id.isNotEmpty),
+      );
 
       if (context.mounted) Navigator.of(context).pop(true);
     } catch (e) {

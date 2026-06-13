@@ -34,7 +34,12 @@ def _connect_url() -> str:
 def _explain(cur, label: str, sql: str, params: tuple) -> dict:
     cur.execute(f"EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) {sql}", params)
     row = cur.fetchone()
-    plan = row[0] if row else []
+    if not row:
+        plan: object = []
+    elif isinstance(row, dict):
+        plan = next(iter(row.values()))
+    else:
+        plan = row[0]
     if isinstance(plan, str):
         plan = json.loads(plan)
     root = plan[0] if plan else {}
@@ -152,8 +157,22 @@ def main() -> None:
         sections.append("")
 
     explains: list[dict] = []
-    std = _explain(
-        cur,
+
+    def _try_explain(label: str, sql: str, params: tuple) -> None:
+        try:
+            explains.append(_explain(cur, label, sql, params))
+        except Exception as exc:
+            explains.append(
+                {
+                    "label": label,
+                    "timing_ms": None,
+                    "node_type": "skipped",
+                    "flags": ["error"],
+                    "plan": {"error": str(exc).split("\n")[0]},
+                }
+            )
+
+    _try_explain(
         "trade_purchases_list",
         """
         SELECT tp.id FROM trade_purchases tp
@@ -164,61 +183,48 @@ def main() -> None:
         """,
         (bid,),
     )
-    explains.append(std)
 
-    explains.append(
-        _explain(
-            cur,
-            "delivery_pipeline",
-            """
-            SELECT delivery_status, COUNT(*) FROM trade_purchases
-            WHERE business_id = %s::uuid
-              AND status NOT IN ('deleted', 'cancelled')
-            GROUP BY delivery_status
-            """,
-            (bid,),
-        )
+    _try_explain(
+        "delivery_pipeline",
+        """
+        SELECT delivery_status, COUNT(*) FROM trade_purchases
+        WHERE business_id = %s::uuid
+          AND status NOT IN ('deleted', 'cancelled')
+        GROUP BY delivery_status
+        """,
+        (bid,),
     )
 
-    explains.append(
-        _explain(
-            cur,
-            "stock_adjustment_recent",
-            """
-            SELECT id FROM stock_adjustment_logs
-            WHERE business_id = %s::uuid
-            ORDER BY updated_at DESC
-            LIMIT 250
-            """,
-            (bid,),
-        )
+    _try_explain(
+        "stock_adjustment_recent",
+        """
+        SELECT id FROM stock_adjustment_logs
+        WHERE business_id = %s::uuid
+        ORDER BY updated_at DESC
+        LIMIT 250
+        """,
+        (bid,),
     )
 
-    explains.append(
-        _explain(
-            cur,
-            "notifications_unread",
-            """
-            SELECT COUNT(*) FROM app_notifications
-            WHERE business_id = %s::uuid
-              AND read_at IS NULL
-            """,
-            (bid,),
-        )
+    _try_explain(
+        "notifications_unread",
+        """
+        SELECT COUNT(*) FROM app_notifications
+        WHERE business_id = %s::uuid
+          AND read_at IS NULL
+        """,
+        (bid,),
     )
 
-    explains.append(
-        _explain(
-            cur,
-            "catalog_active_items",
-            """
-            SELECT id FROM catalog_items
-            WHERE business_id = %s::uuid AND deleted_at IS NULL
-            ORDER BY lower(name)
-            LIMIT 200
-            """,
-            (bid,),
-        )
+    _try_explain(
+        "catalog_active_items",
+        """
+        SELECT id FROM catalog_items
+        WHERE business_id = %s::uuid AND deleted_at IS NULL
+        ORDER BY lower(name)
+        LIMIT 200
+        """,
+        (bid,),
     )
 
     sections.append("## EXPLAIN ANALYZE hot paths")

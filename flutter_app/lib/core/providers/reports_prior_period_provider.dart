@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 
 import '../auth/session_notifier.dart';
 import 'analytics_kpi_provider.dart';
+import 'home_dashboard_provider.dart';
 
 /// Same-length window immediately before the current [analyticsDateRangeProvider].
 class ReportsPriorPeriodDelta {
@@ -39,6 +40,22 @@ double? _pctDelta(double cur, double prev) {
 /// Fetches [analyticsSummary] for the current range and the prior equal-length range.
 final reportsPriorPeriodDeltaProvider =
     FutureProvider.autoDispose<ReportsPriorPeriodDelta>((ref) async {
+  if (!ref.watch(homePriorPeriodFetchEnabledProvider)) {
+    final range = ref.watch(analyticsDateRangeProvider);
+    final from = DateTime(range.from.year, range.from.month, range.from.day);
+    final to = DateTime(range.to.year, range.to.month, range.to.day);
+    final days = to.difference(from).inDays + 1;
+    final priorTo = from.subtract(const Duration(days: 1));
+    final priorFrom = priorTo.subtract(Duration(days: days - 1));
+    return ReportsPriorPeriodDelta(
+      priorFrom: priorFrom,
+      priorTo: priorTo,
+      currentProfit: 0,
+      priorProfit: 0,
+      currentPurchase: 0,
+      priorPurchase: 0,
+    );
+  }
   final session = ref.watch(sessionProvider);
   final range = ref.watch(analyticsDateRangeProvider);
   if (session == null) {

@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../auth/provider_api_guard.dart';
 import '../auth/session_notifier.dart'
     show activeSessionProvider, hexaApiProvider, sessionProvider;
+import '../../features/shell/shell_branch_provider.dart';
+import 'home_dashboard_provider.dart' show homeChecklistFetchEnabledProvider;
 
 bool _isAuthFailure(Object e) {
   if (e is DioException) {
@@ -21,6 +23,10 @@ bool _checklistSessionActive(Ref ref) {
 final checklistTodayProvider =
     FutureProvider.autoDispose<Map<String, dynamic>>((ref) async {
   if (!_checklistSessionActive(ref)) return {};
+  if (shellBranchIsVisible(ref, ShellBranch.home) &&
+      !ref.watch(homeChecklistFetchEnabledProvider)) {
+    return {};
+  }
   final session = ref.read(sessionProvider)!;
   try {
     return await ref.read(hexaApiProvider).getChecklistToday(

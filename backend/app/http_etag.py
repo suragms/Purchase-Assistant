@@ -23,12 +23,18 @@ def json_response_with_etag(
     payload: dict[str, Any],
     *,
     cache_control: str | None = None,
+    precomputed_body: bytes | None = None,
+    precomputed_etag: str | None = None,
 ) -> Response:
-    body = json_bytes(payload)
-    etag = payload_etag(body)
+    if precomputed_body is not None and precomputed_etag is not None:
+        body = precomputed_body
+        etag = precomputed_etag
+    else:
+        body = json_bytes(payload)
+        etag = payload_etag(body)
     headers: dict[str, str] = {"ETag": etag}
     if cache_control:
         headers["Cache-Control"] = cache_control
     if request.headers.get("if-none-match") == etag:
         return Response(status_code=304, headers=headers)
-    return JSONResponse(content=payload, headers=headers)
+    return Response(content=body, media_type="application/json", headers=headers)

@@ -5,7 +5,8 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/auth/dashboard_role.dart';
 import '../../../../core/auth/session_notifier.dart';
 import '../../../../core/design_system/hexa_ds_tokens.dart';
-import '../../../../core/providers/home_dashboard_provider.dart';
+import '../../../../core/providers/home_dashboard_provider.dart'
+    show homeDashboardDataProvider, homeNotificationsListFetchEnabledProvider;
 import '../../../../core/providers/notifications_provider.dart';
 import '../../../../core/theme/hexa_colors.dart';
 
@@ -127,7 +128,11 @@ class HomeCompactHeader extends ConsumerWidget {
           ),
           IconButton(
             tooltip: 'Notifications',
-            onPressed: () => context.push('/notifications'),
+            onPressed: () {
+              ref.read(homeNotificationsListFetchEnabledProvider.notifier).state =
+                  true;
+              context.push('/notifications');
+            },
             icon: Badge(
               isLabelVisible: bellCount > 0,
               label: Text(

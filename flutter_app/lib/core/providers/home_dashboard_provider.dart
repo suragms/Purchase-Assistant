@@ -273,9 +273,25 @@ class HomeStockInHandSummary {
 /// Lazy-fetch gates for Home satellite providers (reduce cold-load GET count).
 final homeLowStockDetailFetchEnabledProvider = StateProvider<bool>((ref) => false);
 final homeStockMovementSectionVisibleProvider = StateProvider<bool>((ref) => false);
+final homeLowStockTopFetchEnabledProvider = StateProvider<bool>((ref) => false);
+final homePriorPeriodFetchEnabledProvider = StateProvider<bool>((ref) => false);
+final homeActivityFeedFetchEnabledProvider = StateProvider<bool>((ref) => false);
+final homeNotificationsListFetchEnabledProvider = StateProvider<bool>((ref) => false);
+final homeChecklistFetchEnabledProvider = StateProvider<bool>((ref) => false);
+final homeStaffSessionsFetchEnabledProvider = StateProvider<bool>((ref) => false);
+final homePendingDamageFetchEnabledProvider = StateProvider<bool>((ref) => false);
+
+/// Satellites defer until primary home-overview has data (avoids duplicate cold GETs).
+bool homeOverviewReadyForSatellites(dynamic ref) {
+  if (!shellBranchIsVisible(ref, ShellBranch.home)) return false;
+  if (homeTabHasOperationalBundle(ref)) return true;
+  final dash = ref.watch(homeDashboardDataProvider);
+  if (dash.refreshing) return false;
+  return !dash.snapshot.data.isEmpty;
+}
 
 /// True when Home tab can use bundled operational counts from [homeDashboardDataProvider].
-bool homeTabHasOperationalBundle(Ref ref) {
+bool homeTabHasOperationalBundle(dynamic ref) {
   if (!shellBranchIsVisible(ref, ShellBranch.home)) return false;
   return ref.watch(homeDashboardDataProvider).snapshot.data.operational != null;
 }
@@ -1073,7 +1089,7 @@ class HomeDashboardDataNotifier extends AutoDisposeNotifier<HomeDashboardDashSta
     final fetchedAt = _homeOverviewFetchedAt[dedupeKey];
     final cacheFresh = hasRenderableCache &&
         fetchedAt != null &&
-        DateTime.now().difference(fetchedAt) < const Duration(seconds: 45);
+        DateTime.now().difference(fetchedAt) < const Duration(seconds: 90);
     if (cacheFresh) {
       return HomeDashboardDashState(
         snapshot: seed,

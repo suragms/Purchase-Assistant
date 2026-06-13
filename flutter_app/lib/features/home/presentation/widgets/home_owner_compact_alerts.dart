@@ -5,7 +5,11 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/design_system/hexa_operational_tokens.dart';
 import '../../../../core/json_coerce.dart';
 import '../../../../core/providers/delivery_pipeline_provider.dart';
-import '../../../../core/providers/home_dashboard_provider.dart';
+import '../../../../core/providers/home_dashboard_provider.dart'
+    show
+        homeDashboardDataProvider,
+        homePendingDamageFetchEnabledProvider,
+        homeTabHasOperationalBundle;
 import '../../../../core/providers/purchase_damage_reports_provider.dart';
 import '../../../../core/providers/stock_providers.dart'
     show openingStockMissingProvider, stockStatusCountsProvider;
@@ -13,7 +17,7 @@ import '../../../../core/router/navigation_ext.dart';
 import '../../../../core/utils/snack.dart';
 
 /// Owner home: priority cards (low stock + pending delivery first), then opening/out.
-class HomeOwnerCompactAlerts extends ConsumerWidget {
+class HomeOwnerCompactAlerts extends ConsumerStatefulWidget {
   const HomeOwnerCompactAlerts({super.key});
 
   static const _critical = Color(0xFFDC2626);
@@ -21,8 +25,30 @@ class HomeOwnerCompactAlerts extends ConsumerWidget {
   static const _opening = Color(0xFFCA8A04);
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final status = ref.watch(stockStatusCountsProvider).valueOrNull ?? const {};
+  ConsumerState<HomeOwnerCompactAlerts> createState() =>
+      _HomeOwnerCompactAlertsState();
+}
+
+class _HomeOwnerCompactAlertsState extends ConsumerState<HomeOwnerCompactAlerts> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      ref.read(homePendingDamageFetchEnabledProvider.notifier).state = true;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final status = homeTabHasOperationalBundle(ref)
+        ? ref
+            .watch(homeDashboardDataProvider)
+            .snapshot
+            .data
+            .operational!
+            .stockStatusCounts
+        : ref.watch(stockStatusCountsProvider).valueOrNull ?? const {};
     final low = coerceToInt(status['low']) + coerceToInt(status['critical']);
     final out = coerceToInt(status['out']);
     final openingN =
@@ -46,7 +72,7 @@ class HomeOwnerCompactAlerts extends ConsumerWidget {
               child: _PriorityCard(
                 label: 'Low stock',
                 count: low,
-                accent: _warn,
+                accent: HomeOwnerCompactAlerts._warn,
                 onTap: () => pushLowStockDashboard(context),
               ),
             ),
@@ -55,7 +81,7 @@ class HomeOwnerCompactAlerts extends ConsumerWidget {
               child: _PriorityCard(
                 label: 'Pending delivery',
                 count: pending,
-                accent: _critical,
+                accent: HomeOwnerCompactAlerts._critical,
                 filled: pending > 0,
                 onTap: () => context.go('/purchase'),
               ),
@@ -87,7 +113,7 @@ class HomeOwnerCompactAlerts extends ConsumerWidget {
                   child: _SecondaryChip(
                     label: 'Opening stock',
                     count: openingN,
-                    accent: _opening,
+                    accent: HomeOwnerCompactAlerts._opening,
                     onTap: () => pushOpeningStockSetup(context),
                   ),
                 ),
@@ -97,7 +123,7 @@ class HomeOwnerCompactAlerts extends ConsumerWidget {
                   child: _SecondaryChip(
                     label: 'Out of stock',
                     count: out,
-                    accent: _critical,
+                    accent: HomeOwnerCompactAlerts._critical,
                     onTap: () => context.go('/stock?status=out'),
                   ),
                 ),

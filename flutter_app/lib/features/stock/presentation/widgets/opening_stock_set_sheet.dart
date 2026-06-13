@@ -7,7 +7,12 @@ import '../../../../core/design_system/hexa_responsive.dart';
 import '../../../../core/errors/user_facing_errors.dart';
 import '../../../../core/json_coerce.dart';
 import '../../../../core/providers/business_aggregates_invalidation.dart';
-import '../../../../core/providers/stock_providers.dart';
+import '../../../../core/providers/stock_providers.dart'
+    show
+        applyStockListRowPatch,
+        openingStockMissingProvider,
+        openingStockSetupProvider,
+        stockChangesFeedProvider;
 import '../../../../core/utils/unit_utils.dart';
 
 /// Shows compact bottom sheet to set opening stock.
@@ -111,8 +116,21 @@ class _OpeningStockSetBodyState extends ConsumerState<_OpeningStockSetBody> {
             idempotencyKey: _idempotencyKey,
           );
 
-      invalidateWarehouseSurfaces(ref, itemId: _itemId);
+      invalidateStockRowSaveSurfaces(
+        ref,
+        itemId: _itemId,
+        refreshItemDetail: true,
+      );
+      applyStockListRowPatch(
+        ref,
+        itemId: _itemId,
+        patch: {
+          'opening_stock_qty': parsed,
+          'opening_stock_locked': _locked || parsed > 0,
+        },
+      );
       ref.invalidate(openingStockSetupProvider);
+      ref.invalidate(openingStockMissingProvider);
       ref.invalidate(stockChangesFeedProvider);
 
       if (context.mounted) Navigator.of(context).pop(true);
