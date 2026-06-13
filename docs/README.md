@@ -5,7 +5,7 @@
 | `harisree/` | Product truth, deploy, UX system (`MASTER_REFERENCE.md`) |
 | `debug/` | Root-cause and investigation notes |
 | `plans/` | Feature rebuild plans (e.g. barcode scan) |
-| `archive/` | Historical plans, reports validation, session scratch |
+| `archive/` | *(removed — historical notes folded into `TASKS.md`)* |
 | `users/` | User management UX specs |
 | `TEST_RESULTS.md` | Latest regression sign-off snapshot |
 | `DATA_SOURCE_RENDER.md` | Render / data source ops |

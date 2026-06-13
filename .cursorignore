@@ -1,4 +1,8 @@
 ﻿# Heavy / generated — keep Cursor index small (reduces lag a lot)
+backend/.venv/
+**/__pycache__/
+.pytest_cache/
+.mypy_cache/
 node_modules/
 build/
 dist/
@@ -9,3 +13,6 @@ coverage/
 *.log
 *.sqlite
 *.db
+*.pgdump
+flutter_app/build_verbose.txt
+schema_missing_cols.sql
