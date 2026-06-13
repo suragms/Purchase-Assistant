@@ -366,9 +366,11 @@ void invalidateStockRowSaveSurfaces(
   bool reorderAlert = false,
   bool deferFullList = true,
   bool immediateListReconcile = false,
+  bool refreshItemDetail = false,
 }) {
-  if (itemId.isNotEmpty) {
-    invalidateWarehouseItemSurfacesLight(ref, itemId: itemId);
+  if (refreshItemDetail && itemId.isNotEmpty) {
+    ref.invalidate(stockItemDetailProvider(itemId));
+    ref.invalidate(stockItemActivityProvider(itemId));
   }
   ref.invalidate(stockStatusCountsProvider);
   ref.invalidate(stockFilteredStatusCountsProvider);
@@ -454,7 +456,6 @@ void invalidateStaffDeliverySurfacesLight(dynamic ref) {
   ref.invalidate(staffPendingDeliveriesProvider);
   ref.invalidate(staffTodayActivityProvider);
   ref.invalidate(staffTodaySummaryProvider);
-  ref.invalidate(stockListProvider);
   invalidateStaffHomeSurfacesLight(ref);
 }
 

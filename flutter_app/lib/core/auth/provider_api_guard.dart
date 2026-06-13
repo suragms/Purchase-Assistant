@@ -13,3 +13,16 @@ bool providerSkipApi(dynamic ref) {
   if (ref.read(activeSessionProvider) == null) return true;
   return false;
 }
+
+/// Wait for resume JWT / 401 gate to clear before item-detail fetches (avoids false "load failed").
+Future<void> awaitProviderApiReady(
+  dynamic ref, {
+  Duration maxWait = const Duration(seconds: 3),
+}) async {
+  if (!providerSkipApi(ref)) return;
+  final deadline = DateTime.now().add(maxWait);
+  while (providerSkipApi(ref)) {
+    if (DateTime.now().isAfter(deadline)) return;
+    await Future<void>.delayed(const Duration(milliseconds: 80));
+  }
+}

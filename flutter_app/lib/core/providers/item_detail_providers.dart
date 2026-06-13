@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../auth/provider_api_guard.dart';
 import '../auth/session_notifier.dart';
 import '../errors/user_facing_errors.dart';
 import 'catalog_providers.dart';
@@ -53,6 +54,9 @@ class ItemDetailBundle {
 
 /// Parallel fetch for item detail. Keep this light: it is mounted whenever
 /// `/catalog/item/:id` is opened.
+///
+/// Do not [ref.watch] leaf detail providers here — that caused reload loops when
+/// stock list saves invalidated [stockItemDetailProvider].
 final itemDetailBundleProvider =
     FutureProvider.autoDispose.family<ItemDetailBundle, String>((ref, itemId) async {
   final keepAlive = ref.keepAlive();
@@ -69,9 +73,15 @@ final itemDetailBundleProvider =
     );
   }
 
-  ref.watch(catalogItemDetailProvider(itemId));
-  ref.watch(stockItemDetailProvider(itemId));
-  ref.watch(stockItemActivityProvider(itemId));
+  await awaitProviderApiReady(ref);
+  if (providerSkipApi(ref)) {
+    return const ItemDetailBundle(
+      catalogItem: {},
+      stockDetail: {},
+      activity: {},
+      tradePurchases: [],
+    );
+  }
 
   Object? catalogError;
   Map<String, dynamic> catalog = {};

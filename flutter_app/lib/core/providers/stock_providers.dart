@@ -554,6 +554,8 @@ final stockItemDetailProvider =
   (ref, itemId) async {
     final session = ref.watch(sessionProvider);
     if (session == null) return {};
+    await awaitProviderApiReady(ref);
+    if (providerSkipApi(ref)) return {};
     try {
       return await ref.read(hexaApiProvider).getStockItem(
             businessId: session.primaryBusiness.id,

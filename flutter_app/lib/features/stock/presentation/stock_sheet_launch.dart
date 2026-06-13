@@ -63,5 +63,6 @@ Future<bool> openQuickStockWithFreshItem({
     item: item,
     initialMode: initialMode,
     skipInitialRefresh: true,
+    refreshItemDetail: true,
   );
 }

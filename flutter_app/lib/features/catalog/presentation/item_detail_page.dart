@@ -40,12 +40,11 @@ class ItemDetailPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     ref.listen<BusinessWriteEvent>(businessWriteEventProvider, (prev, next) {
       if (next.revision <= (prev?.revision ?? -1)) return;
+      if (next.kind == 'stock_patch') return;
       final purchaseOrStock = next.kind == 'purchase' ||
-          next.kind == 'stock' ||
-          next.kind == 'stock_patch';
+          next.kind == 'stock';
       if (purchaseOrStock &&
-          (next.affectsItem(itemId) ||
-              (next.isGlobal && next.kind != 'stock_patch'))) {
+          (next.affectsItem(itemId) || next.isGlobal)) {
         deferInvalidate(ref, itemDetailBundleProvider(itemId));
         deferInvalidate(ref, tradePurchasesForItemProvider(itemId));
         deferInvalidate(ref, stockItemDetailProvider(itemId));

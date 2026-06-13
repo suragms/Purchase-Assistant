@@ -43,6 +43,7 @@ Future<bool> showQuickStockActionSheet({
   required Map<String, dynamic> item,
   StockUpdateMode initialMode = StockUpdateMode.physical,
   bool skipInitialRefresh = false,
+  bool refreshItemDetail = false,
 }) async {
   final result = await showHexaBottomSheet<bool>(
     context: context,
@@ -53,6 +54,7 @@ Future<bool> showQuickStockActionSheet({
       parentRef: ref,
       initialMode: initialMode,
       skipInitialRefresh: skipInitialRefresh,
+      refreshItemDetail: refreshItemDetail,
     ),
   );
   return result == true;
@@ -64,12 +66,14 @@ class _QuickStockActionBody extends ConsumerStatefulWidget {
     required this.parentRef,
     this.initialMode = StockUpdateMode.physical,
     this.skipInitialRefresh = false,
+    this.refreshItemDetail = false,
   });
 
   final Map<String, dynamic> item;
   final WidgetRef parentRef;
   final StockUpdateMode initialMode;
   final bool skipInitialRefresh;
+  final bool refreshItemDetail;
 
   @override
   ConsumerState<_QuickStockActionBody> createState() =>
@@ -323,6 +327,7 @@ class _QuickStockActionBodyState extends ConsumerState<_QuickStockActionBody> {
         itemId: _itemId,
         immediateListReconcile: true,
         reorderAlert: crossedReorder,
+        refreshItemDetail: widget.refreshItemDetail,
       );
     });
     if (crossedReorder) {

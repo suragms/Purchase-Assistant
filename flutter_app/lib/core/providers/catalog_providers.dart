@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../auth/provider_api_guard.dart';
 import '../auth/session_notifier.dart';
 
 /// Default insights window: last 90 days (aligns with price intelligence default).
@@ -132,6 +133,8 @@ final catalogItemDetailProvider = FutureProvider.autoDispose
     .family<Map<String, dynamic>, String>((ref, itemId) async {
   final session = ref.watch(sessionProvider);
   if (session == null) return {};
+  await awaitProviderApiReady(ref);
+  if (providerSkipApi(ref)) return {};
   return ref.read(hexaApiProvider).getCatalogItem(
         businessId: session.primaryBusiness.id,
         itemId: itemId,

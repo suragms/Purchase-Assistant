@@ -28,7 +28,9 @@
 - [x] **BUG-014** Category items route: no double `Uri.decodeComponent`
 - [x] **BUG-015** `.gitignore` for `clean_analyze.txt`, `.cursor/KICHU`
 
-## Production bugs (2026-06-13)
+## Production bugs (2026-06-06)
+
+- [x] **BUG-018** Item detail reload loop / "load failed" — remove bundle `ref.watch` on leaf providers; skip `stock_patch` detail storm; await resume API gate; stock list save no longer busts detail unless opened from detail sheet
 
 - [x] **BUG-016** Stock list PHYS/SYS stale after quick save — pop before background invalidation; defer 500ms; immediate list reconcile (`e630e47`)
 - [x] **BUG-017** iOS PWA barcode dies after 1–2 scans — fresh MobileScanner on iOS, 400ms web timeout, keyboard scan-line pause (`e630e47`)

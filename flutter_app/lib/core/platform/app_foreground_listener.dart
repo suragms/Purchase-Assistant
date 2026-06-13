@@ -8,6 +8,8 @@ import '../auth/session_notifier.dart' show sessionProvider;
 import '../providers/business_aggregates_invalidation.dart';
 import '../providers/business_write_revision.dart'
     show markWarehouseGlobalInvalidated, warehouseGlobalInvalidateRecently;
+import '../providers/stock_providers.dart' show stockListLastFetchedAtProvider;
+import '../navigation/surface_refresh_policy.dart' show kStockListCacheTtl;
 import '../providers/realtime_events_provider.dart';
 import '../services/backup_auto_service.dart';
 import 'app_foreground_provider.dart';
@@ -114,7 +116,12 @@ class _AppForegroundListenerState extends ConsumerState<AppForegroundListener>
       }
       _lastWarehouseInvalidateAt = now;
       markWarehouseGlobalInvalidated(ref);
-      invalidateWarehouseSurfacesLight(ref);
+      final stockFetched = ref.read(stockListLastFetchedAtProvider);
+      final stockCacheFresh = stockFetched != null &&
+          now.difference(stockFetched) < kStockListCacheTtl;
+      if (!stockCacheFresh) {
+        invalidateWarehouseSurfacesLight(ref);
+      }
       ref.invalidate(realtimeInvalidationProvider);
       unawaited(maybeRunDailyAutoBackup(ref));
     } finally {
