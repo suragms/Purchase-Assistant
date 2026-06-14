@@ -48,8 +48,9 @@ flutter clean
 flutter pub get
 
 API_URL="${API_BASE_URL:-https://my-purchases-api.onrender.com}"
+BUILD_SHA="$(git -C "$ROOT" rev-parse --short HEAD 2>/dev/null || echo unknown)"
 
-echo "Building web (API=${API_URL})..."
+echo "Building web (API=${API_URL}, BUILD_SHA=${BUILD_SHA})..."
 flutter build web --release \
   -O2 \
   --pwa-strategy=none \
@@ -57,6 +58,7 @@ flutter build web --release \
   --no-source-maps \
   --no-wasm-dry-run \
   --dart-define=API_BASE_URL="$API_URL" \
+  --dart-define=BUILD_SHA="$BUILD_SHA" \
   2>&1 | tee "$BUILD_LOG"
 
 echo "Built: $ROOT/flutter_app/build/web"

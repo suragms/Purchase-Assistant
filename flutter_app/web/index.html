@@ -262,7 +262,7 @@
       if (!boot || boot.classList.contains('boot-error')) return;
       boot.classList.add('boot-error');
       boot.textContent =
-        'App error — hard refresh (Ctrl+Shift+R). If it continues, clear site data for this URL.';
+        'App error — close all tabs, clear site data for this URL, then reopen in Incognito. Need build b6e9da8+.';
       console.error(ev.error || ev.message);
     });
   </script>

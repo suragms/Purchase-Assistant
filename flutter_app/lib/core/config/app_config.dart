@@ -52,6 +52,12 @@ class AppConfig {
     defaultValue: 'http://127.0.0.1:8000',
   );
 
+  /// Git short SHA from Vercel build (`--dart-define=BUILD_SHA=…`). Empty on local dev.
+  static const String buildSha = String.fromEnvironment(
+    'BUILD_SHA',
+    defaultValue: '',
+  );
+
   /// Dio base URL for HTTP calls. On **web**, when [apiBaseUrl] targets local port 8000 and the app
   /// is opened on loopback (e.g. `http://localhost:8080`), this returns `http://localhost:8000`
   /// so the browser **Origin** matches the API host (`localhost` vs `127.0.0.1` are different

@@ -11,6 +11,7 @@ import '../../../core/auth/biometric_login.dart';
 import '../../../core/auth/auth_failure_policy.dart';
 import '../../../core/auth/session_notifier.dart';
 import '../../../core/router/post_auth_route.dart';
+import '../../../core/config/app_config.dart';
 import '../../../core/design_system/hexa_ds_tokens.dart';
 import '../../../core/theme/hexa_colors.dart';
 import 'widgets/auth_input_styles.dart';
@@ -540,6 +541,15 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                       ),
                     ),
                     const SizedBox(height: 8),
+                    if (AppConfig.buildSha.isNotEmpty)
+                      Text(
+                        'Build ${AppConfig.buildSha}',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: Colors.grey.shade500,
+                        ),
+                      ),
                     Text(
                       '© 2026',
                       textAlign: TextAlign.center,
