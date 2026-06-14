@@ -31,6 +31,11 @@ void _providerKeepAlive(Ref ref, Duration ttl) {
 /// Public alias for providers outside this file (e.g. warehouse alerts).
 void providerKeepAlive(Ref ref, Duration ttl) => _providerKeepAlive(ref, ttl);
 
+final Map<String, Future<Map<String, dynamic>>> _stockListInflight = {};
+final Map<String, Future<Map<String, dynamic>>> _openingMissingInflight = {};
+final Map<String, Future<Map<String, dynamic>>> _deliveryCountsInflight = {};
+final Map<String, Future<Map<String, dynamic>>> _stockAlertsSummaryInflight = {};
+
 /// Query for GET `/v1/businesses/{id}/stock/list`.
 class StockListQuery {
   const StockListQuery({
@@ -69,6 +74,11 @@ class StockListQuery {
 
   /// Server-side: only items with period purchases (requires [includePeriod]).
   final bool purchasedInPeriod;
+
+  /// Stable cache/dedupe key for list fetches (all query params except supplier).
+  String toCacheKey() =>
+      '$page|$perPage|$q|$category|$subcategory|'
+      '$status|$sort|$includePeriod|$periodStart|$periodEnd|$purchasedInPeriod';
 
   StockListQuery copyWith({
     int? page,
@@ -356,31 +366,38 @@ final stockListProvider = FutureProvider.autoDispose((ref) async {
       'per_page': query.perPage,
     };
   }
-  final queryKey =
-      '${query.page}|${query.perPage}|${query.q}|${query.category}|${query.subcategory}|'
-      '${query.status}|${query.sort}|${query.includePeriod}|${query.periodStart}|'
-      '${query.periodEnd}|${query.purchasedInPeriod}';
+  final queryKey = query.toCacheKey();
   final cachedKey = ref.read(stockListCacheQueryKeyProvider);
   final cachedBody = ref.read(stockListCachedBodyProvider);
   final etag = ref.read(stockListEtagProvider);
   final useEtag = query.page == 1 && cachedKey == queryKey && etag != null;
+  final bid = session.primaryBusiness.id;
+  final purchasedInPeriod = query.purchasedInPeriod ||
+      ref.read(stockOperationalFiltersProvider).purchasedInPeriodOnly;
+  final inflightKey =
+      '$bid|$queryKey|${useEtag ? etag : ''}|$purchasedInPeriod';
+  final api = ref.read(hexaApiProvider);
 
-  final res = await ref.read(hexaApiProvider).listStock(
-        businessId: session.primaryBusiness.id,
-        page: query.page,
-        perPage: query.perPage,
-        q: query.q,
-        category: query.category,
-        subcategory: query.subcategory,
-        status: query.status,
-        sort: query.sort,
-        includePeriod: query.includePeriod,
-        periodStart: query.periodStart,
-        periodEnd: query.periodEnd,
-        purchasedInPeriod: query.purchasedInPeriod ||
-            ref.read(stockOperationalFiltersProvider).purchasedInPeriodOnly,
-        ifNoneMatch: useEtag ? etag : null,
-      );
+  final res = await _stockListInflight.putIfAbsent(
+    inflightKey,
+    () => api
+        .listStock(
+          businessId: bid,
+          page: query.page,
+          perPage: query.perPage,
+          q: query.q,
+          category: query.category,
+          subcategory: query.subcategory,
+          status: query.status,
+          sort: query.sort,
+          includePeriod: query.includePeriod,
+          periodStart: query.periodStart,
+          periodEnd: query.periodEnd,
+          purchasedInPeriod: purchasedInPeriod,
+          ifNoneMatch: useEtag ? etag : null,
+        )
+        .whenComplete(() => _stockListInflight.remove(inflightKey)),
+  );
 
   if (res['_not_modified'] == true && cachedBody != null) {
     return cachedBody;
@@ -622,33 +639,56 @@ final stockItemAuditProvider =
   },
 );
 
+/// Raw GET `/stock/alerts/summary` — SSOT for chip counts off Home bundle.
+final stockAlertsSummaryProvider =
+    FutureProvider.autoDispose<Map<String, dynamic>>((ref) async {
+  _providerKeepAlive(ref, const Duration(seconds: 30));
+  final session = ref.watch(sessionProvider);
+  if (session == null || providerSkipApi(ref)) return const {};
+  final bid = session.primaryBusiness.id;
+  return _stockAlertsSummaryInflight.putIfAbsent(
+    bid,
+    () => ref
+        .read(hexaApiProvider)
+        .getStockAlertsSummary(businessId: bid)
+        .whenComplete(() => _stockAlertsSummaryInflight.remove(bid)),
+  );
+});
+
+Map<String, int> _stockStatusCountsFromAlertsSummary(
+  Map<String, dynamic> summary, {
+  int? allTotal,
+}) {
+  final outCount = (summary['active_out_of_stock'] as num?)?.toInt() ??
+      (summary['out_of_stock'] as num?)?.toInt() ??
+      0;
+  final resolvedAll = allTotal ??
+      (summary['total_items'] as num?)?.toInt();
+  return {
+    'all': resolvedAll ?? 0,
+    'low': (summary['low_stock'] as num?)?.toInt() ?? 0,
+    'critical': (summary['critical_stock'] as num?)?.toInt() ?? 0,
+    'out': outCount,
+    'missing_code': (summary['missing_item_code'] as num?)?.toInt() ?? 0,
+    'missing_barcode': (summary['missing_barcode'] as num?)?.toInt() ?? 0,
+  };
+}
+
 /// Status bucket counts for stock filter chips (authoritative server summary).
 final stockStatusCountsProvider =
     FutureProvider.autoDispose<Map<String, int>>((ref) async {
   final bundled = homeBundledStockStatusCounts(ref);
   if (bundled != null) return bundled;
-  final keepAlive = ref.keepAlive();
-  final timer = Timer(const Duration(minutes: 2), keepAlive.close);
-  ref.onDispose(timer.cancel);
+  _providerKeepAlive(ref, const Duration(minutes: 2));
   final session = ref.watch(sessionProvider);
   if (session == null) return {};
   final api = ref.read(hexaApiProvider);
   final bid = session.primaryBusiness.id;
 
-  final summary = await api.getStockAlertsSummary(businessId: bid);
+  final summary = await ref.watch(stockAlertsSummaryProvider.future);
   final allTotal = (summary['total_items'] as num?)?.toInt();
-  final outCount = (summary['active_out_of_stock'] as num?)?.toInt() ??
-      (summary['out_of_stock'] as num?)?.toInt() ??
-      0;
   if (allTotal != null && allTotal > 0) {
-    return {
-      'all': allTotal,
-      'low': (summary['low_stock'] as num?)?.toInt() ?? 0,
-      'critical': (summary['critical_stock'] as num?)?.toInt() ?? 0,
-      'out': outCount,
-      'missing_code': (summary['missing_item_code'] as num?)?.toInt() ?? 0,
-      'missing_barcode': (summary['missing_barcode'] as num?)?.toInt() ?? 0,
-    };
+    return _stockStatusCountsFromAlertsSummary(summary, allTotal: allTotal);
   }
 
   final res = await api.listStock(
@@ -658,14 +698,10 @@ final stockStatusCountsProvider =
     status: 'all',
     sort: 'recent',
   );
-  return {
-    'all': (res['total'] as num?)?.toInt() ?? 0,
-    'low': (summary['low_stock'] as num?)?.toInt() ?? 0,
-    'critical': (summary['critical_stock'] as num?)?.toInt() ?? 0,
-    'out': outCount,
-    'missing_code': (summary['missing_item_code'] as num?)?.toInt() ?? 0,
-    'missing_barcode': (summary['missing_barcode'] as num?)?.toInt() ?? 0,
-  };
+  return _stockStatusCountsFromAlertsSummary(
+    summary,
+    allTotal: (res['total'] as num?)?.toInt() ?? 0,
+  );
 });
 
 /// Pending/delivered truck counts for stock list filter chips.
@@ -678,21 +714,31 @@ final stockDeliveryIndicatorCountsProvider = FutureProvider.autoDispose<
   }
   final query = ref.watch(stockListQueryProvider);
   final op = ref.watch(stockOperationalFiltersProvider);
-  final counts = await ref.read(hexaApiProvider).stockDeliveryIndicatorCounts(
-        businessId: session.primaryBusiness.id,
-        q: query.q,
-        category: query.category,
-        subcategory: query.subcategory,
-        status: query.status,
-        sort: query.sort,
-        includePeriod: query.includePeriod,
-        periodStart: query.periodStart,
-        periodEnd: query.periodEnd,
-        missingBarcode: op.missingBarcodeOnly,
-        missingItemCode: op.missingItemCodeOnly,
-        reorderOnly: op.reorderOnly,
-        unit: op.unit,
-      );
+  final bid = session.primaryBusiness.id;
+  final inflightKey =
+      '$bid|${query.toCacheKey()}|${op.missingBarcodeOnly}|${op.missingItemCodeOnly}|'
+      '${op.reorderOnly}|${op.unit}';
+  final api = ref.read(hexaApiProvider);
+  final counts = await _deliveryCountsInflight.putIfAbsent(
+    inflightKey,
+    () => api
+        .stockDeliveryIndicatorCounts(
+          businessId: bid,
+          q: query.q,
+          category: query.category,
+          subcategory: query.subcategory,
+          status: query.status,
+          sort: query.sort,
+          includePeriod: query.includePeriod,
+          periodStart: query.periodStart,
+          periodEnd: query.periodEnd,
+          missingBarcode: op.missingBarcodeOnly,
+          missingItemCode: op.missingItemCodeOnly,
+          reorderOnly: op.reorderOnly,
+          unit: op.unit,
+        )
+        .whenComplete(() => _deliveryCountsInflight.remove(inflightKey)),
+  );
   return (
     pending: coerceToInt(counts['pending']),
     delivered: coerceToInt(counts['delivered']),
@@ -956,15 +1002,20 @@ final openingStockBulkSelectionProvider = StateProvider<Set<String>>(
 /// Items missing opening stock (home banners + critical alerts).
 final openingStockMissingProvider =
     FutureProvider.autoDispose<Map<String, dynamic>>((ref) async {
+  _providerKeepAlive(ref, const Duration(minutes: 2));
   if (!homeOverviewReadyForSatellites(ref)) {
     return {'items': <Map<String, dynamic>>[], 'missing_count': 0};
   }
-  _providerKeepAlive(ref, const Duration(minutes: 2));
   final session = ref.watch(sessionProvider);
   if (session == null) {
     return {'items': <Map<String, dynamic>>[], 'missing_count': 0};
   }
-  return ref.read(hexaApiProvider).getMissingOpeningStock(
-        businessId: session.primaryBusiness.id,
-      );
+  final bid = session.primaryBusiness.id;
+  return _openingMissingInflight.putIfAbsent(
+    bid,
+    () => ref
+        .read(hexaApiProvider)
+        .getMissingOpeningStock(businessId: bid)
+        .whenComplete(() => _openingMissingInflight.remove(bid)),
+  );
 });

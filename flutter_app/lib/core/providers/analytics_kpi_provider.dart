@@ -43,6 +43,30 @@ class AnalyticsKpi {
   final double totalTins;
 }
 
+final Map<String, DateTime> _tradeSummaryFetchedAt = {};
+final Map<String, AnalyticsKpi> _tradeSummaryCache = {};
+
+String _tradeSummaryCacheKey(String bid, String from, String to) =>
+    '$bid|$from|$to';
+
+AnalyticsKpi _analyticsKpiFromSummaryMap(Map<String, dynamic> m) {
+  final u = m['unit_totals'];
+  Map<String, dynamic> ut = {};
+  if (u is Map) {
+    ut = Map<String, dynamic>.from(u);
+  }
+  return AnalyticsKpi(
+    totalPurchase: coerceToDouble(m['total_purchase']),
+    totalQtyBase: coerceToDouble(m['total_qty']),
+    totalProfit: 0,
+    purchaseCount: coerceToInt(m['deals']),
+    totalKg: coerceToDouble(ut['total_kg']),
+    totalBags: coerceToDouble(ut['total_bags']),
+    totalBoxes: coerceToDouble(ut['total_boxes']),
+    totalTins: coerceToDouble(ut['total_tins']),
+  );
+}
+
 final analyticsKpiProvider =
     FutureProvider.autoDispose<AnalyticsKpi>((ref) async {
   final link = ref.keepAlive();
@@ -65,25 +89,24 @@ final analyticsKpiProvider =
   }
   final api = ref.read(hexaApiProvider);
   final fmt = DateFormat('yyyy-MM-dd');
+  final bid = session.primaryBusiness.id;
+  final fromStr = fmt.format(range.from);
+  final toStr = fmt.format(range.to);
+  final cacheKey = _tradeSummaryCacheKey(bid, fromStr, toStr);
+  final fetchedAt = _tradeSummaryFetchedAt[cacheKey];
+  if (fetchedAt != null &&
+      DateTime.now().difference(fetchedAt) < const Duration(seconds: 60)) {
+    final cached = _tradeSummaryCache[cacheKey];
+    if (cached != null) return cached;
+  }
   final m = await api.tradePurchaseSummary(
-    businessId: session.primaryBusiness.id,
-    from: fmt.format(range.from),
-    to: fmt.format(range.to),
+    businessId: bid,
+    from: fromStr,
+    to: toStr,
     tzOffsetMinutes: localTzOffsetMinutes,
   );
-  final u = m['unit_totals'];
-  Map<String, dynamic> ut = {};
-  if (u is Map) {
-    ut = Map<String, dynamic>.from(u);
-  }
-  return AnalyticsKpi(
-    totalPurchase: coerceToDouble(m['total_purchase']),
-    totalQtyBase: coerceToDouble(m['total_qty']),
-    totalProfit: 0,
-    purchaseCount: coerceToInt(m['deals']),
-    totalKg: coerceToDouble(ut['total_kg']),
-    totalBags: coerceToDouble(ut['total_bags']),
-    totalBoxes: coerceToDouble(ut['total_boxes']),
-    totalTins: coerceToDouble(ut['total_tins']),
-  );
+  final kpi = _analyticsKpiFromSummaryMap(m);
+  _tradeSummaryFetchedAt[cacheKey] = DateTime.now();
+  _tradeSummaryCache[cacheKey] = kpi;
+  return kpi;
 });

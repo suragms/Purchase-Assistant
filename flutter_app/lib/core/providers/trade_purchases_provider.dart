@@ -138,7 +138,7 @@ final tradePurchasesForAlertsProvider =
   return ref.watch(tradePurchasesRecentSnapshotProvider);
 });
 
-/// Staff home + deliveries — not gated on owner [ShellBranch.home].
+/// Staff home + deliveries — shares [tradePurchasesRecentSnapshotProvider] SSOT.
 final staffTradePurchasesForAlertsProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
   final link = ref.keepAlive();
@@ -148,10 +148,7 @@ final staffTradePurchasesForAlertsProvider =
   final session = ref.watch(activeSessionProvider);
   if (session == null) return [];
   if (session.primaryBusiness.role.toLowerCase() != 'staff') return [];
-  return ref.read(hexaApiProvider).listTradePurchases(
-        businessId: session.primaryBusiness.id,
-        limit: kTradePurchasesAlertFetchLimit,
-      );
+  return ref.watch(tradePurchasesRecentSnapshotProvider.future);
 });
 
 final staffTradePurchasesForAlertsParsedProvider =

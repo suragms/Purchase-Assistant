@@ -62,7 +62,10 @@ class _HomeAnalyticsCardState extends ConsumerState<HomeAnalyticsCard> {
       );
     }
 
-    if (shellAsync.hasError && dash.isEmpty && _lastDash == null) {
+    if (shellAsync.hasError &&
+        !dashState.refreshing &&
+        dash.isEmpty &&
+        _lastDash == null) {
       return _cardShell(
         child: FriendlyLoadError(
           message: 'Could not load analytics',

@@ -22,7 +22,11 @@ import '../../../core/navigation/surface_refresh_policy.dart';
 import '../../../core/providers/app_period_provider.dart'
     show homePeriodSyncListenerProvider;
 import '../../../core/providers/home_dashboard_provider.dart'
-    show bustHomeDashboardVolatileCaches, homeDashboardDataProvider;
+    show
+        bustHomeDashboardVolatileCaches,
+        homeDashboardDataProvider,
+        homePageSatellitesEnabledProvider,
+        homeTabHasOperationalBundle;
 import '../../../core/providers/home_owner_dashboard_providers.dart'
     show
         homeRecentActivityFeedProvider,
@@ -84,6 +88,7 @@ class _HomePageState extends ConsumerState<HomePage>
   Timer? _rtPollHome;
   Timer? _refreshDebounce;
   Timer? _resumeRefreshDebounce;
+  Timer? _satellitesEnableTimer;
   bool _homeTimersActive = false;
   bool _handlingPurchasePostSave = false;
   int _lastUnread = 0;
@@ -94,6 +99,7 @@ class _HomePageState extends ConsumerState<HomePage>
   DateTime? _lastWriteRevisionRefresh;
   DateTime? _homeLastRefreshedAt;
   bool _coldStartRetried = false;
+  ProviderSubscription<AsyncValue<({int low, int critical})>>? _stockAlertSub;
   bool _throttleHomeInvalidate({bool force = false}) {
     if (force) {
       _lastThrottledInvalidate = DateTime.now();
@@ -145,7 +151,11 @@ class _HomePageState extends ConsumerState<HomePage>
     ref.invalidate(stockLowTopHomeProvider);
     ref.invalidate(stockVariancesTodayProvider);
     ref.invalidate(stockAuditPeriodProvider);
-    _invalidateAlertProviders();
+    if (homeTabHasOperationalBundle(ref)) {
+      ref.invalidate(notificationCenterCoordinatorProvider);
+    } else {
+      _invalidateAlertProviders();
+    }
   }
 
   void _setHomePollingActive(bool active) {
@@ -173,6 +183,44 @@ class _HomePageState extends ConsumerState<HomePage>
     });
   }
 
+  void _onStockAlertCounts(
+    AsyncValue<({int low, int critical})>? prev,
+    AsyncValue<({int low, int critical})> next,
+  ) {
+    if (!ref.read(localNotificationsOptInProvider)) return;
+    next.whenData((counts) {
+      if (!mounted) return;
+      final count = counts.low + counts.critical;
+      if (count <= _lastNotifiedLowCount) {
+        _lastNotifiedLowCount = count;
+        return;
+      }
+      _lastNotifiedLowCount = count;
+      final rows = ref.read(stockLowTopHomeProvider).valueOrNull;
+      if (rows != null && rows.isNotEmpty) {
+        final r = rows.first;
+        final name =
+            r['name']?.toString() ?? r['item_name']?.toString() ?? 'Item';
+        final qty = r['stock_qty'] ?? r['quantity'] ?? r['on_hand'];
+        final unit =
+            r['unit']?.toString() ?? r['stock_unit']?.toString() ?? '';
+        final qtyLabel = qty != null
+            ? '${qty.toString()} ${unit.trim()} left'.trim()
+            : 'running low';
+        unawaited(LocalNotificationsService.instance.showLowStockItem(
+          itemName: name,
+          detail: qtyLabel,
+        ));
+      } else {
+        unawaited(LocalNotificationsService.instance.showLowStockItem(
+          itemName: 'Inventory',
+          detail:
+              count == 1 ? '1 item running low' : '$count items running low',
+        ));
+      }
+    });
+  }
+
   @override
   void initState() {
     super.initState();
@@ -180,6 +228,16 @@ class _HomePageState extends ConsumerState<HomePage>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       _lastUnread = ref.read(notificationsUnreadCountProvider);
+      _satellitesEnableTimer?.cancel();
+      _satellitesEnableTimer = Timer(const Duration(milliseconds: 500), () {
+        if (!mounted) return;
+        ref.read(homePageSatellitesEnabledProvider.notifier).state = true;
+      });
+      _stockAlertSub?.close();
+      _stockAlertSub = ref.listenManual(
+        stockAlertCountsProvider,
+        _onStockAlertCounts,
+      );
       // IndexedStack keeps Home mounted on other tabs — never reset shell branch here
       // (ShellScreen owns branch sync). Doing so broke Reports error handling.
       if (ref.read(shellCurrentBranchProvider) == ShellBranch.home &&
@@ -237,6 +295,8 @@ class _HomePageState extends ConsumerState<HomePage>
 
   @override
   void dispose() {
+    _stockAlertSub?.close();
+    _satellitesEnableTimer?.cancel();
     _rtPollHome?.cancel();
     _refreshDebounce?.cancel();
     _resumeRefreshDebounce?.cancel();
@@ -415,7 +475,7 @@ class _HomePageState extends ConsumerState<HomePage>
       return const SizedBox.shrink();
     }
 
-    if (!providerSkipApi(ref)) {
+    if (!providerSkipApi(ref) && ref.watch(homePageSatellitesEnabledProvider)) {
       ref.watch(notificationCenterCoordinatorProvider);
     }
 
@@ -442,40 +502,6 @@ class _HomePageState extends ConsumerState<HomePage>
         }
         _lastWriteRevisionRefresh = now;
         _scheduleRefresh(force: false);
-      });
-    });
-    ref.listen(stockAlertCountsProvider, (prev, next) {
-      if (!ref.read(localNotificationsOptInProvider)) return;
-      next.whenData((counts) {
-        if (!mounted) return;
-        final count = counts.low + counts.critical;
-        if (count <= _lastNotifiedLowCount) {
-          _lastNotifiedLowCount = count;
-          return;
-        }
-        _lastNotifiedLowCount = count;
-        final rows = ref.read(stockLowTopHomeProvider).valueOrNull;
-        if (rows != null && rows.isNotEmpty) {
-          final r = rows.first;
-          final name =
-              r['name']?.toString() ?? r['item_name']?.toString() ?? 'Item';
-          final qty = r['stock_qty'] ?? r['quantity'] ?? r['on_hand'];
-          final unit =
-              r['unit']?.toString() ?? r['stock_unit']?.toString() ?? '';
-          final qtyLabel = qty != null
-              ? '${qty.toString()} ${unit.trim()} left'.trim()
-              : 'running low';
-          unawaited(LocalNotificationsService.instance.showLowStockItem(
-            itemName: name,
-            detail: qtyLabel,
-          ));
-        } else {
-          unawaited(LocalNotificationsService.instance.showLowStockItem(
-            itemName: 'Inventory',
-            detail:
-                count == 1 ? '1 item running low' : '$count items running low',
-          ));
-        }
       });
     });
 

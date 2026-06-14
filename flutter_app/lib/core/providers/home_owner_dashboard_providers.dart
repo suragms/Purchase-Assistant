@@ -149,8 +149,8 @@ class HomeInventorySummary {
 
 final homeInventorySummaryProvider =
     FutureProvider.autoDispose<HomeInventorySummary>((ref) async {
-  final inHand =
-      ref.watch(homeDashboardDataProvider).snapshot.data.stockInHand;
+  final dashState = ref.watch(homeDashboardDataProvider);
+  final inHand = dashState.snapshot.data.stockInHand;
   if (homeTabHasOperationalBundle(ref) && inHand != null) {
     return HomeInventorySummary(
       totalValueInr: inHand.totalValueInr,
@@ -160,6 +160,9 @@ final homeInventorySummaryProvider =
       kg: inHand.kg,
       itemCount: inHand.itemCount,
     );
+  }
+  if (dashState.refreshing && !homeTabHasOperationalBundle(ref)) {
+    return HomeInventorySummary.empty;
   }
   _providerKeepAlive(ref, const Duration(minutes: 5));
   final session = ref.watch(activeSessionProvider);

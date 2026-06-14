@@ -26,6 +26,15 @@ class DioAutoRetryInterceptor extends Interceptor {
   int _delayMs(DioException err, int attempt) {
     final sc = err.response?.statusCode;
     if (sc == 503) {
+      if (attempt == 1) {
+        final ra = err.response?.headers.value('retry-after')?.trim();
+        if (ra != null && ra.isNotEmpty) {
+          final sec = int.tryParse(ra);
+          if (sec != null && sec > 0 && sec <= 30) {
+            return sec * 1000;
+          }
+        }
+      }
       return const [3000, 6000, 12000, 20000][math.min(attempt - 1, 3)];
     }
     return const [100, 300, 900][math.min(attempt - 1, 2)];

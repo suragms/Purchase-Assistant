@@ -376,27 +376,27 @@ void invalidateWarehouseSurfacesLight(dynamic ref, {String? itemId}) {
   }
 }
 
-/// Opening stock bulk/single save — deferred list reconcile without KPI storm.
+/// Opening stock bulk/single save — row patch reconcile without deferred list storm.
 void invalidateOpeningStockSaveSurfaces(
   dynamic ref, {
   Iterable<String> itemIds = const [],
 }) {
-  deferInvalidateDelayed(
-    ref,
-    stockListProvider,
-    delay: const Duration(milliseconds: 500),
-  );
+  final ids = itemIds.where((id) => id.isNotEmpty).toList();
+  if (ids.isEmpty) {
+    ref.invalidate(stockListProvider);
+  } else {
+    for (final id in ids) {
+      unawaited(patchStockItemInCache(ref, itemId: id));
+      invalidateWarehouseItemSurfacesLight(ref, itemId: id);
+    }
+  }
   ref.invalidate(stockStatusCountsProvider);
   ref.invalidate(openingStockSetupProvider);
   ref.invalidate(openingStockMissingProvider);
   ref.invalidate(stockChangesFeedProvider);
-  for (final id in itemIds) {
-    if (id.isEmpty) continue;
-    invalidateWarehouseItemSurfacesLight(ref, itemId: id);
-  }
 }
 
-/// Tiered stock row save — patch overlay + list reconcile without financial KPI storm.
+/// Tiered stock row save — patch overlay + single-row reconcile (no deferred list storm).
 void invalidateStockRowSaveSurfaces(
   dynamic ref, {
   required String itemId,
@@ -411,14 +411,13 @@ void invalidateStockRowSaveSurfaces(
   }
   ref.invalidate(stockStatusCountsProvider);
   ref.invalidate(stockFilteredStatusCountsProvider);
+  ref.invalidate(stockDeliveryIndicatorCountsProvider);
   if (immediateListReconcile) {
     ref.invalidate(stockListProvider);
+  } else if (itemId.isNotEmpty) {
+    unawaited(patchStockItemInCache(ref, itemId: itemId));
   } else if (deferFullList) {
-    deferInvalidateDelayed(
-      ref,
-      stockListProvider,
-      delay: const Duration(milliseconds: 500),
-    );
+    ref.invalidate(stockListProvider);
   }
   if (reorderAlert) {
     ref.invalidate(homeInventorySummaryProvider);
@@ -463,14 +462,13 @@ void invalidateWarehouseSurfacesAfterStockWrite(
   ref.invalidate(stockStatusCountsProvider);
   ref.invalidate(stockFilteredStatusCountsProvider);
   if (deferFullList) {
-    const listDelay = Duration(milliseconds: 500);
-    deferInvalidateDelayed(ref, stockListProvider, delay: listDelay);
+    if (itemId != null && itemId.isNotEmpty) {
+      unawaited(patchStockItemInCache(ref, itemId: itemId));
+    } else {
+      ref.invalidate(stockListProvider);
+    }
     if (!light) {
-      deferInvalidateDelayed(
-        ref,
-        stockDeliveryIndicatorCountsProvider,
-        delay: listDelay,
-      );
+      ref.invalidate(stockDeliveryIndicatorCountsProvider);
     }
   } else if (!light) {
     ref.invalidate(stockListProvider);

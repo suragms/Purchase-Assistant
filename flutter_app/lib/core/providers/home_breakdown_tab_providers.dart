@@ -145,6 +145,10 @@ final homeShellReportsProvider =
     return ref.watch(homeShellReportsSyncCacheProvider) ??
         HomeShellReportsBundle.empty;
   }
+  if (!homeOverviewReadyForSatellites(ref)) {
+    return ref.watch(homeShellReportsSyncCacheProvider) ??
+        HomeShellReportsBundle.empty;
+  }
   final q = homeDateRangeForRef(ref);
   final bid = session.primaryBusiness.id;
   final dedupeKey = '$bid|${q.from}|${q.to}';

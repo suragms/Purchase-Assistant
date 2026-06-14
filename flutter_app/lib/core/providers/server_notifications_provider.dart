@@ -5,6 +5,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../auth/provider_api_guard.dart';
 import '../auth/session_notifier.dart' show activeSessionProvider, hexaApiProvider;
 
+final Map<String, Future<List<Map<String, dynamic>>>> _appNotificationsInflight =
+    {};
+
 /// Server-backed in-app notifications (GET …/notifications).
 final appNotificationsListProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
@@ -14,9 +17,15 @@ final appNotificationsListProvider =
   if (providerSkipApi(ref)) return [];
   final session = ref.watch(activeSessionProvider);
   if (session == null) return [];
-  return ref.read(hexaApiProvider).listAppNotifications(
-        businessId: session.primaryBusiness.id,
-      );
+  final bid = session.primaryBusiness.id;
+  final key = bid;
+  return _appNotificationsInflight.putIfAbsent(
+    key,
+    () => ref
+        .read(hexaApiProvider)
+        .listAppNotifications(businessId: bid)
+        .whenComplete(() => _appNotificationsInflight.remove(key)),
+  );
 });
 
 final appNotificationUnreadCountProvider =

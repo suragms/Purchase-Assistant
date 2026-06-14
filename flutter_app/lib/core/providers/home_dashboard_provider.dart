@@ -280,6 +280,7 @@ final homeNotificationsListFetchEnabledProvider = StateProvider<bool>((ref) => f
 final homeChecklistFetchEnabledProvider = StateProvider<bool>((ref) => false);
 final homeStaffSessionsFetchEnabledProvider = StateProvider<bool>((ref) => false);
 final homePendingDamageFetchEnabledProvider = StateProvider<bool>((ref) => false);
+final homePageSatellitesEnabledProvider = StateProvider<bool>((ref) => false);
 
 /// Satellites defer until primary home-overview has data (avoids duplicate cold GETs).
 bool homeOverviewReadyForSatellites(dynamic ref) {
@@ -694,7 +695,7 @@ void bustHomeDashboardVolatileCaches() {
   _dashInflight.clear();
   _homeOverviewSnapMemory.clear();
   _homeOverviewFetchedAt.clear();
-  _homeOverviewEtagMemory.clear();
+  // Preserve ETags so post-mutation refresh can 304 instead of full 200 bodies.
 }
 
 /// Thrown when [bustHomeDashboardVolatileCaches] ran while a fetch was in flight;
@@ -842,6 +843,23 @@ Future<HomeDashboardPayload> _homeDashboardPullFresh({
     throw StaleHomeDashboardFetch();
   }
 
+  final etagStored = _homeOverviewEtagMemory[dedupeKey];
+  final overviewFetchedAt = _homeOverviewFetchedAt[dedupeKey];
+  if (etagStored != null &&
+      etagStored.isNotEmpty &&
+      overviewFetchedAt != null &&
+      DateTime.now().difference(overviewFetchedAt) <
+          const Duration(seconds: 60)) {
+    final memSnap = _homeOverviewSnapMemory[dedupeKey];
+    if (memSnap != null) {
+      return ok(homeDashboardDataFromApiSnapshot(period, memSnap));
+    }
+    final hiveData = readCache();
+    if (hiveData != null) {
+      return ok(hiveData);
+    }
+  }
+
   try {
     final overviewSw = Stopwatch()..start();
     Future<Map<String, dynamic>> loadOverview() => api
@@ -872,6 +890,18 @@ Future<HomeDashboardPayload> _homeDashboardPullFresh({
         final fromSnapshot = homeDashboardDataFromApiSnapshot(period, cached);
         return ok(fromSnapshot);
       }
+      final hiveData = readCache();
+      if (hiveData != null) {
+        final raw = OfflineStore.getCachedTradeDashboardSnapshot(bid, from, to);
+        if (raw != null) {
+          _homeOverviewSnapMemory[dedupeKey] = Map<String, dynamic>.from(raw);
+        }
+        return ok(hiveData);
+      }
+      if (cachedData != null) {
+        return ok(cachedData, readDegraded: true);
+      }
+      throw StaleHomeDashboardFetch();
     }
     final etag = snap['_etag']?.toString();
     if (etag != null && etag.isNotEmpty) {
@@ -1107,6 +1137,7 @@ class HomeDashboardDataNotifier extends AutoDisposeNotifier<HomeDashboardDashSta
     }
 
     Future<void>.microtask(() async {
+      if (_dead) return;
       try {
         final bustAtStart = _homeDashBustGeneration;
         final payload = await _dashInflight.putIfAbsent(

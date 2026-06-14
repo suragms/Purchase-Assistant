@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../auth/provider_api_guard.dart';
@@ -5,6 +7,8 @@ import '../auth/session_notifier.dart' show activeSessionProvider, hexaApiProvid
 import '../json_coerce.dart';
 import 'home_dashboard_provider.dart' show homeDashboardDataProvider, homeTabHasOperationalBundle;
 import 'stock_providers.dart' show providerKeepAlive;
+
+final Map<String, Future<Map<String, dynamic>>> _warehouseAlertsInflight = {};
 
 /// Consolidated warehouse alert counts for home / stock LIVE chips.
 class WarehouseAlerts {
@@ -50,6 +54,20 @@ class WarehouseAlerts {
       evictionCount;
 }
 
+WarehouseAlerts _warehouseAlertsFromSummary(Map<String, dynamic> summary) {
+  return WarehouseAlerts(
+    pendingDeliveries: coerceToInt(summary['pending_deliveries']),
+    lowStock: coerceToInt(summary['low_stock']),
+    criticalStock: coerceToInt(summary['critical_stock']),
+    pendingVerifications: coerceToInt(summary['pending_verifications']),
+    missingBarcode: coerceToInt(summary['missing_barcode']),
+    missingUsageLogs: coerceToInt(summary['missing_usage_logs']),
+    evictionCount: coerceToInt(summary['eviction_count']),
+    checklistCompletionPct:
+        coerceToDoubleNullable(summary['checklist_completion_pct']) ?? 100,
+  );
+}
+
 final warehouseAlertsProvider =
     FutureProvider.autoDispose<WarehouseAlerts>((ref) async {
   if (homeTabHasOperationalBundle(ref)) {
@@ -66,19 +84,15 @@ final warehouseAlertsProvider =
   if (session == null) return const WarehouseAlerts();
   final api = ref.read(hexaApiProvider);
   final bid = session.primaryBusiness.id;
-  Map<String, dynamic> summary = {};
   try {
-    summary = await api.getWarehouseAlertsSummary(businessId: bid);
-  } catch (_) {}
-  return WarehouseAlerts(
-    pendingDeliveries: coerceToInt(summary['pending_deliveries']),
-    lowStock: coerceToInt(summary['low_stock']),
-    criticalStock: coerceToInt(summary['critical_stock']),
-    pendingVerifications: coerceToInt(summary['pending_verifications']),
-    missingBarcode: coerceToInt(summary['missing_barcode']),
-    missingUsageLogs: coerceToInt(summary['missing_usage_logs']),
-    evictionCount: coerceToInt(summary['eviction_count']),
-    checklistCompletionPct:
-        coerceToDoubleNullable(summary['checklist_completion_pct']) ?? 100,
-  );
+    final summary = await _warehouseAlertsInflight.putIfAbsent(
+      bid,
+      () => api
+          .getWarehouseAlertsSummary(businessId: bid)
+          .whenComplete(() => _warehouseAlertsInflight.remove(bid)),
+    );
+    return _warehouseAlertsFromSummary(summary);
+  } catch (_) {
+    return const WarehouseAlerts();
+  }
 });

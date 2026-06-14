@@ -87,6 +87,7 @@ def _apply_get_cache_control(request: Request, response) -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    app.state.server_ready = False
     settings = get_settings()
     settings.validate_production_safety()
     logging.basicConfig(level=getattr(logging, settings.log_level.upper(), logging.INFO))
@@ -277,6 +278,7 @@ async def lifespan(app: FastAPI):
     except Exception as e:  # noqa: BLE001
         logger.warning("APScheduler not started: %s", e)
 
+    app.state.server_ready = True
     yield
     for task in (low_stock_task, idle_delivery_task):
         if task is not None:
@@ -296,6 +298,23 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Harisree Warehouse API", lifespan=lifespan)
+
+# DEAD: routes not called by flutter_app/lib/core/api/hexa_api.dart — keep for admin/scripts;
+# audit with `rg '@router\\.(get|post)' backend/app/routers` vs hexa_api method paths.
+
+
+@app.middleware("http")
+async def cold_start_gate_middleware(request: Request, call_next):
+    if getattr(request.app.state, "server_ready", True):
+        return await call_next(request)
+    path = request.url.path.rstrip("/") or "/"
+    if path.endswith("/health") or path == "/health":
+        return await call_next(request)
+    return JSONResponse(
+        status_code=503,
+        content={"detail": "Server starting — retry shortly"},
+        headers={"Retry-After": "2"},
+    )
 
 
 def _http_measurement_payload(

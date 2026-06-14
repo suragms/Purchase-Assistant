@@ -6,6 +6,9 @@ import '../api/hexa_api.dart';
 import '../auth/session_notifier.dart' show activeSessionProvider, hexaApiProvider;
 import '../auth/provider_api_guard.dart';
 
+final Map<String, Future<List<Map<String, dynamic>>>> _tradePurchasesRecentInflight =
+    {};
+
 /// SSOT for `GET …/stock/audit/recent` — one fetch serves home, stock tabs, and activity.
 final stockAuditRecentSnapshotProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
@@ -30,10 +33,14 @@ final tradePurchasesRecentSnapshotProvider =
   if (providerSkipApi(ref)) return [];
   final session = ref.watch(activeSessionProvider);
   if (session == null) return [];
-  return ref.read(hexaApiProvider).listTradePurchases(
-        businessId: session.primaryBusiness.id,
-        limit: 50,
-      );
+  final bid = session.primaryBusiness.id;
+  return _tradePurchasesRecentInflight.putIfAbsent(
+    bid,
+    () => ref
+        .read(hexaApiProvider)
+        .listTradePurchases(businessId: bid, limit: 50)
+        .whenComplete(() => _tradePurchasesRecentInflight.remove(bid)),
+  );
 });
 
 void bustStockAuditRecentSnapshot(dynamic ref) {
