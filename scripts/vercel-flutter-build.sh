@@ -48,7 +48,6 @@ flutter clean
 flutter pub get
 
 API_URL="${API_BASE_URL:-https://my-purchases-api.onrender.com}"
-GOOGLE_ID="${GOOGLE_OAUTH_CLIENT_ID:-}"
 
 echo "Building web (API=${API_URL})..."
 flutter build web --release \
@@ -58,7 +57,6 @@ flutter build web --release \
   --no-source-maps \
   --no-wasm-dry-run \
   --dart-define=API_BASE_URL="$API_URL" \
-  --dart-define=GOOGLE_OAUTH_CLIENT_ID="$GOOGLE_ID" \
   2>&1 | tee "$BUILD_LOG"
 
 echo "Built: $ROOT/flutter_app/build/web"

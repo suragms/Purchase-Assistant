@@ -21,7 +21,6 @@ import '../router/post_auth_route.dart' show sessionIsStaff;
 import '../services/staff_activity_logger.dart';
 import '../../features/barcode/barcode_camera_session.dart';
 import 'auth_failure_policy.dart';
-import 'google_sign_in_helper.dart';
 import 'jwt_access_token.dart';
 import 'secure_token_store.dart';
 import 'session_cache.dart';
@@ -297,7 +296,7 @@ class SessionNotifier extends Notifier<Session?> {
     return null;
   }
 
-  /// Serializes [restore], [login], [register], and [signInWithGoogle] so a concurrent
+  /// Serializes [restore], [login], and [register] so a concurrent
   /// [restore] (splash / login / cold start) cannot fire `logout()` from a dead refresh
   /// while new tokens are being written — which used to clear storage mid sign-up and
   /// leave the Create Account button spinning forever.
@@ -812,37 +811,6 @@ class SessionNotifier extends Notifier<Session?> {
     _warmWorkspaceListCaches();
   }
 
-  Future<void> signInWithGoogle({required String idToken}) =>
-      _withAuthSerial(() => _signInWithGoogleImpl(idToken: idToken));
-
-  Future<void> _signInWithGoogleImpl({required String idToken}) async {
-    final api = ref.read(hexaApiProvider);
-    final store = ref.read(tokenStoreProvider);
-    api.setAuthToken(null);
-    final tokens = await api.loginWithGoogle(idToken: idToken);
-    await store.write(access: tokens.access, refresh: tokens.refresh);
-    api.setAuthToken(tokens.access);
-    var businesses = await api.meBusinesses();
-    final isSa = await _readIsSuperAdmin(api);
-    var session = Session(
-        accessToken: tokens.access,
-        refreshToken: tokens.refresh,
-        businesses: businesses,
-        isSuperAdmin: isSa);
-    state = session;
-    await _persistSession(session);
-    _clearAuthFailureFlags();
-    authRefresh.value++;
-    invalidateStaffHomeCaches(ref);
-    _notifyStaffAuthEvent(session, signedIn: true);
-    if (sessionIsStaff(session)) {
-      unawaited(StaffActivityLogger.logStaffLogin(ref));
-    }
-    _scheduleWorkspaceBootstrap();
-    _warmWorkspaceListCaches();
-  }
-
-  /// Reload workspaces from API (e.g. after branding update).
   Future<void> refreshBusinesses() async {
     if (_disposed) return;
     if (ref.read(authSessionExpiredProvider) ||
@@ -869,7 +837,7 @@ class SessionNotifier extends Notifier<Session?> {
     final store = ref.read(tokenStoreProvider);
     final cache = SessionCache(ref.read(sharedPreferencesProvider));
     // Drop session + Bearer immediately so home/stock providers stop polling
-    // while async Google sign-out and secure-store clears run (401 storms on web).
+    // while secure-store clears run (401 storms on web).
     state = null;
     api.setAuthToken(null);
     authRefresh.value++;
@@ -880,7 +848,6 @@ class SessionNotifier extends Notifier<Session?> {
         unawaited(StaffActivityLogger.logStaffLogout(ref));
       }
     }
-    await signOutGoogleIfNeeded();
     await store.clear();
     await cache.clear();
     try {
