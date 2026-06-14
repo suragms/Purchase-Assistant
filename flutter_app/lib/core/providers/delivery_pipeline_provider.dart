@@ -18,19 +18,20 @@ final deliveryPipelineProvider =
       ref.watch(homeDashboardDataProvider).snapshot.data.operational!.deliveryPipeline,
     );
   }
-  final link = ref.keepAlive();
-  final timer = Timer(const Duration(minutes: 3), link.close);
-  ref.onDispose(timer.cancel);
+  final disposed = registerProviderDisposeGuard(ref);
+  registerProviderKeepAliveTimer(ref, const Duration(minutes: 3));
 
   final session = ref.watch(activeSessionProvider);
   if (session == null) return {};
   try {
-    return await ref
+    final result = await ref
         .read(hexaApiProvider)
         .fetchDeliveryPipeline(
           businessId: session.primaryBusiness.id,
         )
         .timeout(const Duration(seconds: 15));
+    if (providerWasDisposed(disposed)) return {};
+    return result;
   } on TimeoutException {
     return {};
   }

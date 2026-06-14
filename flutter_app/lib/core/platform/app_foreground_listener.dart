@@ -4,7 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../auth/auth_failure_policy.dart';
-import '../auth/session_notifier.dart' show sessionProvider;
+import '../api/api_warmup.dart';
+import '../auth/session_notifier.dart' show hexaApiProvider, sessionProvider;
 import '../providers/business_aggregates_invalidation.dart';
 import '../providers/business_write_revision.dart'
     show markWarehouseGlobalInvalidated, warehouseGlobalInvalidateRecently;
@@ -95,6 +96,11 @@ class _AppForegroundListenerState extends ConsumerState<AppForegroundListener>
       try {
         ref.read(authApiGateProvider.notifier).clearSuspend();
       } catch (_) {}
+      // Warm API before invalidation storm (Render cold-start mitigation).
+      try {
+        await ApiWarmupService.pingHealth(ref.read(hexaApiProvider));
+      } catch (_) {}
+      if (!mounted) return;
       final now = DateTime.now();
       if (_lastForegroundRefreshAt != null &&
           now.difference(_lastForegroundRefreshAt!) <

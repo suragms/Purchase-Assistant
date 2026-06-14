@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../../features/shell/shell_branch_provider.dart';
 import '../auth/session_notifier.dart';
 import '../services/offline_store.dart';
@@ -27,13 +29,20 @@ import 'staff_home_providers.dart';
 import 'stock_providers.dart';
 import '../../features/purchase/providers/trade_purchase_detail_provider.dart';
 import '../models/trade_purchase_models.dart';
-import 'server_notifications_provider.dart';
+import 'server_notifications_provider.dart'
+    show
+        appNotificationUnreadCountProvider,
+        appNotificationsListProvider,
+        appNotificationsSummaryProvider;
 import 'warehouse_alerts_provider.dart';
 import 'deferred_invalidation.dart'
     show deferInvalidateDelayed;
+import '../auth/provider_api_guard.dart' show resolveInvalidationContainer;
 
 // Debounce guard: prevent stampede when called from multiple sources within 400ms.
 Timer? _invalidateDebounce;
+Timer? _invalidateTier2;
+Timer? _invalidateTier3;
 const _invalidateDebounceMs = 250;
 DateTime? _lastDashboardInvalidateAt;
 const _dashboardInvalidateMinGap = Duration(seconds: 5);
@@ -60,20 +69,24 @@ void markReportsDirty(dynamic ref) {
 
 /// Live refetch of Reports tab providers (call when Reports is visible).
 void invalidateAnalyticsDataLive(dynamic ref) {
-  ref.invalidate(analyticsKpiProvider);
-  ref.invalidate(analyticsDailyProfitProvider);
-  ref.invalidate(analyticsItemsTableProvider);
-  ref.invalidate(analyticsCategoriesTableProvider);
-  ref.invalidate(analyticsTypesTableProvider);
-  ref.invalidate(analyticsSuppliersTableProvider);
-  ref.invalidate(analyticsBrokersTableProvider);
-  ref.invalidate(analyticsBestSupplierInsightProvider);
-  ref.invalidate(fullReportsInsightsProvider);
-  ref.invalidate(fullReportsGoalsProvider);
-  ref.invalidate(reportsPriorPeriodDeltaProvider);
-  ref.invalidate(reportsPurchasesPayloadProvider);
-  ref.invalidate(reportsPeriodComparisonProvider);
-  ref.invalidate(reportsMovementSummaryProvider);
+  invalidateAnalyticsDataLiveFromContainer(resolveInvalidationContainer(ref));
+}
+
+void invalidateAnalyticsDataLiveFromContainer(ProviderContainer container) {
+  container.invalidate(analyticsKpiProvider);
+  container.invalidate(analyticsDailyProfitProvider);
+  container.invalidate(analyticsItemsTableProvider);
+  container.invalidate(analyticsCategoriesTableProvider);
+  container.invalidate(analyticsTypesTableProvider);
+  container.invalidate(analyticsSuppliersTableProvider);
+  container.invalidate(analyticsBrokersTableProvider);
+  container.invalidate(analyticsBestSupplierInsightProvider);
+  container.invalidate(fullReportsInsightsProvider);
+  container.invalidate(fullReportsGoalsProvider);
+  container.invalidate(reportsPriorPeriodDeltaProvider);
+  container.invalidate(reportsPurchasesPayloadProvider);
+  container.invalidate(reportsPeriodComparisonProvider);
+  container.invalidate(reportsMovementSummaryProvider);
 }
 
 /// KPIs and tables that depend on [analyticsDateRangeProvider] and/or entries.
@@ -86,47 +99,87 @@ void invalidateAnalyticsData(dynamic ref) {
 /// After purchases, entries, or other business writes, bust derived KPIs so
 /// Home, Reports, Contacts KPIs, and lists do not show stale numbers.
 void invalidateBusinessAggregates(dynamic ref) {
+  ProviderContainer container;
+  try {
+    container = resolveInvalidationContainer(ref);
+  } catch (_) {
+    return;
+  }
   _invalidateDebounce?.cancel();
   _invalidateDebounce = Timer(
     const Duration(milliseconds: _invalidateDebounceMs),
     () {
       _invalidateDebounce = null;
-      _doInvalidateBusinessAggregates(ref);
+      _doInvalidateBusinessAggregates(container);
     },
   );
 }
 
-void _doInvalidateBusinessAggregates(dynamic ref) {
+void _invalidateCatalogSurfacesFromContainer(ProviderContainer container) {
+  container.invalidate(itemCategoriesListProvider);
+  container.invalidate(catalogItemsListProvider);
+}
+
+void _invalidateContactsSurfacesFromContainer(ProviderContainer container) {
+  container.invalidate(contactsSuppliersEnrichedProvider);
+  container.invalidate(contactsBrokersEnrichedProvider);
+  container.invalidate(contactsCategoriesProvider);
+  container.invalidate(contactsItemsProvider);
+  container.invalidate(suppliersListProvider);
+  container.invalidate(brokersListProvider);
+}
+
+void _doInvalidateBusinessAggregates(ProviderContainer container) {
+  _invalidateTier2?.cancel();
+  _invalidateTier3?.cancel();
+
   bustHomeDashboardVolatileCaches();
   bustHomeShellReportsInflight();
   bustReportsPurchasesInflight();
-  final session = ref.read(sessionProvider);
+  final session = container.read(sessionProvider);
   if (session != null) {
     unawaited(
       OfflineStore.bustTradeAggregateCachesForBusiness(session.primaryBusiness.id),
     );
   }
-  markReportsDirty(ref);
-  if (shellBranchIsVisible(ref, ShellBranch.reports)) {
-    invalidateAnalyticsDataLive(ref);
-  }
-  final onHome = shellBranchIsVisible(ref, ShellBranch.home);
+  markReportsDirty(container);
+
+  final branch = container.read(shellCurrentBranchProvider);
+  final onHome = branch == ShellBranch.home;
+  final onReports = branch == ShellBranch.reports;
   final now = DateTime.now();
   final allowDashboardInvalidate = _lastDashboardInvalidateAt == null ||
       now.difference(_lastDashboardInvalidateAt!) >= _dashboardInvalidateMinGap;
-  if (allowDashboardInvalidate && onHome) {
-    _lastDashboardInvalidateAt = now;
-    ref.invalidate(homeDashboardDataProvider);
-    ref.invalidate(homeShellReportsProvider);
-  }
+
+  // Tier 1 — critical counts (immediate).
+  container.invalidate(deliveryPipelineProvider);
   if (onHome) {
-    ref.invalidate(homeInventorySummaryProvider);
+    container.invalidate(homeInventorySummaryProvider);
   }
-  invalidateContactsSurfacesLight(ref);
-  invalidateCatalogSurfacesLight(ref);
-  invalidateTradePurchaseCaches(ref);
-  invalidateUserManagementCaches(ref);
-  bumpBusinessDataWriteRevision(ref);
+  container.invalidate(appNotificationsSummaryProvider);
+  bumpBusinessDataWriteRevision(container);
+
+  // Tier 2 — lists after DB write propagation (~400ms).
+  _invalidateTier2 = Timer(const Duration(milliseconds: 400), () {
+    _invalidateTier2 = null;
+    invalidateTradePurchaseCachesFromContainer(container);
+    _invalidateCatalogSurfacesFromContainer(container);
+    _invalidateContactsSurfacesFromContainer(container);
+    container.invalidate(businessUsersListProvider);
+  });
+
+  // Tier 3 — heavy aggregates (~1.5s), home/reports only.
+  _invalidateTier3 = Timer(const Duration(milliseconds: 1500), () {
+    _invalidateTier3 = null;
+    if (onReports) {
+      invalidateAnalyticsDataLiveFromContainer(container);
+    }
+    if (allowDashboardInvalidate && onHome) {
+      _lastDashboardInvalidateAt = DateTime.now();
+      container.invalidate(homeDashboardDataProvider);
+      container.invalidate(homeShellReportsProvider);
+    }
+  });
 }
 
 /// Catalog item field save — lists + item detail only (no reports/home storm).

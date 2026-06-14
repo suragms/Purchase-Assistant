@@ -151,12 +151,16 @@ final stockItemIntelligenceProvider = FutureProvider.autoDispose
 
 final stockItemActivityProvider = FutureProvider.autoDispose
     .family<Map<String, dynamic>, String>((ref, itemId) async {
+  final disposed = registerProviderDisposeGuard(ref);
+  registerProviderKeepAliveTimer(ref, const Duration(seconds: 45));
   final session = ref.watch(sessionProvider);
   if (session == null) return {};
-  return ref.read(hexaApiProvider).getStockItemActivity(
+  final result = await ref.read(hexaApiProvider).getStockItemActivity(
         businessId: session.primaryBusiness.id,
         itemId: itemId,
       );
+  if (providerWasDisposed(disposed)) return {};
+  return result;
 });
 
 final stockListQueryProvider =
@@ -353,6 +357,7 @@ final stockChangesFeedProvider =
 });
 
 final stockListProvider = FutureProvider.autoDispose((ref) async {
+  final disposed = registerProviderDisposeGuard(ref);
   final keepAlive = ref.keepAlive();
   final timer = Timer(kStockListCacheTtl, keepAlive.close);
   ref.onDispose(timer.cancel);
@@ -399,6 +404,16 @@ final stockListProvider = FutureProvider.autoDispose((ref) async {
         .whenComplete(() => _stockListInflight.remove(inflightKey)),
   );
 
+  if (providerWasDisposed(disposed)) {
+    return cachedBody ??
+        <String, dynamic>{
+          'items': <dynamic>[],
+          'total': 0,
+          'page': query.page,
+          'per_page': query.perPage,
+        };
+  }
+
   if (res['_not_modified'] == true && cachedBody != null) {
     return cachedBody;
   }
@@ -435,7 +450,7 @@ final bulkStockListProvider =
   final api = ref.read(hexaApiProvider);
   // Smaller pages on web: large JSON over HTTP/3 (QUIC) often trips
   // ERR_QUIC_PROTOCOL_ERROR on flaky networks / Render cold paths.
-  final pageSize = kIsWeb ? 100 : 500;
+  final pageSize = kIsWeb ? 50 : 500;
   var page = 1;
   final merged = <Map<String, dynamic>>[];
   var total = 0;
@@ -608,20 +623,24 @@ Future<void> patchStockItemInCache(
 final stockItemDetailProvider =
     FutureProvider.autoDispose.family<Map<String, dynamic>, String>(
   (ref, itemId) async {
+    final disposed = registerProviderDisposeGuard(ref);
     _providerKeepAlive(ref, const Duration(seconds: 45));
     final session = ref.watch(sessionProvider);
     if (session == null) return {};
     await awaitProviderApiReady(ref);
     if (providerSkipApi(ref)) return {};
+    if (providerWasDisposed(disposed)) return {};
     try {
       final row = await ref.read(hexaApiProvider).getStockItem(
             businessId: session.primaryBusiness.id,
             itemId: itemId,
           );
+      if (providerWasDisposed(disposed)) return {};
       clearStockItemDetailPatch(ref, itemId: itemId);
       return row;
     } on DioException catch (e) {
       if (e.response?.statusCode == 404) return {};
+      if (providerWasDisposed(disposed)) return {};
       rethrow;
     }
   },
@@ -811,7 +830,7 @@ Future<List<Map<String, dynamic>>> _fetchStockListAllPages({
     final res = await api.listStock(
       businessId: businessId,
       page: page,
-      perPage: 200,
+      perPage: 50,
       status: status,
       sort: 'stock_asc',
       includePeriod: includePeriod,
@@ -836,6 +855,7 @@ final lowStockByCategoryProvider =
       !ref.watch(homeLowStockDetailFetchEnabledProvider)) {
     return {};
   }
+  final disposed = registerProviderDisposeGuard(ref);
   _providerKeepAlive(ref, const Duration(minutes: 2));
   final session = ref.watch(sessionProvider);
   if (session == null) return {};
@@ -862,6 +882,9 @@ final lowStockByCategoryProvider =
     periodStart: periodStart,
     periodEnd: periodEnd,
   );
+  if (providerWasDisposed(disposed)) {
+    return {};
+  }
   final byId = <String, Map<String, dynamic>>{};
   for (final item in lowRows) {
     final status = (item['stock_status']?.toString() ?? '').toLowerCase();

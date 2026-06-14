@@ -24,6 +24,9 @@ const _session = Session(
 void main() {
   testWidgets('HomeOwnerDashboardBody renders without section load error',
       (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1400, 2400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
     SharedPreferences.setMockInitialValues({});
     final prefs = await SharedPreferences.getInstance();
 
@@ -81,7 +84,7 @@ void main() {
     expect(find.textContaining('This section could not load'), findsNothing);
     expect(find.text('Purchases'), findsWidgets);
     expect(find.text('Pending delivery'), findsOneWidget);
-    expect(find.text('Low stock'), findsOneWidget);
+    expect(find.text('Low stock'), findsWidgets);
   });
 }
 

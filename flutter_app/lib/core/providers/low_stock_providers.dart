@@ -15,7 +15,7 @@ class LowStockOperationsQuery {
     this.q = '',
     this.filter = 'all',
     this.page = 1,
-    this.perPage = 200,
+    this.perPage = 50,
     this.category = '',
     this.subcategory = '',
     this.sort = 'priority',

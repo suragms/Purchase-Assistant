@@ -13,6 +13,7 @@ Future<T> _fetchWithRetry<T>(Future<T> Function() load) async {
     try {
       return await load();
     } catch (e, st) {
+      if (e is StateError) rethrow;
       logSilencedApiError(e, st);
       if (i == 2) rethrow;
       await Future<void>.delayed(Duration(milliseconds: 600 * (i + 1)));
@@ -52,32 +53,31 @@ class ItemDetailBundle {
       !hasAnyData;
 }
 
+const _emptyItemDetailBundle = ItemDetailBundle(
+  catalogItem: {},
+  stockDetail: {},
+  activity: {},
+  tradePurchases: [],
+);
+
 /// Parallel fetch for item detail warm-up (catalog + stock only).
 /// Activity / purchases load lazily when their tabs open.
 final itemDetailBundleProvider =
     FutureProvider.autoDispose.family<ItemDetailBundle, String>((ref, itemId) async {
-  final keepAlive = ref.keepAlive();
-  final timer = Timer(const Duration(seconds: 45), keepAlive.close);
-  ref.onDispose(timer.cancel);
+  final disposed = registerProviderDisposeGuard(ref);
+  registerProviderKeepAliveTimer(ref, const Duration(seconds: 45));
 
   final session = ref.watch(sessionProvider);
   if (session == null) {
-    return const ItemDetailBundle(
-      catalogItem: {},
-      stockDetail: {},
-      activity: {},
-      tradePurchases: [],
-    );
+    return _emptyItemDetailBundle;
   }
 
   await awaitProviderApiReady(ref);
   if (providerSkipApi(ref)) {
-    return const ItemDetailBundle(
-      catalogItem: {},
-      stockDetail: {},
-      activity: {},
-      tradePurchases: [],
-    );
+    return _emptyItemDetailBundle;
+  }
+  if (providerWasDisposed(disposed)) {
+    return _emptyItemDetailBundle;
   }
 
   Object? catalogError;
@@ -112,6 +112,10 @@ final itemDetailBundleProvider =
     }(),
   ]);
 
+  if (providerWasDisposed(disposed)) {
+    return _emptyItemDetailBundle;
+  }
+
   return ItemDetailBundle(
     catalogItem: catalog,
     stockDetail: stock,
@@ -126,21 +130,26 @@ final itemDetailBundleProvider =
 final itemStockIntelligenceProvider =
     FutureProvider.autoDispose.family<Map<String, dynamic>, String>(
         (ref, itemId) async {
+  final disposed = registerProviderDisposeGuard(ref);
+  registerProviderKeepAliveTimer(ref, const Duration(seconds: 45));
   final session = ref.watch(sessionProvider);
   if (session == null) return {};
   await awaitProviderApiReady(ref);
   if (providerSkipApi(ref)) return {};
+  if (providerWasDisposed(disposed)) return {};
   final now = DateTime.now();
   final end = DateTime(now.year, now.month, now.day);
   final start = end.subtract(const Duration(days: 29));
   String iso(DateTime d) =>
       '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
-  return ref.read(hexaApiProvider).getStockIntelligence(
+  final result = await ref.read(hexaApiProvider).getStockIntelligence(
         businessId: session.primaryBusiness.id,
         itemId: itemId,
         periodStart: iso(start),
         periodEnd: iso(end),
       );
+  if (providerWasDisposed(disposed)) return {};
+  return result;
 });
 
 /// Stock map for item detail sections — merges optimistic patches (no flash on save).

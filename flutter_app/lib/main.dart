@@ -13,6 +13,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'app.dart';
 import 'core/config/app_config.dart';
 import 'core/api/api_warmup.dart';
+import 'core/auth/provider_api_guard.dart' show registerRootProviderContainer;
 import 'core/auth/session_notifier.dart' show sessionProvider, hexaApiProvider;
 import 'core/theme/app_theme.dart';
 import 'core/theme/hexa_colors.dart';
@@ -58,6 +59,25 @@ bool _hexaAsyncErrorLikelyBenign(Object error) {
       s.contains('overflowed') ||
       s.contains('BoxConstraints') ||
       s.contains('setState() called after dispose()');
+}
+
+class _AppProviderObserver extends ProviderObserver {
+  @override
+  void providerDidFail(
+    ProviderBase<Object?> provider,
+    Object error,
+    StackTrace stackTrace,
+    ProviderContainer container,
+  ) {
+    if (error is StateError && error.message.contains('onDispose')) {
+      return;
+    }
+    if (kDebugMode) {
+      debugPrint(
+        '[Provider Error] ${provider.name ?? provider.runtimeType}: $error',
+      );
+    }
+  }
 }
 
 void _installHexaPlatformAsyncErrorHook() {
@@ -276,8 +296,10 @@ class _HexaBootstrapState extends State<_HexaBootstrap> {
       }
 
       final container = ProviderContainer(
+        observers: [_AppProviderObserver()],
         overrides: [sharedPreferencesProvider.overrideWithValue(prefs)],
       );
+      registerRootProviderContainer(container);
       _bootstrapLog('ProviderContainer OK');
 
       try {

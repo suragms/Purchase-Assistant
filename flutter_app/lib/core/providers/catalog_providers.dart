@@ -131,14 +131,19 @@ final catalogVariantsProvider = FutureProvider.autoDispose
 
 final catalogItemDetailProvider = FutureProvider.autoDispose
     .family<Map<String, dynamic>, String>((ref, itemId) async {
+  final disposed = registerProviderDisposeGuard(ref);
+  registerProviderKeepAliveTimer(ref, const Duration(seconds: 45));
   final session = ref.watch(sessionProvider);
   if (session == null) return {};
   await awaitProviderApiReady(ref);
   if (providerSkipApi(ref)) return {};
-  return ref.read(hexaApiProvider).getCatalogItem(
+  if (providerWasDisposed(disposed)) return {};
+  final row = await ref.read(hexaApiProvider).getCatalogItem(
         businessId: session.primaryBusiness.id,
         itemId: itemId,
       );
+  if (providerWasDisposed(disposed)) return {};
+  return row;
 });
 
 /// Confirmed-trade aggregates per item in a category (server SSOT).
