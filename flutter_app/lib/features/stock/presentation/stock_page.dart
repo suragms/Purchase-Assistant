@@ -124,11 +124,35 @@ class _StockPageState extends ConsumerState<StockPage>
     _subcatCtrl.text = initialQuery.subcategory;
     _scroll.addListener(_onScrollLoadMore);
 
+    // Shell IndexedStack + tab resume gates can block stock/list while other XHRs succeed.
+    clearStuckAuthGates(ref);
+
+    _deliveryCountsPoll = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (!mounted) return;
+      if (providerSkipApi(ref)) return;
+      ref.invalidate(stockDeliveryIndicatorCountsProvider);
+    });
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _bootstrapStockListQueryOnce();
+      if (!_scroll.hasClients) return;
+      final saved = ref.read(stockListScrollOffsetProvider);
+      if (saved > 0) {
+        final max = _scroll.position.maxScrollExtent;
+        _scroll.jumpTo(saved.clamp(0.0, max));
+      }
+    });
+  }
+
+  /// One query sync on mount — avoids double stockListProvider restart (init + route sync).
+  void _bootstrapStockListQueryOnce() {
     final period = ref.read(stockPagePeriodProvider);
     final range = homePeriodRange(period);
     final endInclusive = range.end.subtract(const Duration(days: 1));
     var q = ref.read(stockListQueryProvider);
-    final routeStatus = _mapRouteStatus(widget.initialStatus);
+    final routeStatus = _mapRouteStatus(widget.initialStatus) ??
+        _mapRouteStatus(GoRouterState.of(context).uri.queryParameters['status']);
     if (routeStatus != null && q.status != routeStatus) {
       q = q.copyWith(status: routeStatus, page: 1);
     }
@@ -140,53 +164,23 @@ class _StockPageState extends ConsumerState<StockPage>
       periodStart: stockApiDate(range.start),
       periodEnd: stockApiDate(endInclusive),
     );
-    if (normalized.toCacheKey() != ref.read(stockListQueryProvider).toCacheKey()) {
-      ref.read(stockListQueryProvider.notifier).state = normalized;
-      ref.read(stockSelectedItemIdProvider.notifier).state = null;
-      clearStockListEtagCache(ref);
-    }
-
-    // Shell IndexedStack + tab resume gates can block stock/list while other XHRs succeed.
-    clearStuckAuthGates(ref);
-
-    final cached = stockListCachedDataForCurrentQuery(ref);
-    if (cached != null) {
-      _mergedData = mergeStockListPage(
-        previous: null,
-        incoming: cached,
-        page: 1,
-      );
-    }
-
-    _deliveryCountsPoll = Timer.periodic(const Duration(seconds: 30), (_) {
-      if (!mounted) return;
-      if (providerSkipApi(ref)) return;
-      ref.invalidate(stockDeliveryIndicatorCountsProvider);
-    });
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      _syncRouteQueryToStockList();
-      if (!_scroll.hasClients) return;
-      final saved = ref.read(stockListScrollOffsetProvider);
-      if (saved > 0) {
-        final max = _scroll.position.maxScrollExtent;
-        _scroll.jumpTo(saved.clamp(0.0, max));
+    if (normalized.toCacheKey() == ref.read(stockListQueryProvider).toCacheKey()) {
+      final cached = stockListCachedDataForCurrentQuery(ref);
+      if (cached != null && _mergedData == null && mounted) {
+        setState(() {
+          _mergedData = mergeStockListPage(
+            previous: null,
+            incoming: cached,
+            page: 1,
+          );
+        });
       }
-    });
-  }
-
-  void _syncRouteQueryToStockList() {
-    final uri = GoRouterState.of(context).uri;
-    final mapped = _mapRouteStatus(uri.queryParameters['status']);
-    if (mapped == null) return;
-    final q = ref.read(stockListQueryProvider);
-    if (q.status == mapped) return;
-    ref.read(stockListQueryProvider.notifier).state =
-        q.copyWith(status: mapped, page: 1);
-    _resetMerged();
+      return;
+    }
+    ref.read(stockListQueryProvider.notifier).state = normalized;
+    ref.read(stockSelectedItemIdProvider.notifier).state = null;
     clearStockListEtagCache(ref);
-    ref.invalidate(stockListProvider);
+    _resetMerged();
   }
 
   void _scheduleTransientStockListRetry() {
@@ -853,6 +847,19 @@ class _StockPageState extends ConsumerState<StockPage>
       final q = ref.read(stockListQueryProvider);
       final restoreOffset = _pendingScrollOffset;
       final incoming = next.value;
+      if (q.page == 1 && _mergedData == null) {
+        final merged = mergeStockListPage(
+          previous: null,
+          incoming: incoming,
+          page: 1,
+        );
+        if (mounted) {
+          setState(() {
+            _loadingMore = false;
+            _mergedData = merged;
+          });
+        }
+      }
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
         try {
@@ -890,12 +897,22 @@ class _StockPageState extends ConsumerState<StockPage>
     });
 
     final listAsync = ref.watch(stockListProvider);
+    // Repaint when RAM/live snapshot updates even if FutureProvider misses the completion.
+    ref.watch(stockListCachedBodyProvider);
+    ref.watch(stockListCacheQueryKeyProvider);
+    ref.watch(stockListLiveSnapshotProvider);
     final listQ = ref.watch(stockListQueryProvider);
     final op = ref.watch(stockOperationalFiltersProvider);
     final filterCount = countWarehouseActiveFilters(listQ, op);
     final ramCache = stockListCachedDataForCurrentQuery(ref);
-    final data = _mergedData ?? listAsync.valueOrNull ?? ramCache;
+    final pageOneRaw = listQ.page <= 1
+        ? (listAsync.valueOrNull ?? ramCache)
+        : null;
+    final data = listQ.page <= 1
+        ? (pageOneRaw ?? _mergedData)
+        : (_mergedData ?? listAsync.valueOrNull ?? ramCache);
     final isReloading = listAsync.isLoading && data != null;
+    final showInitialSkeleton = data == null && !listAsync.hasValue;
     final showDebounceProgress = _debounce?.isActive ?? false;
 
     // First paint: don't wait for _mergedData post-frame when page-1 data is ready.
@@ -942,7 +959,8 @@ class _StockPageState extends ConsumerState<StockPage>
                 : 'Warehouse list needs a valid session. Sign in and try again.',
         onRetry: () => unawaited(_retryStockAfterAuthOrApiBlock()),
       );
-    } else if (data == null && listAsync.isLoading) {
+    } else if (showInitialSkeleton &&
+        (listAsync.isLoading || listAsync.isRefreshing)) {
       body = const ListSkeleton(rowCount: 12);
     } else if (listAsync.hasError && data == null) {
       final err = listAsync.error;
@@ -1007,6 +1025,9 @@ class _StockPageState extends ConsumerState<StockPage>
         },
       );
     } else {
+      if (_transientListRetryCount < _maxTransientListRetries) {
+        _scheduleTransientStockListRetry();
+      }
       body = const ListSkeleton(rowCount: 12);
     }
 

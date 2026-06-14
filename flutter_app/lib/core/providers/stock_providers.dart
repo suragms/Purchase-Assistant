@@ -208,7 +208,12 @@ void clearStockListEtagCache(dynamic ref) {
   ref.read(stockListCachedBodyProvider.notifier).state = null;
   ref.read(stockListCacheQueryKeyProvider.notifier).state = null;
   ref.read(stockListLastFetchedAtProvider.notifier).state = null;
+  ref.read(stockListLiveSnapshotProvider.notifier).state = null;
 }
+
+/// Reactive last good page-1 list — UI watches this so 200 + cache write always repaints.
+final stockListLiveSnapshotProvider =
+    StateProvider<Map<String, dynamic>?>((ref) => null);
 
 /// Stock list period chips (Today / Week / Month / Year).
 final stockPagePeriodProvider =
@@ -250,6 +255,11 @@ bool stockListCacheBodyIsUsable(Map<String, dynamic>? body) {
 /// Last successful page-1 body for the active query (survives autoDispose races on web).
 Map<String, dynamic>? stockListCachedDataForCurrentQuery(dynamic ref) {
   final queryKey = ref.read(stockListQueryProvider).toCacheKey();
+  final live = ref.read(stockListLiveSnapshotProvider);
+  if (live != null && stockListCacheBodyIsUsable(live)) {
+    final liveKey = ref.read(stockListCacheQueryKeyProvider);
+    if (liveKey == queryKey) return Map<String, dynamic>.from(live);
+  }
   final cacheKey = ref.read(stockListCacheQueryKeyProvider);
   if (cacheKey != queryKey) return null;
   final cached = ref.read(stockListCachedBodyProvider);
@@ -273,6 +283,7 @@ void _writeStockListRamCache(
       ref.read(stockListCachedBodyProvider.notifier).state = next;
       ref.read(stockListCacheQueryKeyProvider.notifier).state = queryKey;
       ref.read(stockListLastFetchedAtProvider.notifier).state = DateTime.now();
+      ref.read(stockListLiveSnapshotProvider.notifier).state = next;
     } else if (query.page == 1 && res['_not_modified'] != true) {
       ref.read(stockListLastFetchedAtProvider.notifier).state = DateTime.now();
     }
@@ -464,7 +475,9 @@ final stockListProvider = FutureProvider<Map<String, dynamic>>((ref) async {
   if (session == null) {
     throw const StockListFetchBlockedException('no_session');
   }
-  await awaitProviderApiReady(ref);
+  if (!kIsWeb) {
+    await awaitProviderApiReady(ref);
+  }
   final skipApi = providerSkipApi(ref);
   if (skipApi) {
     final cachedBody = ref.read(stockListCachedBodyProvider);
