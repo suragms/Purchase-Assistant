@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../auth/provider_api_guard.dart';
 import '../auth/session_notifier.dart';
+import 'stock_list_exceptions.dart';
 
 /// Default insights window: last 90 days (aligns with price intelligence default).
 ({String from, String to}) catalogInsightsDefaultRange() {
@@ -134,15 +135,23 @@ final catalogItemDetailProvider = FutureProvider.autoDispose
   final disposed = registerProviderDisposeGuard(ref);
   registerProviderKeepAliveTimer(ref, const Duration(seconds: 45));
   final session = ref.watch(sessionProvider);
-  if (session == null) return {};
+  if (session == null) {
+    throw const StockListFetchBlockedException('no_session');
+  }
   await awaitProviderApiReady(ref);
-  if (providerSkipApi(ref)) return {};
-  if (providerWasDisposed(disposed)) return {};
+  if (providerSkipApi(ref)) {
+    throw const StockListFetchBlockedException('api_gate');
+  }
+  if (providerWasDisposed(disposed)) {
+    throw const ProviderFetchAborted();
+  }
   final row = await ref.read(hexaApiProvider).getCatalogItem(
         businessId: session.primaryBusiness.id,
         itemId: itemId,
       );
-  if (providerWasDisposed(disposed)) return {};
+  if (providerWasDisposed(disposed)) {
+    throw const ProviderFetchAborted();
+  }
   return row;
 });
 

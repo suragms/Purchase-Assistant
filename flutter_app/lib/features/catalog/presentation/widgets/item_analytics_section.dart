@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/design_system/hexa_operational_tokens.dart';
 import '../../../../core/json_coerce.dart';
 import '../../../../core/providers/item_detail_providers.dart';
+import '../../../../core/providers/stock_list_exceptions.dart';
 import '../../../../core/providers/stock_providers.dart'
     show stockItemDetailProvider;
 import '../../../../core/utils/unit_utils.dart';
@@ -55,6 +56,14 @@ class _ItemAnalyticsSectionState extends ConsumerState<ItemAnalyticsSection> {
         : null;
 
     if (stockFetch.hasError && !stockFetch.hasValue) {
+      if (isTransientStockFetchError(stockFetch.error)) {
+        return const Card(
+          child: Padding(
+            padding: EdgeInsets.all(24),
+            child: Center(child: CircularProgressIndicator()),
+          ),
+        );
+      }
       _scheduleAutoRetryOnce();
       return Card(
         child: Padding(
@@ -71,6 +80,14 @@ class _ItemAnalyticsSectionState extends ConsumerState<ItemAnalyticsSection> {
         intelAsync != null &&
         intelAsync.hasError &&
         !intelAsync.hasValue) {
+      if (isTransientStockFetchError(intelAsync.error)) {
+        return const Card(
+          child: Padding(
+            padding: EdgeInsets.all(24),
+            child: Center(child: CircularProgressIndicator()),
+          ),
+        );
+      }
       _scheduleAutoRetryOnce();
       return Card(
         child: Padding(

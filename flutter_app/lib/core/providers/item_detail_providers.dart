@@ -6,6 +6,7 @@ import '../auth/provider_api_guard.dart';
 import '../auth/session_notifier.dart';
 import '../errors/user_facing_errors.dart';
 import 'catalog_providers.dart';
+import 'stock_list_exceptions.dart';
 import 'stock_providers.dart';
 
 Future<T> _fetchWithRetry<T>(Future<T> Function() load) async {
@@ -133,10 +134,16 @@ final itemStockIntelligenceProvider =
   final disposed = registerProviderDisposeGuard(ref);
   registerProviderKeepAliveTimer(ref, const Duration(seconds: 45));
   final session = ref.watch(sessionProvider);
-  if (session == null) return {};
+  if (session == null) {
+    throw const StockListFetchBlockedException('no_session');
+  }
   await awaitProviderApiReady(ref);
-  if (providerSkipApi(ref)) return {};
-  if (providerWasDisposed(disposed)) return {};
+  if (providerSkipApi(ref)) {
+    throw const StockListFetchBlockedException('api_gate');
+  }
+  if (providerWasDisposed(disposed)) {
+    throw const ProviderFetchAborted();
+  }
   final now = DateTime.now();
   final end = DateTime(now.year, now.month, now.day);
   final start = end.subtract(const Duration(days: 29));
@@ -148,7 +155,9 @@ final itemStockIntelligenceProvider =
         periodStart: iso(start),
         periodEnd: iso(end),
       );
-  if (providerWasDisposed(disposed)) return {};
+  if (providerWasDisposed(disposed)) {
+    throw const ProviderFetchAborted();
+  }
   return result;
 });
 

@@ -8,6 +8,7 @@ import '../../../../core/design_system/hexa_operational_tokens.dart';
 import '../../../../core/design_system/hexa_responsive.dart';
 import '../../../../core/json_coerce.dart';
 import '../../../../core/providers/item_detail_providers.dart';
+import '../../../../core/providers/stock_list_exceptions.dart';
 import '../../../../core/providers/stock_providers.dart'
     show applyStockItemDetailFromSave, applyStockItemDetailPatch, stockItemDetailProvider;
 import '../../../../core/theme/hexa_colors.dart';
@@ -34,6 +35,12 @@ class ItemStockSnapshotCard extends ConsumerWidget {
       );
     }
     if (stockFetch.hasError && !stockFetch.hasValue) {
+      if (isTransientStockFetchError(stockFetch.error)) {
+        return const SizedBox(
+          height: 72,
+          child: Center(child: LinearProgressIndicator()),
+        );
+      }
       return _sectionRetryCard(
         context,
         ref,
@@ -135,8 +142,10 @@ class ItemStockSnapshotCard extends ConsumerWidget {
 
     final hasPhysicalCount = physicalQty > 0.001 ||
         stock['physical_stock_counted_at'] != null;
-    final diff = (stock['physical_stock_difference_qty'] as num?)?.toDouble() ??
-        (hasPhysicalCount ? physicalQty - systemQty : 0.0);
+    final diffField = stock['physical_stock_difference_qty'];
+    final diff = diffField != null
+        ? coerceToDouble(diffField)
+        : (hasPhysicalCount ? physicalQty - systemQty : 0.0);
 
     final updatedAtRaw = stock['last_stock_updated_at']?.toString();
     final updatedAt = updatedAtRaw != null ? DateTime.tryParse(updatedAtRaw)?.toLocal() : null;

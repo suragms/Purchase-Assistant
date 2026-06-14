@@ -15,6 +15,8 @@ import 'core/config/app_config.dart';
 import 'core/api/api_warmup.dart';
 import 'core/auth/provider_api_guard.dart'
     show ProviderFetchAborted, registerRootProviderContainer;
+import 'core/providers/stock_list_exceptions.dart'
+    show StockListFetchBlockedException;
 import 'core/auth/session_notifier.dart' show sessionProvider, hexaApiProvider;
 import 'core/theme/app_theme.dart';
 import 'core/theme/hexa_colors.dart';
@@ -54,6 +56,7 @@ bool _hexaAsyncErrorLikelyBenign(Object error) {
       s.contains('StateError') ||
       s.contains('Cannot call onDispose after a provider was disposed') ||
       s.contains('ProviderFetchAborted') ||
+      s.contains('StockListFetchBlockedException') ||
       s.contains('Cannot use "ref"') ||
       s.contains('Bad state: Cannot use') ||
       s.contains('minified:') ||
@@ -73,6 +76,7 @@ class _AppProviderObserver extends ProviderObserver {
     ProviderContainer container,
   ) {
     if (error is ProviderFetchAborted) return;
+    if (error is StockListFetchBlockedException) return;
     if (error is StateError &&
         (error.message.contains('onDispose') ||
             error.message.contains('disposed'))) {

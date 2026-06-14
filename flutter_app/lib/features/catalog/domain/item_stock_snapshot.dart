@@ -55,9 +55,8 @@ class ItemStockSnapshot {
     final pendingIncomingDays =
         row['pending_order_days'] is num ? (row['pending_order_days'] as num).toInt() : null;
 
-    final diffQty = (row['physical_stock_difference_qty'] as num?)
-            ?.toDouble() ??
-        (row['warehouse_diff_qty'] as num?)?.toDouble() ??
+    final diffQty = coerceToDoubleNullable(row['physical_stock_difference_qty']) ??
+        coerceToDoubleNullable(row['warehouse_diff_qty']) ??
         (physicalQty - systemQty);
 
     final lastUpdatedAtRaw = row['last_stock_updated_at']?.toString();

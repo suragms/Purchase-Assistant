@@ -142,7 +142,16 @@ final stockItemIntelligenceProvider = FutureProvider.autoDispose
   final disposed = registerProviderDisposeGuard(ref);
   registerProviderKeepAliveTimer(ref, const Duration(seconds: 45));
   final session = ref.watch(sessionProvider);
-  if (session == null) return {};
+  if (session == null) {
+    throw const StockListFetchBlockedException('no_session');
+  }
+  await awaitProviderApiReady(ref);
+  if (providerSkipApi(ref)) {
+    throw const StockListFetchBlockedException('api_gate');
+  }
+  if (providerWasDisposed(disposed)) {
+    throw const ProviderFetchAborted();
+  }
   final range = ref.watch(stockListQueryProvider);
   final result = await ref.read(hexaApiProvider).getStockIntelligence(
         businessId: session.primaryBusiness.id,
@@ -150,7 +159,9 @@ final stockItemIntelligenceProvider = FutureProvider.autoDispose
         periodStart: range.periodStart,
         periodEnd: range.periodEnd,
       );
-  if (providerWasDisposed(disposed)) return {};
+  if (providerWasDisposed(disposed)) {
+    throw const ProviderFetchAborted();
+  }
   return result;
 });
 
@@ -159,12 +170,23 @@ final stockItemActivityProvider = FutureProvider.autoDispose
   final disposed = registerProviderDisposeGuard(ref);
   registerProviderKeepAliveTimer(ref, const Duration(seconds: 45));
   final session = ref.watch(sessionProvider);
-  if (session == null) return {};
+  if (session == null) {
+    throw const StockListFetchBlockedException('no_session');
+  }
+  await awaitProviderApiReady(ref);
+  if (providerSkipApi(ref)) {
+    throw const StockListFetchBlockedException('api_gate');
+  }
+  if (providerWasDisposed(disposed)) {
+    throw const ProviderFetchAborted();
+  }
   final result = await ref.read(hexaApiProvider).getStockItemActivity(
         businessId: session.primaryBusiness.id,
         itemId: itemId,
       );
-  if (providerWasDisposed(disposed)) return {};
+  if (providerWasDisposed(disposed)) {
+    throw const ProviderFetchAborted();
+  }
   return result;
 });
 
@@ -208,11 +230,20 @@ bool stockListHasScopedFilters(StockListQuery q, StockOperationalFilters op) {
   if (q.q.trim().isNotEmpty) return true;
   if (q.category.trim().isNotEmpty) return true;
   if (q.supplier.trim().isNotEmpty) return true;
-  if (q.includePeriod) return true;
   if (q.purchasedInPeriod) return true;
   if (op.evictionOnly) return true;
   if (op.purchasedInPeriodOnly) return true;
   return false;
+}
+
+/// RAM ETag cache must not replay an empty page-1 payload (dispose/auth race artifact).
+bool stockListCacheBodyIsUsable(Map<String, dynamic>? body) {
+  if (body == null || body.isEmpty) return false;
+  if (body['_not_modified'] == true) return false;
+  final total = coerceToInt(body['total']);
+  if (total > 0) return true;
+  final items = body['items'];
+  return items is List && items.isNotEmpty;
 }
 
 int _warehouseChipFilterCount(StockListQuery q, StockOperationalFilters op) {
@@ -386,7 +417,9 @@ final stockListProvider = FutureProvider.autoDispose((ref) async {
   await awaitProviderApiReady(ref);
   if (providerSkipApi(ref)) {
     final cachedBody = ref.read(stockListCachedBodyProvider);
-    if (cachedBody != null) return cachedBody;
+    if (stockListCacheBodyIsUsable(cachedBody)) {
+      return Map<String, dynamic>.from(cachedBody!);
+    }
     throw const StockListFetchBlockedException('api_gate');
   }
   final queryKey = query.toCacheKey();
@@ -427,7 +460,9 @@ final stockListProvider = FutureProvider.autoDispose((ref) async {
     );
   } on DioException {
     if (providerWasDisposed(disposed)) {
-      if (cachedBody != null) return cachedBody;
+      if (stockListCacheBodyIsUsable(cachedBody)) {
+        return Map<String, dynamic>.from(cachedBody!);
+      }
       throw const ProviderFetchAborted();
     }
     rethrow;
@@ -436,7 +471,9 @@ final stockListProvider = FutureProvider.autoDispose((ref) async {
   _stockListAbortIfDisposed(disposed);
 
   if (res['_not_modified'] == true) {
-    if (cachedBody != null) return cachedBody;
+    if (stockListCacheBodyIsUsable(cachedBody)) {
+      return Map<String, dynamic>.from(cachedBody!);
+    }
     // ETag matched but RAM cache missing (dispose/race) — bust and pull once.
     clearStockListEtagCache(ref);
     res = await api.listStock(
@@ -464,7 +501,10 @@ final stockListProvider = FutureProvider.autoDispose((ref) async {
   final newEtag = res['_etag']?.toString();
   if (!providerWasDisposed(disposed)) {
     try {
-      if (query.page == 1 && newEtag != null && newEtag.isNotEmpty) {
+      if (query.page == 1 &&
+          newEtag != null &&
+          newEtag.isNotEmpty &&
+          stockListCacheBodyIsUsable(next)) {
         ref.read(stockListEtagProvider.notifier).state = newEtag;
         ref.read(stockListCachedBodyProvider.notifier).state = next;
         ref.read(stockListCacheQueryKeyProvider.notifier).state = queryKey;
@@ -718,21 +758,31 @@ final stockItemDetailProvider =
     final disposed = registerProviderDisposeGuard(ref);
     registerProviderKeepAliveTimer(ref, const Duration(seconds: 45));
     final session = ref.watch(sessionProvider);
-    if (session == null) return {};
+    if (session == null) {
+      throw const StockListFetchBlockedException('no_session');
+    }
     await awaitProviderApiReady(ref);
-    if (providerSkipApi(ref)) return {};
-    if (providerWasDisposed(disposed)) return {};
+    if (providerSkipApi(ref)) {
+      throw const StockListFetchBlockedException('api_gate');
+    }
+    if (providerWasDisposed(disposed)) {
+      throw const ProviderFetchAborted();
+    }
     try {
       final row = await ref.read(hexaApiProvider).getStockItem(
             businessId: session.primaryBusiness.id,
             itemId: itemId,
           );
-      if (providerWasDisposed(disposed)) return {};
+      if (providerWasDisposed(disposed)) {
+        throw const ProviderFetchAborted();
+      }
       clearStockItemDetailPatch(ref, itemId: itemId);
-      return row;
+      return normalizeStockDetailMap(row);
     } on DioException catch (e) {
       if (e.response?.statusCode == 404) return {};
-      if (providerWasDisposed(disposed)) return {};
+      if (providerWasDisposed(disposed)) {
+        throw const ProviderFetchAborted();
+      }
       rethrow;
     }
   },

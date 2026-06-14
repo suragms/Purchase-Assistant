@@ -32,3 +32,30 @@ int? coerceToIntNullable(Object? v) {
   if (d == null) return null;
   return d.round();
 }
+
+/// Coerce known stock-detail numeric keys so UI never hits unsafe `as num` casts.
+Map<String, dynamic> normalizeStockDetailMap(Map<String, dynamic> row) {
+  const keys = [
+    'current_stock',
+    'physical_stock_qty',
+    'opening_stock_qty',
+    'reorder_level',
+    'period_purchased_qty',
+    'total_delivered_qty',
+    'physical_stock_difference_qty',
+    'warehouse_diff_qty',
+    'pending_delivery_qty',
+    'total_pending_delivery_qty',
+    'period_usage_qty',
+    'last_line_qty',
+    'kg_per_unit',
+    'kg_per_bag',
+  ];
+  final out = Map<String, dynamic>.from(row);
+  for (final k in keys) {
+    if (!out.containsKey(k) || out[k] == null) continue;
+    final parsed = coerceToDoubleNullable(out[k]);
+    if (parsed != null) out[k] = parsed;
+  }
+  return out;
+}

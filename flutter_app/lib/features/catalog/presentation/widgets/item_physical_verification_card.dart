@@ -12,6 +12,7 @@ import '../../../../core/auth/session_notifier.dart';
 import '../../../../core/design_system/hexa_operational_tokens.dart';
 import '../../../../core/json_coerce.dart';
 import '../../../../core/providers/item_detail_providers.dart';
+import '../../../../core/providers/stock_list_exceptions.dart';
 import '../../../../core/providers/stock_providers.dart'
     show
         applyStockItemDetailFromSave,
@@ -101,6 +102,9 @@ class _ItemPhysicalVerificationCardState
           _scheduleAutoRetry();
           return const SizedBox.shrink();
         }
+        if (isTransientStockFetchError(stockFetch.error)) {
+          return const SizedBox.shrink();
+        }
         return Card(
           shape:
               RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -149,7 +153,7 @@ class _ItemPhysicalVerificationCardState
     final countedAt =
         countedAtRaw != null ? DateTime.tryParse(countedAtRaw)?.toLocal() : null;
     final countedBy = stock['physical_stock_counted_by']?.toString();
-    final diff = (stock['physical_stock_difference_qty'] as num?)?.toDouble() ?? 0;
+    final diff = coerceToDouble(stock['physical_stock_difference_qty']);
 
     if (countedAt == null && audit.isEmpty) {
       return const SizedBox.shrink();

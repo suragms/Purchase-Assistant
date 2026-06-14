@@ -1193,6 +1193,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
                   child: StockPage(
                       mode: StockPageMode.owner,
                       initialTab: state.uri.queryParameters['tab'],
+                      initialStatus: state.uri.queryParameters['status'],
                     ),
                 ),
               ),
@@ -1276,6 +1277,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
                 builder: (context, state) => StockPage(
                       mode: StockPageMode.staff,
                       initialTab: state.uri.queryParameters['tab'],
+                      initialStatus: state.uri.queryParameters['status'],
                     ),
                 routes: [
                   GoRoute(

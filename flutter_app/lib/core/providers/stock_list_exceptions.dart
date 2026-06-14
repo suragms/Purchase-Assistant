@@ -1,3 +1,5 @@
+import '../auth/provider_api_guard.dart';
+
 /// Thrown when stock list must not return an empty success payload (auth gate / no session).
 class StockListFetchBlockedException implements Exception {
   const StockListFetchBlockedException([this.reason]);
@@ -26,4 +28,10 @@ bool isStockListAuthFailure(Object? error) {
 bool isStockListTransientBlock(Object? error) {
   if (error is! StockListFetchBlockedException) return false;
   return error.reason == 'api_gate' || error.reason == 'tab_not_visible';
+}
+
+/// Item detail / stock row fetches — loading skeleton, not hard error.
+bool isTransientStockFetchError(Object? error) {
+  if (error is ProviderFetchAborted) return true;
+  return isStockListTransientBlock(error);
 }
