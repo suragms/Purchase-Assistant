@@ -69,10 +69,12 @@ class _LowStockDashboardPageState extends ConsumerState<LowStockDashboardPage>
       if (!_tabs.indexIsChanging && mounted) setState(() {});
     });
 
+    // Enable fetch before first build — postFrameCallback was too late (All 0 flash).
+    ref.read(homeLowStockDetailFetchEnabledProvider.notifier).state = true;
+    ref.read(lowStockDashboardMountedProvider.notifier).update((n) => n + 1);
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      ref.read(lowStockDashboardMountedProvider.notifier).update((n) => n + 1);
-      ref.read(homeLowStockDetailFetchEnabledProvider.notifier).state = true;
       ref.invalidate(lowStockByCategoryProvider);
       final filter = GoRouterState.of(context).uri.queryParameters['filter'];
       final idx = _tabIndexFromFilter(filter);

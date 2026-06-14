@@ -119,6 +119,13 @@ class _QuickCatalogUnitSetupSheetState
       ref.invalidate(catalogItemDetailProvider(catalogId));
       invalidateCatalogItemSaveSurfaces(ref, itemId: catalogId);
       ref.invalidate(catalogItemsListProvider);
+      try {
+        await ref.read(hexaApiProvider).getCatalogItem(
+              businessId: session.primaryBusiness.id,
+              itemId: catalogId,
+            );
+        await ref.read(catalogItemsListProvider.future);
+      } catch (_) {}
       if (mounted) Navigator.of(context).pop(true);
     } on DioException catch (e) {
       if (mounted) {

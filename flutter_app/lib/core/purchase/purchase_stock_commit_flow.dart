@@ -31,6 +31,74 @@ Future<List<Map<String, dynamic>>> ensureCatalogRowsForCommitPreflight(
   }
 }
 
+/// Always refresh catalog rows linked on the purchase — list cache can lag after unit PATCH.
+Future<List<Map<String, dynamic>>> hydrateCatalogRowsForCommitPreflight(
+  WidgetRef ref,
+  TradePurchase purchase,
+  List<Map<String, dynamic>> rows,
+) async {
+  final session = ref.read(sessionProvider);
+  if (session == null) return rows;
+
+  final ids = <String>{};
+  for (final line in purchase.lines) {
+    final cid = line.catalogItemId?.trim();
+    if (cid != null && cid.isNotEmpty) ids.add(cid);
+  }
+  if (ids.isEmpty) return rows;
+
+  final listById = <String, Map<String, dynamic>>{
+    for (final row in rows)
+      if ((row['id']?.toString() ?? '').isNotEmpty) row['id'].toString(): row,
+  };
+
+  final api = ref.read(hexaApiProvider);
+  final bid = session.primaryBusiness.id;
+  final freshById = <String, Map<String, dynamic>>{};
+  for (final cid in ids) {
+    try {
+      freshById[cid] = await api.getCatalogItem(businessId: bid, itemId: cid);
+    } catch (_) {
+      final fallback = listById[cid];
+      if (fallback != null) freshById[cid] = fallback;
+    }
+  }
+  if (freshById.isEmpty) return rows;
+
+  return [
+    for (final row in rows)
+      if (!ids.contains(row['id']?.toString())) row,
+    ...freshById.values,
+  ];
+}
+
+/// After inline unit save, read the catalog row from API (list cache can lag behind PATCH).
+Future<List<Map<String, dynamic>>> refreshCatalogRowForCommitIssue(
+  WidgetRef ref,
+  PurchaseStockCommitIssue issue,
+  List<Map<String, dynamic>> rows,
+) async {
+  final cid = issue.catalogItemId?.trim();
+  if (cid == null || cid.isEmpty) return rows;
+  final session = ref.read(sessionProvider);
+  if (session == null) return rows;
+  try {
+    final fresh = await ref.read(hexaApiProvider).getCatalogItem(
+          businessId: session.primaryBusiness.id,
+          itemId: cid,
+        );
+    final next = <Map<String, dynamic>>[
+      for (final row in rows)
+        if (row['id']?.toString() != cid) row,
+      fresh,
+    ];
+    ref.invalidate(catalogItemDetailProvider(cid));
+    return next;
+  } catch (_) {
+    return ensureCatalogRowsForCommitPreflight(ref);
+  }
+}
+
 Future<Map<String, dynamic>?> catalogRowForCommitIssue(
   WidgetRef ref,
   PurchaseStockCommitIssue issue,
@@ -57,7 +125,8 @@ Future<List<PurchaseStockCommitIssue>> loadPurchaseStockCommitIssues(
   WidgetRef ref,
   TradePurchase purchase,
 ) async {
-  final rows = await ensureCatalogRowsForCommitPreflight(ref);
+  var rows = await ensureCatalogRowsForCommitPreflight(ref);
+  rows = await hydrateCatalogRowsForCommitPreflight(ref, purchase, rows);
   return findPurchaseStockCommitIssues(purchase, rows);
 }
 
@@ -97,7 +166,7 @@ Future<bool> resolvePurchaseStockCommitUnitSetup(
     if (!context.mounted) break;
     if (saved) {
       fixedAny = true;
-      rows = await ensureCatalogRowsForCommitPreflight(ref);
+      rows = await refreshCatalogRowForCommitIssue(ref, issue, rows);
     }
   }
   return fixedAny;

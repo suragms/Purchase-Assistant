@@ -18,7 +18,6 @@ import '../../features/stock/stock_list_row_patch.dart'
         kStockListPatchAtKey,
         serverRowNewerThanPatch,
         stockListPatchFromStockDetail;
-import 'analytics_kpi_provider.dart' show analyticsDateRangeProvider;
 import 'app_period_provider.dart';
 import 'deferred_invalidation.dart';
 import 'home_dashboard_provider.dart';
@@ -476,16 +475,6 @@ final stockListProvider = FutureProvider.autoDispose((ref) async {
             'per_page': query.perPage,
           };
     }
-  }
-
-  if (res['_not_modified'] == true) {
-    return cachedBody ??
-        <String, dynamic>{
-          'items': <dynamic>[],
-          'total': 0,
-          'page': query.page,
-          'per_page': query.perPage,
-        };
   }
 
   final next = Map<String, dynamic>.from(res)..remove('_etag');
@@ -998,34 +987,30 @@ final lowStockByCategoryProvider =
   if (session == null) return {};
   final api = ref.read(hexaApiProvider);
   final bid = session.primaryBusiness.id;
-  final period = ref.watch(homePeriodProvider);
-  final customRange = ref.watch(analyticsDateRangeProvider);
-  final range = homePeriodRange(
-    period,
-    now: DateTime.now(),
-    custom: period == HomePeriod.custom
-        ? (start: customRange.from, endInclusive: customRange.to)
-        : null,
-  );
-  final periodStart =
-      '${range.start.year}-${range.start.month.toString().padLeft(2, '0')}-${range.start.day.toString().padLeft(2, '0')}';
-  final periodEnd =
-      '${range.end.year}-${range.end.month.toString().padLeft(2, '0')}-${range.end.day.toString().padLeft(2, '0')}';
-  final lowRows = await _fetchStockListAllPages(
-    api: api,
-    businessId: bid,
-    status: 'all',
-    includePeriod: true,
-    periodStart: periodStart,
-    periodEnd: periodEnd,
-  );
+  final lowRows = <Map<String, dynamic>>[];
+  final seen = <String>{};
+  for (final st in ['low', 'critical', 'out']) {
+    final chunk = await _fetchStockListAllPages(
+      api: api,
+      businessId: bid,
+      status: st,
+      maxPages: 20,
+    );
+    if (providerWasDisposed(disposed)) return {};
+    for (final item in chunk) {
+      final id = item['id']?.toString();
+      if (id != null && id.isNotEmpty) {
+        if (seen.add(id)) lowRows.add(item);
+      } else {
+        lowRows.add(item);
+      }
+    }
+  }
   if (providerWasDisposed(disposed)) {
     return {};
   }
   final byId = <String, Map<String, dynamic>>{};
   for (final item in lowRows) {
-    final status = (item['stock_status']?.toString() ?? '').toLowerCase();
-    if (status != 'low' && status != 'out') continue;
     final id = item['id']?.toString();
     if (id != null && id.isNotEmpty) {
       byId[id] = item;
