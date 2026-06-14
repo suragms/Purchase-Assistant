@@ -272,6 +272,8 @@ class HomeStockInHandSummary {
 
 /// Lazy-fetch gates for Home satellite providers (reduce cold-load GET count).
 final homeLowStockDetailFetchEnabledProvider = StateProvider<bool>((ref) => false);
+/// >0 while [LowStockDashboardPage] is mounted (overlay from Home must still fetch).
+final lowStockDashboardMountedProvider = StateProvider<int>((ref) => 0);
 final homeStockMovementSectionVisibleProvider = StateProvider<bool>((ref) => false);
 final homeLowStockTopFetchEnabledProvider = StateProvider<bool>((ref) => false);
 final homePriorPeriodFetchEnabledProvider = StateProvider<bool>((ref) => false);

@@ -768,6 +768,20 @@ class _StockPageState extends ConsumerState<StockPage>
     final listQ = ref.watch(stockListQueryProvider);
     final op = ref.watch(stockOperationalFiltersProvider);
     final filterCount = countWarehouseActiveFilters(listQ, op);
+    if (_mergedData == null && listAsync.hasValue && listAsync.value != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || _mergedData != null) return;
+        final snap = ref.read(stockListProvider).valueOrNull;
+        if (snap == null) return;
+        setState(() {
+          _mergedData = mergeStockListPage(
+            previous: null,
+            incoming: snap,
+            page: ref.read(stockListQueryProvider).page,
+          );
+        });
+      });
+    }
     final data = _mergedData ?? listAsync.valueOrNull;
     final isReloading = listAsync.isLoading && data != null;
     final showDebounceProgress = _debounce?.isActive ?? false;

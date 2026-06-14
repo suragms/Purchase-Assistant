@@ -12,6 +12,8 @@ import '../../../core/design_system/hexa_ds_tokens.dart';
 import '../../../core/design_system/hexa_responsive.dart';
 import '../../../core/providers/notification_center_provider.dart';
 import '../../../core/providers/server_notifications_provider.dart';
+import '../../../core/providers/home_dashboard_provider.dart'
+    show homeLowStockDetailFetchEnabledProvider, lowStockDashboardMountedProvider;
 import '../../../core/providers/stock_providers.dart';
 import '../../../core/services/stock_list_pdf.dart';
 import '../../../core/services/pdf_actions.dart';
@@ -69,6 +71,9 @@ class _LowStockDashboardPageState extends ConsumerState<LowStockDashboardPage>
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
+      ref.read(lowStockDashboardMountedProvider.notifier).update((n) => n + 1);
+      ref.read(homeLowStockDetailFetchEnabledProvider.notifier).state = true;
+      ref.invalidate(lowStockByCategoryProvider);
       final filter = GoRouterState.of(context).uri.queryParameters['filter'];
       final idx = _tabIndexFromFilter(filter);
       if (idx != null && idx != _tabs.index) {
@@ -76,6 +81,14 @@ class _LowStockDashboardPageState extends ConsumerState<LowStockDashboardPage>
       }
     });
     _scheduleLoadSlowTimer();
+  }
+
+  @override
+  void deactivate() {
+    ref.read(lowStockDashboardMountedProvider.notifier).update(
+          (n) => n > 0 ? n - 1 : 0,
+        );
+    super.deactivate();
   }
 
   void _scheduleLoadSlowTimer() {

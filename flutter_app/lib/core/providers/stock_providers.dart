@@ -18,7 +18,6 @@ import '../../features/stock/stock_list_row_patch.dart'
         kStockListPatchAtKey,
         serverRowNewerThanPatch,
         stockListPatchFromStockDetail;
-import 'stock_list_exceptions.dart';
 import 'analytics_kpi_provider.dart' show analyticsDateRangeProvider;
 import 'app_period_provider.dart';
 import 'deferred_invalidation.dart';
@@ -372,9 +371,7 @@ final stockChangesFeedProvider =
 
 final stockListProvider = FutureProvider.autoDispose((ref) async {
   final disposed = registerProviderDisposeGuard(ref);
-  final keepAlive = ref.keepAlive();
-  final timer = Timer(kStockListCacheTtl, keepAlive.close);
-  ref.onDispose(timer.cancel);
+  registerProviderKeepAliveTimer(ref, kStockListCacheTtl);
   final session = ref.watch(sessionProvider);
   final query = ref.watch(stockListQueryProvider);
   if (session == null) {
@@ -386,7 +383,14 @@ final stockListProvider = FutureProvider.autoDispose((ref) async {
     };
   }
   if (providerSkipApi(ref)) {
-    throw const StockListFetchBlockedException('api_gate');
+    final cachedBody = ref.read(stockListCachedBodyProvider);
+    if (cachedBody != null) return cachedBody;
+    return <String, dynamic>{
+      'items': <dynamic>[],
+      'total': 0,
+      'page': query.page,
+      'per_page': query.perPage,
+    };
   }
   final queryKey = query.toCacheKey();
   final cachedKey = ref.read(stockListCacheQueryKeyProvider);
@@ -445,8 +449,43 @@ final stockListProvider = FutureProvider.autoDispose((ref) async {
         };
   }
 
-  if (res['_not_modified'] == true && cachedBody != null) {
-    return cachedBody;
+  if (res['_not_modified'] == true) {
+    if (cachedBody != null) return cachedBody;
+    // ETag matched but RAM cache missing (dispose/race) — bust and pull once.
+    clearStockListEtagCache(ref);
+    res = await api.listStock(
+      businessId: bid,
+      page: query.page,
+      perPage: query.perPage,
+      q: query.q,
+      category: query.category,
+      subcategory: query.subcategory,
+      status: query.status,
+      sort: query.sort,
+      includePeriod: query.includePeriod,
+      periodStart: query.periodStart,
+      periodEnd: query.periodEnd,
+      purchasedInPeriod: purchasedInPeriod,
+    );
+    if (providerWasDisposed(disposed)) {
+      return cachedBody ??
+          <String, dynamic>{
+            'items': <dynamic>[],
+            'total': 0,
+            'page': query.page,
+            'per_page': query.perPage,
+          };
+    }
+  }
+
+  if (res['_not_modified'] == true) {
+    return cachedBody ??
+        <String, dynamic>{
+          'items': <dynamic>[],
+          'total': 0,
+          'page': query.page,
+          'per_page': query.perPage,
+        };
   }
 
   final next = Map<String, dynamic>.from(res)..remove('_etag');
@@ -947,7 +986,9 @@ Future<List<Map<String, dynamic>>> _fetchStockListAllPages({
 
 final lowStockByCategoryProvider =
     FutureProvider.autoDispose<LowStockByCategoryMap>((ref) async {
+  final mounted = ref.watch(lowStockDashboardMountedProvider);
   if (shellBranchIsVisible(ref, ShellBranch.home) &&
+      mounted < 1 &&
       !ref.watch(homeLowStockDetailFetchEnabledProvider)) {
     return {};
   }
