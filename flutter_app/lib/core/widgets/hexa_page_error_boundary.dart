@@ -1,7 +1,7 @@
 import 'dart:async';
 
-import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../auth/provider_api_guard.dart';
@@ -54,6 +54,14 @@ bool hexaAsyncErrorLikelyBenign(Object error) {
   if (error is TimeoutException) return true;
   if (error is ProviderFetchAborted) return true;
   if (error is StockListFetchBlockedException) return true;
+  if (error is Error) {
+    final bare = error.toString();
+    if (bare == 'Error' ||
+        bare.startsWith('Instance of') ||
+        bare.contains('minified:')) {
+      return true;
+    }
+  }
   final s = error.toString();
   return s.contains('SocketException') ||
       s.contains('ClientException') ||
@@ -92,6 +100,11 @@ bool hexaAsyncErrorLikelyBenign(Object error) {
 bool hexaErrorLikelyNonFatal(FlutterErrorDetails details) {
   if (hexaAsyncErrorLikelyBenign(details.exception)) return true;
   if (details.silent) return true;
+  final summary = details.summary.toString();
+  if (summary.contains('Another exception was thrown') ||
+      summary.contains('minified:')) {
+    return true;
+  }
   final s = details.exceptionAsString();
   return s.contains('RenderFlex') ||
       s.contains('overflowed') ||
@@ -137,5 +150,7 @@ bool hexaErrorLikelyNonFatal(FlutterErrorDetails details) {
       s.contains('AssertionError') ||
       s.contains('is not a subtype of') ||
       s.contains('mA<void>') ||
-      s.contains('minified:mA');
+      s.contains('mE<void>') ||
+      s.contains('minified:mA') ||
+      s.contains('minified:mE');
 }

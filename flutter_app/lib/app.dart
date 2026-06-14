@@ -183,9 +183,14 @@ class _HexaErrorBoundaryState extends State<_HexaErrorBoundary> {
   Object? _error;
   void Function(FlutterErrorDetails)? _previousOnError;
 
+  /// Web PWA: per-page [FriendlyLoadError] handles API failures; a global hook
+  /// turns transient provider/async faults into "Could not load the app".
+  bool get _useGlobalErrorHook => !kIsWeb;
+
   @override
   void initState() {
     super.initState();
+    if (!_useGlobalErrorHook) return;
     _previousOnError = FlutterError.onError;
     FlutterError.onError = (FlutterErrorDetails details) {
       _previousOnError?.call(details);
@@ -204,7 +209,9 @@ class _HexaErrorBoundaryState extends State<_HexaErrorBoundary> {
 
   @override
   void dispose() {
-    FlutterError.onError = _previousOnError;
+    if (_useGlobalErrorHook) {
+      FlutterError.onError = _previousOnError;
+    }
     super.dispose();
   }
 
@@ -217,8 +224,10 @@ class _HexaErrorBoundaryState extends State<_HexaErrorBoundary> {
 
   @override
   Widget build(BuildContext context) {
-    if (_error != null) {
-      return Material(
+    if (!_useGlobalErrorHook || _error == null) {
+      return widget.child;
+    }
+    return Material(
         child: SafeArea(
           child: Padding(
             padding: const EdgeInsets.all(24),
@@ -264,9 +273,7 @@ class _HexaErrorBoundaryState extends State<_HexaErrorBoundary> {
             ),
           ),
         ),
-      );
-    }
-    return widget.child;
+    );
   }
 }
 
