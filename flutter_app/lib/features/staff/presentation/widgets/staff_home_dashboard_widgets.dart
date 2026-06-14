@@ -65,49 +65,53 @@ class StaffHomeFloorKpiRow extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final kpis = ref.watch(staffDeliveryPipelineKpisProvider);
+    final pipeline = ref.watch(deliveryPipelineProvider);
 
-    return kpis.when(
-      loading: () => const _StaffKpiRowSkeleton(),
-      error: (_, __) => SectionInlineError(
+    if (kpis == null && pipeline.isLoading) {
+      return const _StaffKpiRowSkeleton();
+    }
+    if (pipeline.hasError && kpis == null) {
+      return SectionInlineError(
         message: 'Could not load floor counts',
         onRetry: () {
           ref.invalidate(deliveryPipelineProvider);
           ref.invalidate(stockStatusCountsProvider);
         },
-      ),
-      data: (k) => Row(
-        children: [
-          Expanded(
-            child: _StaffKpiCard(
-              label: 'Pending',
-              value: '${k.pending}',
-              icon: Icons.local_shipping_outlined,
-              accent: const Color(0xFFE65100),
-              onTap: () => context.go('/staff/deliveries'),
-            ),
+      );
+    }
+    final k = kpis ?? const StaffFloorKpis();
+    return Row(
+      children: [
+        Expanded(
+          child: _StaffKpiCard(
+            label: 'Pending',
+            value: '${k.pending}',
+            icon: Icons.local_shipping_outlined,
+            accent: const Color(0xFFE65100),
+            onTap: () => context.go('/staff/deliveries'),
           ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: _StaffKpiCard(
-              label: 'Delivered',
-              value: '${k.delivered}',
-              icon: Icons.check_circle_outline,
-              accent: const Color(0xFF0F766E),
-              onTap: () => context.go('/staff/deliveries'),
-            ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: _StaffKpiCard(
+            label: 'Delivered',
+            value: '${k.delivered}',
+            icon: Icons.check_circle_outline,
+            accent: const Color(0xFF0F766E),
+            onTap: () => context.go('/staff/deliveries'),
           ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: _StaffKpiCard(
-              label: 'Low stock',
-              value: '${k.lowStock}',
-              icon: Icons.warning_amber_rounded,
-              accent: const Color(0xFFDC2626),
-              onTap: () => context.push('/staff/low-stock'),
-            ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: _StaffKpiCard(
+            label: 'Low stock',
+            value: '${k.lowStock}',
+            icon: Icons.warning_amber_rounded,
+            accent: const Color(0xFFDC2626),
+            onTap: () => context.push('/staff/low-stock'),
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }
@@ -405,19 +409,24 @@ class StaffHomeShiftSnapshotStrip extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final summaryAsync = ref.watch(staffTodaySummaryProvider);
+    final summary = ref.watch(staffTodaySummaryProvider);
     final pendingDel = ref.watch(staffPendingDeliveryCountProvider);
+    final activity = ref.watch(staffTodayActivityProvider);
+    final audits = ref.watch(staffTodayStockWorkProvider);
 
-    return summaryAsync.when(
-      loading: () => const StaffHomeShiftSnapshotSkeleton(),
-      error: (_, __) => StaffHomeShiftSnapshotRow(
+    if (summary == null && (activity.isLoading || audits.isLoading)) {
+      return const StaffHomeShiftSnapshotSkeleton();
+    }
+    if (activity.hasError || audits.hasError) {
+      return StaffHomeShiftSnapshotRow(
         scans: '–',
         stock: '–',
         purchases: '–',
         deliveries: pendingDel > 0 ? '$pendingDel' : '–',
-      ),
-      data: (s) {
-        if (s.total == 0 && pendingDel == 0) {
+      );
+    }
+    final s = summary ?? const StaffTodayActivitySummary();
+    if (s.total == 0 && pendingDel == 0) {
           return Material(
             color: Colors.white,
             shape: RoundedRectangleBorder(
@@ -432,13 +441,11 @@ class StaffHomeShiftSnapshotStrip extends ConsumerWidget {
             ),
           );
         }
-        return StaffHomeShiftSnapshotRow(
-          scans: '${s.scanned}',
-          stock: '${s.stockUpdates}',
-          purchases: '${s.purchases}',
-          deliveries: '$pendingDel',
-        );
-      },
+    return StaffHomeShiftSnapshotRow(
+      scans: '${s.scanned}',
+      stock: '${s.stockUpdates}',
+      purchases: '${s.purchases}',
+      deliveries: '$pendingDel',
     );
   }
 }

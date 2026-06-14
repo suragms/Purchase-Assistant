@@ -241,30 +241,28 @@ int _pipelinePendingCount(Map<String, dynamic> p) =>
     deliveryPipelinePendingCount(p);
 
 final staffDeliveryPipelineKpisProvider =
-    Provider.autoDispose<AsyncValue<StaffFloorKpis>>((ref) {
+    Provider.autoDispose<StaffFloorKpis?>((ref) {
   if (!_staffSessionActive(ref)) {
-    return const AsyncData(StaffFloorKpis());
+    return const StaffFloorKpis();
   }
   final pipeline = ref.watch(deliveryPipelineProvider);
   final low = ref.watch(staffLowStockAttentionCountProvider);
-  return pipeline.when(
-    data: (p) => AsyncData(
-      StaffFloorKpis(
-        pending: _pipelinePendingCount(p),
-        delivered: (p['stock_committed'] as num?)?.toInt() ?? 0,
-        lowStock: low,
-      ),
-    ),
-    loading: () => const AsyncLoading(),
-    error: (e, st) => AsyncError(e, st),
+  final p = pipeline.valueOrNull;
+  if (p == null) {
+    return pipeline.isLoading ? null : const StaffFloorKpis();
+  }
+  return StaffFloorKpis(
+    pending: _pipelinePendingCount(p),
+    delivered: (p['stock_committed'] as num?)?.toInt() ?? 0,
+    lowStock: low,
   );
 });
 
 /// Undelivered trade purchases visible to staff (for home alert pill).
 final staffPendingDeliveryCountProvider = Provider.autoDispose<int>((ref) {
   final kpis = ref.watch(staffDeliveryPipelineKpisProvider);
-  return kpis.valueOrNull?.pending ??
-      ref.watch(staffPendingDeliveriesProvider).valueOrNull?.length ??
+  return kpis?.pending ??
+      ref.watch(staffPendingDeliveriesProvider)?.length ??
       0;
 });
 
@@ -340,24 +338,28 @@ StaffDeliverySections groupStaffDeliverySections(List<TradePurchase> purchases) 
 }
 
 final staffDeliverySectionsProvider =
-    Provider.autoDispose<AsyncValue<StaffDeliverySections>>((ref) {
+    Provider.autoDispose<StaffDeliverySections?>((ref) {
   if (!_staffSessionActive(ref)) {
-    return const AsyncData(StaffDeliverySections());
+    return const StaffDeliverySections();
   }
   _assertStaffProviderRole(ref);
   final list = ref.watch(staffTradePurchasesForAlertsParsedProvider);
-  return list.whenData(groupStaffDeliverySections);
+  if (list == null) return null;
+  return groupStaffDeliverySections(list);
 });
 
 /// Warehouse deliveries staff can act on (arrive / verify) — oldest first.
 final staffPendingDeliveriesProvider =
-    Provider.autoDispose<AsyncValue<List<TradePurchase>>>((ref) {
+    Provider.autoDispose<List<TradePurchase>?>((ref) {
   final sections = ref.watch(staffDeliverySectionsProvider);
-  return sections.whenData((s) {
-    final pending = [...s.dispatched, ...s.arrived, ...s.pendingVerification];
-    pending.sort((a, b) => a.purchaseDate.compareTo(b.purchaseDate));
-    return pending;
-  });
+  if (sections == null) return null;
+  final pending = [
+    ...sections.dispatched,
+    ...sections.arrived,
+    ...sections.pendingVerification,
+  ];
+  pending.sort((a, b) => a.purchaseDate.compareTo(b.purchaseDate));
+  return pending;
 });
 
 /// Last barcode scans from device prefs (shared with [BarcodeScanPage]).
@@ -428,23 +430,22 @@ StaffTodayActivitySummary summarizeStaffToday({
 }
 
 final staffTodaySummaryProvider =
-    Provider.autoDispose<AsyncValue<StaffTodayActivitySummary>>((ref) {
+    Provider.autoDispose<StaffTodayActivitySummary?>((ref) {
   if (!_staffSessionActive(ref)) {
-    return const AsyncData(StaffTodayActivitySummary());
+    return const StaffTodayActivitySummary();
   }
   _assertStaffProviderRole(ref);
   final activity = ref.watch(staffTodayActivityProvider);
   final audits = ref.watch(staffTodayStockWorkProvider);
   if (activity.isLoading || audits.isLoading) {
-    return const AsyncLoading();
+    return null;
   }
-  if (activity.hasError) return AsyncError(activity.error!, activity.stackTrace!);
-  if (audits.hasError) return AsyncError(audits.error!, audits.stackTrace!);
-  return AsyncData(
-    summarizeStaffToday(
-      activityRows: activity.valueOrNull ?? [],
-      auditRows: audits.valueOrNull ?? [],
-    ),
+  if (activity.hasError || audits.hasError) {
+    return const StaffTodayActivitySummary();
+  }
+  return summarizeStaffToday(
+    activityRows: activity.valueOrNull ?? [],
+    auditRows: audits.valueOrNull ?? [],
   );
 });
 

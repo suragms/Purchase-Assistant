@@ -216,7 +216,7 @@ class _ItemEditPageState extends ConsumerState<ItemEditPage> {
   @override
   Widget build(BuildContext context) {
     final itemAsync = ref.watch(catalogItemDetailProvider(widget.itemId));
-    final stock = ref.watch(itemDetailStockProvider(widget.itemId)).valueOrNull;
+    final stock = ref.watch(itemDetailStockProvider(widget.itemId));
     final session = ref.watch(sessionProvider);
     final isOwner = session != null && sessionHasOwnerDashboard(session);
     final openingQty = coerceToDouble(stock?['opening_stock_qty']);

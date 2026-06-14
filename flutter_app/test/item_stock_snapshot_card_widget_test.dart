@@ -4,6 +4,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:harisree_warehouse/core/auth/session_notifier.dart';
 import 'package:harisree_warehouse/core/models/session.dart';
 import 'package:harisree_warehouse/core/providers/item_detail_providers.dart';
+import 'package:harisree_warehouse/core/providers/stock_providers.dart'
+    show stockItemDetailProvider;
 import 'package:harisree_warehouse/features/catalog/presentation/widgets/item_physical_verification_card.dart';
 import 'package:harisree_warehouse/features/catalog/presentation/widgets/item_stock_snapshot_card.dart';
 
@@ -51,9 +53,10 @@ Widget _wrap(Widget child) {
   return ProviderScope(
     overrides: [
       sessionProvider.overrideWith(() => _FakeSessionNotifier()),
-      itemDetailStockProvider(_itemId).overrideWith(
-        (ref) => AsyncValue.data(_stock),
+      stockItemDetailProvider(_itemId).overrideWith(
+        (ref) async => _stock,
       ),
+      itemDetailStockProvider(_itemId).overrideWith((ref) => _stock),
     ],
     child: MaterialApp(
       home: Scaffold(body: SingleChildScrollView(child: child)),

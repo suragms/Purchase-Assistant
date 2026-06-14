@@ -255,7 +255,7 @@ class BrokerHistoryPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(brokerHistoryLinesProvider(brokerId));
     final headerAsync = ref.watch(_brokerHistoryHeaderProvider(brokerId));
-    final purchasesAsync = ref.watch(tradePurchasesParsedProvider);
+    final purchases = ref.watch(tradePurchasesParsedProvider);
     final fmt = DateFormat.yMMMd();
     final notifier = ref.read(brokerHistoryLinesProvider(brokerId).notifier);
 
@@ -279,7 +279,7 @@ class BrokerHistoryPage extends ConsumerWidget {
                   (header?['name'] ?? header?['display_name'])?.toString().trim();
               final brokerPhone = header?['phone']?.toString().trim();
 
-              final merged = purchasesAsync.asData?.value;
+              final merged = purchases;
               if (merged == null) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(content: Text('Loading purchases… try again in a moment')),

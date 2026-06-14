@@ -24,8 +24,8 @@ class ItemSupplierIntelligenceSection extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final session = ref.watch(sessionProvider);
     final hideFinancials = session != null && !sessionCanSeeFinancials(session);
-    final purchasesAsync =
-        ref.watch(tradePurchasesForItemParsedProvider(itemId));
+    final purchasesFetch = ref.watch(tradePurchasesForItemProvider(itemId));
+    final purchases = ref.watch(tradePurchasesForItemParsedProvider(itemId));
 
     return Card(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -36,7 +36,7 @@ class ItemSupplierIntelligenceSection extends ConsumerWidget {
           children: [
             Text('Supplier intelligence', style: HexaOp.cardTitle(context)),
             const SizedBox(height: 8),
-            purchasesAsync.when(
+            purchasesFetch.when(
               loading: () => const Padding(
                 padding: EdgeInsets.symmetric(vertical: 14),
                 child: Center(child: CircularProgressIndicator()),
@@ -45,9 +45,9 @@ class ItemSupplierIntelligenceSection extends ConsumerWidget {
                 message: 'Could not load supplier intelligence',
                 onRetry: () => ref.invalidate(tradePurchasesForItemProvider(itemId)),
               ),
-              data: (purchases) {
+              data: (_) {
                 final rows = itemTradeHistoryRows(
-                  purchases,
+                  purchases ?? const [],
                   itemId,
                   catalogItemName: itemName,
                 );

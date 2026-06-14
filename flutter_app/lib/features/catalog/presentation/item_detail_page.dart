@@ -53,9 +53,10 @@ class ItemDetailPage extends ConsumerWidget {
     });
 
     final catalogAsync = ref.watch(catalogItemDetailProvider(itemId));
-    final stockAsync = ref.watch(itemDetailStockProvider(itemId));
+    final stockFetch = ref.watch(stockItemDetailProvider(itemId));
+    final stockRow = ref.watch(itemDetailStockProvider(itemId));
     final catalog = catalogAsync.valueOrNull ?? const <String, dynamic>{};
-    final stock = stockAsync.valueOrNull ?? const <String, dynamic>{};
+    final stock = stockRow ?? stockFetch.valueOrNull ?? const <String, dynamic>{};
     final hasAnyData = catalog.isNotEmpty || stock.isNotEmpty;
     final gutter = HexaResponsive.pageGutter(context, operational: true);
     final desktop = HexaBreakpoints.isDesktop(context);
@@ -136,9 +137,10 @@ class ItemDetailPage extends ConsumerWidget {
 
     if (!hasAnyData &&
         catalogAsync.isLoading &&
-        stockAsync.isLoading &&
+        stockFetch.isLoading &&
+        stockRow == null &&
         !catalogAsync.hasError &&
-        !stockAsync.hasError) {
+        !stockFetch.hasError) {
       return const Scaffold(
         backgroundColor: HexaColors.brandBackground,
         body: SafeArea(
@@ -147,7 +149,7 @@ class ItemDetailPage extends ConsumerWidget {
       );
     }
 
-    if (!hasAnyData && catalogAsync.hasError && stockAsync.hasError) {
+    if (!hasAnyData && catalogAsync.hasError && stockFetch.hasError) {
       return Scaffold(
         backgroundColor: HexaColors.brandBackground,
         body: SafeArea(
@@ -259,7 +261,7 @@ class _ItemStickyActions extends ConsumerWidget {
             Expanded(
               child: FilledButton.icon(
                 onPressed: () async {
-                  final row = ref.read(itemDetailStockProvider(itemId)).valueOrNull;
+                  final row = ref.read(itemDetailStockProvider(itemId));
                   if (!context.mounted) return;
                   await showUpdateStockSheet(
                     context: context,
@@ -278,7 +280,7 @@ class _ItemStickyActions extends ConsumerWidget {
             Expanded(
               child: OutlinedButton.icon(
                 onPressed: () async {
-                  final row = ref.read(itemDetailStockProvider(itemId)).valueOrNull;
+                  final row = ref.read(itemDetailStockProvider(itemId));
                   if (!context.mounted) return;
                   await showUpdateStockSheet(
                     context: context,
@@ -298,8 +300,7 @@ class _ItemStickyActions extends ConsumerWidget {
               Expanded(
                 child: OutlinedButton.icon(
                   onPressed: () async {
-                    final item =
-                        ref.read(itemDetailStockProvider(itemId)).valueOrNull;
+                    final item = ref.read(itemDetailStockProvider(itemId));
                     if (!context.mounted) return;
                     if (item == null || item.isEmpty) return;
                     await showStockQuickPurchaseSheet(

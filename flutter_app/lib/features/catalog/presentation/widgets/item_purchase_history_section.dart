@@ -39,8 +39,9 @@ class _ItemPurchaseHistorySectionState
     final isStaff = session != null && sessionIsStaff(session);
     final hideFinancials = session != null && !sessionCanSeeFinancials(session);
 
-    final purchasesAsync =
-        ref.watch(tradePurchasesForItemParsedProvider(widget.itemId));
+    final purchasesFetch =
+        ref.watch(tradePurchasesForItemProvider(widget.itemId));
+    final purchases = ref.watch(tradePurchasesForItemParsedProvider(widget.itemId));
     return Card(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Padding(
@@ -65,7 +66,7 @@ class _ItemPurchaseHistorySectionState
             const SizedBox(height: 8),
             _rangeChips(),
             const SizedBox(height: 8),
-            purchasesAsync.when(
+            purchasesFetch.when(
               loading: () => const Padding(
                 padding: EdgeInsets.symmetric(vertical: 14),
                 child: Center(child: CircularProgressIndicator()),
@@ -75,9 +76,9 @@ class _ItemPurchaseHistorySectionState
                 onRetry: () =>
                     ref.invalidate(tradePurchasesForItemProvider(widget.itemId)),
               ),
-              data: (purchases) {
+              data: (_) {
                 final rows = itemTradeHistoryRows(
-                  purchases,
+                  purchases ?? const [],
                   widget.itemId,
                   catalogItemName: widget.itemName,
                 );

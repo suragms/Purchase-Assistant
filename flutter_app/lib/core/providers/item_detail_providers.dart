@@ -144,31 +144,24 @@ final itemStockIntelligenceProvider =
 });
 
 /// Stock map for item detail sections — merges optimistic patches (no flash on save).
+/// Use [stockItemDetailProvider] for loading/error; this is data-only.
 final itemDetailStockProvider =
-    Provider.autoDispose.family<AsyncValue<Map<String, dynamic>>, String>(
-        (ref, itemId) {
-  final async = ref.watch(stockItemDetailProvider(itemId));
+    Provider.autoDispose.family<Map<String, dynamic>?, String>((ref, itemId) {
   final patch = ref.watch(stockItemDetailPatchProvider(itemId));
-  if (patch.isEmpty) return async;
-  return async.when(
-    data: (data) => AsyncValue.data({...data, ...patch}),
-    loading: () => AsyncValue.data(Map<String, dynamic>.from(patch)),
-    error: (e, st) => async.hasValue
-        ? AsyncValue.data({...async.requireValue, ...patch})
-        : AsyncValue.data(Map<String, dynamic>.from(patch)),
-  );
+  final base = ref.watch(stockItemDetailProvider(itemId)).valueOrNull;
+  if (patch.isEmpty) return base;
+  if (base != null) return {...base, ...patch};
+  return Map<String, dynamic>.from(patch);
 });
 
 /// Catalog map for item detail sections (leaf provider).
 final itemDetailCatalogProvider =
-    Provider.autoDispose.family<AsyncValue<Map<String, dynamic>>, String>(
-        (ref, itemId) {
-  return ref.watch(catalogItemDetailProvider(itemId));
+    Provider.autoDispose.family<Map<String, dynamic>?, String>((ref, itemId) {
+  return ref.watch(catalogItemDetailProvider(itemId)).valueOrNull;
 });
 
 /// Activity map for item detail timeline sections.
 final itemDetailActivityProvider =
-    Provider.autoDispose.family<AsyncValue<Map<String, dynamic>>, String>(
-        (ref, itemId) {
-  return ref.watch(stockItemActivityProvider(itemId));
+    Provider.autoDispose.family<Map<String, dynamic>?, String>((ref, itemId) {
+  return ref.watch(stockItemActivityProvider(itemId)).valueOrNull;
 });

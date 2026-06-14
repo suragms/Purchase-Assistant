@@ -48,12 +48,13 @@ class _ItemAnalyticsSectionState extends ConsumerState<ItemAnalyticsSection> {
 
   @override
   Widget build(BuildContext context) {
-    final stockAsync = ref.watch(itemDetailStockProvider(widget.itemId));
+    final stockFetch = ref.watch(stockItemDetailProvider(widget.itemId));
+    final stockRow = ref.watch(itemDetailStockProvider(widget.itemId));
     final intelAsync = widget.loadIntelligence
         ? ref.watch(itemStockIntelligenceProvider(widget.itemId))
         : null;
 
-    if (stockAsync.hasError && !stockAsync.hasValue) {
+    if (stockFetch.hasError && !stockFetch.hasValue) {
       _scheduleAutoRetryOnce();
       return Card(
         child: Padding(
@@ -82,7 +83,7 @@ class _ItemAnalyticsSectionState extends ConsumerState<ItemAnalyticsSection> {
       );
     }
 
-    if (stockAsync.isLoading && !stockAsync.hasValue) {
+    if (stockFetch.isLoading && stockRow == null) {
       return const Card(
         child: Padding(
           padding: EdgeInsets.all(24),
@@ -91,7 +92,7 @@ class _ItemAnalyticsSectionState extends ConsumerState<ItemAnalyticsSection> {
       );
     }
 
-    final stock = stockAsync.valueOrNull ?? const <String, dynamic>{};
+    final stock = stockRow ?? stockFetch.valueOrNull ?? const <String, dynamic>{};
     final intel = widget.loadIntelligence
         ? intelAsync?.valueOrNull ?? const <String, dynamic>{}
         : const <String, dynamic>{};

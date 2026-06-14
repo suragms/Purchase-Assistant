@@ -75,8 +75,8 @@ class _ItemPhysicalVerificationCardState
 
   @override
   Widget build(BuildContext context) {
-    final stockAsync = ref.watch(itemDetailStockProvider(widget.itemId));
-    final stockRow = stockAsync.valueOrNull;
+    final stockFetch = ref.watch(stockItemDetailProvider(widget.itemId));
+    final stockRow = ref.watch(itemDetailStockProvider(widget.itemId));
     final needsAudit = stockRow != null &&
         (stockRow['physical_stock_counted_at'] != null ||
             stockRow['needs_verification'] == true);
@@ -84,7 +84,7 @@ class _ItemPhysicalVerificationCardState
         ? ref.watch(stockItemAuditProvider(widget.itemId))
         : const AsyncValue<List<Map<String, dynamic>>>.data([]);
 
-    stockAsync.whenOrNull(
+    stockFetch.whenOrNull(
       data: (_) {
         if (_retryCount > 0 || _retryScheduled) {
           _retryCount = 0;
@@ -94,7 +94,7 @@ class _ItemPhysicalVerificationCardState
       },
     );
 
-    return stockAsync.when(
+    return stockFetch.when(
       loading: () => const SizedBox.shrink(),
       error: (_, __) {
         if (_retryCount < _maxRetries) {
@@ -253,7 +253,7 @@ class _ItemPhysicalVerificationCardState
     final session = ref.read(sessionProvider);
     if (session == null) return;
     final stock =
-        ref.read(itemDetailStockProvider(widget.itemId)).valueOrNull ??
+        ref.read(itemDetailStockProvider(widget.itemId)) ??
             const <String, dynamic>{};
     try {
       final saved = await ref.read(hexaApiProvider).verifyStockCountWithRetry(

@@ -909,7 +909,7 @@ class _PurchaseHomePageState extends ConsumerState<PurchaseHomePage> {
     final session = ref.read(sessionProvider);
     if (session == null) return;
     final ids = _selected.toList();
-    final list = ref.read(tradePurchasesParsedProvider).valueOrNull ??
+    final list = ref.read(tradePurchasesParsedProvider) ??
         const <TradePurchase>[];
     final catalogIds = <String>{};
     for (final id in ids) {
@@ -1040,8 +1040,8 @@ class _PurchaseHomePageState extends ConsumerState<PurchaseHomePage> {
   @override
   Widget build(BuildContext context) {
     final session = ref.watch(sessionProvider);
-    final rows =
-        ref.watch(tradePurchasesParsedProvider).whenData(_mergeOptimisticRows);
+    final listAsync = ref.watch(tradePurchasesListProvider);
+    final parsed = ref.watch(tradePurchasesParsedProvider);
     final primary = ref.watch(purchaseHistoryPrimaryFilterProvider);
     final secondary = ref.watch(purchaseHistorySecondaryFilterProvider);
     final alerts = ref.watch(purchaseAlertsProvider);
@@ -1134,8 +1134,8 @@ class _PurchaseHomePageState extends ConsumerState<PurchaseHomePage> {
             IconButton(
               tooltip: 'Select all (filtered list)',
               onPressed: () {
-                final items = rows.asData?.value;
-                if (items == null) return;
+                final items = _mergeOptimisticRows(parsed ?? const []);
+                if (items.isEmpty) return;
                 final v = _buildVisibleSorted(
                   items,
                   ref.read(purchaseHistorySearchProvider),
@@ -1147,8 +1147,8 @@ class _PurchaseHomePageState extends ConsumerState<PurchaseHomePage> {
             IconButton(
               tooltip: 'Export selected CSV',
               onPressed: () async {
-                final items = rows.asData?.value;
-                if (items == null) return;
+                final items = _mergeOptimisticRows(parsed ?? const []);
+                if (items.isEmpty) return;
                 final v = _buildVisibleSorted(
                   items,
                   ref.read(purchaseHistorySearchProvider),
@@ -1267,7 +1267,7 @@ class _PurchaseHomePageState extends ConsumerState<PurchaseHomePage> {
         maxWidth: 800,
         child: session == null
           ? _SignInPrompt(onTap: () => context.go('/login'))
-          : rows.when(
+          : listAsync.when(
               skipLoadingOnReload: false,
               skipLoadingOnRefresh: true,
               loading: () => const ListSkeleton(),
@@ -1283,7 +1283,8 @@ class _PurchaseHomePageState extends ConsumerState<PurchaseHomePage> {
                   subtitle: offline ? kFriendlyLoadNetworkSubtitle : null,
                 );
               },
-              data: (List<TradePurchase> items) {
+              data: (_) {
+                final items = _mergeOptimisticRows(parsed ?? const []);
                 final visible = _buildVisibleSorted(items, searchQ);
                 final showLocalWipRow = localWip != null &&
                     !_selectMode &&
@@ -2546,8 +2547,8 @@ class _PurchaseHistoryFullscreenSearchPageState
             false) ||
         ref.watch(purchaseHistoryDateFromProvider) != null ||
         ref.watch(purchaseHistoryDateToProvider) != null;
-    final rows =
-        ref.watch(tradePurchasesParsedProvider).whenData(_mergeOptimisticRows);
+    final listAsync = ref.watch(tradePurchasesListProvider);
+    final parsed = ref.watch(tradePurchasesParsedProvider);
     final searchQ = ref.watch(purchaseHistorySearchProvider);
     ref.watch(purchaseHistoryValueSortProvider);
     return FullscreenSearchShell(
@@ -2582,7 +2583,7 @@ class _PurchaseHistoryFullscreenSearchPageState
           contentPadding: EdgeInsets.symmetric(vertical: 10),
         ),
       ),
-      body: rows.when(
+      body: listAsync.when(
         skipLoadingOnReload: false,
         skipLoadingOnRefresh: true,
         loading: () => const ListSkeleton(
@@ -2598,7 +2599,8 @@ class _PurchaseHistoryFullscreenSearchPageState
             ),
           ),
         ),
-        data: (items) {
+        data: (_) {
+          final items = _mergeOptimisticRows(parsed ?? const []);
           final visible = purchaseHistoryVisibleSortedForRef(
             ref,
             items,

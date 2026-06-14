@@ -277,7 +277,7 @@ class _LedgerEmptyState extends ConsumerWidget {
       );
     }
 
-    final detail = ref.watch(itemDetailStockProvider(itemId)).valueOrNull;
+    final detail = ref.watch(itemDetailStockProvider(itemId));
     final systemStock = coerceToDouble(detail?['current_stock']);
     final itemName = detail?['name']?.toString() ?? 'Item';
 
@@ -314,7 +314,7 @@ class _LedgerEmptyState extends ConsumerWidget {
                 onPressed: () async {
                   final row =
                       detail ??
-                          ref.read(itemDetailStockProvider(itemId)).valueOrNull;
+                          ref.read(itemDetailStockProvider(itemId));
                   if (!context.mounted) return;
                   await showUpdateStockSheet(
                     context: context,

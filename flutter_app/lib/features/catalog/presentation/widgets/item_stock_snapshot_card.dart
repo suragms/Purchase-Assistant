@@ -25,14 +25,15 @@ class ItemStockSnapshotCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final stockAsync = ref.watch(itemDetailStockProvider(itemId));
-    if (stockAsync.isLoading && !stockAsync.hasValue) {
+    final stockFetch = ref.watch(stockItemDetailProvider(itemId));
+    final stock = ref.watch(itemDetailStockProvider(itemId));
+    if (stockFetch.isLoading && stock == null) {
       return const SizedBox(
         height: 72,
         child: Center(child: LinearProgressIndicator()),
       );
     }
-    if (stockAsync.hasError && !stockAsync.hasValue) {
+    if (stockFetch.hasError && !stockFetch.hasValue) {
       return _sectionRetryCard(
         context,
         ref,
@@ -42,7 +43,7 @@ class ItemStockSnapshotCard extends ConsumerWidget {
     return _buildWithStock(
       context,
       ref,
-      stockAsync.valueOrNull ?? const <String, dynamic>{},
+      stock ?? const <String, dynamic>{},
     );
   }
 

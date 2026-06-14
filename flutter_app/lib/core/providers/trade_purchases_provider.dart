@@ -152,12 +152,12 @@ final staffTradePurchasesForAlertsProvider =
 });
 
 final staffTradePurchasesForAlertsParsedProvider =
-    Provider.autoDispose<AsyncValue<List<TradePurchase>>>((ref) {
-  return ref.watch(staffTradePurchasesForAlertsProvider).whenData(
-        (maps) => maps
-            .map((e) => TradePurchase.fromJson(Map<String, dynamic>.from(e)))
-            .toList(),
-      );
+    Provider.autoDispose<List<TradePurchase>?>((ref) {
+  final maps = ref.watch(staffTradePurchasesForAlertsProvider).valueOrNull;
+  if (maps == null) return null;
+  return maps
+      .map((e) => TradePurchase.fromJson(Map<String, dynamic>.from(e)))
+      .toList();
 });
 
 final tradePurchasesForAlertsParsedProvider =
@@ -309,63 +309,58 @@ final tradePurchasesListProvider =
 /// async completion cannot call `markNeedsBuild` on a disposed home/shell
 /// element after a fast navigation or 401-driven route swap (Riverpod #…).
 final tradePurchasesParsedProvider =
-    Provider.autoDispose<AsyncValue<List<TradePurchase>>>((ref) {
-  return ref.watch(tradePurchasesListProvider).whenData(
-    (view) {
-      final parsed = <TradePurchase>[];
-      for (final e in view.rows) {
-        try {
-          parsed.add(TradePurchase.fromJson(Map<String, dynamic>.from(e)));
-        } catch (err, st) {
-          FlutterError.reportError(FlutterErrorDetails(
-            exception: err,
-            stack: st,
-            library: 'trade_purchases_provider',
-            context: ErrorDescription('parsing TradePurchase row'),
-            silent: true,
-          ));
-        }
-      }
-      return parsed;
-    },
-  );
+    Provider.autoDispose<List<TradePurchase>?>((ref) {
+  final view = ref.watch(tradePurchasesListProvider).valueOrNull;
+  if (view == null) return null;
+  final parsed = <TradePurchase>[];
+  for (final e in view.rows) {
+    try {
+      parsed.add(TradePurchase.fromJson(Map<String, dynamic>.from(e)));
+    } catch (err, st) {
+      FlutterError.reportError(FlutterErrorDetails(
+        exception: err,
+        stack: st,
+        library: 'trade_purchases_provider',
+        context: ErrorDescription('parsing TradePurchase row'),
+        silent: true,
+      ));
+    }
+  }
+  return parsed;
 });
 
 /// Counts for dashboard / history banner.
 final purchaseAlertsProvider = Provider.autoDispose<Map<String, int>>((ref) {
-  final async = ref.watch(tradePurchasesParsedProvider);
-  return async.maybeWhen(
-    data: (list) {
-      var dueSoon = 0;
-      var overdue = 0;
-      var paid = 0;
-      var dueToday = 0;
-      final now = DateTime.now();
-      final today = DateTime(now.year, now.month, now.day);
-      for (final p in list) {
-        final st = p.statusEnum;
-        if (st == PurchaseStatus.dueSoon) dueSoon++;
-        if (st == PurchaseStatus.overdue) overdue++;
-        if (st == PurchaseStatus.paid) paid++;
-        if (p.dueDate != null) {
-          final d = DateTime(p.dueDate!.year, p.dueDate!.month, p.dueDate!.day);
-          if (d == today &&
-              st != PurchaseStatus.paid &&
-              st != PurchaseStatus.cancelled) {
-            dueToday++;
-          }
-        }
+  final list = ref.watch(tradePurchasesParsedProvider);
+  if (list == null) {
+    return {'dueSoon': 0, 'overdue': 0, 'paid': 0, 'dueToday': 0};
+  }
+  var dueSoon = 0;
+  var overdue = 0;
+  var paid = 0;
+  var dueToday = 0;
+  final now = DateTime.now();
+  final today = DateTime(now.year, now.month, now.day);
+  for (final p in list) {
+    final st = p.statusEnum;
+    if (st == PurchaseStatus.dueSoon) dueSoon++;
+    if (st == PurchaseStatus.overdue) overdue++;
+    if (st == PurchaseStatus.paid) paid++;
+    if (p.dueDate != null) {
+      final d = DateTime(p.dueDate!.year, p.dueDate!.month, p.dueDate!.day);
+      if (d == today &&
+          st != PurchaseStatus.paid &&
+          st != PurchaseStatus.cancelled) {
+        dueToday++;
       }
-      return {
-        'dueSoon': dueSoon,
-        'overdue': overdue,
-        'paid': paid,
-        'dueToday': dueToday,
-      };
-    },
-    orElse: () =>
-        {'dueSoon': 0, 'overdue': 0, 'paid': 0, 'dueToday': 0},
-  );
+    }
+  }
+  return {
+    'dueSoon': dueSoon,
+    'overdue': overdue,
+    'paid': paid,
+    'dueToday': dueToday,
+  };
 });
 
 /// Period strip for Purchase History: aligns with [analyticsDateRangeProvider]
@@ -381,40 +376,33 @@ final purchaseAlertsProvider = Provider.autoDispose<Map<String, int>>((ref) {
 final purchaseHistoryMonthStatsProvider =
     Provider.autoDispose<PurchaseHistoryMonthStats>((ref) {
   final range = ref.watch(analyticsDateRangeProvider);
-  final listAsync = ref.watch(tradePurchasesParsedProvider);
-  return listAsync.when(
-    data: (list) => computePurchaseHistoryRangeStats(
-      list,
-      from: range.from,
-      to: range.to,
-    ),
-    loading: () => PurchaseHistoryMonthStats.empty,
-    error: (_, __) => PurchaseHistoryMonthStats.empty,
+  final list = ref.watch(tradePurchasesParsedProvider);
+  if (list == null) return PurchaseHistoryMonthStats.empty;
+  return computePurchaseHistoryRangeStats(
+    list,
+    from: range.from,
+    to: range.to,
   );
 });
 
 /// Bags / boxes / tins from loaded trade purchase lines.
 final purchaseUnitTotalsProvider =
     Provider.autoDispose<({int bags, int boxes, int tins})>((ref) {
-  final async = ref.watch(tradePurchasesParsedProvider);
-  return async.maybeWhen(
-    data: (list) {
-      var bags = 0;
-      var boxes = 0;
-      var tins = 0;
-      for (final p in list) {
-        for (final ln in p.lines) {
-          final u = ln.unit.toUpperCase();
-          final q = ln.qty.round();
-          if (unitCountsAsBagFamily(ln.unit)) bags += q;
-          if (u.contains('BOX')) boxes += q;
-          if (u.contains('TIN')) tins += q;
-        }
-      }
-      return (bags: bags, boxes: boxes, tins: tins);
-    },
-    orElse: () => (bags: 0, boxes: 0, tins: 0),
-  );
+  final list = ref.watch(tradePurchasesParsedProvider);
+  if (list == null) return (bags: 0, boxes: 0, tins: 0);
+  var bags = 0;
+  var boxes = 0;
+  var tins = 0;
+  for (final p in list) {
+    for (final ln in p.lines) {
+      final u = ln.unit.toUpperCase();
+      final q = ln.qty.round();
+      if (unitCountsAsBagFamily(ln.unit)) bags += q;
+      if (u.contains('BOX')) boxes += q;
+      if (u.contains('TIN')) tins += q;
+    }
+  }
+  return (bags: bags, boxes: boxes, tins: tins);
 });
 
 /// Purchases for one catalog item (item detail / supplier intel) — not full business list.
@@ -434,13 +422,12 @@ final tradePurchasesForItemProvider =
 });
 
 final tradePurchasesForItemParsedProvider =
-    Provider.autoDispose.family<AsyncValue<List<TradePurchase>>, String>(
-        (ref, itemId) {
-  return ref.watch(tradePurchasesForItemProvider(itemId)).whenData(
-        (maps) => maps
-            .map((e) => TradePurchase.fromJson(Map<String, dynamic>.from(e)))
-            .toList(),
-      );
+    Provider.autoDispose.family<List<TradePurchase>?, String>((ref, itemId) {
+  final maps = ref.watch(tradePurchasesForItemProvider(itemId)).valueOrNull;
+  if (maps == null) return null;
+  return maps
+      .map((e) => TradePurchase.fromJson(Map<String, dynamic>.from(e)))
+      .toList();
 });
 
 /// Trade list for catalog item intel — shares [tradePurchasesRecentSnapshotProvider].

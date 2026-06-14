@@ -7,6 +7,8 @@ import '../../../core/design_system/hexa_ds_tokens.dart';
 import '../../../core/models/trade_purchase_models.dart';
 import '../../../core/providers/business_aggregates_invalidation.dart';
 import '../../../core/providers/staff_home_providers.dart';
+import '../../../core/providers/trade_purchases_provider.dart'
+    show staffTradePurchasesForAlertsProvider;
 import '../../../core/theme/hexa_colors.dart';
 import '../../../core/utils/unit_utils.dart';
 import '../../../core/widgets/friendly_load_error.dart';
@@ -37,8 +39,9 @@ class StaffPendingDeliveriesPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final sectionsAsync = ref.watch(staffDeliverySectionsProvider);
-    final total = sectionsAsync.valueOrNull?.total ?? 0;
+    final sections = ref.watch(staffDeliverySectionsProvider);
+    final fetch = ref.watch(staffTradePurchasesForAlertsProvider);
+    final total = sections?.total ?? 0;
 
     return Scaffold(
       backgroundColor: HexaColors.brandBackground,
@@ -56,38 +59,43 @@ class StaffPendingDeliveriesPage extends ConsumerWidget {
           ),
         ],
       ),
-      body: sectionsAsync.when(
-        loading: () => const ListSkeleton(rowCount: 6),
-        error: (_, __) => FriendlyLoadError(
-          message: 'Could not load pending deliveries',
-          onRetry: () => invalidateStaffDeliverySurfaces(ref),
-        ),
-        data: (sections) {
+      body: Builder(
+        builder: (context) {
+          if (sections == null && fetch.isLoading) {
+            return const ListSkeleton(rowCount: 6);
+          }
+          if (fetch.hasError && sections == null) {
+            return FriendlyLoadError(
+              message: 'Could not load pending deliveries',
+              onRetry: () => invalidateStaffDeliverySurfaces(ref),
+            );
+          }
+          final data = sections ?? const StaffDeliverySections();
           return ListView(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 88),
             children: [
               _DeliverySection(
                 title: 'Dispatched',
-                count: sections.dispatched.length,
+                count: data.dispatched.length,
                 emptyMessage: 'No dispatches in transit.',
-                purchases: sections.dispatched,
+                purchases: data.dispatched,
               ),
               const SizedBox(height: 16),
               _DeliverySection(
                 title: 'Arrived',
-                count: sections.arrived.length,
+                count: data.arrived.length,
                 emptyMessage: 'Nothing waiting at the warehouse.',
-                purchases: sections.arrived,
+                purchases: data.arrived,
                 highlight: true,
               ),
               const SizedBox(height: 16),
               _DeliverySection(
                 title: 'Pending verification',
-                count: sections.pendingVerification.length,
+                count: data.pendingVerification.length,
                 emptyMessage: 'No purchases awaiting owner commit.',
-                purchases: sections.pendingVerification,
+                purchases: data.pendingVerification,
               ),
-              if (sections.total == 0) ...[
+              if (data.total == 0) ...[
                 const SizedBox(height: 32),
                 Center(
                   child: Text(

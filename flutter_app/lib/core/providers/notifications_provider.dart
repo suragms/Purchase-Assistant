@@ -549,7 +549,7 @@ final warehouseAlertNotificationItemsProvider =
     ));
   }
   if (isStaff) {
-    final pending = ref.watch(staffPendingDeliveriesProvider).valueOrNull ?? [];
+    final pending = ref.watch(staffPendingDeliveriesProvider) ?? [];
     if (pending.isNotEmpty) {
       final first = pending.first.supplierName?.trim();
       final sub = first != null && first.isNotEmpty

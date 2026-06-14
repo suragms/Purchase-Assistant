@@ -36,7 +36,7 @@ class ItemQuickActionsBar extends ConsumerWidget {
         icon: Icons.fact_check_outlined,
         color: HexaColors.brandPrimary,
         onTap: () async {
-          final row = ref.read(itemDetailStockProvider(itemId)).valueOrNull;
+          final row = ref.read(itemDetailStockProvider(itemId));
           if (!context.mounted) return;
           await showQuickStockActionSheet(
             context: context,
@@ -53,7 +53,7 @@ class ItemQuickActionsBar extends ConsumerWidget {
         icon: Icons.memory_outlined,
         color: const Color(0xFF2563EB),
         onTap: () async {
-          final row = ref.read(itemDetailStockProvider(itemId)).valueOrNull;
+          final row = ref.read(itemDetailStockProvider(itemId));
           if (!context.mounted) return;
           await showQuickStockActionSheet(
             context: context,
@@ -70,7 +70,7 @@ class ItemQuickActionsBar extends ConsumerWidget {
         icon: Icons.add_shopping_cart_rounded,
         color: HexaColors.profit,
         onTap: () async {
-          final item = ref.read(itemDetailStockProvider(itemId)).valueOrNull;
+          final item = ref.read(itemDetailStockProvider(itemId));
           if (!context.mounted) return;
           if (item == null || item.isEmpty) return;
           await showStockQuickPurchaseSheet(context: context, ref: ref, item: item);

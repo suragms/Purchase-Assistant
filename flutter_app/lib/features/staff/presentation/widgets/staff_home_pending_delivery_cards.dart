@@ -22,7 +22,7 @@ class StaffHomePendingDeliveryCards extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final pending = ref.watch(staffPendingDeliveriesProvider).valueOrNull ?? [];
+    final pending = ref.watch(staffPendingDeliveriesProvider) ?? [];
     if (pending.isEmpty) return const SizedBox.shrink();
 
     return Column(
