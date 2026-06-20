@@ -1022,7 +1022,7 @@ async def low_stock_operations(
     db: Annotated[AsyncSession, Depends(get_db)],
     _m: Annotated[Membership, Depends(require_membership)],
     page: int = Query(1, ge=1),
-    per_page: int = Query(50, ge=1, le=200),
+    per_page: int = Query(50, ge=1, le=2000),
     q: str = Query(""),
     filter: LowStockOpsFilter = Query("all"),
     category: str = Query(""),
