@@ -115,6 +115,28 @@ class Settings(BaseSettings):
 
     redis_url: str | None = "redis://localhost:6379/0"
 
+    # In-process read cache TTLs (seconds). Redis URL is optional/future; app_cache is in-process.
+    cache_ttl_stock_list: int = Field(
+        default=30,
+        validation_alias=AliasChoices("CACHE_TTL_STOCK_LIST"),
+    )
+    cache_ttl_home_dashboard: int = Field(
+        default=60,
+        validation_alias=AliasChoices("CACHE_TTL_HOME_DASHBOARD"),
+    )
+    cache_ttl_catalog_items: int = Field(
+        default=120,
+        validation_alias=AliasChoices("CACHE_TTL_CATALOG_ITEMS"),
+    )
+    cache_ttl_purchase_list: int = Field(
+        default=30,
+        validation_alias=AliasChoices("CACHE_TTL_PURCHASE_LIST"),
+    )
+    cache_ttl_stock_shell: int = Field(
+        default=30,
+        validation_alias=AliasChoices("CACHE_TTL_STOCK_SHELL"),
+    )
+
     jwt_secret: str = "change-me-min-32-chars-dev-only"
     jwt_refresh_secret: str = "change-me-min-32-chars-refresh-dev"
     jwt_access_ttl_minutes: int = 15

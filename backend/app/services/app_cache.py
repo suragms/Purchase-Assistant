@@ -6,15 +6,38 @@ import hashlib
 import json
 import time
 from collections import OrderedDict
+from functools import lru_cache
 from typing import Any
 from uuid import UUID
 
-STOCK_LIST_TTL_S = 30.0
-HOME_OVERVIEW_TTL_S = 60.0
-CATALOG_COMPACT_TTL_S = 120.0
-STOCK_SHELL_BUNDLE_TTL_S = 30.0
-
 _MAX_ENTRIES = 512
+
+
+@lru_cache
+def _settings():
+    from app.config import get_settings
+
+    return get_settings()
+
+
+def stock_list_ttl_s() -> float:
+    return float(_settings().cache_ttl_stock_list)
+
+
+def home_overview_ttl_s() -> float:
+    return float(_settings().cache_ttl_home_dashboard)
+
+
+def catalog_items_ttl_s() -> float:
+    return float(_settings().cache_ttl_catalog_items)
+
+
+def purchase_list_ttl_s() -> float:
+    return float(_settings().cache_ttl_purchase_list)
+
+
+def stock_shell_bundle_ttl_s() -> float:
+    return float(_settings().cache_ttl_stock_shell)
 
 
 class _TtlCache:
@@ -83,9 +106,22 @@ def home_overview_cache_key(business_id: UUID | str, query: dict[str, Any]) -> s
     return f"{_biz_prefix(business_id)}home:overview:{cache_key_hash(query)}"
 
 
+def catalog_items_list_cache_key(business_id: UUID | str, query: dict[str, Any]) -> str:
+    return f"{_biz_prefix(business_id)}catalog:list:{cache_key_hash(query)}"
+
+
 def catalog_compact_cache_key(business_id: UUID | str) -> str:
     return f"{_biz_prefix(business_id)}catalog:compact"
 
 
+def purchase_list_cache_key(business_id: UUID | str, query: dict[str, Any]) -> str:
+    return f"{_biz_prefix(business_id)}purchases:list:{cache_key_hash(query)}"
+
+
 def stock_shell_bundle_cache_key(business_id: UUID | str, query: dict[str, Any]) -> str:
     return f"{_biz_prefix(business_id)}stock:shell:{cache_key_hash(query)}"
+
+
+def clear_all_caches_for_tests() -> None:
+    """Test helper — wipe in-process cache."""
+    _cache.clear()

@@ -171,6 +171,7 @@ class _UserProfilePageState extends ConsumerState<UserProfilePage>
     final emailCtrl = TextEditingController(text: user['email']?.toString() ?? '');
     final phoneCtrl = TextEditingController(text: user['phone']?.toString() ?? '');
     var role = user['role']?.toString() ?? 'staff';
+    final previousRole = role;
     var saving = false;
 
     await showModalBottomSheet<void>(
@@ -193,6 +194,9 @@ class _UserProfilePageState extends ConsumerState<UserProfilePage>
                       role: role,
                     );
                 ref.invalidate(businessUserProfileProvider(widget.userId));
+                if (role != previousRole) {
+                  ref.invalidate(userPermissionsProvider(widget.userId));
+                }
                 invalidateUserManagementCaches(ref);
                 if (ctx.mounted) Navigator.pop(ctx);
               } catch (e) {

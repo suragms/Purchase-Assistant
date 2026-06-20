@@ -18,6 +18,7 @@ import '../../../core/widgets/hexa_error_card.dart';
 import '../../../core/widgets/list_skeleton.dart';
 import '../users/user_compact_card.dart';
 import '../users/user_list_filters.dart';
+import '../users/user_profile_providers.dart';
 import 'widgets/user_management_detail_panel.dart';
 
 /// Owner / admin / manager: warehouse user list (ERP rebuild).
@@ -332,6 +333,9 @@ class _UserManagementPageState extends ConsumerState<UserManagementPage> {
             isActive: data['is_active'] as bool?,
             isBlocked: data['is_blocked'] as bool?,
           );
+      if (data.containsKey('role') && data['role'] != null) {
+        ref.invalidate(userPermissionsProvider(userId));
+      }
       invalidateUserManagementCaches(ref);
     } catch (e) {
       if (!mounted) return;

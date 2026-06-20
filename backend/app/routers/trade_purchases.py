@@ -53,6 +53,13 @@ from app.services.realtime_events import publish_business_event
 from app.services.stock_movement_service import NegativeStockError, StaleStockVersionError
 from app.services import purchase_damage_service as pds
 from app.schemas.purchase_damage import PurchaseDamageReportIn, PurchaseDamageReportOut
+from app.read_cache_generation import trade_read_cache_generation
+from app.services.app_cache import (
+    get_cached,
+    purchase_list_cache_key,
+    purchase_list_ttl_s,
+    set_cached,
+)
 
 router = APIRouter(prefix="/v1/businesses/{business_id}/trade-purchases", tags=["trade-purchases"])
 _log = logging.getLogger(__name__)
@@ -102,6 +109,35 @@ def _purchase_list_response(
             [redact_trade_purchase_dict(r.model_dump(mode="json")) for r in rows]
         )
     return rows
+
+
+def _purchase_list_from_cache(cached: dict[str, Any]) -> list[TradePurchaseOut] | list[TradePurchaseListItemOut] | JSONResponse:
+    if cached.get("redacted"):
+        return JSONResponse(cached["items"])
+    items = cached["items"]
+    if cached.get("include_lines"):
+        return [TradePurchaseOut(**row) for row in items]
+    return [TradePurchaseListItemOut(**row) for row in items]
+
+
+def _purchase_list_to_cache(
+    role: str,
+    rows: list[TradePurchaseOut] | list[TradePurchaseListItemOut],
+    *,
+    include_lines: bool,
+) -> dict[str, Any]:
+    redacted = should_redact_financials(role)
+    if redacted:
+        return {
+            "redacted": True,
+            "include_lines": include_lines,
+            "items": [redact_trade_purchase_dict(r.model_dump(mode="json")) for r in rows],
+        }
+    return {
+        "redacted": False,
+        "include_lines": include_lines,
+        "items": [r.model_dump(mode="json") for r in rows],
+    }
 
 
 def _purchase_detail_response(
@@ -318,6 +354,26 @@ async def list_trade_purchases(
     limit_v = max(1, min(limit, 50))
     offset_v = max(0, min(offset, 10_000))
     status_norm = _normalize_trade_list_status(status)
+    gen = trade_read_cache_generation(business_id)
+    cache_query = {
+        "gen": gen,
+        "role": _m.role,
+        "limit": limit_v,
+        "offset": offset_v,
+        "status": status_norm,
+        "q": (q or "").strip() or None,
+        "supplier_id": str(supplier_id) if supplier_id else None,
+        "broker_id": str(broker_id) if broker_id else None,
+        "catalog_item_id": str(catalog_item_id) if catalog_item_id else None,
+        "purchase_from": purchase_from.isoformat() if purchase_from else None,
+        "purchase_to": purchase_to.isoformat() if purchase_to else None,
+        "include_lines": include_lines,
+    }
+    cache_key = purchase_list_cache_key(business_id, cache_query)
+    cached = get_cached(cache_key, purchase_list_ttl_s())
+    if cached is not None:
+        return _purchase_list_from_cache(cached)
+
     _log.debug(
         "list_trade_purchases business_id=%s limit=%s offset=%s status_raw=%r status_norm=%r q=%s",
         business_id,
@@ -342,6 +398,11 @@ async def list_trade_purchases(
         purchase_to=purchase_to,
         include_lines=include_lines,
     ),
+    )
+    set_cached(
+        cache_key,
+        _purchase_list_to_cache(_m.role, rows, include_lines=include_lines),
+        purchase_list_ttl_s(),
     )
     return _purchase_list_response(_m.role, rows)
 

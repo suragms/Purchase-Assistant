@@ -124,12 +124,12 @@ from app.services import stock_helpers as sh
 from app.services.stock_helpers import OpeningSetupStatus, SortBy, StatusFilter
 from app.read_cache_generation import trade_read_cache_generation
 from app.services.app_cache import (
-    STOCK_LIST_TTL_S,
-    STOCK_SHELL_BUNDLE_TTL_S,
     get_cached,
     set_cached,
     stock_list_cache_key,
+    stock_list_ttl_s,
     stock_shell_bundle_cache_key,
+    stock_shell_bundle_ttl_s,
 )
 from app.routers.stock.stock_audit import fetch_recent_adjustments
 
@@ -360,7 +360,7 @@ async def list_stock(
         "unit": unit,
     }
     cache_key = stock_list_cache_key(business_id, cache_query)
-    cached_payload = get_cached(cache_key, STOCK_LIST_TTL_S)
+    cached_payload = get_cached(cache_key, stock_list_ttl_s())
     if cached_payload is not None:
         body = json.dumps(cached_payload, sort_keys=True, default=str).encode()
         etag = '"' + hashlib.md5(body).hexdigest()[:16] + '"'
@@ -394,7 +394,7 @@ async def list_stock(
         unit=unit,
     )
     payload = out.model_dump(mode="json")
-    set_cached(cache_key, payload, STOCK_LIST_TTL_S)
+    set_cached(cache_key, payload, stock_list_ttl_s())
     body = json.dumps(payload, sort_keys=True, default=str).encode()
     etag = '"' + hashlib.md5(body).hexdigest()[:16] + '"'
     if request.headers.get("if-none-match") == etag:
@@ -455,7 +455,7 @@ async def stock_shell_bundle(
         "audit_limit": audit_limit,
     }
     cache_key = stock_shell_bundle_cache_key(business_id, cache_query)
-    cached = get_cached(cache_key, STOCK_SHELL_BUNDLE_TTL_S)
+    cached = get_cached(cache_key, stock_shell_bundle_ttl_s())
     if cached is not None:
         return StockShellBundleOut(**cached)
 
@@ -508,7 +508,7 @@ async def stock_shell_bundle(
         delivery_counts=delivery_counts,
         audit_recent=audit_recent,
     ).model_dump(mode="json")
-    set_cached(cache_key, payload, STOCK_SHELL_BUNDLE_TTL_S)
+    set_cached(cache_key, payload, stock_shell_bundle_ttl_s())
     return StockShellBundleOut.model_validate(payload)
 
 

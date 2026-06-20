@@ -45,10 +45,24 @@ from app.services.unit_resolution_service import (
     resolve_for_catalog_item,
     resolve_from_text,
 )
+from app.read_cache_generation import trade_read_cache_generation
+from app.services.app_cache import (
+    catalog_items_list_cache_key,
+    catalog_items_ttl_s,
+    get_cached,
+    set_cached,
+)
 
 router = APIRouter(prefix="/v1/businesses/{business_id}", tags=["catalog"])
 
 logger = logging.getLogger(__name__)
+
+
+def _invalidate_catalog_read_caches(business_id: uuid.UUID) -> None:
+    from app.read_cache_generation import bump_trade_read_caches_for_business
+
+    bump_trade_read_caches_for_business(business_id)
+
 
 GENERAL_TYPE_NAME = "General"
 
@@ -1578,6 +1592,7 @@ async def bulk_archive_catalog_items(
     for item in r.scalars().all():
         item.deleted_at = now
     await db.commit()
+    _invalidate_catalog_read_caches(business_id)
 
 
 @router.patch("/catalog/items/bulk-reorder")
@@ -1601,6 +1616,7 @@ async def bulk_reorder_catalog_items(
         item.reorder_level = D(str(body.reorder_level))
         updated += 1
     await db.commit()
+    _invalidate_catalog_read_caches(business_id)
     return {"updated": updated}
 
 
@@ -1659,6 +1675,19 @@ async def list_catalog_items(
     page: int = Query(1, ge=1),
     per_page: int = Query(200, ge=1, le=500),
 ):
+    gen = trade_read_cache_generation(business_id)
+    cache_query = {
+        "gen": gen,
+        "role": _m.role,
+        "page": page,
+        "per_page": per_page,
+        "category_id": str(category_id) if category_id else None,
+        "type_id": str(type_id) if type_id else None,
+    }
+    cache_key = catalog_items_list_cache_key(business_id, cache_query)
+    cached = get_cached(cache_key, catalog_items_ttl_s())
+    if cached is not None:
+        return [CatalogItemOut(**row) for row in cached["items"]]
 
     async def _read() -> list[CatalogItemOut]:
         offset = (page - 1) * per_page
@@ -1761,8 +1790,15 @@ async def list_catalog_items(
         type_id,
     )
     if should_redact_financials(_m.role):
-        return [_maybe_redact_catalog_out(x, _m.role) for x in out]
-    return out
+        final = [_maybe_redact_catalog_out(x, _m.role) for x in out]
+    else:
+        final = out
+    set_cached(
+        cache_key,
+        {"items": [x.model_dump(mode="json") for x in final]},
+        catalog_items_ttl_s(),
+    )
+    return final
 
 
 _ITM_CODE_RE = re.compile(r"^ITM-(\d+)$", re.IGNORECASE)
@@ -2131,6 +2167,7 @@ async def create_catalog_item(
     await _replace_default_broker_rows(db, business_id, i.id, broker_ids)
     await _seed_supplier_item_defaults(db, business_id, i.id, supplier_ids)
     await db.commit()
+    _invalidate_catalog_read_caches(business_id)
     await db.refresh(i)
     tn = None
     if i.type_id is not None:
@@ -2252,6 +2289,7 @@ async def batch_create_catalog_items(
         created_rows.append(i)
 
     await db.commit()
+    _invalidate_catalog_read_caches(business_id)
     outs: list[CatalogItemOut] = []
     for i in created_rows:
         await db.refresh(i)
@@ -3053,6 +3091,7 @@ async def update_catalog_item(
         await _assert_broker_ids_in_business(db, business_id, bids)
         await _replace_default_broker_rows(db, business_id, item_id, bids)
     await db.commit()
+    _invalidate_catalog_read_caches(business_id)
     if not has_type_col:
         rr = await db.execute(
             select(CatalogItem)
@@ -3150,6 +3189,7 @@ async def delete_catalog_item(
             )
     await db.delete(i)
     await db.commit()
+    _invalidate_catalog_read_caches(business_id)
 
 
 # --- Variants (Category → Item → Variant) ---
