@@ -8,6 +8,7 @@ import '../auth/session_notifier.dart';
 import 'post_auth_route.dart'
     show authenticatedHomePath, sessionCanManageUsers, sessionIsStaff;
 import '../models/trade_purchase_models.dart';
+import 'purchase_overlay_active_provider.dart';
 import 'page_transitions.dart';
 import '../widgets/hexa_page_error_boundary.dart';
 import '../../features/shell/shell_branch_provider.dart';
@@ -176,6 +177,9 @@ final appRouterProvider = Provider<GoRouter>((ref) {
     },
     redirect: (context, state) {
       final loc = state.matchedLocation;
+      try {
+        syncPurchaseOverlayActive(ProviderScope.containerOf(context), loc);
+      } catch (_) {}
       final public = loc == '/splash' ||
           loc == '/login' ||
           loc == '/forgot-password' ||
@@ -878,9 +882,15 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         },
         pageBuilder: (context, state) {
           final id = state.pathParameters['purchaseId']!.trim();
+          final ex = state.extra;
+          final seed = ex is TradePurchase ? ex : null;
+          final seedOk = seed != null && seed.id == id;
           return iosPushPage(
             key: state.pageKey,
-            child: PurchaseEntryWizardV2(editingId: id),
+            child: PurchaseEntryWizardV2(
+              editingId: id,
+              seedPurchase: seedOk ? seed : null,
+            ),
           );
         },
       ),

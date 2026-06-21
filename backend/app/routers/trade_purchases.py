@@ -2,17 +2,19 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import uuid
 from datetime import date
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Body, Depends, Header, HTTPException, Query, Response, status
+from fastapi import APIRouter, Body, Depends, Header, HTTPException, Query, Request, Response, status
 from fastapi.responses import JSONResponse
+from sqlalchemy.exc import DBAPIError, OperationalError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.db_resilience import execute_with_retry
+from app.db_resilience import execute_with_retry, is_sa_infrastructure_failure
 from app.deps import get_current_user, require_membership, require_permission, require_role
 from app.models import Membership, User
 from app.schemas.trade_purchases import (
@@ -319,6 +321,7 @@ async def next_trade_human_id(
 
 @router.get("")
 async def list_trade_purchases(
+    request: Request,
     business_id: uuid.UUID,
     user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
@@ -354,6 +357,7 @@ async def list_trade_purchases(
     limit_v = max(1, min(limit, 50))
     offset_v = max(0, min(offset, 10_000))
     status_norm = _normalize_trade_list_status(status)
+    req_id = request.headers.get("x-request-id", "").strip() or None
     gen = trade_read_cache_generation(business_id)
     cache_query = {
         "gen": gen,
@@ -383,22 +387,61 @@ async def list_trade_purchases(
         status_norm,
         (q or "").strip()[:80] or None,
     )
-    rows = await execute_with_retry(
-        lambda: tps.list_trade_purchases(
-        db,
-        business_id,
-        limit=limit_v,
-        offset=offset_v,
-        status_filter=status_norm,
-        q=q,
-        supplier_id=supplier_id,
-        broker_id=broker_id,
-        catalog_item_id=catalog_item_id,
-        purchase_from=purchase_from,
-        purchase_to=purchase_to,
-        include_lines=include_lines,
-    ),
-    )
+    try:
+        rows = await execute_with_retry(
+            lambda: tps.list_trade_purchases(
+                db,
+                business_id,
+                limit=limit_v,
+                offset=offset_v,
+                status_filter=status_norm,
+                q=q,
+                supplier_id=supplier_id,
+                broker_id=broker_id,
+                catalog_item_id=catalog_item_id,
+                purchase_from=purchase_from,
+                purchase_to=purchase_to,
+                include_lines=include_lines,
+            ),
+        )
+    except (TimeoutError, asyncio.TimeoutError, OperationalError, DBAPIError) as exc:
+        if not is_sa_infrastructure_failure(exc) and not isinstance(
+            exc, (TimeoutError, asyncio.TimeoutError)
+        ):
+            raise
+        _log.warning(
+            "list_trade_purchases temporary failure business_id=%s purchase_from=%s "
+            "purchase_to=%s limit=%s offset=%s include_lines=%s x-request-id=%s | %s",
+            business_id,
+            purchase_from,
+            purchase_to,
+            limit_v,
+            offset_v,
+            include_lines,
+            req_id,
+            type(exc).__name__,
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={"error": "PURCHASE_LIST_TEMPORARY"},
+        ) from exc
+    except Exception as exc:
+        _log.exception(
+            "list_trade_purchases failed business_id=%s purchase_from=%s purchase_to=%s "
+            "limit=%s offset=%s include_lines=%s x-request-id=%s",
+            business_id,
+            purchase_from,
+            purchase_to,
+            limit_v,
+            offset_v,
+            include_lines,
+            req_id,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={"error": "SERVER_TEMPORARY_ISSUE"},
+        ) from exc
     set_cached(
         cache_key,
         _purchase_list_to_cache(_m.role, rows, include_lines=include_lines),

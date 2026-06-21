@@ -1799,7 +1799,7 @@ class _PurchaseHomePageState extends ConsumerState<PurchaseHomePage> {
               context.push('/purchase/detail/${p.id}', extra: p);
             }
           },
-          onEdit: () => context.push('/purchase/edit/${p.id}'),
+          onEdit: () => context.push('/purchase/edit/${p.id}', extra: p),
           onMarkPaid: () => _markPaidQuick(p),
           onMarkDelivered: () => _markDeliveredQuick(p),
           onDelete: () => _confirmDelete(context, p),
@@ -2660,7 +2660,7 @@ class _PurchaseHistoryFullscreenSearchPageState
                   '/purchase/detail/${p.id}',
                   extra: p,
                 ),
-                onEdit: () => context.push('/purchase/edit/${p.id}'),
+                onEdit: () => context.push('/purchase/edit/${p.id}', extra: p),
                 onMarkPaid: () => _markPaid(p),
                 onMarkDelivered: () => _markDelivered(p),
                 onDelete: () => _confirmDelete(ctx, p),

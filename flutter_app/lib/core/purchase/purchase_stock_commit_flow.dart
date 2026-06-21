@@ -238,7 +238,7 @@ Future<void> showPurchaseStockCommitBlockedDialog(
           TextButton(
             onPressed: () {
               Navigator.of(dialogContext).pop();
-              context.push('/purchase/edit/${purchase.id}');
+              context.push('/purchase/edit/${purchase.id}', extra: purchase);
             },
             child: const Text('Edit purchase'),
           ),

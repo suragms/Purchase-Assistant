@@ -1223,9 +1223,13 @@ class HexaApi {
   Future<Map<String, dynamic>> getTradePurchase({
     required String businessId,
     required String purchaseId,
+    bool failFast = false,
   }) async {
     final res = await _dio.get<Map<String, dynamic>>(
       '/v1/businesses/$businessId/trade-purchases/$purchaseId',
+      options: failFast
+          ? Options(extra: const {'skipAutoRetry': true})
+          : null,
     );
     return Map<String, dynamic>.from(res.data ?? {});
   }

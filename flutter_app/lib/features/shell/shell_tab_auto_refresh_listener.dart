@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/auth/provider_api_guard.dart';
 import '../../core/navigation/surface_refresh_policy.dart';
+import '../../core/router/purchase_overlay_active_provider.dart';
 import '../../core/providers/business_aggregates_invalidation.dart';
 import '../../core/providers/business_write_revision.dart';
 import '../../core/providers/delivery_pipeline_provider.dart';
@@ -32,6 +33,7 @@ class _ShellTabAutoRefreshListenerState
 
   void _refreshBranch(int branch, {required String reason}) {
     if (!mounted || providerSkipApi(ref)) return;
+    if (ref.read(purchaseOverlayActiveProvider)) return;
     final now = DateTime.now();
     final last = _lastTabRefresh[branch];
     if (last != null &&

@@ -17,6 +17,7 @@ import '../../../core/auth/session_notifier.dart'
     show hexaApiProvider, sessionProvider;
 import '../../../core/platform/app_foreground_provider.dart';
 import '../../../core/providers/api_degraded_provider.dart';
+import '../../../core/providers/api_health_snapshot_provider.dart';
 import '../../../core/widgets/friendly_load_error.dart';
 import '../../../core/models/trade_purchase_models.dart';
 import '../../../core/navigation/surface_refresh_policy.dart';
@@ -369,10 +370,8 @@ class _HomePageState extends ConsumerState<HomePage>
     if (!dash.refreshing && dash.snapshot.data.purchaseCount > 0) return;
 
     try {
-      await ref
-          .read(hexaApiProvider)
-          .healthReady()
-          .timeout(const Duration(seconds: 20));
+      final snap = await ref.read(apiHealthSnapshotProvider.future);
+      if (!snap.readyOk) return;
     } catch (_) {
       return;
     }
@@ -386,10 +385,10 @@ class _HomePageState extends ConsumerState<HomePage>
     ref.read(authApiGateProvider.notifier).reset();
     ref.read(authSessionExpiredProvider.notifier).clear();
     try {
-      await ref
-          .read(hexaApiProvider)
-          .healthLive()
-          .timeout(const Duration(seconds: 15));
+      final snap = await ref.read(apiHealthSnapshotProvider.future);
+      if (!snap.liveOk) {
+        throw StateError('health_live_failed');
+      }
     } catch (e) {
       if (!mounted) return;
       final sc = e is DioException ? e.response?.statusCode : null;

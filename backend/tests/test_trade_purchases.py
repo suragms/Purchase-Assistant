@@ -468,6 +468,44 @@ def test_list_purchase_date_range_inclusive_filter():
     assert len(rb.json()) == 3
 
 
+def test_list_purchase_date_range_include_lines_false():
+    """Reports/history list shape: date range only, no line payloads."""
+    h, bid = _register_and_business()
+    sid = _supplier_id(h, bid)
+    iid = _catalog_item_id(h, bid)
+    pd = date(2024, 8, 20)
+    body = {
+        "purchase_date": pd.isoformat(),
+        "supplier_id": sid,
+        "lines": [
+            {
+                "catalog_item_id": iid,
+                "item_name": "Sugar",
+                "qty": 2,
+                "unit": "kg",
+                "landing_cost": "50",
+                "tax_percent": "0",
+            }
+        ],
+    }
+    cr = client.post(f"/v1/businesses/{bid}/trade-purchases", headers=h, json=body)
+    assert cr.status_code == 201, cr.text
+
+    r = client.get(
+        f"/v1/businesses/{bid}/trade-purchases"
+        f"?purchase_from={pd.isoformat()}&purchase_to={pd.isoformat()}"
+        f"&limit=50&offset=0&include_lines=false",
+        headers=h,
+    )
+    assert r.status_code == 200, r.text
+    rows = r.json()
+    assert len(rows) >= 1
+    row = rows[0]
+    assert row["purchase_date"] == pd.isoformat()
+    assert "lines" not in row or row.get("lines") in (None, [])
+    assert row.get("items_count", 0) >= 1
+
+
 def test_compute_totals_plain_line():
     req = TradePurchaseCreateRequest(
         purchase_date=date.today(),

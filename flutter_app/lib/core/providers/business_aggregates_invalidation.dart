@@ -32,6 +32,7 @@ import '../models/trade_purchase_models.dart';
 import 'server_notifications_provider.dart'
     show
         appNotificationUnreadCountProvider,
+        appNotificationsBundleProvider,
         appNotificationsListProvider,
         appNotificationsSummaryProvider;
 import 'warehouse_alerts_provider.dart';
@@ -150,6 +151,7 @@ void _doInvalidateBusinessAggregates(ProviderContainer container) {
   if (onHome) {
     container.invalidate(homeInventorySummaryProvider);
   }
+  container.invalidate(appNotificationsBundleProvider);
   container.invalidate(appNotificationsSummaryProvider);
   bumpBusinessDataWriteRevision(container);
 
@@ -544,8 +546,10 @@ void invalidateWarehouseSurfacesAfterStockWrite(
 }
 
 void invalidateNotificationSurfaces(dynamic ref) {
+  ref.invalidate(appNotificationsBundleProvider);
   ref.invalidate(appNotificationsListProvider);
   ref.invalidate(appNotificationUnreadCountProvider);
+  ref.invalidate(appNotificationsSummaryProvider);
 }
 
 /// Staff delivery lists, pipeline KPIs, and owner home — without full financial KPI storm.

@@ -50,12 +50,18 @@ flutter pub get
 API_URL="${API_BASE_URL:-https://my-purchases-api.onrender.com}"
 BUILD_SHA="$(git -C "$ROOT" rev-parse --short HEAD 2>/dev/null || echo unknown)"
 
-echo "Building web (API=${API_URL}, BUILD_SHA=${BUILD_SHA})..."
+# Default prod: no source maps (smaller bundle). Set ENABLE_SOURCE_MAPS=1 on a Vercel preview only.
+SOURCE_MAPS_FLAG="--no-source-maps"
+if [ "${ENABLE_SOURCE_MAPS:-0}" = "1" ]; then
+  SOURCE_MAPS_FLAG=""
+fi
+
+echo "Building web (API=${API_URL}, BUILD_SHA=${BUILD_SHA}, SOURCE_MAPS=${ENABLE_SOURCE_MAPS:-0})..."
 flutter build web --release \
   -O2 \
   --pwa-strategy=none \
   --no-web-resources-cdn \
-  --no-source-maps \
+  $SOURCE_MAPS_FLAG \
   --no-wasm-dry-run \
   --dart-define=API_BASE_URL="$API_URL" \
   --dart-define=BUILD_SHA="$BUILD_SHA" \

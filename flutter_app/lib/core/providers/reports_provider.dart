@@ -16,6 +16,8 @@ import '../reporting/trade_report_aggregate.dart';
 import '../services/offline_store.dart';
 import '../utils/report_date_params.dart';
 import '../../features/shell/shell_branch_provider.dart';
+import '../router/purchase_overlay_active_provider.dart';
+import 'trade_purchases_list_inflight.dart';
 import 'api_degraded_provider.dart';
 import 'analytics_kpi_provider.dart';
 import 'connectivity_provider.dart' show isOfflineResult;
@@ -125,7 +127,8 @@ Future<({List<TradePurchase> items, List<Map<String, dynamic>> raw})?>
   final toD = DateTime(range.to.year, range.to.month, range.to.day);
   final aggregated = <Map<String, dynamic>>[];
   for (var offset = 0; offset < 50000; offset += 50) {
-    final page = await api.listTradePurchases(
+    final page = await fetchTradePurchasesPageDeduped(
+      api: api,
       businessId: bid,
       limit: 50,
       offset: offset,
@@ -221,8 +224,8 @@ Future<List<TradePurchase>> _loadReportsPurchases(Ref ref) async {
           // [Bug 5 fix] Hard timeout on each page so a cold/unreachable Render
           // host can never hang the Reports page forever — we just fall back to
           // cached data + a Retry banner.
-          final page = await api
-              .listTradePurchases(
+          final page = await fetchTradePurchasesPageDeduped(
+                api: api,
                 businessId: bid,
                 limit: 50,
                 offset: offset,
@@ -377,6 +380,14 @@ final reportsPurchasesPayloadProvider =
 
   // IndexedStack mounts Reports off-screen; use Hive only until the user opens Reports.
   if (branch != ShellBranch.reports && !needsLive) {
+    final hive = ref.watch(reportsPurchasesHiveCacheProvider);
+    return ReportsPurchasePayload(
+      items: hive ?? const [],
+      fromLiveFetch: false,
+    );
+  }
+
+  if (ref.watch(purchaseOverlayActiveProvider)) {
     final hive = ref.watch(reportsPurchasesHiveCacheProvider);
     return ReportsPurchasePayload(
       items: hive ?? const [],

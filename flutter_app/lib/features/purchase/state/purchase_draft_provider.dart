@@ -1,7 +1,9 @@
 import 'dart:async';
 
+import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart' show immutable;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/auth/auth_error_messages.dart';
 import '../../../core/calc_engine.dart';
 import '../../../core/auth/session_notifier.dart';
 import '../../../core/strict_decimal.dart';
@@ -764,21 +766,30 @@ class PurchaseDraftNotifier extends Notifier<PurchaseDraft> {
   }
 
   /// Returns the raw server map for the wizard (e.g. human_id, payment snapshot).
-  Future<Map<String, dynamic>?> loadFromEdit(String purchaseId) async {
+  Future<Map<String, dynamic>?> loadFromEdit(
+    String purchaseId, {
+    bool failFast = true,
+  }) async {
     if (_disposed) return null;
     final session = ref.read(sessionProvider);
     if (session == null) return null;
     Map<String, dynamic> raw;
+    final timeout = failFast
+        ? const Duration(seconds: 12)
+        : const Duration(seconds: 20);
     try {
       raw = await ref
           .read(hexaApiProvider)
           .getTradePurchase(
             businessId: session.primaryBusiness.id,
             purchaseId: purchaseId,
+            failFast: failFast,
           )
-          .timeout(const Duration(seconds: 20));
+          .timeout(timeout);
     } on TimeoutException {
       return null;
+    } on DioException catch (e) {
+      throw Exception(friendlyApiError(e));
     }
     if (_disposed) return raw;
     if (!_tradePurchaseMapLooksValid(raw)) {

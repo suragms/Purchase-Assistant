@@ -1,15 +1,19 @@
 import 'dart:async';
 
+import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../auth/auth_error_messages.dart';
 import '../auth/auth_failure_policy.dart';
 import '../auth/session_notifier.dart' show activeSessionProvider, hexaApiProvider, sessionProvider;
 import '../../features/shell/shell_branch_provider.dart';
+import '../router/purchase_overlay_active_provider.dart';
 import '../models/trade_purchase_models.dart';
 import '../auth/provider_api_guard.dart';
 import 'api_read_snapshots.dart';
 import 'analytics_kpi_provider.dart' show analyticsDateRangeProvider;
+import 'trade_purchases_list_inflight.dart';
 import '../utils/line_display.dart';
 
 /// Alert strip: small cap — full due counts use server-side reports when needed.
@@ -62,6 +66,7 @@ String? _tradeListApiStatus(String primaryRaw, String? secondaryRaw) {
 /// Bust list + catalog-intel snapshots together.
 void invalidateTradePurchaseCaches(dynamic ref) {
   bustTradePurchasesRecentSnapshot(ref);
+  bustTradePurchasesListInflight();
   ref.invalidate(tradePurchasesListProvider);
   ref.invalidate(tradePurchasesForAlertsProvider);
   ref.invalidate(staffTradePurchasesForAlertsProvider);
@@ -71,6 +76,7 @@ void invalidateTradePurchaseCaches(dynamic ref) {
 /// Same as [invalidateTradePurchaseCaches] for use after async gaps where [WidgetRef] may be disposed.
 void invalidateTradePurchaseCachesFromContainer(ProviderContainer container) {
   container.invalidate(tradePurchasesRecentSnapshotProvider);
+  bustTradePurchasesListInflight();
   container.invalidate(tradePurchasesListProvider);
   container.invalidate(tradePurchasesForAlertsProvider);
   container.invalidate(staffTradePurchasesForAlertsProvider);
@@ -225,6 +231,12 @@ class TradePurchasesListNotifier extends AutoDisposeAsyncNotifier<TradePurchases
       return const TradePurchasesListView(rows: [], hasMore: false);
     }
 
+    if (ref.watch(purchaseOverlayActiveProvider)) {
+      final cached = state.valueOrNull;
+      if (cached != null) return cached;
+      return const TradePurchasesListView(rows: [], hasMore: false);
+    }
+
     final session = ref.watch(sessionProvider);
     if (session == null) {
       return const TradePurchasesListView(rows: [], hasMore: false);
@@ -242,15 +254,25 @@ class TradePurchasesListNotifier extends AutoDisposeAsyncNotifier<TradePurchases
 
     final apiRange = tradePurchaseDateApiRange(fromDate, toDate);
 
-    final page = await ref.read(hexaApiProvider).listTradePurchases(
-          businessId: session.primaryBusiness.id,
-          limit: kTradePurchasesHistoryFetchLimit,
-          offset: 0,
-          status: apiStatus,
-          purchaseFrom: apiRange.from,
-          purchaseTo: apiRange.to,
-          includeLines: false,
-        );
+    List<Map<String, dynamic>> page;
+    try {
+      page = await fetchTradePurchasesPageDeduped(
+        api: ref.read(hexaApiProvider),
+        businessId: session.primaryBusiness.id,
+        limit: kTradePurchasesHistoryFetchLimit,
+        offset: 0,
+        status: apiStatus,
+        purchaseFrom: apiRange.from,
+        purchaseTo: apiRange.to,
+        includeLines: false,
+      );
+    } on DioException catch (e) {
+      throw Exception(friendlyApiError(e));
+    } on TimeoutException {
+      throw Exception(
+        'Could not load purchases in time — check your connection and try again.',
+      );
+    }
     if (_dead) {
       return const TradePurchasesListView(rows: [], hasMore: false);
     }
@@ -282,15 +304,25 @@ class TradePurchasesListNotifier extends AutoDisposeAsyncNotifier<TradePurchases
       final toDate = advTo ?? analyticsRange.to;
 
       final apiRange = tradePurchaseDateApiRange(fromDate, toDate);
-      final page = await ref.read(hexaApiProvider).listTradePurchases(
-            businessId: session.primaryBusiness.id,
-            limit: kTradePurchasesHistoryFetchLimit,
-            offset: offset,
-            status: apiStatus,
-            purchaseFrom: apiRange.from,
-            purchaseTo: apiRange.to,
-            includeLines: false,
-          );
+      List<Map<String, dynamic>> page;
+      try {
+        page = await fetchTradePurchasesPageDeduped(
+          api: ref.read(hexaApiProvider),
+          businessId: session.primaryBusiness.id,
+          limit: kTradePurchasesHistoryFetchLimit,
+          offset: offset,
+          status: apiStatus,
+          purchaseFrom: apiRange.from,
+          purchaseTo: apiRange.to,
+          includeLines: false,
+        );
+      } on DioException catch (e) {
+        throw Exception(friendlyApiError(e));
+      } on TimeoutException {
+        throw Exception(
+          'Could not load more purchases in time — check your connection.',
+        );
+      }
       if (_dead) return;
       final after = state.valueOrNull;
       if (after == null || after.rows.length != offset) return;

@@ -54,6 +54,16 @@ bool hexaAsyncErrorLikelyBenign(Object error) {
   if (error is TimeoutException) return true;
   if (error is ProviderFetchAborted) return true;
   if (error is StockListFetchBlockedException) return true;
+  if (error is Exception) {
+    final s = error.toString();
+    if (s.contains('Could not load purchase') ||
+        s.contains('Could not load purchases') ||
+        s.contains('Cannot reach') ||
+        s.contains('Waking server') ||
+        s.contains('connection')) {
+      return true;
+    }
+  }
   if (error is Error) {
     final bare = error.toString();
     if (bare == 'Error' ||

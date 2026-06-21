@@ -1519,7 +1519,7 @@ class PurchaseDetailBodyState extends ConsumerState<PurchaseDetailBody> {
           onEdit: p.statusEnum == PurchaseStatus.cancelled ||
                   !_canEditPurchase(ref)
               ? null
-              : () => context.push('/purchase/edit/${p.id}'),
+              : () => context.push('/purchase/edit/${p.id}', extra: p),
           onExportPdf: downloadPdf,
           onShare: sharePdf,
           onPrint: printPdf,
@@ -1548,7 +1548,7 @@ class PurchaseDetailBodyState extends ConsumerState<PurchaseDetailBody> {
           backgroundColor: Colors.amber.shade50,
           side:
               BorderSide(color: Colors.amber.shade700.withValues(alpha: 0.35)),
-          onPressed: () => context.push('/purchase/edit/${p.id}'),
+          onPressed: () => context.push('/purchase/edit/${p.id}', extra: p),
         ),
       ),
     );

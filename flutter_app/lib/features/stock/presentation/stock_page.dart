@@ -13,6 +13,7 @@ import '../../../core/auth/auth_failure_policy.dart';
 import '../../../core/auth/provider_api_guard.dart';
 import '../../../core/auth/session_notifier.dart';
 import '../../../core/providers/api_degraded_provider.dart';
+import '../../../core/providers/api_health_snapshot_provider.dart';
 import '../../../core/models/session.dart';
 import '../../../core/providers/stock_list_exceptions.dart';
 import '../../../core/services/stock_list_pdf.dart';
@@ -302,10 +303,10 @@ class _StockPageState extends ConsumerState<StockPage>
     ref.read(authSessionExpiredProvider.notifier).clear();
     final session = ref.read(sessionProvider);
     try {
-      await ref
-          .read(hexaApiProvider)
-          .healthLive()
-          .timeout(const Duration(seconds: 15));
+      final snap = await ref.read(apiHealthSnapshotProvider.future);
+      if (!snap.liveOk) {
+        throw StateError('health_live_failed');
+      }
     } catch (e) {
       if (!mounted) return;
       final sc = e is DioException ? e.response?.statusCode : null;

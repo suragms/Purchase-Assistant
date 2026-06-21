@@ -10,6 +10,7 @@ import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/router/navigation_ext.dart';
+import '../../../core/api/api_warmup.dart';
 import '../../../core/api/fastapi_error.dart';
 import '../../../core/auth/auth_error_messages.dart';
 import '../../../core/errors/user_facing_errors.dart';
@@ -20,6 +21,7 @@ import '../../../core/models/trade_purchase_models.dart';
 import '../../../core/widgets/form_field_scroll.dart';
 import '../../../core/widgets/friendly_load_error.dart';
 import '../../../core/widgets/hexa_page_error_boundary.dart';
+import '../../../core/providers/api_degraded_provider.dart';
 import '../../../core/providers/brokers_list_provider.dart';
 import '../../../core/utils/currency_utils.dart';
 import '../../../core/utils/snack.dart';
@@ -44,6 +46,7 @@ import '../../purchase/domain/purchase_draft.dart';
 import '../../purchase/state/purchase_draft_provider.dart';
 import '../../purchase/state/purchase_smart_defaults.dart';
 import '../../purchase/state/purchase_trade_preview_provider.dart';
+import '../mapping/purchase_trade_seed.dart';
 import '../providers/trade_purchase_detail_provider.dart';
 
 import '../../contacts/presentation/broker_wizard_page.dart';
@@ -62,12 +65,16 @@ class PurchaseEntryWizardV2 extends ConsumerStatefulWidget {
   const PurchaseEntryWizardV2({
     super.key,
     this.editingId,
+    this.seedPurchase,
     this.initialCatalogItemId,
     this.initialDraft,
     this.resumeDraft = false,
   });
 
   final String? editingId;
+
+  /// List/detail row seed — party/terms show instantly; lines fetched separately.
+  final TradePurchase? seedPurchase;
   final String? initialCatalogItemId;
 
   /// Seeds the wizard after external flows (skipped when editing).
@@ -86,6 +93,8 @@ class _PurchaseEntryWizardV2State extends ConsumerState<PurchaseEntryWizardV2>
   bool _isBootstrapping = false;
   bool _bootstrapSlowConnection = false;
   String? _editBootstrapError;
+  bool _editLinesLoading = false;
+  String? _editLinesLoadError;
   Timer? _bootstrapSlowTimer;
   bool _isSaving = false;
   bool _itemSheetInFlight = false;
@@ -170,6 +179,15 @@ class _PurchaseEntryWizardV2State extends ConsumerState<PurchaseEntryWizardV2>
     clearStuckAuthGates(ref);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
+      unawaited(_warmWizardPartyLists());
+      unawaited(_bootstrap());
+    });
+  }
+
+  /// Warm supplier/broker lists without letting async failures escape as zone errors.
+  Future<void> _warmWizardPartyLists() async {
+    if (!mounted) return;
+    try {
       final sup = ref.read(suppliersListProvider);
       final bro = ref.read(brokersListProvider);
       if (!sup.hasValue && !sup.isLoading) {
@@ -178,8 +196,13 @@ class _PurchaseEntryWizardV2State extends ConsumerState<PurchaseEntryWizardV2>
       if (!bro.hasValue && !bro.isLoading) {
         ref.invalidate(brokersListProvider);
       }
-      _bootstrap();
-    });
+      await Future.wait([
+        ref.read(suppliersListProvider.future).catchError((_) => const <Map<String, dynamic>>[]),
+        ref.read(brokersListProvider.future).catchError((_) => const <Map<String, dynamic>>[]),
+      ]);
+    } catch (_) {
+      // Party autocomplete may be stale — edit still works via manual entry.
+    }
   }
 
   @override
@@ -194,15 +217,34 @@ class _PurchaseEntryWizardV2State extends ConsumerState<PurchaseEntryWizardV2>
   Future<void> _bootstrap() async {
     final notifier = ref.read(purchaseDraftProvider.notifier);
     if (widget.editingId != null && widget.editingId!.isNotEmpty) {
+      final seed = widget.seedPurchase;
+      final seedOk = seed != null && seed.id == widget.editingId;
       if (!mounted) return;
       setState(() {
-        _isBootstrapping = true;
-        _bootstrapSlowConnection = false;
         _editBootstrapError = null;
+        _editLinesLoadError = null;
+        _bootstrapSlowConnection = false;
+        if (seedOk) {
+          _isBootstrapping = false;
+          _editLinesLoading = seed.lines.isEmpty;
+        } else {
+          _isBootstrapping = true;
+          _editLinesLoading = false;
+        }
       });
+      if (seedOk) {
+        notifier.replaceDraft(purchaseDraftHeaderFromTradePurchase(seed));
+        _editHumanId = seed.humanId;
+        _loadedDerivedStatus = seed.derivedStatus;
+        _loadedRemaining = seed.remaining;
+        _syncControllersFromDraft();
+        if (seed.lines.isNotEmpty) {
+          return;
+        }
+      }
       _bootstrapSlowTimer?.cancel();
       _bootstrapSlowTimer = Timer(const Duration(seconds: 8), () {
-        if (mounted && _isBootstrapping) {
+        if (mounted && (_isBootstrapping || _editLinesLoading)) {
           setState(() => _bootstrapSlowConnection = true);
         }
       });
@@ -215,21 +257,27 @@ class _PurchaseEntryWizardV2State extends ConsumerState<PurchaseEntryWizardV2>
       } catch (_) {
         // Proceed — interceptor may still attach token from store.
       }
-      ref.invalidate(tradePurchaseDetailProvider(widget.editingId!));
+      if (ref.read(apiDegradedProvider) != null) {
+        unawaited(
+          ApiWarmupService.pingHealth(ref.read(hexaApiProvider)),
+        );
+      }
       Map<String, dynamic>? raw;
       try {
         raw = await notifier.loadFromEdit(widget.editingId!);
-        if (raw == null && mounted) {
-          await Future<void>.delayed(const Duration(milliseconds: 420));
-          if (!mounted) return;
-          raw = await notifier.loadFromEdit(widget.editingId!);
-        }
       } catch (e) {
         if (!mounted) return;
         _bootstrapSlowTimer?.cancel();
+        final msg = friendlyApiError(e);
         setState(() {
-          _editBootstrapError = friendlyApiError(e);
-          _isBootstrapping = false;
+          if (seedOk) {
+            _editLinesLoadError = msg;
+            _editLinesLoading = false;
+            _editBootstrapError = null;
+          } else {
+            _editBootstrapError = msg;
+            _isBootstrapping = false;
+          }
           _bootstrapSlowConnection = false;
         });
         return;
@@ -237,10 +285,17 @@ class _PurchaseEntryWizardV2State extends ConsumerState<PurchaseEntryWizardV2>
       if (!mounted) return;
       if (raw == null) {
         _bootstrapSlowTimer?.cancel();
+        const msg =
+            'Could not load this purchase (timeout or incomplete data). '
+            'Check your connection, pull to refresh login, then tap Retry.';
         setState(() {
-          _editBootstrapError = 'Could not load this purchase (timeout or incomplete data). '
-              'Check your connection, pull to refresh login, then tap Retry.';
-          _isBootstrapping = false;
+          if (seedOk) {
+            _editLinesLoadError = msg;
+            _editLinesLoading = false;
+          } else {
+            _editBootstrapError = msg;
+            _isBootstrapping = false;
+          }
           _bootstrapSlowConnection = false;
         });
         return;
@@ -253,6 +308,8 @@ class _PurchaseEntryWizardV2State extends ConsumerState<PurchaseEntryWizardV2>
       _bootstrapSlowTimer?.cancel();
       setState(() {
         _isBootstrapping = false;
+        _editLinesLoading = false;
+        _editLinesLoadError = null;
         _bootstrapSlowConnection = false;
       });
     } else {
@@ -1665,8 +1722,14 @@ class _PurchaseEntryWizardV2State extends ConsumerState<PurchaseEntryWizardV2>
         invalidatePurchaseWorkspace(
           ref,
           affectedItemIds: savedItemIds,
-          createOnly: true,
+          createOnly: !isEdit,
         );
+      }
+      if (isEdit) {
+        final eid = widget.editingId?.trim();
+        if (eid != null && eid.isNotEmpty) {
+          ref.invalidate(tradePurchaseDetailProvider(eid));
+        }
       }
       for (final line in draftSnap.lines) {
         final itemId = line.catalogItemId?.trim();
@@ -2114,17 +2177,52 @@ class _PurchaseEntryWizardV2State extends ConsumerState<PurchaseEntryWizardV2>
         );
         break;
       case 1:
-        step = PurchaseFastItemsStep(
-          listScrollController: _itemsStepListScrollController,
-          onDraftChanged: _onDraftChanged,
-          lineJustAdded: _lineJustAdded,
-          onDismissLineJustAdded: () => setState(() => _lineJustAdded = null),
-          openAdvancedItemEditor: ({editIndex, initialOverride}) =>
-              _openItemSheet(
-                catalog,
-                editIndex: editIndex,
-                initialOverride: initialOverride,
+        step = Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (_editLinesLoading)
+              const LinearProgressIndicator(minHeight: 3),
+            if (_editLinesLoadError != null)
+              Material(
+                color: Colors.orange.shade50,
+                child: Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          _editLinesLoadError!,
+                          style: TextStyle(
+                            color: Colors.orange.shade900,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                      TextButton(
+                        onPressed: _bootstrap,
+                        child: const Text('Retry'),
+                      ),
+                    ],
+                  ),
+                ),
               ),
+            Expanded(
+              child: PurchaseFastItemsStep(
+                listScrollController: _itemsStepListScrollController,
+                onDraftChanged: _onDraftChanged,
+                lineJustAdded: _lineJustAdded,
+                onDismissLineJustAdded: () =>
+                    setState(() => _lineJustAdded = null),
+                openAdvancedItemEditor: ({editIndex, initialOverride}) =>
+                    _openItemSheet(
+                  catalog,
+                  editIndex: editIndex,
+                  initialOverride: initialOverride,
+                ),
+              ),
+            ),
+          ],
         );
         break;
       case 2:
