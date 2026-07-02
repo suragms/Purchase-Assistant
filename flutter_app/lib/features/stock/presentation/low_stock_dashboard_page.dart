@@ -655,6 +655,7 @@ class _LowStockDashboardPageState extends ConsumerState<LowStockDashboardPage>
                           ),
                           const SizedBox(height: 8),
                           DropdownButtonFormField<String?>(
+                            isExpanded: true,
                             initialValue: sub,
                             decoration: InputDecoration(
                               isDense: true,

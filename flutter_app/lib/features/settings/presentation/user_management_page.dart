@@ -166,6 +166,7 @@ class _UserManagementPageState extends ConsumerState<UserManagementPage> {
                 ),
                 const SizedBox(height: 10),
                 DropdownButtonFormField<String>(
+                  isExpanded: true,
                   initialValue: role,
                   decoration: const InputDecoration(
                     labelText: 'Role',

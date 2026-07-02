@@ -122,11 +122,17 @@ class PurchaseDetailLineRow extends StatelessWidget {
                   'Line total',
                   style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant),
                 ),
-                Text(
-                  lineTotalLabel,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w900,
-                    fontSize: 14,
+                const SizedBox(width: 8),
+                Flexible(
+                  child: Text(
+                    lineTotalLabel,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.right,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w900,
+                      fontSize: 14,
+                    ),
                   ),
                 ),
               ],
@@ -140,12 +146,18 @@ class PurchaseDetailLineRow extends StatelessWidget {
                     'Profit',
                     style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant),
                   ),
-                  Text(
-                    profitLabel!,
-                    style: TextStyle(
-                      fontWeight: FontWeight.w900,
-                      fontSize: 14,
-                      color: profitColor ?? const Color(0xFF0F766E),
+                  const SizedBox(width: 8),
+                  Flexible(
+                    child: Text(
+                      profitLabel!,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.right,
+                      style: TextStyle(
+                        fontWeight: FontWeight.w900,
+                        fontSize: 14,
+                        color: profitColor ?? const Color(0xFF0F766E),
+                      ),
                     ),
                   ),
                 ],

@@ -409,6 +409,7 @@ class _OperationalFilterBodyState
         Text('Sort', style: Theme.of(context).textTheme.labelLarge),
         const SizedBox(height: 8),
         DropdownButtonFormField<String>(
+          isExpanded: true,
           initialValue: _sort,
           decoration: const InputDecoration(
               border: OutlineInputBorder(), isDense: true),

@@ -115,14 +115,21 @@ class HomePurchaseControlCenter extends ConsumerWidget {
                         color: Color(0xFF0F172A),
                       ),
                     ),
-                    if (suppliers > 0 || brokers > 0)
-                      Text(
-                        '$suppliers suppliers${brokers > 0 ? ' · $brokers brokers' : ''}',
-                        style: const TextStyle(
-                          fontSize: 12, // Subtitle: 12
-                          color: Color(0xFF64748B),
+                    if (suppliers > 0 || brokers > 0) ...[
+                      const SizedBox(width: 8),
+                      Flexible(
+                        child: Text(
+                          '$suppliers suppliers${brokers > 0 ? ' · $brokers brokers' : ''}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          textAlign: TextAlign.right,
+                          style: const TextStyle(
+                            fontSize: 12, // Subtitle: 12
+                            color: Color(0xFF64748B),
+                          ),
                         ),
                       ),
+                    ],
                   ],
                 ),
                 const SizedBox(height: 16), // Spacing: 16
@@ -182,13 +189,19 @@ class HomePurchaseControlCenter extends ConsumerWidget {
                             color: Color(0xFF1E293B),
                           ),
                         ),
-                        Text(
-                          '${homeInr(dash.totalProfit)}'
-                          '${dash.profitPercent != null ? ' (${dash.profitPercent!.toStringAsFixed(1)}%)' : ''}',
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.bold,
-                            color: HexaColors.profit,
+                        const SizedBox(width: 8),
+                        Flexible(
+                          child: Text(
+                            '${homeInr(dash.totalProfit)}'
+                            '${dash.profitPercent != null ? ' (${dash.profitPercent!.toStringAsFixed(1)}%)' : ''}',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            textAlign: TextAlign.right,
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                              color: HexaColors.profit,
+                            ),
                           ),
                         ),
                       ],

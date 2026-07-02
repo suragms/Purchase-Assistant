@@ -276,6 +276,7 @@ class _QuickCatalogTaxonomySheetState
                   );
                 }
                 return DropdownButtonFormField<String>(
+                  isExpanded: true,
                   initialValue: _categoryId,
                   decoration: InputDecoration(
                     labelText: 'Category',
@@ -288,7 +289,11 @@ class _QuickCatalogTaxonomySheetState
                     for (final c in cats)
                       DropdownMenuItem(
                         value: c['id']?.toString(),
-                        child: Text(c['name']?.toString() ?? '—'),
+                        child: Text(
+                          c['name']?.toString() ?? '—',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
                   ],
                   onChanged: _saving

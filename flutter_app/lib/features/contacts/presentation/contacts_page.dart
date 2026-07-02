@@ -189,7 +189,15 @@ class _SupplierCard extends StatelessWidget {
                                         fontWeight: FontWeight.w700),
                                   ),
                                   const SizedBox(width: 6),
-                                  Text(phone, style: tt.bodySmall),
+                                  Flexible(
+                                    child: Text(
+                                      phone,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      softWrap: false,
+                                      style: tt.bodySmall,
+                                    ),
+                                  ),
                                 ],
                               ),
                             ),

@@ -202,13 +202,18 @@ class _SupplierCreateSimpleState extends ConsumerState<SupplierCreateSimple> {
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Text(
-                            'Add more details (optional)',
-                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                  fontWeight: FontWeight.w600,
-                                  color: HexaColors.brandPrimary,
-                                ),
+                          Flexible(
+                            child: Text(
+                              'Add more details (optional)',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                    fontWeight: FontWeight.w600,
+                                    color: HexaColors.brandPrimary,
+                                  ),
+                            ),
                           ),
+                          const SizedBox(width: 8),
                           Icon(
                             _showOptional
                                 ? Icons.expand_less_rounded

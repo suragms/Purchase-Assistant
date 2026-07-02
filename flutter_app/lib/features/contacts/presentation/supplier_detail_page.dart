@@ -621,12 +621,18 @@ class _SupplierDetailPageState extends ConsumerState<SupplierDetailPage> {
                         style: tt.titleSmall
                             ?.copyWith(fontWeight: FontWeight.w800),
                       ),
-                      Text(
-                        shown.isEmpty
-                            ? '0 bills'
-                            : '${shown.length} bill${shown.length == 1 ? '' : 's'}',
-                        style: tt.labelSmall
-                            ?.copyWith(color: HexaColors.textSecondary),
+                      const SizedBox(width: 8),
+                      Flexible(
+                        child: Text(
+                          shown.isEmpty
+                              ? '0 bills'
+                              : '${shown.length} bill${shown.length == 1 ? '' : 's'}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          textAlign: TextAlign.right,
+                          style: tt.labelSmall
+                              ?.copyWith(color: HexaColors.textSecondary),
+                        ),
                       ),
                     ],
                   ),
@@ -747,19 +753,27 @@ class _WeightChip extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(
-              '$label · ',
-              style: tt.labelSmall?.copyWith(
-                color: cs.onSurfaceVariant,
-                fontWeight: FontWeight.w600,
-                fontSize: 11,
+            Flexible(
+              child: Text(
+                '$label · ',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: tt.labelSmall?.copyWith(
+                  color: cs.onSurfaceVariant,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 11,
+                ),
               ),
             ),
-            Text(
-              value,
-              style: tt.labelSmall?.copyWith(
-                fontWeight: FontWeight.w800,
-                fontSize: 11,
+            Flexible(
+              child: Text(
+                value,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: tt.labelSmall?.copyWith(
+                  fontWeight: FontWeight.w800,
+                  fontSize: 11,
+                ),
               ),
             ),
           ],

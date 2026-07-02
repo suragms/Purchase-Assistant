@@ -207,9 +207,13 @@ class _OwnerTasksPageState extends ConsumerState<OwnerTasksPage>
             for (final slot in const ['morning', 'midday', 'evening']) ...[
               Row(
                 children: [
-                  Text(
-                    slot[0].toUpperCase() + slot.substring(1),
-                    style: HexaDsType.heading(16),
+                  Flexible(
+                    child: Text(
+                      slot[0].toUpperCase() + slot.substring(1),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: HexaDsType.heading(16),
+                    ),
                   ),
                   const Spacer(),
                   TextButton.icon(

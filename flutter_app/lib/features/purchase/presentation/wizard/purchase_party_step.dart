@@ -122,12 +122,18 @@ class PurchasePartyStep extends ConsumerWidget {
                     fontWeight: FontWeight.w700,
                   ),
             ),
-            Text(
-              idVal,
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
-                color: isEdit ? Colors.black87 : sub,
+            const SizedBox(width: 8),
+            Flexible(
+              child: Text(
+                idVal,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.right,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: isEdit ? Colors.black87 : sub,
+                ),
               ),
             ),
           ],

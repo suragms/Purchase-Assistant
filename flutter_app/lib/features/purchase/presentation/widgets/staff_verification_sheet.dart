@@ -306,6 +306,7 @@ class _StaffVerificationSheetState extends ConsumerState<_StaffVerificationSheet
             _numField(_damagedQty[id], 'Damaged qty', unit),
             const SizedBox(height: 8),
             DropdownButtonFormField<String>(
+              isExpanded: true,
               initialValue: ds.reason,
               decoration: const InputDecoration(
                 labelText: 'Reason',

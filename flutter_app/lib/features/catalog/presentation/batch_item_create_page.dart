@@ -252,6 +252,7 @@ class _BatchItemCreatePageState extends ConsumerState<BatchItemCreatePage> {
                         }
                         return DropdownButtonFormField<String>(
                           key: ValueKey('cat_${i}_${line.categoryId}'),
+                          isExpanded: true,
                           menuMaxHeight: dropdownMenuMax,
                           decoration: const InputDecoration(
                             labelText: 'Category *',
@@ -266,6 +267,8 @@ class _BatchItemCreatePageState extends ConsumerState<BatchItemCreatePage> {
                                 child: Text(
                                   c['name']?.toString() ?? '—',
                                   style: const TextStyle(fontSize: 13),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
                                 ),
                               ),
                           ],
@@ -314,6 +317,7 @@ class _BatchItemCreatePageState extends ConsumerState<BatchItemCreatePage> {
                             }
                             return DropdownButtonFormField<String>(
                               key: ValueKey('type_${i}_${line.typeId}'),
+                              isExpanded: true,
                               menuMaxHeight: dropdownMenuMax,
                               decoration: const InputDecoration(
                                 labelText: 'Subcategory *',
@@ -328,6 +332,8 @@ class _BatchItemCreatePageState extends ConsumerState<BatchItemCreatePage> {
                                     child: Text(
                                       t['name']?.toString() ?? '—',
                                       style: const TextStyle(fontSize: 13),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
                                     ),
                                   ),
                               ],

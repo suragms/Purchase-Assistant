@@ -2085,6 +2085,7 @@ class _PurchaseHistoryFiltersSheetState
               ),
               DropdownButtonFormField<String?>(
                 key: ValueKey<String?>(pack),
+                isExpanded: true,
                 initialValue: pack,
                 decoration: const InputDecoration(
                   labelText: 'Package type',
@@ -2787,17 +2788,22 @@ class _PurchaseRow extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(width: 8),
-                      Text(
-                        _inr(p.totalAmount.round()),
-                        style: TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w800,
-                          color: const Color(0xFF111827),
-                          letterSpacing: -0.35,
-                          height: 1.0,
-                          decoration:
-                              cancelled ? TextDecoration.lineThrough : null,
-                          decorationColor: const Color(0xFF9CA3AF),
+                      Flexible(
+                        child: Text(
+                          _inr(p.totalAmount.round()),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          textAlign: TextAlign.right,
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w800,
+                            color: const Color(0xFF111827),
+                            letterSpacing: -0.35,
+                            height: 1.0,
+                            decoration:
+                                cancelled ? TextDecoration.lineThrough : null,
+                            decorationColor: const Color(0xFF9CA3AF),
+                          ),
                         ),
                       ),
                     ],

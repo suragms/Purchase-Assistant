@@ -247,6 +247,7 @@ class _UserProfilePageState extends ConsumerState<UserProfilePage>
                   const SizedBox(height: 10),
                   if ((user['role']?.toString() ?? '') != 'owner')
                     DropdownButtonFormField<String>(
+                      isExpanded: true,
                       initialValue: role,
                       decoration: const InputDecoration(
                         labelText: 'Role',

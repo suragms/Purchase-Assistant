@@ -1604,10 +1604,16 @@ class PurchaseDetailBodyState extends ConsumerState<PurchaseDetailBody> {
                 'Balance',
                 style: TextStyle(fontSize: 12.5, color: cs.onSurfaceVariant),
               ),
-              SelectableText(
-                _inr(p.remaining),
-                style:
-                    const TextStyle(fontWeight: FontWeight.w800, fontSize: 15),
+              const SizedBox(width: 8),
+              Flexible(
+                child: Text(
+                  _inr(p.remaining),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.right,
+                  style:
+                      const TextStyle(fontWeight: FontWeight.w800, fontSize: 15),
+                ),
               ),
             ],
           ),
@@ -1620,10 +1626,16 @@ class PurchaseDetailBodyState extends ConsumerState<PurchaseDetailBody> {
                   'Due',
                   style: TextStyle(fontSize: 12.5, color: cs.onSurfaceVariant),
                 ),
-                Text(
-                  DateFormat.yMMMd().format(p.dueDate!),
-                  style: const TextStyle(
-                      fontWeight: FontWeight.w800, fontSize: 14),
+                const SizedBox(width: 8),
+                Flexible(
+                  child: Text(
+                    DateFormat.yMMMd().format(p.dueDate!),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.right,
+                    style: const TextStyle(
+                        fontWeight: FontWeight.w800, fontSize: 14),
+                  ),
                 ),
               ],
             ),
@@ -1666,17 +1678,27 @@ class PurchaseDetailBodyState extends ConsumerState<PurchaseDetailBody> {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(
-              k,
-              style: TextStyle(
-                fontSize: 12.5,
-                fontWeight: FontWeight.w600,
-                color: cs.onSurfaceVariant,
+            Flexible(
+              child: Text(
+                k,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w600,
+                  color: cs.onSurfaceVariant,
+                ),
               ),
             ),
-            SelectableText(
-              v,
-              style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
+            const SizedBox(width: 8),
+            Flexible(
+              child: Text(
+                v,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.right,
+                style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
+              ),
             ),
           ],
         ),

@@ -135,12 +135,16 @@ class _DeliverySection extends StatelessWidget {
       children: [
         Row(
           children: [
-            Text(
-              '$title ($count)',
-              style: HexaDsType.heading(14).copyWith(
-                color: highlight && count > 0
-                    ? const Color(0xFFE65100)
-                    : const Color(0xFF0F172A),
+            Flexible(
+              child: Text(
+                '$title ($count)',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: HexaDsType.heading(14).copyWith(
+                  color: highlight && count > 0
+                      ? const Color(0xFFE65100)
+                      : const Color(0xFF0F172A),
+                ),
               ),
             ),
           ],
