@@ -35,6 +35,6 @@ DO $$
 BEGIN
   IF to_regclass('public.stock_movements') IS NOT NULL THEN
     CREATE INDEX IF NOT EXISTS ix_stock_movements_item_created_desc
-      ON stock_movements (catalog_item_id, created_at DESC);
+      ON stock_movements (item_id, created_at DESC);
   END IF;
 END $$;

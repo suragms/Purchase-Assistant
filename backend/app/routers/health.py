@@ -14,7 +14,7 @@ router = APIRouter(tags=["health"])
 logger = logging.getLogger("harisree.health")
 
 # Keep in sync with latest Alembic revision in backend/alembic/versions/.
-EXPECTED_ALEMBIC_HEAD = "065_api_storm_hotpath_indexes"
+EXPECTED_ALEMBIC_HEAD = "068_physical_count_idempotency_key"
 
 
 @router.get("/")
