@@ -41,6 +41,6 @@ async def recent_events(
     m: Annotated[Membership, Depends(require_membership)],
     limit: int = Query(50, ge=1, le=100),
 ):
-    if m.role not in ("owner", "admin", "super_admin", "manager"):
+    if m.role not in ("owner", "admin", "super_admin", "manager", "staff"):
         return []
     return recent_business_events(business_id, limit=limit)

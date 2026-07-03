@@ -59,11 +59,11 @@ class RealtimeInvalidationSignal {
   final Set<String> affectedItemIds;
 }
 
-const _pollIntervalForeground = Duration(seconds: 60);
+const _pollIntervalForeground = Duration(seconds: 25);
 const _backoffSteps = [
-  Duration(seconds: 60),
-  Duration(seconds: 120),
-  Duration(seconds: 300),
+  Duration(seconds: 20),
+  Duration(seconds: 45),
+  Duration(seconds: 90),
 ];
 
 bool _pollTransportFailure(DioException e) {
@@ -79,8 +79,6 @@ final realtimeInvalidationProvider =
   if (providerSkipApi(ref)) return;
   final session = ref.watch(sessionProvider);
   if (session == null) return;
-  final role = session.primaryBusiness.role.toLowerCase();
-  if (role == 'staff') return;
   final api = ref.read(hexaApiProvider);
   final seen = <String>{};
   var tick = 0;
