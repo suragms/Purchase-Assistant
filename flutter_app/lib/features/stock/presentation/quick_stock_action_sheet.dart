@@ -411,6 +411,17 @@ class _QuickStockActionBodyState extends ConsumerState<_QuickStockActionBody> {
         parsed: parsed,
       );
       parentRef.invalidate(stockStatusCountsProvider);
+      if (mode == StockUpdateMode.physical) {
+        messenger?.showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Physical count logged — system stock unchanged. Switch to System to update it.',
+            ),
+            duration: Duration(seconds: 5),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
       await _afterSaveBackgroundWithRef(
         parentRef: parentRef,
         itemId: itemId,
@@ -675,11 +686,6 @@ class _QuickStockActionBodyState extends ConsumerState<_QuickStockActionBody> {
           StockUpdateModeToggle(
             mode: _mode,
             onChanged: _onModeChanged,
-          ),
-          const SizedBox(height: 4),
-          Text(
-            stockUpdateModeHint(_mode),
-            style: const TextStyle(fontSize: 11, color: Color(0xFF64748B)),
           ),
           const Divider(height: 20),
           Text(
