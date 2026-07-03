@@ -92,7 +92,9 @@ final hexaApiProvider = Provider<HexaApi>((ref) {
             if (disposed) return false;
             try {
               ref.read(authRefreshInFlightProvider.notifier).state = true;
-            } catch (_) {}
+            } catch (e, st) {
+              debugPrint('sessionNotifier: failed to set refresh-in-flight: $e\n$st');
+            }
             try {
             final store = ref.read(tokenStoreProvider);
             final t = await store.read();
@@ -459,7 +461,9 @@ class SessionNotifier extends Notifier<Session?> {
       ref.read(authSessionExpiredProvider.notifier).markExpired();
       authRefresh.value++;
       _notifySessionExpiredBanner();
-    } catch (_) {}
+    } catch (e, st) {
+      debugPrint('sessionNotifier._clearSessionAfterAuthFailure: $e\n$st');
+    }
   }
 
   /// Post-login bootstrap: does not block [restore] / [login] UI — runs after a microtask.
@@ -855,13 +859,17 @@ class SessionNotifier extends Notifier<Session?> {
       await ref
           .read(recentUnifiedSearchQueriesProvider.notifier)
           .clearAllOnLogout();
-    } catch (_) {}
+    } catch (e, st) {
+      debugPrint('sessionNotifier.logout: failed to clear search cache: $e\n$st');
+    }
     try {
       ref.read(apiDegradedProvider.notifier).clear();
       ref.read(authSessionExpiredProvider.notifier).clear();
       ref.read(authRefreshFailureTrackerProvider).reset();
       ref.read(authApiGateProvider.notifier).reset();
-    } catch (_) {}
+    } catch (e, st) {
+      debugPrint('sessionNotifier.logout: failed to reset auth state: $e\n$st');
+    }
     invalidateStaffHomeCaches(ref);
   }
 }

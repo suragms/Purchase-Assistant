@@ -17,10 +17,10 @@ import '../../../core/providers/business_profile_provider.dart';
 import '../../../core/providers/business_write_event.dart';
 import '../../../core/providers/catalog_providers.dart';
 import '../../../core/router/navigation_ext.dart';
-import '../../../core/services/broker_statement_pdf.dart';
-import '../../../core/services/item_statement_pdf.dart';
-import '../../../core/services/pdf_actions.dart';
-import '../../../core/services/supplier_statement_pdf.dart';
+import '../../../core/services/pdf_action_result.dart';
+import '../../../core/services/broker_statement_pdf.dart' deferred as brokerPdf;
+import '../../../core/services/item_statement_pdf.dart' deferred as itemPdf;
+import '../../../core/services/supplier_statement_pdf.dart' deferred as supplierPdf;
 import '../../../core/theme/hexa_colors.dart';
 import '../../../core/utils/line_display.dart';
 import '../../../core/utils/unit_utils.dart';
@@ -119,7 +119,9 @@ class _TradeLedgerPageState extends ConsumerState<TradeLedgerPage> {
     _to = n;
     _from = DateTime(n.year, n.month, 1);
     _searchCtrl.addListener(() => setState(() {}));
-    _ledgerSearchFocus.addListener(() => setState(() {}));
+    // Focus listener removed — CollapsibleSearchChrome receives focus state
+    // as a parameter; the text controller listener triggers rebuilds when
+    // the user types. Avoids full-page rebuild on focus gain/lose.
     WidgetsBinding.instance.addPostFrameCallback((_) => _load());
   }
 
@@ -306,9 +308,14 @@ class _TradeLedgerPageState extends ConsumerState<TradeLedgerPage> {
     final biz = ref.read(invoiceBusinessProfileProvider);
     try {
       PdfActionResult? result;
+      await Future.wait([
+        supplierPdf.loadLibrary(),
+        brokerPdf.loadLibrary(),
+        itemPdf.loadLibrary(),
+      ]);
       if (widget.kind == TradeLedgerKind.supplier) {
         final first = data.first;
-        result = await shareSupplierStatementPdf(
+        result = await supplierPdf.shareSupplierStatementPdf(
           business: biz,
           supplierName: first.supplierName ?? 'Supplier',
           supplierAddress: first.supplierAddress,
@@ -320,7 +327,7 @@ class _TradeLedgerPageState extends ConsumerState<TradeLedgerPage> {
         );
       } else if (widget.kind == TradeLedgerKind.broker) {
         final first = data.first;
-        result = await shareBrokerStatementPdf(
+        result = await brokerPdf.shareBrokerStatementPdf(
           business: biz,
           brokerName: first.brokerName ?? 'Broker',
           brokerPhone: first.brokerPhone,
@@ -334,7 +341,7 @@ class _TradeLedgerPageState extends ConsumerState<TradeLedgerPage> {
           data: (m) => m['name']?.toString() ?? 'Item',
           orElse: () => 'Item',
         );
-        result = await shareItemStatementPdf(
+        result = await itemPdf.shareItemStatementPdf(
           business: biz,
           itemName: name,
           purchases: data,
@@ -365,7 +372,8 @@ class _TradeLedgerPageState extends ConsumerState<TradeLedgerPage> {
     final biz = ref.read(invoiceBusinessProfileProvider);
     final first = data.first;
     try {
-      await shareBrokerStatementPdfForChat(
+      await brokerPdf.loadLibrary();
+      await brokerPdf.shareBrokerStatementPdfForChat(
         business: biz,
         brokerName: first.brokerName ?? 'Broker',
         brokerPhone: first.brokerPhone,

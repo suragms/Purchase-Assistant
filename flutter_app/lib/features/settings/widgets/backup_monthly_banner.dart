@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+
+import '../../../core/services/prefs_helper.dart';
 
 const _kBackupBannerDismissedYm = 'backup_banner_dismissed_ym';
 
@@ -26,7 +27,7 @@ class _BackupMonthlyBannerState extends State<BackupMonthlyBanner> {
   }
 
   Future<void> _load() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = PrefsHelper.prefs;
     final ym = _yearMonth(DateTime.now());
     final dismissed = prefs.getString(_kBackupBannerDismissedYm);
     if (mounted) {
@@ -38,7 +39,7 @@ class _BackupMonthlyBannerState extends State<BackupMonthlyBanner> {
   }
 
   Future<void> _dismiss() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = PrefsHelper.prefs;
     await prefs.setString(_kBackupBannerDismissedYm, _yearMonth(DateTime.now()));
     if (mounted) setState(() => _visible = false);
   }

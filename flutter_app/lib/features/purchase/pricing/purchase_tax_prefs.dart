@@ -50,8 +50,8 @@ class GstRateBasisPrefs {
     }
   }
 
-  static Future<void> saveSelling(SharedPreferences p, RateTaxBasis basis) =>
-      p.setString(_kSellingGlobal, _basisToPref(basis));
+  static Future<void> saveSelling(SharedPreferences p, RateTaxBasis basis) async =>
+      await p.setString(_kSellingGlobal, _basisToPref(basis));
 }
 
 /// Last-selected GST basis for purchase line preview (exclusive / inclusive / none).
@@ -61,6 +61,6 @@ class PurchaseLineTaxModePrefs {
   static TaxMode read(SharedPreferences p) =>
       taxModeFromWire(p.getString(_kLineTaxMode)) ?? TaxMode.exclusive;
 
-  static Future<void> save(SharedPreferences p, TaxMode mode) =>
-      p.setString(_kLineTaxMode, taxModeToWire(mode));
+  static Future<void> save(SharedPreferences p, TaxMode mode) async =>
+      await p.setString(_kLineTaxMode, taxModeToWire(mode));
 }

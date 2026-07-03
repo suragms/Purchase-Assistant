@@ -1,7 +1,24 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 import '../theme/hexa_colors.dart';
+
+const _fontFamily = 'PlusJakartaSans';
+
+TextStyle _pj({
+  double? fontSize,
+  FontWeight? fontWeight,
+  Color? color,
+  double? height,
+  double? letterSpacing,
+}) =>
+    TextStyle(
+      fontFamily: _fontFamily,
+      fontSize: fontSize,
+      fontWeight: fontWeight,
+      color: color,
+      height: height,
+      letterSpacing: letterSpacing,
+    );
 
 /// Hexa reusable SaaS design tokens (8px grid, Plus Jakarta Sans, Harisree palette).
 ///
@@ -152,7 +169,7 @@ abstract final class HexaDsGradients {
 /// **Plus Jakarta Sans** — matches [buildHexaTheme] app typography.
 abstract final class HexaDsType {
   static TextStyle heading(double size, {Color? color}) =>
-      GoogleFonts.plusJakartaSans(
+      _pj(
         fontSize: size,
         fontWeight: FontWeight.w700,
         color: color ?? HexaDsColors.textPrimary,
@@ -160,7 +177,7 @@ abstract final class HexaDsType {
       );
 
   static TextStyle body(double size, {Color? color, FontWeight? weight}) =>
-      GoogleFonts.plusJakartaSans(
+      _pj(
         fontSize: size,
         fontWeight: weight ?? FontWeight.w500,
         color: color ?? HexaDsColors.textBody,
@@ -168,7 +185,7 @@ abstract final class HexaDsType {
       );
 
   static TextStyle label(double size, {Color? color}) =>
-      GoogleFonts.plusJakartaSans(
+      _pj(
         fontSize: size,
         fontWeight: FontWeight.w600,
         color: color ?? HexaDsColors.textMuted,
@@ -177,7 +194,7 @@ abstract final class HexaDsType {
 
   /// Section titles on dashboards / cards (T — small caps feel via weight).
   static TextStyle sectionTitle({Color? color}) =>
-      GoogleFonts.plusJakartaSans(
+      _pj(
         fontSize: 14,
         fontWeight: FontWeight.w800,
         letterSpacing: -0.15,
@@ -187,7 +204,7 @@ abstract final class HexaDsType {
 
   /// Overline / meta (uppercase optional at call site).
   static TextStyle overline({Color? color}) =>
-      GoogleFonts.plusJakartaSans(
+      _pj(
         fontSize: 11,
         fontWeight: FontWeight.w700,
         letterSpacing: 0.35,
@@ -196,7 +213,7 @@ abstract final class HexaDsType {
       );
 
   static TextStyle metricPrimary({Color? color}) =>
-      GoogleFonts.plusJakartaSans(
+      _pj(
         fontSize: 22,
         fontWeight: FontWeight.w900,
         letterSpacing: -0.4,
@@ -205,7 +222,7 @@ abstract final class HexaDsType {
       );
 
   static TextStyle button({Color color = Colors.white}) =>
-      GoogleFonts.plusJakartaSans(
+      _pj(
         fontSize: 16,
         fontWeight: FontWeight.w700,
         color: color,
@@ -213,27 +230,27 @@ abstract final class HexaDsType {
       );
 
   // Purchase + catalog: readable money / quantity / section labels.
-  static TextStyle purchaseLineMoney = GoogleFonts.plusJakartaSans(
+  static TextStyle purchaseLineMoney = _pj(
     fontSize: 16,
     fontWeight: FontWeight.w800,
     color: HexaColors.brandPrimary,
   );
 
-  static TextStyle purchaseQtyUnit = GoogleFonts.plusJakartaSans(
+  static TextStyle purchaseQtyUnit = _pj(
     fontSize: 15,
     fontWeight: FontWeight.w700,
     color: HexaDsColors.textBody,
   );
 
   /// Critical labels: full-opacity body (avoid washed-out onSurfaceVariant).
-  static TextStyle formSectionLabel = GoogleFonts.plusJakartaSans(
+  static TextStyle formSectionLabel = _pj(
     fontSize: 14,
     fontWeight: FontWeight.w800,
     color: HexaDsColors.textPrimary,
   );
 
   /// Catalog item detail: large title at top of page.
-  static TextStyle catalogItemHeroName = GoogleFonts.plusJakartaSans(
+  static TextStyle catalogItemHeroName = _pj(
     fontSize: 22,
     fontWeight: FontWeight.w800,
     color: HexaDsColors.textPrimary,
@@ -241,7 +258,7 @@ abstract final class HexaDsType {
   );
 
   /// Stat chip primary number on catalog / dashboards.
-  static TextStyle statChipValue = GoogleFonts.plusJakartaSans(
+  static TextStyle statChipValue = _pj(
     fontSize: 18,
     fontWeight: FontWeight.w800,
     color: HexaDsColors.textPrimary,
@@ -249,7 +266,7 @@ abstract final class HexaDsType {
   );
 
   /// Body amount on reports tables (right column).
-  static final TextStyle reportTableMoney = GoogleFonts.plusJakartaSans(
+  static final TextStyle reportTableMoney = _pj(
     fontSize: 14,
     fontWeight: FontWeight.w800,
     color: HexaColors.brandPrimary,
@@ -257,7 +274,7 @@ abstract final class HexaDsType {
   );
 
   /// Emphasized name / first column in reports (non-amount cells).
-  static final TextStyle reportTableRowPrimary = GoogleFonts.plusJakartaSans(
+  static final TextStyle reportTableRowPrimary = _pj(
     fontSize: 13,
     fontWeight: FontWeight.w600,
     color: HexaDsColors.textBody,
@@ -271,14 +288,14 @@ abstract final class HexaDsType {
         color: HexaDsColors.textPrimary,
       );
 
-  static TextStyle h2(BuildContext ctx) => GoogleFonts.plusJakartaSans(
+  static TextStyle h2(BuildContext ctx) => _pj(
         fontSize: 18,
         fontWeight: FontWeight.w600,
         color: HexaDsColors.textPrimary,
         height: 1.25,
       );
 
-  static TextStyle h3(BuildContext ctx) => GoogleFonts.plusJakartaSans(
+  static TextStyle h3(BuildContext ctx) => _pj(
         fontSize: 16,
         fontWeight: FontWeight.w600,
         color: HexaDsColors.textPrimary,
@@ -286,21 +303,21 @@ abstract final class HexaDsType {
       );
 
   /// Semantic 14px body — use instead of raw [TextStyle] (not [body] with size).
-  static TextStyle bodyPrimary(BuildContext ctx) => GoogleFonts.plusJakartaSans(
+  static TextStyle bodyPrimary(BuildContext ctx) => _pj(
         fontSize: 14,
         fontWeight: FontWeight.w400,
         color: HexaDsColors.textPrimary,
         height: 1.45,
       );
 
-  static TextStyle bodySm(BuildContext ctx) => GoogleFonts.plusJakartaSans(
+  static TextStyle bodySm(BuildContext ctx) => _pj(
         fontSize: 12,
         fontWeight: FontWeight.w400,
         color: HexaDsColors.textMuted,
         height: 1.4,
       );
 
-  static TextStyle labelCaps(BuildContext ctx) => GoogleFonts.plusJakartaSans(
+  static TextStyle labelCaps(BuildContext ctx) => _pj(
         fontSize: 11,
         fontWeight: FontWeight.w500,
         letterSpacing: 0.5,
@@ -308,14 +325,14 @@ abstract final class HexaDsType {
         height: 1.25,
       );
 
-  static TextStyle listTitle(BuildContext ctx) => GoogleFonts.plusJakartaSans(
+  static TextStyle listTitle(BuildContext ctx) => _pj(
         fontSize: 15,
         fontWeight: FontWeight.w500,
         color: HexaDsColors.textPrimary,
         height: 1.25,
       );
 
-  static TextStyle listSubtitle(BuildContext ctx) => GoogleFonts.plusJakartaSans(
+  static TextStyle listSubtitle(BuildContext ctx) => _pj(
         fontSize: 12,
         fontWeight: FontWeight.w400,
         color: HexaDsColors.textMuted,

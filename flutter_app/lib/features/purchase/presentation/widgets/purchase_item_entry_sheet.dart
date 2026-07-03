@@ -36,6 +36,7 @@ import '../../pricing/purchase_tax_prefs.dart';
 import '../../../../core/utils/currency_utils.dart';
 import '../../../../core/providers/stock_providers.dart';
 import '../../state/purchase_smart_defaults.dart';
+import '../../../../core/services/prefs_helper.dart';
 
 String _stripKgSuffixForCatalogDisplay(String name) => name
     .replaceAll(RegExp(r'\s*\d+(\.\d+)?\s*KG\s*$', caseSensitive: false), '')
@@ -433,7 +434,7 @@ class _PurchaseItemEntrySheetState extends ConsumerState<PurchaseItemEntrySheet>
     _itemFocus.addListener(_onItemFocusScroll);
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (widget.initial != null || !mounted) return;
-      final p = widget.gstPrefs ?? await SharedPreferences.getInstance();
+      final p = widget.gstPrefs ?? PrefsHelper.prefs;
       if (!mounted) return;
       final saved = PurchaseLineTaxModePrefs.read(p);
       setState(() => _taxMode = saved);
@@ -1292,7 +1293,7 @@ class _PurchaseItemEntrySheetState extends ConsumerState<PurchaseItemEntrySheet>
     final dr = _parseD(_deliveredCtrl.text);
     final br = _parseD(_billtyCtrl.text);
     if (_ratesPerKgEconomics) {
-      final kpu = _kgPer()!;
+      final kpu = _kgPer() ?? 0;
       final perKgIn = _landingParsedAsPerKg() ?? 0;
       final perKg = perKgIn;
       return TradeCalcLine(
@@ -1359,7 +1360,7 @@ class _PurchaseItemEntrySheetState extends ConsumerState<PurchaseItemEntrySheet>
             (_parseD(_deliveredCtrl.text) ?? 0) +
             (_parseD(_billtyCtrl.text) ?? 0);
     if (_ratesPerKgEconomics) {
-      final k = _kgPer()!;
+      final k = _kgPer() ?? 0;
       final perKgLand = _landingParsedAsPerKg() ?? 0;
       final totalK = _qtyVal() * k;
       return ((sell - perKgLand) * totalK) - lineCharges;
@@ -1773,7 +1774,7 @@ class _PurchaseItemEntrySheetState extends ConsumerState<PurchaseItemEntrySheet>
   /// Call only after validation; [sell] must be non-null and >= 0.
   double _sellingForPayloadForWire(double sell) {
     if (_ratesPerKgEconomics) {
-      final k = _kgPer()!;
+      final k = _kgPer() ?? 0;
       return sell * k;
     }
     return sell;
@@ -1909,7 +1910,7 @@ class _PurchaseItemEntrySheetState extends ConsumerState<PurchaseItemEntrySheet>
     };
 
     if (_ratesPerKgEconomics) {
-      final kpu = _kgPer()!;
+      final kpu = _kgPer() ?? 0;
       m['kg_per_unit'] = kpu;
       m['landing_cost_per_kg'] = rate;
       m['landing_cost'] = kpu * rate;
@@ -1981,7 +1982,7 @@ class _PurchaseItemEntrySheetState extends ConsumerState<PurchaseItemEntrySheet>
     );
     m['tax_mode'] = taxModeToWire(_taxMode);
     if (sellSt.isNotEmpty) {
-      final sellIn = _sellingParsedAsPerKg() ?? _parseD(sellSt)!;
+      final sellIn = _sellingParsedAsPerKg() ?? (_parseD(sellSt) ?? 0);
       final sellParsed = sellIn;
       m['selling_cost'] = _sellingForPayloadForWire(sellParsed);
       m['selling_rate'] = m['selling_cost'];
@@ -2270,7 +2271,7 @@ class _PurchaseItemEntrySheetState extends ConsumerState<PurchaseItemEntrySheet>
           }
         });
         _taxModeNotifier.value = m;
-        final p = widget.gstPrefs ?? await SharedPreferences.getInstance();
+        final p = widget.gstPrefs ?? PrefsHelper.prefs;
         await PurchaseLineTaxModePrefs.save(p, m);
         if (mounted) _schedulePreviewRebuild();
       },

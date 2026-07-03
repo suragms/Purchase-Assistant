@@ -37,7 +37,7 @@ Future<AppNotificationsBundle> _fetchNotificationsBundle(
         ]);
         return AppNotificationsBundle(
           rows: List<Map<String, dynamic>>.from(results[0] as List),
-          unreadCount: results[1] as int,
+          unreadCount: (results[1] as num?)?.toInt() ?? 0,
           summary: Map<String, dynamic>.from(results[2] as Map),
         );
       } finally {

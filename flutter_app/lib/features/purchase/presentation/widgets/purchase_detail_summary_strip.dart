@@ -117,7 +117,7 @@ String formatPurchaseSummaryWeight({
   }
   if (parts.isEmpty) return '—';
   if (parts.length == 1) return parts.first;
-  return parts.first;
+  return parts.join(' + ');
 }
 
 String? formatPurchaseSummaryWeightSecondary({

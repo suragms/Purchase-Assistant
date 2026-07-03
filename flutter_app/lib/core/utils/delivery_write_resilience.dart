@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../auth/auth_error_messages.dart';
@@ -32,7 +33,9 @@ Future<Map<String, dynamic>?> fetchPurchaseIfWriteMaybeSucceeded({
           purchaseId: purchaseId,
         );
     if (success(body)) return body;
-  } catch (_) {}
+  } catch (e, st) {
+    debugPrint('fetchPurchaseIfWriteMaybeSucceeded: $e\n$st');
+  }
   return null;
 }
 

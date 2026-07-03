@@ -26,8 +26,8 @@ import '../../../core/providers/stock_offline_queue_provider.dart';
 import '../../../core/utils/delivery_offline_actions.dart';
 import '../../../core/router/navigation_ext.dart';
 import '../../../core/router/post_auth_route.dart';
-import '../../../core/services/pdf_actions.dart';
-import '../../../core/services/purchase_export_service.dart';
+import '../../../core/services/pdf_action_result.dart';
+import '../../../core/services/purchase_export_service.dart' deferred as purchaseExport;
 import '../../../core/design_system/hexa_responsive.dart';
 import '../../../core/services/purchase_invoice_pdf_layout.dart'
     show tradeCalcRequestFromTradePurchase;
@@ -891,10 +891,21 @@ class PurchaseDetailBodyState extends ConsumerState<PurchaseDetailBody> {
         }
         return;
       }
+      final body = result.body;
+      if (body == null) {
+        if (context.mounted) {
+          showTopSnack(
+            context,
+            'Unexpected empty response. Try again.',
+            isError: true,
+          );
+        }
+        return;
+      }
       await _afterDeliveryMutation(
         context,
-        purchase: TradePurchase.fromJson(result.body!),
-        apiBody: result.body!,
+        purchase: TradePurchase.fromJson(body),
+        apiBody: body,
         message: 'Marked arrived at warehouse',
       );
     } catch (e) {
@@ -1406,32 +1417,41 @@ class PurchaseDetailBodyState extends ConsumerState<PurchaseDetailBody> {
     final bid = ref.read(sessionProvider)?.primaryBusiness.id;
     Future<void> sharePdf() => _runExport(
           context,
-          action: () => exportSharePurchase(
-            p,
-            biz,
-            api: api,
-            businessId: bid,
-          ),
+          action: () async {
+            await purchaseExport.loadLibrary();
+            return purchaseExport.exportSharePurchase(
+              p,
+              biz,
+              api: api,
+              businessId: bid,
+            );
+          },
           onRetry: sharePdf,
         );
     Future<void> printPdf() => _runExport(
           context,
-          action: () => exportPrintPurchase(
-            p,
-            biz,
-            api: api,
-            businessId: bid,
-          ),
+          action: () async {
+            await purchaseExport.loadLibrary();
+            return purchaseExport.exportPrintPurchase(
+              p,
+              biz,
+              api: api,
+              businessId: bid,
+            );
+          },
           onRetry: printPdf,
         );
     Future<void> downloadPdf() => _runExport(
           context,
-          action: () => exportDownloadPurchase(
-            p,
-            biz,
-            api: api,
-            businessId: bid,
-          ),
+          action: () async {
+            await purchaseExport.loadLibrary();
+            return purchaseExport.exportDownloadPurchase(
+              p,
+              biz,
+              api: api,
+              businessId: bid,
+            );
+          },
           onRetry: downloadPdf,
         );
 

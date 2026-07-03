@@ -17,7 +17,7 @@ import '../../../core/widgets/friendly_load_error.dart';
 import '../../../core/design_system/hexa_ds_tokens.dart';
 import '../../../core/theme/hexa_colors.dart';
 import '../../../core/widgets/list_skeleton.dart';
-import '../../../core/services/pdf_actions.dart';
+import '../../../core/services/pdf_actions.dart' deferred as pdfActions;
 import '../../stock/presentation/widgets/edit_item_code_sheet.dart';
 import '../services/barcode_pdf_service.dart';
 
@@ -115,6 +115,7 @@ class _BarcodePrintPageState extends ConsumerState<BarcodePrintPage> {
       final session = ref.read(sessionProvider);
       final hideFinancials =
           session == null || !sessionCanSeeFinancials(session);
+      await pdfActions.loadLibrary();
       final bytes = await BarcodePdfService.generateSingleLabel(
         data: label,
         size: _size,
@@ -126,7 +127,7 @@ class _BarcodePrintPageState extends ConsumerState<BarcodePrintPage> {
         await _openLabelPdfPreview(bytes, label);
         return;
       }
-      final result = await printPdfBytes(
+      final result = await pdfActions.printPdfBytes(
         buildBytes: () async => bytes,
         filename: _singleBarcodeFilename(label),
         source: 'barcode_print_page',
@@ -157,7 +158,8 @@ class _BarcodePrintPageState extends ConsumerState<BarcodePrintPage> {
             actions: [
               TextButton.icon(
                 onPressed: () async {
-                  final result = await savePdfBytes(
+                  await pdfActions.loadLibrary();
+                  final result = await pdfActions.savePdfBytes(
                     buildBytes: () async => bytes,
                     filename: name,
                     subject: 'Barcode label - ${label.itemName}',
@@ -196,6 +198,7 @@ class _BarcodePrintPageState extends ConsumerState<BarcodePrintPage> {
       final session = ref.read(sessionProvider);
       final hideFinancials =
           session == null || !sessionCanSeeFinancials(session);
+      await pdfActions.loadLibrary();
       final bytes = await BarcodePdfService.generateSingleLabel(
         data: label,
         size: _size,
@@ -207,7 +210,7 @@ class _BarcodePrintPageState extends ConsumerState<BarcodePrintPage> {
         await _openLabelPdfPreview(bytes, label);
         return;
       }
-      final result = await savePdfBytes(
+      final result = await pdfActions.savePdfBytes(
         buildBytes: () async => bytes,
         filename: _singleBarcodeFilename(label),
         subject: 'Barcode label - ${label.itemName}',

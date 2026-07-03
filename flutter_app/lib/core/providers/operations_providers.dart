@@ -28,7 +28,8 @@ final checklistTodayProvider =
       !ref.watch(homeChecklistFetchEnabledProvider)) {
     return {};
   }
-  final session = ref.read(sessionProvider)!;
+  final session = ref.read(sessionProvider);
+  if (session == null) return {};
   try {
     final result = await ref.read(hexaApiProvider).getChecklistToday(
           businessId: session.primaryBusiness.id,
@@ -44,7 +45,8 @@ final checklistTodayProvider =
 final checklistTemplatesProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
   if (!_checklistSessionActive(ref)) return [];
-  final session = ref.read(sessionProvider)!;
+  final session = ref.read(sessionProvider);
+  if (session == null) return [];
   return ref.read(hexaApiProvider).getChecklistTemplates(
         businessId: session.primaryBusiness.id,
       );
@@ -53,7 +55,8 @@ final checklistTemplatesProvider =
 final usageTodayProvider =
     FutureProvider.autoDispose<Map<String, dynamic>>((ref) async {
   if (!_checklistSessionActive(ref)) return {};
-  final session = ref.read(sessionProvider)!;
+  final session = ref.read(sessionProvider);
+  if (session == null) return {};
   return ref.read(hexaApiProvider).getUsageToday(
         businessId: session.primaryBusiness.id,
       );
@@ -62,7 +65,8 @@ final usageTodayProvider =
 final itemTodaySnapshotProvider = FutureProvider.autoDispose
     .family<Map<String, dynamic>?, String>((ref, itemId) async {
   if (!_checklistSessionActive(ref) || itemId.isEmpty) return null;
-  final session = ref.read(sessionProvider)!;
+  final session = ref.read(sessionProvider);
+  if (session == null) return null;
   final today = DateTime.now().toIso8601String().substring(0, 10);
   final rows = await ref.read(hexaApiProvider).listDailySnapshots(
         businessId: session.primaryBusiness.id,
@@ -77,7 +81,8 @@ final itemTodaySnapshotProvider = FutureProvider.autoDispose
 final operationalReportsProvider =
     FutureProvider.autoDispose<Map<String, dynamic>>((ref) async {
   if (!_checklistSessionActive(ref)) return {};
-  final session = ref.read(sessionProvider)!;
+  final session = ref.read(sessionProvider);
+  if (session == null) return {};
   return ref.read(hexaApiProvider).getOperationalReports(
         businessId: session.primaryBusiness.id,
       );

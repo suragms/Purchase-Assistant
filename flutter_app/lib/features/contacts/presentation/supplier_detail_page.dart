@@ -1,3 +1,5 @@
+import 'dart:developer' as developer;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -184,35 +186,43 @@ class _SupplierDetailPageState extends ConsumerState<SupplierDetailPage> {
 
   Future<void> _dial(String? phone) async {
     if (phone == null || phone.trim().isEmpty) return;
-    final uri = Uri(scheme: 'tel', path: phone.replaceAll(RegExp(r'\s'), ''));
-    if (await canLaunchUrl(uri)) await launchUrl(uri);
+    try {
+      final uri = Uri(scheme: 'tel', path: phone.replaceAll(RegExp(r'\s'), ''));
+      if (await canLaunchUrl(uri)) await launchUrl(uri);
+    } catch (e, st) {
+      developer.log('Failed to launch phone dialer', error: e, stackTrace: st);
+    }
   }
 
   Future<void> _exportCsv() async {
-    final buf = StringBuffer(
-        'date,pur_id,item,qty,unit,landing_per_unit,selling,total_line\n');
-    for (final p in _trades) {
-      final d = p.purchaseDate.toIso8601String().split('T').first;
-      for (final ln in p.lines) {
-        final lpu = (ln.kgPerUnit != null &&
-                ln.landingCostPerKg != null &&
-                (ln.kgPerUnit ?? 0) > 0)
-            ? ln.landingCostPerKg
-            : ln.landingCost;
-        buf.writeln(
-            '$d,${p.humanId},"${ln.itemName.replaceAll('"', "'")}",${ln.qty},${ln.unit},$lpu,${ln.sellingCost ?? ''},${lineAmountInr(ln)}');
+    try {
+      final buf = StringBuffer(
+          'date,pur_id,item,qty,unit,landing_per_unit,selling,total_line\n');
+      for (final p in _trades) {
+        final d = p.purchaseDate.toIso8601String().split('T').first;
+        for (final ln in p.lines) {
+          final lpu = (ln.kgPerUnit != null &&
+                  ln.landingCostPerKg != null &&
+                  (ln.kgPerUnit ?? 0) > 0)
+              ? ln.landingCostPerKg
+              : ln.landingCost;
+          buf.writeln(
+              '$d,${p.humanId},"${ln.itemName.replaceAll('"', "'")}",${ln.qty},${ln.unit},$lpu,${ln.sellingCost ?? ''},${lineAmountInr(ln)}');
+        }
       }
-    }
-    if (buf.length < 100) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('No trade lines to export in this range.')),
-        );
+      if (buf.length < 100) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('No trade lines to export in this range.')),
+          );
+        }
+        return;
       }
-      return;
+      await Share.share(buf.toString(),
+          subject: '${AppConfig.appName} supplier export');
+    } catch (e, st) {
+      developer.log('Failed to share CSV', error: e, stackTrace: st);
     }
-    await Share.share(buf.toString(),
-        subject: '${AppConfig.appName} supplier export');
   }
 
   @override

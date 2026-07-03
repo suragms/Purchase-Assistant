@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:developer' as developer;
 
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
@@ -420,33 +421,38 @@ class _HomePageState extends ConsumerState<HomePage>
   }
 
   Future<void> _showAccountMenu() async {
-    final session = ref.read(sessionProvider);
-    if (session == null || !mounted) return;
-    final action = await showHexaBottomSheet<String>(
-      context: context,
-      compact: true,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          ListTile(
-            title: Text(session.primaryBusiness.role.toUpperCase()),
-            subtitle: Text(
-              session.primaryBusiness.contactEmail ??
-                  session.primaryBusiness.phone ??
-                  session.primaryBusiness.name,
+    try {
+      final session = ref.read(sessionProvider);
+      if (session == null || !mounted) return;
+      final action = await showHexaBottomSheet<String>(
+        context: context,
+        compact: true,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              title: Text(session.primaryBusiness.role.toUpperCase()),
+              subtitle: Text(
+                session.primaryBusiness.contactEmail ??
+                    session.primaryBusiness.phone ??
+                    session.primaryBusiness.name,
+              ),
             ),
-          ),
-          ListTile(
-            leading: const Icon(Icons.logout),
-            title: const Text('Sign out'),
-            onTap: () => Navigator.pop(context, 'logout'),
-          ),
-        ],
-      ),
-    );
-    if (action == 'logout' && mounted) {
-      await ref.read(sessionProvider.notifier).logout();
-      if (mounted) context.go('/login');
+            ListTile(
+              leading: const Icon(Icons.logout),
+              title: const Text('Sign out'),
+              onTap: () => Navigator.pop(context, 'logout'),
+            ),
+          ],
+        ),
+      );
+      if (action == 'logout' && mounted) {
+        await ref.read(sessionProvider.notifier).logout();
+        if (!mounted) return;
+        context.go('/login');
+      }
+    } catch (e) {
+      developer.log('Failed to show account menu: $e', name: 'home_page');
     }
   }
 

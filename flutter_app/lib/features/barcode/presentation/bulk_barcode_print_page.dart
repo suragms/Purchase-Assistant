@@ -13,7 +13,7 @@ import '../../../core/design_system/hexa_operational_tokens.dart';
 import '../../../core/design_system/hexa_responsive.dart';
 import '../../../core/errors/barcode_operation_errors.dart';
 import '../../../core/json_coerce.dart';
-import '../../../core/services/pdf_actions.dart';
+import '../../../core/services/pdf_actions.dart' deferred as pdfActions;
 import '../../../core/providers/stock_providers.dart';
 import '../../stock/presentation/widgets/stock_row_metrics.dart';
 import '../../stock/presentation/widgets/stock_table_layout.dart';
@@ -468,7 +468,8 @@ class _BulkBarcodePrintPageState extends ConsumerState<BulkBarcodePrintPage> {
   }
 
   Future<bool> _sharePdfSafe(Uint8List bytes, String filename) async {
-    final result = await savePdfBytes(
+    await pdfActions.loadLibrary();
+    final result = await pdfActions.savePdfBytes(
       buildBytes: () async => bytes,
       filename: filename,
       subject: 'Harisree barcode labels',
@@ -677,7 +678,8 @@ class _BulkBarcodePrintPageState extends ConsumerState<BulkBarcodePrintPage> {
     }
     for (var i = 0; i < n; i++) {
       if (forPrint) {
-        final result = await printPdfBytes(
+        await pdfActions.loadLibrary();
+        final result = await pdfActions.printPdfBytes(
           buildBytes: () async => pdfs[i],
           filename: names[i],
           source: 'bulk_barcode_print_page',
@@ -1300,8 +1302,10 @@ class _BulkBarcodePrintPageState extends ConsumerState<BulkBarcodePrintPage> {
                   : (code.isEmpty
                       ? '$barcode · $st'
                       : '$code · $barcode · $st');
-              return _BulkPrintRow(
-                selected: selected.contains(id),
+              return RepaintBoundary(
+                child: _BulkPrintRow(
+                  key: id.isNotEmpty ? ValueKey(id) : null,
+                  selected: selected.contains(id),
                 isFirstRow: i == 0,
                 name: name,
                 subtitle: sub,
@@ -1337,6 +1341,7 @@ class _BulkBarcodePrintPageState extends ConsumerState<BulkBarcodePrintPage> {
                           );
                         }
                       },
+                ),
               );
             },
           ),
@@ -1349,6 +1354,7 @@ class _BulkBarcodePrintPageState extends ConsumerState<BulkBarcodePrintPage> {
 
 class _BulkPrintRow extends StatelessWidget {
   const _BulkPrintRow({
+    super.key,
     required this.selected,
     required this.isFirstRow,
     required this.name,

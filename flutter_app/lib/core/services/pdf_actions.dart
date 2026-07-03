@@ -7,16 +7,9 @@ import 'package:share_plus/share_plus.dart';
 import 'pdf_download_io.dart' if (dart.library.html) 'pdf_download_web.dart'
     as platform_pdf;
 import 'pdf_locale.dart';
+import 'pdf_action_result.dart';
 
-class PdfActionResult {
-  const PdfActionResult({
-    required this.ok,
-    required this.message,
-  });
-
-  final bool ok;
-  final String message;
-}
+export 'pdf_action_result.dart' show PdfActionResult;
 
 Future<pw.ImageProvider?> tryFetchPdfLogo(String? url) async {
   final u = url?.trim();

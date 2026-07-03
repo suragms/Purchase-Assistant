@@ -16,8 +16,8 @@ import '../../../core/providers/api_degraded_provider.dart';
 import '../../../core/providers/api_health_snapshot_provider.dart';
 import '../../../core/models/session.dart';
 import '../../../core/providers/stock_list_exceptions.dart';
-import '../../../core/services/stock_list_pdf.dart';
-import '../../../core/services/pdf_actions.dart';
+import '../../../core/services/stock_list_pdf.dart' deferred as stockPdf;
+import '../../../core/services/pdf_actions.dart' deferred as pdfActions;
 import '../../../core/json_coerce.dart';
 import '../../../core/providers/business_write_event.dart';
 import '../../../core/providers/home_dashboard_provider.dart';
@@ -456,20 +456,21 @@ class _StockPageState extends ConsumerState<StockPage>
           const SnackBar(content: Text('Preparing stock PDF…')),
         );
       }
-      final bytes = await buildStockListPdf(
+      await Future.wait([stockPdf.loadLibrary(), pdfActions.loadLibrary()]);
+      final bytes = await stockPdf.buildStockListPdf(
         businessName: session.primaryBusiness.effectiveDisplayTitle,
         rows: items.take(500).toList(),
         filterSummary: summary.isEmpty ? null : summary,
       );
       if (!mounted) return;
       final result = kIsWeb
-          ? await savePdfBytes(
+          ? await pdfActions.savePdfBytes(
               buildBytes: () async => bytes,
               filename: 'harisree_stock_statement.pdf',
               subject: 'Harisree stock statement',
               source: 'stock_list_pdf',
             )
-          : await shareStockListPdf(
+          : await stockPdf.shareStockListPdf(
               bytes: bytes,
               filename: 'harisree_stock_statement.pdf',
             );
@@ -574,6 +575,8 @@ class _StockPageState extends ConsumerState<StockPage>
   Widget _buildListBody({
     required Map<String, dynamic> data,
     required bool isReloading,
+    required StockDeliveryFilter deliveryFilter,
+    required Map<String, int> chipCounts,
   }) {
     final raw = [
       for (final e in (data['items'] as List? ?? []))
@@ -583,10 +586,7 @@ class _StockPageState extends ConsumerState<StockPage>
     final deliveryCounts =
         ref.watch(stockDeliveryIndicatorCountsProvider).valueOrNull ??
             StockRowMetrics.countDeliveryIndicators(raw);
-    final deliveryFilter = ref.watch(stockDeliveryFilterProvider);
     final listQ = ref.watch(stockListQueryProvider);
-    final chipCounts =
-        ref.watch(stockStatusCountsProvider).valueOrNull ?? const {};
     final chipAll = chipCounts['all'] ?? 0;
     final total = coerceToInt(data['total']);
     final maxPage = stockListMaxPage(total, listQ.perPage);
@@ -1029,7 +1029,14 @@ class _StockPageState extends ConsumerState<StockPage>
       );
       }
     } else if (data != null) {
-      body = _buildListBody(data: data, isReloading: isReloading);
+      final deliveryFilter = ref.watch(stockDeliveryFilterProvider);
+      final chipCounts = ref.watch(stockStatusCountsProvider).valueOrNull ?? const {};
+      body = _buildListBody(
+        data: data,
+        isReloading: isReloading,
+        deliveryFilter: deliveryFilter,
+        chipCounts: chipCounts,
+      );
     } else if (listAsync.hasError) {
       body = FriendlyLoadError(
         message: 'Unable to load stock',

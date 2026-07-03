@@ -311,7 +311,9 @@ Future<bool> _performCommitStock(
   invalidateStaffDeliverySurfacesLight(ref);
   try {
     await ref.read(tradePurchasesListProvider.future);
-  } catch (_) {}
+  } catch (e, st) {
+    debugPrint('commitPurchaseStock: failed to refresh trade list: $e\n$st');
+  }
   if (context.mounted) {
     showTopSnack(context, 'Stock added to warehouse');
   }

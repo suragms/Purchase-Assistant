@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+
 import '../auth/session_notifier.dart';
 import '../providers/staff_home_providers.dart';
 import '../router/post_auth_route.dart' show sessionIsStaff;
@@ -23,7 +25,9 @@ class StaffActivityLogger {
             details: details,
           );
       ref.invalidate(staffTodayActivityProvider);
-    } catch (_) {}
+    } catch (e, st) {
+      debugPrint('StaffActivityLogger.log($actionType): $e\n$st');
+    }
   }
 
   static Future<void> logStaffLogin(dynamic ref) async {

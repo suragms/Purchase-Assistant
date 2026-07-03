@@ -163,16 +163,20 @@ class SmartUnitClassifier {
     double? size;
     String? meas;
     if (_sizeKg.hasMatch(upper)) {
-      size = double.tryParse(_sizeKg.firstMatch(upper)!.group(1)!);
+      final mKg = _sizeKg.firstMatch(upper);
+      if (mKg != null) size = double.tryParse(mKg.group(1) ?? '');
       meas = 'KG';
     } else if (_sizeGm.hasMatch(upper)) {
-      size = double.tryParse(_sizeGm.firstMatch(upper)!.group(1)!);
+      final mGm = _sizeGm.firstMatch(upper);
+      if (mGm != null) size = double.tryParse(mGm.group(1) ?? '');
       meas = 'GM';
     } else if (_sizeLtr.hasMatch(upper)) {
-      size = double.tryParse(_sizeLtr.firstMatch(upper)!.group(1)!);
+      final mLtr = _sizeLtr.firstMatch(upper);
+      if (mLtr != null) size = double.tryParse(mLtr.group(1) ?? '');
       meas = 'LTR';
     } else if (_sizeMl.hasMatch(upper)) {
-      size = double.tryParse(_sizeMl.firstMatch(upper)!.group(1)!);
+      final mMl = _sizeMl.firstMatch(upper);
+      if (mMl != null) size = double.tryParse(mMl.group(1) ?? '');
       meas = 'ML';
     }
 

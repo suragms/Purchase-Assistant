@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:developer' as developer;
 
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
@@ -62,6 +63,7 @@ String _initials(String name) {
 /// Supplier row — name, phone and a ⋮ menu. No analytics clutter.
 class _SupplierCard extends StatelessWidget {
   const _SupplierCard({
+    super.key,
     required this.data,
     required this.metrics,
     required this.onOpen,
@@ -232,6 +234,7 @@ class _SupplierCard extends StatelessWidget {
 
 class _BrokerCard extends StatelessWidget {
   const _BrokerCard({
+    super.key,
     required this.data,
     required this.metrics,
     required this.onOpen,
@@ -385,7 +388,8 @@ class _ContactsPageState extends ConsumerState<ContactsPage>
 
   void _onTabChanged() {
     if (_tabController.indexIsChanging || !mounted) return;
-    setState(() {});
+    // No setState needed — tab content is in separate ConsumerWidgets
+    // that manage their own rebuilds via Riverpod providers.
   }
 
   @override
@@ -516,9 +520,13 @@ class _ContactsPageState extends ConsumerState<ContactsPage>
 
   Future<void> _dial(String? phone) async {
     if (phone == null || phone.trim().isEmpty) return;
-    final uri = Uri(scheme: 'tel', path: phone.replaceAll(RegExp(r'\s'), ''));
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri);
+    try {
+      final uri = Uri(scheme: 'tel', path: phone.replaceAll(RegExp(r'\s'), ''));
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri);
+      }
+    } catch (e, st) {
+      developer.log('Failed to launch phone dialer', error: e, stackTrace: st);
     }
   }
 
@@ -1199,9 +1207,6 @@ class _ContactsPageState extends ConsumerState<ContactsPage>
                 controller: _tabController,
                 isScrollable: true,
                 tabAlignment: TabAlignment.start,
-                onTap: (_) {
-                  setState(() {});
-                },
                 tabs: [
                   _tabWithBadge('Suppliers', _searchCountForTab(searchSnapshot, 0)),
                   _tabWithBadge('Brokers', _searchCountForTab(searchSnapshot, 1)),
@@ -1352,8 +1357,10 @@ class _SuppliersTabState extends ConsumerState<_SuppliersTab> {
               final s = list[i];
               final id = s['id']?.toString();
               final m = s['_metrics'] as Map<String, dynamic>?;
-              return _SupplierCard(
-                data: Map<String, dynamic>.from(s),
+              return RepaintBoundary(
+                child: _SupplierCard(
+                  key: id != null ? ValueKey(id) : null,
+                  data: Map<String, dynamic>.from(s),
                 metrics: m,
                 onOpen: id == null
                     ? () {}
@@ -1361,6 +1368,7 @@ class _SuppliersTabState extends ConsumerState<_SuppliersTab> {
                 onDial: widget.onDial,
                 onEdit: () => widget.onEdit(s),
                 onDelete: () => widget.onDelete(s),
+              ),
               );
             },
           ),
@@ -1428,14 +1436,17 @@ class _BrokersTabState extends ConsumerState<_BrokersTab> {
               final b = list[i];
               final id = b['id']?.toString();
               final m = b['_metrics'] as Map<String, dynamic>?;
-              return _BrokerCard(
-                data: Map<String, dynamic>.from(b),
-                metrics: m,
-                onOpen: id == null
-                    ? () {}
-                    : () => context.push('/broker/$id'),
-                onEdit: () => widget.onEdit(b),
-                onDelete: () => widget.onDelete(b),
+              return RepaintBoundary(
+                child: _BrokerCard(
+                  key: id != null ? ValueKey(id) : null,
+                  data: Map<String, dynamic>.from(b),
+                  metrics: m,
+                  onOpen: id == null
+                      ? () {}
+                      : () => context.push('/broker/$id'),
+                  onEdit: () => widget.onEdit(b),
+                  onDelete: () => widget.onDelete(b),
+                ),
               );
             },
           ),

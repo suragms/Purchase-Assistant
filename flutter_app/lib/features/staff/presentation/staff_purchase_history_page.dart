@@ -286,17 +286,20 @@ class _StaffPurchaseHistoryPageState extends ConsumerState<StaffPurchaseHistoryP
                           itemCount: grouped.length,
                           itemBuilder: (ctx, i) {
                             final entry = grouped[i];
-                            return switch (entry) {
-                              PurchaseHistoryDateHeader(:final label) =>
-                                _DateHeader(label: label),
-                              PurchaseHistoryPurchaseRow(:final purchase) =>
-                                StaffPurchaseHistoryRow(
-                                  purchase: purchase,
-                                  onTap: () => context.push(
-                                    '/staff/purchase-history/${purchase.id}',
+                            return RepaintBoundary(
+                              child: switch (entry) {
+                                PurchaseHistoryDateHeader(:final label) =>
+                                  _DateHeader(label: label),
+                                PurchaseHistoryPurchaseRow(:final purchase) =>
+                                  StaffPurchaseHistoryRow(
+                                    key: ValueKey(purchase.id),
+                                    purchase: purchase,
+                                    onTap: () => context.push(
+                                      '/staff/purchase-history/${purchase.id}',
+                                    ),
                                   ),
-                                ),
-                            };
+                              },
+                            );
                           },
                         ),
                       );

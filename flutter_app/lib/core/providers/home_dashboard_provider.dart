@@ -311,7 +311,9 @@ bool homeTabHasOperationalBundle(dynamic ref) {
 
 Map<String, int>? homeBundledStockStatusCounts(Ref ref) {
   if (!homeTabHasOperationalBundle(ref)) return null;
-  return ref.watch(homeDashboardDataProvider).snapshot.data.operational!.stockStatusCounts;
+  final operational = ref.watch(homeDashboardDataProvider).snapshot.data.operational;
+  if (operational == null) return null;
+  return operational.stockStatusCounts;
 }
 
 class HomeDashboardData {
@@ -1258,11 +1260,13 @@ double _lineTradeAmount(TradePurchaseLine ln) {
 }
 
 double _lineKg(TradePurchaseLine ln) {
-  if (ln.kgPerUnit != null &&
-      ln.kgPerUnit! > 0 &&
-      ln.landingCostPerKg != null &&
-      ln.landingCostPerKg! > 0) {
-    return ln.qty * ln.kgPerUnit!;
+  final kgPerUnit = ln.kgPerUnit;
+  final landingCostPerKg = ln.landingCostPerKg;
+  if (kgPerUnit != null &&
+      kgPerUnit > 0 &&
+      landingCostPerKg != null &&
+      landingCostPerKg > 0) {
+    return ln.qty * kgPerUnit;
   }
   final u = ln.unit.toUpperCase().trim();
   if (u == 'KG' || u.endsWith('KG')) return ln.qty;

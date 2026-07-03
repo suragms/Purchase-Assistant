@@ -1,6 +1,6 @@
 import 'dart:convert';
 
-import 'package:shared_preferences/shared_preferences.dart';
+import '../../core/services/prefs_helper.dart';
 
 const _kSuppliers = 'recent_supplier_picks_v1';
 const _kBrokers = 'recent_broker_picks_v1';
@@ -25,7 +25,7 @@ Future<void> recordRecentBrokerId(String id) async {
 }
 
 Future<List<String>> _loadIds(String key) async {
-  final prefs = await SharedPreferences.getInstance();
+  final prefs = PrefsHelper.prefs;
   final raw = prefs.getString(key);
   if (raw == null || raw.isEmpty) return [];
   try {
@@ -45,6 +45,6 @@ Future<List<String>> _bump(String key, String id) async {
 }
 
 Future<void> _saveIds(String key, List<String> ids) async {
-  final prefs = await SharedPreferences.getInstance();
+  final prefs = PrefsHelper.prefs;
   await prefs.setString(key, jsonEncode(ids));
 }

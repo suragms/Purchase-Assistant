@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:developer' as developer;
 import 'dart:ui';
 
 import 'package:dio/dio.dart';
@@ -83,15 +84,19 @@ class _LoginPageState extends ConsumerState<LoginPage>
   }
 
   Future<void> _loadBiometricState() async {
-    final email = await BiometricLogin.savedEmail();
-    final can = await BiometricLogin.isAvailable();
-    final t = await ref.read(tokenStoreProvider).read();
-    final hasTokens = t.access != null && t.refresh != null;
-    if (!mounted) return;
-    setState(() {
-      _bioEmail = email;
-      _bioReady = can && email != null && email.isNotEmpty && hasTokens;
-    });
+    try {
+      final email = await BiometricLogin.savedEmail();
+      final can = await BiometricLogin.isAvailable();
+      final t = await ref.read(tokenStoreProvider).read();
+      final hasTokens = t.access != null && t.refresh != null;
+      if (!mounted) return;
+      setState(() {
+        _bioEmail = email;
+        _bioReady = can && email != null && email.isNotEmpty && hasTokens;
+      });
+    } catch (e) {
+      developer.log('Failed to load biometric state: $e', name: 'login_page');
+    }
   }
 
   void _clearInlineErrors() {
@@ -192,6 +197,7 @@ class _LoginPageState extends ConsumerState<LoginPage>
       if (mounted) _goPostAuth();
       return;
     }
+    if (!mounted) return;
     setState(() {
       _loading = true;
       _showNetworkBanner = false;
@@ -224,6 +230,7 @@ class _LoginPageState extends ConsumerState<LoginPage>
   }
 
   void _retryAfterNetwork() {
+    if (_loading) return;
     setState(() {
       _showNetworkBanner = false;
       _lastNetworkError = null;
@@ -269,6 +276,7 @@ class _LoginPageState extends ConsumerState<LoginPage>
       }
       final sc = e.response?.statusCode;
       if (sc == 401) {
+        developer.log('Login failed: invalid credentials', name: 'login_page');
         setState(() {
           _inlineAuthError = 'Invalid email or password. Try again.';
         });
@@ -277,6 +285,7 @@ class _LoginPageState extends ConsumerState<LoginPage>
       if (sc == 403) {
         final detail = e.response?.data;
         final msg = detail is Map ? detail['detail']?.toString() : null;
+        developer.log('Login failed: account blocked/inactive (403)', name: 'login_page');
         setState(() {
           _inlineAuthError = msg?.toLowerCase().contains('blocked') == true
               ? 'This account is blocked. Contact your owner.'
@@ -287,16 +296,19 @@ class _LoginPageState extends ConsumerState<LoginPage>
         return;
       }
       if (sc == 422) {
+        developer.log('Login failed: validation error (422)', name: 'login_page');
         setState(() {
           _inlineAuthError =
               'Use your full login email (e.g. 1234567890@staff.harisree.local) and password from the owner.';
         });
         return;
       }
+      developer.log('Login failed: ${friendlyAuthError(e, context: AuthErrorContext.login)}', name: 'login_page');
       setState(() {
         _inlineAuthError = friendlyAuthError(e, context: AuthErrorContext.login);
       });
-    } catch (_) {
+    } catch (e, st) {
+      developer.log('Login failed with unexpected error: $e', name: 'login_page', error: e, stackTrace: st);
       if (mounted) {
         setState(() {
           _inlineAuthError = 'Something went wrong. Please try again.';
@@ -309,13 +321,13 @@ class _LoginPageState extends ConsumerState<LoginPage>
 
   Future<void> _signInWithBiometric() async {
     if (_loading || !_bioReady) return;
-    final ok = await BiometricLogin.authenticate();
-    if (!ok || !mounted) return;
-    if (_bioEmail != null && _bioEmail!.isNotEmpty) {
-      _loginEmail.text = _bioEmail!;
-    }
     setState(() => _loading = true);
     try {
+      final ok = await BiometricLogin.authenticate();
+      if (!ok || !mounted) return;
+      if (_bioEmail != null && _bioEmail!.isNotEmpty) {
+        _loginEmail.text = _bioEmail!;
+      }
       await ref.read(sessionProvider.notifier).restore();
       if (mounted && ref.read(sessionProvider) != null) {
         _goPostAuth();

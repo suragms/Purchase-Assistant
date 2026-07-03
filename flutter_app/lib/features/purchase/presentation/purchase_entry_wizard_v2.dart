@@ -7,7 +7,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:dio/dio.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/router/navigation_ext.dart';
 import '../../../core/api/api_warmup.dart';
@@ -38,6 +37,7 @@ import '../../../core/providers/prefs_provider.dart';
 import '../../../core/providers/stock_providers.dart';
 import '../../../core/providers/suppliers_list_provider.dart';
 import '../../../core/services/offline_store.dart';
+import '../../../core/services/prefs_helper.dart';
 import '../../../core/theme/hexa_colors.dart';
 import '../../../core/services/offline_sync_service.dart';
 import '../../../core/services/staff_activity_logger.dart';
@@ -682,7 +682,7 @@ class _PurchaseEntryWizardV2State extends ConsumerState<PurchaseEntryWizardV2>
       final bid = _cachedDraftBid;
       if (json != null && key != null && bid != null) {
         unawaited(() async {
-          final p = await SharedPreferences.getInstance();
+          final p = PrefsHelper.prefs;
           await p.setString(key, json);
           await OfflineStore.putPurchaseWizardDraft(bid, json);
         }());
@@ -2253,11 +2253,8 @@ class _PurchaseEntryWizardV2State extends ConsumerState<PurchaseEntryWizardV2>
         );
       },
       child: RepaintBoundary(
-        child: Padding(
-          key: ValueKey<int>(_wizStep),
-          padding: EdgeInsets.zero,
-          child: step,
-        ),
+        key: ValueKey<int>(_wizStep),
+        child: step,
       ),
     );
   }

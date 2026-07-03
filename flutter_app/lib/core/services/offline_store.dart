@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 
 /// Local persistence for offline-first UX (dashboard cache, future entry queue).
@@ -11,22 +12,34 @@ class OfflineStore {
   static const _boxEntries = 'offline_entries';
   static const _boxPurchaseWizardDraft = 'purchase_wizard_draft';
 
+  static Box? _cachedCache;
+  static Box? _cachedEntries;
+  static Box? _cachedPurchaseWizardDraft;
+
   static Future<void> init() async {
     await Hive.initFlutter();
-    await Hive.openBox(_boxCache);
-    await Hive.openBox(_boxEntries);
-    await Hive.openBox(_boxPurchaseWizardDraft);
+    final results = await Future.wait([
+      Hive.openBox(_boxCache),
+      Hive.openBox(_boxEntries),
+      Hive.openBox(_boxPurchaseWizardDraft),
+    ]);
+    _cachedCache = results[0];
+    _cachedEntries = results[1];
+    _cachedPurchaseWizardDraft = results[2];
   }
 
   /// Hive may not be ready yet on cold web load — never crash UI reads.
   static Box? _openBox(String name) {
     try {
       if (Hive.isBoxOpen(name)) return Hive.box(name);
-    } catch (_) {}
+    } catch (e, st) {
+      debugPrint('OfflineStore._openBox($name) failed: $e\n$st');
+    }
     return null;
   }
 
-  static Box? get _purchaseWizardDraft => _openBox(_boxPurchaseWizardDraft);
+  static Box? get _purchaseWizardDraft =>
+      _cachedPurchaseWizardDraft ?? _openBox(_boxPurchaseWizardDraft);
 
   /// JSON blob for incomplete purchase wizard (same shape as prefs draft).
   static Future<void> putPurchaseWizardDraft(String businessId, String json) async {
@@ -69,8 +82,8 @@ class OfflineStore {
     await box.delete(businessId);
   }
 
-  static Box? get _cache => _openBox(_boxCache);
-  static Box? get _entries => _openBox(_boxEntries);
+  static Box? get _cache => _cachedCache ?? _openBox(_boxCache);
+  static Box? get _entries => _cachedEntries ?? _openBox(_boxEntries);
 
   static Future<void> cacheDashboardMap(Map<String, dynamic> summary) async {
     final box = _cache;
@@ -292,13 +305,15 @@ class OfflineStore {
     final pDash = 'trade_dash|$businessId|';
     final pShell = 'home_shell|$businessId|';
     final pTp = 'reports_tp|$businessId|';
+    final keysToDelete = <dynamic>[];
     for (final k in box.keys.toList()) {
       final ks = k.toString();
       if (ks.startsWith(pDash) || ks.startsWith(pShell) || ks.startsWith(pTp)) {
-        await box.delete(k);
+        keysToDelete.add(k);
       }
     }
-    await box.delete('dashboard');
+    keysToDelete.add('dashboard');
+    await box.deleteAll(keysToDelete);
   }
 
   static String _reportsTpKey(String businessId, String from, String to) =>

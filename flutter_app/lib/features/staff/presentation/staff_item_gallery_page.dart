@@ -286,17 +286,19 @@ class _StaffItemGalleryPageState extends ConsumerState<StaffItemGalleryPage> {
                           final subMap = grouped[cat]!;
                           final expanded = _expandedCats.contains(cat);
                           final subs = subMap.keys.toList()..sort();
-                          return Card(
-                            margin: const EdgeInsets.only(bottom: 6),
-                            clipBehavior: Clip.antiAlias,
-                            elevation: 0,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(10),
-                              side: const BorderSide(color: Color(0xFFE2E8E6)),
-                            ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
+                          return RepaintBoundary(
+                            child: Card(
+                              key: ValueKey(cat),
+                              margin: const EdgeInsets.only(bottom: 6),
+                              clipBehavior: Clip.antiAlias,
+                              elevation: 0,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10),
+                                side: const BorderSide(color: Color(0xFFE2E8E6)),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
                                 ListTile(
                                   dense: true,
                                   title: Text(
@@ -376,10 +378,11 @@ class _StaffItemGalleryPageState extends ConsumerState<StaffItemGalleryPage> {
                                               subEntry.key == '—',
                                         ),
                                       ),
+                                  ],
                                 ],
-                              ],
+                              ),
                             ),
-                          );
+                            );
                         },
                       ),
               ),

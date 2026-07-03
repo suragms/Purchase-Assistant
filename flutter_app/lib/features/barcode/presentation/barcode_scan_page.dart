@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:developer' as developer;
 import 'dart:math' as math;
 
 import 'package:dio/dio.dart';
@@ -10,7 +11,8 @@ import 'package:go_router/go_router.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+
+import '../../../core/services/prefs_helper.dart';
 
 import '../../../core/design_system/hexa_operational_tokens.dart';
 import '../../../core/design_system/hexa_responsive.dart';
@@ -113,22 +115,32 @@ class _BarcodeScanPageState extends ConsumerState<BarcodeScanPage>
   }
 
   Future<void> _bootstrapCamera() async {
-    final persisted = await _readPersistedCameraPerm();
-    _permCache.persistedGranted = persisted;
-    if (persisted) {
-      _cameraPermissionGrantedThisSession = true;
-      _permCache.grantedThisSession = true;
+    try {
+      final persisted = await _readPersistedCameraPerm();
+      _permCache.persistedGranted = persisted;
+      if (persisted) {
+        _cameraPermissionGrantedThisSession = true;
+        _permCache.grantedThisSession = true;
+      }
+      if (kIsWeb && !_permCache.canAutoStartCamera) {
+        if (!mounted) return;
+        setState(() => _webCameraAwaitingGesture = true);
+        return;
+      }
+      await _initCamera();
+    } catch (e, st) {
+      developer.log('Error bootstrapping camera', error: e, stackTrace: st);
     }
-    if (kIsWeb && !_permCache.canAutoStartCamera) {
-      if (mounted) setState(() => _webCameraAwaitingGesture = true);
-      return;
-    }
-    await _initCamera();
   }
 
   Future<void> _startCameraFromUserGesture() async {
-    if (mounted) setState(() => _webCameraAwaitingGesture = false);
-    await _initCamera();
+    try {
+      if (!mounted) return;
+      setState(() => _webCameraAwaitingGesture = false);
+      await _initCamera();
+    } catch (e, st) {
+      developer.log('Error starting camera from user gesture', error: e, stackTrace: st);
+    }
   }
 
   void _onManualFocusChange() {
@@ -189,47 +201,62 @@ class _BarcodeScanPageState extends ConsumerState<BarcodeScanPage>
 
   Future<void> _scanFromImage() async {
     if (_busy) return;
-    final picker = ImagePicker();
-    final file = await picker.pickImage(source: ImageSource.gallery);
-    if (file == null || !mounted) return;
-    String? code;
     try {
-      if (_camera != null) {
-        final cap = await _camera!.analyzeImage(file.path);
-        if (cap != null && cap.barcodes.isNotEmpty) {
-          code = cap.barcodes.first.rawValue?.trim();
+      final picker = ImagePicker();
+      final file = await picker.pickImage(source: ImageSource.gallery);
+      if (file == null || !mounted) return;
+      String? code;
+      try {
+        if (_camera != null) {
+          final cap = await _camera!.analyzeImage(file.path);
+          if (cap != null && cap.barcodes.isNotEmpty) {
+            code = cap.barcodes.first.rawValue?.trim();
+          }
         }
+        if ((code == null || code.isEmpty) && kIsWeb) {
+          final bytes = await file.readAsBytes();
+          code = await decodeBarcodeFromImageBytes(bytes);
+        }
+      } catch (e, st) {
+        developer.log('Error analyzing barcode image', error: e, stackTrace: st);
       }
-      if ((code == null || code.isEmpty) && kIsWeb) {
-        final bytes = await file.readAsBytes();
-        code = await decodeBarcodeFromImageBytes(bytes);
-      }
-    } catch (_) {}
-    if (code != null && code.isNotEmpty) {
-      await _lookupAndNavigate(code);
-    } else if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('Barcode image unreadable. Try another photo.'),
-          action: SnackBarAction(
-            label: 'Manual',
-            onPressed: () => _manualFocus.requestFocus(),
+      if (code != null && code.isNotEmpty) {
+        await _lookupAndNavigate(code);
+      } else if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Barcode image unreadable. Try another photo.'),
+            action: SnackBarAction(
+              label: 'Manual',
+              onPressed: () => _manualFocus.requestFocus(),
+            ),
           ),
-        ),
-      );
+        );
+      }
+    } catch (e, st) {
+      developer.log('Error in _scanFromImage', error: e, stackTrace: st);
     }
   }
 
   Future<bool> _readPersistedCameraPerm() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool(_kCameraPermGrantedKey) ?? false;
+    try {
+      final prefs = PrefsHelper.prefs;
+      return prefs.getBool(_kCameraPermGrantedKey) ?? false;
+    } catch (e, st) {
+      developer.log('Error reading persisted camera permission', error: e, stackTrace: st);
+      return false;
+    }
   }
 
   Future<void> _markCameraPermGranted() async {
     _cameraPermissionGrantedThisSession = true;
     _permCache.markGranted();
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_kCameraPermGrantedKey, true);
+    try {
+      final prefs = PrefsHelper.prefs;
+      await prefs.setBool(_kCameraPermGrantedKey, true);
+    } catch (e, st) {
+      developer.log('Error marking camera permission granted', error: e, stackTrace: st);
+    }
   }
 
   Future<void> _stopWebLiveScanner() async {
@@ -347,22 +374,25 @@ class _BarcodeScanPageState extends ConsumerState<BarcodeScanPage>
 
   Future<void> _startNativeMobileScanner() async {
     if (!mounted) return;
-    if (defaultTargetPlatform == TargetPlatform.iOS) {
-      await _disposeNativeCamera();
-      _camera = _newScannerController();
-    } else {
-      _camera = BarcodeCameraSession.mobile ?? _newScannerController();
-    }
-    BarcodeCameraSession.retainMobile(_camera!);
-    if (!_camera!.value.isRunning) {
-      await _camera!.start();
-    }
-    await _markCameraPermGranted();
-    if (mounted) {
+    try {
+      if (defaultTargetPlatform == TargetPlatform.iOS) {
+        await _disposeNativeCamera();
+        _camera = _newScannerController();
+      } else {
+        _camera = BarcodeCameraSession.mobile ?? _newScannerController();
+      }
+      BarcodeCameraSession.retainMobile(_camera!);
+      if (!_camera!.value.isRunning) {
+        await _camera!.start();
+      }
+      await _markCameraPermGranted();
+      if (!mounted) return;
       setState(() {
         _cameraDenied = false;
         _cameraDeniedMessage = null;
       });
+    } catch (e, st) {
+      developer.log('Error starting native mobile scanner', error: e, stackTrace: st);
     }
   }
 
@@ -381,8 +411,12 @@ class _BarcodeScanPageState extends ConsumerState<BarcodeScanPage>
   }
 
   Future<void> _retryCameraAfterDenial() async {
-    await BarcodeCameraSession.reset();
-    await _initCamera();
+    try {
+      await BarcodeCameraSession.reset();
+      await _initCamera();
+    } catch (e, st) {
+      developer.log('Error retrying camera after denial', error: e, stackTrace: st);
+    }
   }
 
   Future<void> _initCamera() async {
@@ -463,7 +497,7 @@ class _BarcodeScanPageState extends ConsumerState<BarcodeScanPage>
           return;
         }
         if (persisted) {
-          final prefs = await SharedPreferences.getInstance();
+          final prefs = PrefsHelper.prefs;
           await prefs.setBool(_kCameraPermGrantedKey, false);
         }
         _cameraPermissionGrantedThisSession = false;
@@ -490,8 +524,13 @@ class _BarcodeScanPageState extends ConsumerState<BarcodeScanPage>
   }
 
   Future<void> _loadRecent() async {
-    final list = await loadBarcodeRecentScans(max: _kMaxRecent);
-    if (mounted) setState(() => _recent = list);
+    try {
+      final list = await loadBarcodeRecentScans(max: _kMaxRecent);
+      if (!mounted) return;
+      setState(() => _recent = list);
+    } catch (e, st) {
+      developer.log('Error loading recent scans', error: e, stackTrace: st);
+    }
   }
 
   Future<void> _pushRecent(BarcodeRecentScan row) async {
@@ -500,7 +539,11 @@ class _BarcodeScanPageState extends ConsumerState<BarcodeScanPage>
       ..._recent.where((x) => x.code != row.code),
     ].take(_kMaxRecent).toList();
     setState(() => _recent = next);
-    await saveBarcodeRecentScans(next);
+    try {
+      await saveBarcodeRecentScans(next);
+    } catch (e, st) {
+      developer.log('Error saving recent scans', error: e, stackTrace: st);
+    }
   }
 
   bool _debouncePass(String code) {
@@ -845,8 +888,13 @@ class _BarcodeScanPageState extends ConsumerState<BarcodeScanPage>
 
   Future<void> _toggleTorch() async {
     if (_camera == null) return;
-    await _camera!.toggleTorch();
-    setState(() => _torch = !_torch);
+    try {
+      await _camera!.toggleTorch();
+      if (!mounted) return;
+      setState(() => _torch = !_torch);
+    } catch (e, st) {
+      developer.log('Error toggling torch', error: e, stackTrace: st);
+    }
   }
 
   Future<void> _startAuditSession() async {

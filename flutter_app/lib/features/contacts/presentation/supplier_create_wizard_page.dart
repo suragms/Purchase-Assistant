@@ -1,12 +1,12 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:developer' as developer;
 import 'dart:math' as math;
 
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/auth/auth_error_messages.dart';
 import '../../../core/auth/session_notifier.dart';
@@ -17,6 +17,8 @@ import '../../../core/providers/contacts_hub_provider.dart';
 import '../../../core/providers/purchase_prefill_provider.dart';
 import '../../../core/providers/suppliers_list_provider.dart';
 import '../../../core/providers/trade_purchases_provider.dart';
+import '../../../core/services/prefs_helper.dart';
+import '../../../core/utils/string_distance.dart' show nameSimilarity;
 import '../../../core/widgets/form_feedback.dart';
 import '../../../core/widgets/async_value_form.dart';
 import '../../catalog/catalog_taxonomy_utils.dart';
@@ -31,38 +33,6 @@ const _stepTitles = <String>[
   'Items & categories',
   'Review',
 ];
-
-int _levenshtein(String a, String b) {
-  final m = a.length, n = b.length;
-  if (m == 0) return n;
-  if (n == 0) return m;
-  var v0 = List<int>.generate(n + 1, (j) => j);
-  var v1 = List<int>.filled(n + 1, 0);
-  for (var i = 0; i < m; i++) {
-    v1[0] = i + 1;
-    for (var j = 0; j < n; j++) {
-      final cost = a.codeUnitAt(i) == b.codeUnitAt(j) ? 0 : 1;
-      final ins = v1[j] + 1;
-      final del = v0[j + 1] + 1;
-      final sub = v0[j] + cost;
-      v1[j + 1] = ins < del ? (ins < sub ? ins : sub) : (del < sub ? del : sub);
-    }
-    final t = v0;
-    v0 = v1;
-    v1 = t;
-  }
-  return v0[n];
-}
-
-double _nameSimilarity(String a, String b) {
-  final A = a.toLowerCase().trim();
-  final B = b.toLowerCase().trim();
-  if (A.isEmpty || B.isEmpty) return 0;
-  if (A == B) return 1;
-  final d = _levenshtein(A, B);
-  final maxL = A.length > B.length ? A.length : B.length;
-  return 1 - d / maxL;
-}
 
 bool _validPhoneDigits(String raw) {
   final d = raw.replaceAll(RegExp(r'\D'), '');
@@ -272,7 +242,7 @@ class _SupplierCreateWizardPageState
       for (final r in _supplierRows) {
         final ex = r['name']?.toString() ?? '';
         if (ex.isEmpty) continue;
-        final s = _nameSimilarity(n, ex);
+        final s = nameSimilarity(n, ex);
         if (s > bestScore && s < 1) {
           bestScore = s;
           best = ex;
@@ -291,7 +261,7 @@ class _SupplierCreateWizardPageState
   }
 
   Future<void> _loadDraft(String businessId) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = PrefsHelper.prefs;
     final raw = prefs.getString('$_kDraftKey|$businessId');
     if (raw == null || raw.isEmpty) return;
     try {
@@ -334,28 +304,36 @@ class _SupplierCreateWizardPageState
   }
 
   Future<void> _persistDraft(String businessId) async {
-    final prefs = await SharedPreferences.getInstance();
-    final m = <String, dynamic>{
-      'step': _step,
-      'name': _name.text,
-      'phone': _phone.text,
-      'location': _loc.text,
-      'gst': _gst.text,
-      'address': _addr.text,
-      'notes': _notes.text,
-      'ai_memory': _aiMemory,
-      'brokers': _brokerIds.toList(),
-      'cats': _categoryIds.toList(),
-      'types': _typeIds.toList(),
-      'items': _itemIds.toList(),
-      'item_labels': _itemLabels,
-    };
-    await prefs.setString('$_kDraftKey|$businessId', jsonEncode(m));
+    try {
+      final prefs = PrefsHelper.prefs;
+      final m = <String, dynamic>{
+        'step': _step,
+        'name': _name.text,
+        'phone': _phone.text,
+        'location': _loc.text,
+        'gst': _gst.text,
+        'address': _addr.text,
+        'notes': _notes.text,
+        'ai_memory': _aiMemory,
+        'brokers': _brokerIds.toList(),
+        'cats': _categoryIds.toList(),
+        'types': _typeIds.toList(),
+        'items': _itemIds.toList(),
+        'item_labels': _itemLabels,
+      };
+      await prefs.setString('$_kDraftKey|$businessId', jsonEncode(m));
+    } catch (e) {
+      developer.log('Failed to persist draft: $e', name: 'supplier_create_wizard_page');
+    }
   }
 
   Future<void> _clearDraft(String businessId) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove('$_kDraftKey|$businessId');
+    try {
+      final prefs = PrefsHelper.prefs;
+      await prefs.remove('$_kDraftKey|$businessId');
+    } catch (e) {
+      developer.log('Failed to clear draft: $e', name: 'supplier_create_wizard_page');
+    }
   }
 
   Future<void> _handleExitRequest() async {
@@ -448,7 +426,7 @@ class _SupplierCreateWizardPageState
     for (final r in _supplierRows) {
       final ex = r['name']?.toString() ?? '';
       if (ex.isEmpty) continue;
-      final s = _nameSimilarity(n, ex);
+      final s = nameSimilarity(n, ex);
       if (s > best && s < 1) {
         best = s;
         label = ex;

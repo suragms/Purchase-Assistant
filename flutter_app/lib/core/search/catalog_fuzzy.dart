@@ -1,31 +1,12 @@
 // Lightweight fuzzy matching for catalog search (typo-tolerant, case-insensitive).
 
+import '../utils/string_distance.dart' show levenshtein;
+
 /// Max autocomplete / picker rows (Sprint 12 duplicate-search cap).
 const int kCatalogFuzzySearchMax = 8;
 
 String normalizeCatalogSearch(String s) {
   return s.toLowerCase().trim().replaceAll(RegExp(r'\s+'), ' ');
-}
-
-int _levenshtein(String a, String b) {
-  if (a.isEmpty) return b.length;
-  if (b.isEmpty) return a.length;
-  final m = a.length;
-  final n = b.length;
-  var prev = List<int>.generate(n + 1, (j) => j);
-  for (var i = 1; i <= m; i++) {
-    final cur = List<int>.filled(n + 1, 0);
-    cur[0] = i;
-    for (var j = 1; j <= n; j++) {
-      final cost = a[i - 1] == b[j - 1] ? 0 : 1;
-      final ins = cur[j - 1] + 1;
-      final del = prev[j] + 1;
-      final sub = prev[j - 1] + cost;
-      cur[j] = ins < del ? (ins < sub ? ins : sub) : (del < sub ? del : sub);
-    }
-    prev = cur;
-  }
-  return prev[n];
 }
 
 /// Higher is better. Empty [query] matches everything at score 100.
@@ -53,7 +34,7 @@ double catalogFuzzyScore(String query, String candidate) {
 
   final maxLen = q.length > c.length ? q.length : c.length;
   if (maxLen > 48) return 0;
-  final d = _levenshtein(q, c);
+  final d = levenshtein(q, c);
   final sim = 70 - d * 4;
   return sim < 0 ? 0 : sim.toDouble();
 }

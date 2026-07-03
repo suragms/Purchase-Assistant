@@ -4,15 +4,19 @@
 {{flutter_js}}
 {{flutter_build_config}}
 
-// Use full CanvasKit (not chromium/) so browsers without ImageDecoder / break
-// iterators still load WASM — avoids a permanent white screen in some embedded browsers.
-//
-// CRITICAL: Engine init must receive the same `config` object. The default loader calls
-// `engineInitializer.initializeEngine(config)` (see flutter_js entrypoint_loader.js). Calling
-// `initializeEngine()` with no args breaks web startup (hang / blank canvas) even when DDC 930/930 OK.
+// Use 'chromium' variant for Chrome/Edge (smaller WASM, uses ImageDecoder API).
+// Fall back to 'full' for Firefox, Safari, and embedded browsers that lack ImageDecoder.
+// This reduces the initial WASM download by ~1.8 MB for Chrome/Edge users.
+var _ckVariant = 'full';
+try {
+  if (typeof ImageDecoder !== 'undefined' && /Chrome|Edg/.test(navigator.userAgent)) {
+    _ckVariant = 'chromium';
+  }
+} catch (e) {}
+
 const _flutterLoaderConfig = {
   canvasKitBaseUrl: '/canvaskit/',
-  canvasKitVariant: 'full',
+  canvasKitVariant: _ckVariant,
 };
 
 _flutter.loader.load({

@@ -103,7 +103,7 @@ class _QuickStockActionBodyState extends ConsumerState<_QuickStockActionBody> {
     );
     _notesCtrl = TextEditingController();
     _qtyCtrl.addListener(_revalidateQty);
-    if (!widget.skipInitialRefresh) {
+    if (!widget.skipInitialRefresh && !_itemIsFresh(widget.item)) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) unawaited(_refreshItemFromServer());
       });
@@ -117,6 +117,16 @@ class _QuickStockActionBodyState extends ConsumerState<_QuickStockActionBody> {
     }
     final sys = coerceToDouble(_item['current_stock']);
     return sys.isFinite ? sys : 0;
+  }
+
+  /// Returns true when the passed item has enough data to skip a fresh API fetch.
+  static bool _itemIsFresh(Map<String, dynamic> item) {
+    if (item['current_stock'] == null) return false;
+    final updatedAt = item['last_stock_updated_at']?.toString();
+    if (updatedAt == null || updatedAt.isEmpty) return false;
+    final dt = DateTime.tryParse(updatedAt);
+    if (dt == null) return false;
+    return DateTime.now().difference(dt).inMinutes < 5;
   }
 
   int? _stockVersion() => stockVersionFromItem(_item);

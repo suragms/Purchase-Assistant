@@ -23,7 +23,7 @@ Future<void> replayStockOfflineQueue({
         await api.recordPhysicalStockCount(
           businessId: businessId,
           itemId: data['item_id'].toString(),
-          countedQty: data['counted_qty'] as num,
+          countedQty: (data['counted_qty'] as num?) ?? 0,
           notes: data['notes']?.toString(),
         );
       } else if (kind == 'stock_audit_line') {
@@ -31,7 +31,7 @@ Future<void> replayStockOfflineQueue({
           businessId: businessId,
           auditId: data['audit_id'].toString(),
           itemId: data['item_id'].toString(),
-          countedQty: data['counted_qty'] as num,
+          countedQty: (data['counted_qty'] as num?) ?? 0,
           adjustmentType: data['adjustment_type']?.toString(),
           reason: data['reason']?.toString(),
           notes: data['notes']?.toString(),

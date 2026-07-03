@@ -25,7 +25,8 @@ final itemCategoriesListProvider =
   if (session == null) return [];
   return ref
       .read(hexaApiProvider)
-      .listItemCategories(businessId: session.primaryBusiness.id);
+      .listItemCategories(businessId: session.primaryBusiness.id)
+      .timeout(const Duration(seconds: 15));
 });
 
 /// Kept alive so the purchase wizard never cold-loads catalog twice per session.
@@ -38,7 +39,8 @@ final catalogItemsListProvider =
   if (session == null) return [];
   return ref
       .read(hexaApiProvider)
-      .listCatalogItems(businessId: session.primaryBusiness.id);
+      .listCatalogItems(businessId: session.primaryBusiness.id)
+      .timeout(const Duration(seconds: 15));
 });
 
 /// Per-category types (Category → Type → items) — derived from bulk index.
@@ -148,7 +150,7 @@ final catalogItemDetailProvider = FutureProvider.autoDispose
   final row = await ref.read(hexaApiProvider).getCatalogItem(
         businessId: session.primaryBusiness.id,
         itemId: itemId,
-      );
+      ).timeout(const Duration(seconds: 15));
   if (providerWasDisposed(disposed)) {
     throw const ProviderFetchAborted();
   }

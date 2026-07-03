@@ -67,13 +67,17 @@ class _ReportsItemReportPageState extends ConsumerState<ReportsItemReportPage> {
           },
         ),
         title: bundleAsync.maybeWhen(
-          data: (b) => Text(
-            (b['item_name'] as String?)?.trim().isNotEmpty == true
-                ? b['item_name'] as String
-                : (widget.itemName ?? 'Item'),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
+          data: (b) {
+            final rawName = b['item_name'];
+            final nameStr = rawName?.toString().trim();
+            return Text(
+              (nameStr != null && nameStr.isNotEmpty)
+                  ? nameStr
+                  : (widget.itemName ?? 'Item'),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            );
+          },
           orElse: () => Text(
             widget.itemName ?? 'Item',
             maxLines: 1,
@@ -91,9 +95,11 @@ class _ReportsItemReportPageState extends ConsumerState<ReportsItemReportPage> {
           onRetry: _retryBundle,
         ),
         data: (bundle) {
+          final rawName = bundle['item_name'];
+          final nameStr = rawName?.toString().trim();
           final displayName =
-              (bundle['item_name'] as String?)?.trim().isNotEmpty == true
-                  ? bundle['item_name'] as String
+              (nameStr != null && nameStr.isNotEmpty)
+                  ? nameStr
                   : (widget.itemName ?? 'Item');
           final item = Map<String, dynamic>.from(
             bundle['item'] as Map? ?? const {},

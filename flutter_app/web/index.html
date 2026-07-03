@@ -23,6 +23,9 @@
 
   <title>Harisree Warehouse</title>
   <link rel="manifest" href="manifest.json">
+  <link rel="preconnect" href="https://my-purchases-api.onrender.com" crossorigin>
+  <link rel="dns-prefetch" href="https://my-purchases-api.onrender.com">
+  <link rel="modulepreload" href="flutter_bootstrap.js">
   <script>
     (function () {
       var host = location.hostname;
@@ -249,20 +252,20 @@
     })();
   </script>
   <script>
-    // Harisree on Vercel: do NOT register a service worker. Purge legacy SW without
-    // reloading the tab — reload loops caused permanent blank screens on desktop.
-    (function () {
-      if (!('serviceWorker' in navigator)) return;
-      navigator.serviceWorker.getRegistrations().then(function (regs) {
-        return Promise.all(regs.map(function (r) { return r.unregister(); }));
-      }).catch(function () {});
-    })();
+    // Register service worker for offline caching. The SW uses cache-first for
+    // static assets and network-first for HTML, ensuring users always get the
+    // latest index.html while JS/WASM/images are served from cache.
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', function () {
+        navigator.serviceWorker.register('/sw.js').catch(function () {});
+      });
+    }
     window.addEventListener('error', function (ev) {
       var boot = document.getElementById('boot');
       if (!boot || boot.classList.contains('boot-error')) return;
       boot.classList.add('boot-error');
       boot.textContent =
-        'App error — close all tabs, clear site data for this URL, then reopen in Incognito. Need build b6e9da8+.';
+        'App error — close all tabs, clear site data for this URL, then reopen in Incognito.';
       console.error(ev.error || ev.message);
     });
   </script>

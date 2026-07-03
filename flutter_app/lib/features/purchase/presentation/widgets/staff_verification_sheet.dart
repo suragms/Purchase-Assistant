@@ -169,17 +169,18 @@ class _StaffVerificationSheetState extends ConsumerState<_StaffVerificationSheet
           await api.createPurchaseDamageReport(
             businessId: bizId,
             purchaseId: widget.purchaseId,
-            itemName: dl['item_name'] as String,
-            qtyDamaged: dl['damaged_qty'] as double,
+            itemName: (dl['item_name'] as String?) ?? 'Item',
+            qtyDamaged: (dl['damaged_qty'] as num?)?.toDouble() ?? 0,
             catalogItemId: catId != null && catId.isNotEmpty ? catId : null,
             unit: dl['unit'] as String?,
-            reason: dl['reason'] as String,
+            reason: (dl['reason'] as String?) ?? '',
             notes: (dl['notes'] as String?)?.trim().isNotEmpty == true
                 ? dl['notes'] as String
                 : null,
             emitNotification: i == damagedLines.length - 1,
             damagedItemsInBatch: batchN,
           );
+          if (!mounted) return;
         }
         ref.invalidate(pendingDamageReportsCountProvider);
         ref.invalidate(purchaseDamageReportsProvider(widget.purchaseId));

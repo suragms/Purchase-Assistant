@@ -1,6 +1,6 @@
 import 'dart:convert';
 
-import 'package:shared_preferences/shared_preferences.dart';
+import '../../core/services/prefs_helper.dart';
 
 /// Shared with [BarcodeScanPage] and staff home — keep in sync.
 const kBarcodeRecentScansPrefsKey = 'barcode_recent_scans_v1';
@@ -37,7 +37,7 @@ class BarcodeRecentScan {
 }
 
 Future<List<BarcodeRecentScan>> loadBarcodeRecentScans({int max = 10}) async {
-  final p = await SharedPreferences.getInstance();
+  final p = PrefsHelper.prefs;
   final raw = p.getString(kBarcodeRecentScansPrefsKey);
   if (raw == null || raw.isEmpty) return [];
   try {
@@ -60,7 +60,7 @@ Future<List<BarcodeRecentScan>> loadBarcodeRecentScans({int max = 10}) async {
 }
 
 Future<void> saveBarcodeRecentScans(List<BarcodeRecentScan> rows) async {
-  final p = await SharedPreferences.getInstance();
+  final p = PrefsHelper.prefs;
   final payload = rows.map((e) => e.toJson()).toList();
   await p.setString(kBarcodeRecentScansPrefsKey, jsonEncode(payload));
 }

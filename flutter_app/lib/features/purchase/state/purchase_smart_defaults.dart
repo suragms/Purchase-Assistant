@@ -1,4 +1,4 @@
-import 'package:shared_preferences/shared_preferences.dart';
+import '../../../core/services/prefs_helper.dart';
 
 /// Local smart defaults for purchase entry (no financial truth — prefs only).
 class PurchaseSmartDefaults {
@@ -12,12 +12,12 @@ class PurchaseSmartDefaults {
   static Future<void> saveLastSupplierId(String supplierId) async {
     final id = supplierId.trim();
     if (id.isEmpty) return;
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = PrefsHelper.prefs;
     await prefs.setString(_kLastSupplierId, id);
   }
 
   static Future<String?> loadLastSupplierId() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = PrefsHelper.prefs;
     final id = prefs.getString(_kLastSupplierId)?.trim();
     if (id == null || id.isEmpty) return null;
     return id;
@@ -30,14 +30,14 @@ class PurchaseSmartDefaults {
     final cat = categoryId.trim();
     final sup = supplierId.trim();
     if (cat.isEmpty || sup.isEmpty) return;
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = PrefsHelper.prefs;
     await prefs.setString('$_kLastSupplierCatPrefix$cat', sup);
   }
 
   static Future<String?> loadLastSupplierForCategory(String categoryId) async {
     final cat = categoryId.trim();
     if (cat.isEmpty) return null;
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = PrefsHelper.prefs;
     final id = prefs.getString('$_kLastSupplierCatPrefix$cat')?.trim();
     if (id == null || id.isEmpty) return null;
     return id;
@@ -46,21 +46,21 @@ class PurchaseSmartDefaults {
   static Future<void> saveLastRateForItem(String itemId, double rate) async {
     final id = itemId.trim();
     if (id.isEmpty || rate <= 0) return;
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = PrefsHelper.prefs;
     await prefs.setDouble('$_kLastRatePrefix$id', rate);
   }
 
   static Future<double?> loadLastRateForItem(String itemId) async {
     final id = itemId.trim();
     if (id.isEmpty) return null;
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = PrefsHelper.prefs;
     return prefs.getDouble('$_kLastRatePrefix$id');
   }
 
   static Future<void> recordQtyForItem(String itemId, double qty) async {
     final id = itemId.trim();
     if (id.isEmpty || qty <= 0) return;
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = PrefsHelper.prefs;
     final key = '$_kQtyHistPrefix$id';
     final existing = prefs.getStringList(key) ?? [];
     final next = [...existing, qty.toStringAsFixed(4)];
@@ -73,7 +73,7 @@ class PurchaseSmartDefaults {
   static Future<List<double>> loadQtyHistoryForItem(String itemId) async {
     final id = itemId.trim();
     if (id.isEmpty) return [];
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = PrefsHelper.prefs;
     final raw = prefs.getStringList('$_kQtyHistPrefix$id') ?? [];
     final out = <double>[];
     for (final s in raw) {

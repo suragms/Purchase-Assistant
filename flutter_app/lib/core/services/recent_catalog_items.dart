@@ -1,6 +1,6 @@
 import 'dart:convert';
 
-import 'package:shared_preferences/shared_preferences.dart';
+import '../../core/services/prefs_helper.dart';
 
 import '../json_coerce.dart';
 
@@ -60,7 +60,7 @@ class RecentCatalogItem {
 
 /// Reads the saved LRU list (most-recent first).
 Future<List<RecentCatalogItem>> loadRecentCatalogItems() async {
-  final prefs = await SharedPreferences.getInstance();
+  final prefs = PrefsHelper.prefs;
   final raw = prefs.getString(_kKey);
   if (raw == null || raw.isEmpty) return [];
   try {
@@ -77,8 +77,23 @@ Future<List<RecentCatalogItem>> loadRecentCatalogItems() async {
 
 /// Records a picked item. Moves to front, caps at [_kMax], persists.
 Future<void> recordRecentCatalogItem(RecentCatalogItem item) async {
-  final prefs = await SharedPreferences.getInstance();
-  var list = await loadRecentCatalogItems();
+  final prefs = PrefsHelper.prefs;
+  final raw = prefs.getString(_kKey);
+  List<RecentCatalogItem> list;
+  if (raw == null || raw.isEmpty) {
+    list = [];
+  } else {
+    try {
+      final decoded = jsonDecode(raw) as List<dynamic>;
+      list = decoded
+          .whereType<Map<String, dynamic>>()
+          .map(RecentCatalogItem.fromJson)
+          .where((r) => r.id.isNotEmpty && r.name.isNotEmpty)
+          .toList();
+    } catch (_) {
+      list = [];
+    }
+  }
   list.removeWhere((r) => r.id == item.id);
   list.insert(0, item);
   if (list.length > _kMax) list = list.sublist(0, _kMax);

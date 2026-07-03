@@ -43,7 +43,7 @@ final analyticsDailyProfitProvider =
           businessId: session.primaryBusiness.id,
           from: fromS,
           to: toS,
-        );
+        ).timeout(const Duration(seconds: 15));
   final byDay = <String, double>{};
   for (final row in raw) {
     final ds = row['d']?.toString();
@@ -93,7 +93,7 @@ final analyticsCategoriesTableProvider =
           businessId: session.primaryBusiness.id,
           from: fmt.format(range.from),
           to: fmt.format(range.to),
-        );
+        ).timeout(const Duration(seconds: 15));
   } on DioException catch (e) {
     if (e.response?.statusCode == 429) return [];
     rethrow;
@@ -144,8 +144,12 @@ final analyticsBrokersTableProvider =
 /// Heuristic insight: highest estimated purchase-volume item × supplier with lowest avg landing vs peer average.
 final analyticsBestSupplierInsightProvider =
     FutureProvider.autoDispose<String?>((ref) async {
-  final items = await ref.watch(analyticsItemsTableProvider.future);
-  final suppliers = await ref.watch(analyticsSuppliersTableProvider.future);
+  _keepAnalyticsAlive(ref);
+  final itemsFuture = ref.watch(analyticsItemsTableProvider.future);
+  final suppliersFuture = ref.watch(analyticsSuppliersTableProvider.future);
+  final results = await Future.wait<Object?>([itemsFuture, suppliersFuture]);
+  final items = (results[0] as List).cast<Map<String, dynamic>>();
+  final suppliers = (results[1] as List).cast<Map<String, dynamic>>();
   if (items.isEmpty || suppliers.isEmpty) return null;
   Map<String, dynamic>? topByVol;
   var bestVol = -1.0;

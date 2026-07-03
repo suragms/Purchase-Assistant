@@ -29,6 +29,7 @@ import 'core/providers/prefs_provider.dart'
     show kNotificationsOptInKey, sharedPreferencesProvider;
 import 'core/providers/api_degraded_provider.dart';
 import 'core/services/offline_store.dart';
+import 'core/services/prefs_helper.dart';
 import 'core/services/offline_sync_service.dart';
 import 'core/services/pdf_locale.dart';
 
@@ -260,6 +261,7 @@ class _HexaBootstrapState extends State<_HexaBootstrap> {
       await OfflineStore.init().timeout(cap);
       _bootstrapLog('OfflineStore.init OK');
       final prefs = await SharedPreferences.getInstance().timeout(cap);
+      PrefsHelper.init(prefs);
       _bootstrapLog('SharedPreferences OK');
       await LocalNotificationsService.instance.init();
       final notifOptIn = prefs.getBool(kNotificationsOptInKey) ?? false;

@@ -2,7 +2,6 @@ import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 import '../../../../core/config/app_config.dart';
 
@@ -159,7 +158,7 @@ class _AuthBrandPanelState extends State<AuthBrandPanel> with TickerProviderStat
                 SizedBox(height: widget.compact ? 14 : 28),
                 Text(
                   AppConfig.appName,
-                  style: GoogleFonts.plusJakartaSans(
+                  style: TextStyle(fontFamily: 'PlusJakartaSans',
                     fontSize: widget.compact ? 22 : 32,
                     fontWeight: FontWeight.w800,
                     color: Colors.white,
@@ -170,7 +169,7 @@ class _AuthBrandPanelState extends State<AuthBrandPanel> with TickerProviderStat
                 const SizedBox(height: 8),
                 Text(
                   'Purchase Intelligence Platform',
-                  style: GoogleFonts.inter(
+                  style: TextStyle(fontFamily: 'Inter',
                     fontSize: widget.compact ? 14 : 16,
                     fontWeight: FontWeight.w500,
                     color: Colors.white.withValues(alpha: 0.78),
@@ -181,7 +180,7 @@ class _AuthBrandPanelState extends State<AuthBrandPanel> with TickerProviderStat
                   SizedBox(height: widget.compact ? 10 : 14),
                   Text(
                     widget.accentLine!.trim(),
-                    style: GoogleFonts.inter(
+                    style: TextStyle(fontFamily: 'Inter',
                       fontSize: widget.compact ? 13 : 15,
                       fontWeight: FontWeight.w600,
                       color: Colors.white.withValues(alpha: 0.9),
@@ -311,7 +310,7 @@ class _AuthBrandPanelState extends State<AuthBrandPanel> with TickerProviderStat
       alignment: Alignment.center,
       child: Text(
         'H',
-        style: GoogleFonts.plusJakartaSans(
+        style: TextStyle(fontFamily: 'PlusJakartaSans',
           fontSize: compact ? 22 : 26,
           fontWeight: FontWeight.w800,
           color: Colors.white,
@@ -344,7 +343,7 @@ class _CheckFeature extends StatelessWidget {
         Expanded(
           child: Text(
             text,
-            style: GoogleFonts.inter(
+            style: TextStyle(fontFamily: 'Inter',
               fontSize: dense ? 13 : 15,
               fontWeight: FontWeight.w600,
               color: Colors.white.withValues(alpha: 0.92),

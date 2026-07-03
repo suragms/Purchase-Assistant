@@ -48,8 +48,8 @@ class BusinessBrief {
     }
     return BusinessBrief(
       id: j['id'].toString(),
-      name: j['name'] as String,
-      role: j['role'] as String,
+      name: (j['name'] as String?) ?? '',
+      role: (j['role'] as String?) ?? '',
       permissions: perms,
       brandingTitle: j['branding_title'] as String?,
       brandingLogoUrl: j['branding_logo_url'] as String?,

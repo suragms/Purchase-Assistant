@@ -15,5 +15,5 @@ Future<List<Map<String, dynamic>>> fetchContactsListWithApiGuard(
   if (providerSkipApi(ref)) {
     throw const StockListFetchBlockedException('api_gate');
   }
-  return fetch();
+  return fetch().timeout(const Duration(seconds: 15));
 }

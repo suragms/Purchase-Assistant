@@ -1,3 +1,5 @@
+import 'dart:developer' as developer;
+
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -273,57 +275,67 @@ class BrokerHistoryPage extends ConsumerWidget {
           IconButton(
             tooltip: 'Commission statement (PDF)',
             onPressed: () async {
-              final biz = ref.read(invoiceBusinessProfileProvider);
-              final header = headerAsync.asData?.value;
-              final brokerName =
-                  (header?['name'] ?? header?['display_name'])?.toString().trim();
-              final brokerPhone = header?['phone']?.toString().trim();
+              try {
+                final biz = ref.read(invoiceBusinessProfileProvider);
+                final header = headerAsync.asData?.value;
+                final brokerName =
+                    (header?['name'] ?? header?['display_name'])?.toString().trim();
+                final brokerPhone = header?['phone']?.toString().trim();
 
-              final merged = purchases;
-              if (merged == null) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Loading purchases… try again in a moment')),
+                final merged = purchases;
+                if (merged == null) {
+                  if (!context.mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Loading purchases… try again in a moment')),
+                  );
+                  return;
+                }
+
+                final now = DateTime.now();
+                final today = DateTime(now.year, now.month, now.day);
+                final seedFrom = today.subtract(const Duration(days: 29));
+                final picked = await showDateRangePicker(
+                  context: context,
+                  firstDate: DateTime(now.year - 5),
+                  lastDate: DateTime(now.year + 1, 12, 31),
+                  initialDateRange: DateTimeRange(start: seedFrom, end: today),
                 );
-                return;
-              }
+                if (picked == null) return;
+                if (!context.mounted) return;
+                final from = DateTime(picked.start.year, picked.start.month, picked.start.day);
+                final to = DateTime(picked.end.year, picked.end.month, picked.end.day);
 
-              final now = DateTime.now();
-              final today = DateTime(now.year, now.month, now.day);
-              final seedFrom = today.subtract(const Duration(days: 29));
-              final picked = await showDateRangePicker(
-                context: context,
-                firstDate: DateTime(now.year - 5),
-                lastDate: DateTime(now.year + 1, 12, 31),
-                initialDateRange: DateTimeRange(start: seedFrom, end: today),
-              );
-              if (picked == null) return;
-              final from = DateTime(picked.start.year, picked.start.month, picked.start.day);
-              final to = DateTime(picked.end.year, picked.end.month, picked.end.day);
+                final filtered = merged.where((p) {
+                  if (p.brokerId == null || p.brokerId!.isEmpty) return false;
+                  if (p.brokerId != brokerId) return false;
+                  final d = DateTime(p.purchaseDate.year, p.purchaseDate.month, p.purchaseDate.day);
+                  return !d.isBefore(from) && !d.isAfter(to);
+                }).toList();
 
-              final filtered = merged.where((p) {
-                if (p.brokerId == null || p.brokerId!.isEmpty) return false;
-                if (p.brokerId != brokerId) return false;
-                final d = DateTime(p.purchaseDate.year, p.purchaseDate.month, p.purchaseDate.day);
-                return !d.isBefore(from) && !d.isAfter(to);
-              }).toList();
+                if (filtered.isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('No broker purchases in this period')),
+                  );
+                  return;
+                }
 
-              if (filtered.isEmpty) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('No broker purchases in this period')),
+                await shareBrokerStatementPdfForChat(
+                  business: biz,
+                  brokerName: (brokerName != null && brokerName.isNotEmpty)
+                      ? brokerName
+                      : 'Broker',
+                  brokerPhone: brokerPhone,
+                  purchases: filtered,
+                  fromDate: from,
+                  toDate: to,
                 );
-                return;
+              } catch (e) {
+                developer.log('Failed to share broker statement: $e', name: 'broker_history_page');
+                if (!context.mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Failed to share statement: $e')),
+                );
               }
-
-              await shareBrokerStatementPdfForChat(
-                business: biz,
-                brokerName: (brokerName != null && brokerName.isNotEmpty)
-                    ? brokerName
-                    : 'Broker',
-                brokerPhone: brokerPhone,
-                purchases: filtered,
-                fromDate: from,
-                toDate: to,
-              );
             },
             icon: const Icon(Icons.receipt_long_outlined),
           ),

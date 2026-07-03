@@ -46,7 +46,9 @@ Future<TradeReportSnapshot> _fetchTradeReportSnapshotOnce(
   TradeReportRangeKey range,
 ) async {
   final api = ref.read(hexaApiProvider);
-  final bid = ref.read(activeSessionProvider)!.primaryBusiness.id;
+  final session = ref.read(activeSessionProvider);
+  if (session == null) return TradeReportSnapshot.empty;
+  final bid = session.primaryBusiness.id;
   final out = await Future.wait([
     api.tradeReportTypes(
       businessId: bid,

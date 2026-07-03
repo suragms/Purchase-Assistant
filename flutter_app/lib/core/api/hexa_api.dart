@@ -343,8 +343,8 @@ class HexaApi {
       Response<Map<String, dynamic>> res) {
     final d = res.data!;
     return (
-      access: d['access_token'] as String,
-      refresh: d['refresh_token'] as String
+      access: (d['access_token'] as String?) ?? '',
+      refresh: (d['refresh_token'] as String?) ?? '',
     );
   }
 

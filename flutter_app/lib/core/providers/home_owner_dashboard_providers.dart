@@ -713,9 +713,9 @@ Future<List<HomeActivityItem>> _fetchHomeWarehouseActivity(
     custom: ref.read(homeCustomDateRangeProvider),
   );
 
-  late final List<Map<String, dynamic>> purchases;
-  late final List<Map<String, dynamic>> auditRows;
-  late final List<Map<String, dynamic>> staffPurchases;
+  var purchases = <Map<String, dynamic>>[];
+  var auditRows = <Map<String, dynamic>>[];
+  var staffPurchases = <Map<String, dynamic>>[];
   try {
     final auditFuture = ref.read(stockAuditRecentSnapshotProvider.future);
     final results = await Future.wait<dynamic>([
@@ -826,7 +826,7 @@ Future<List<HomeActivityItem>> _fetchHomeWarehouseActivity(
             a['user_name']?.toString(),
         at: local,
         routeId: received?.purchaseId?.isNotEmpty == true
-            ? received!.purchaseId
+            ? received?.purchaseId
             : a['item_id']?.toString(),
         actor: a['updated_by_name']?.toString() ??
             a['updated_by']?.toString() ??

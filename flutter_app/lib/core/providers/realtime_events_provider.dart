@@ -97,7 +97,7 @@ final realtimeInvalidationProvider =
       rows = await api.listRealtimeEvents(
         businessId: session.primaryBusiness.id,
         limit: 40,
-      );
+      ).timeout(const Duration(seconds: 15));
       backoffStep = 0;
     } on DioException catch (e) {
       final sc = e.response?.statusCode;

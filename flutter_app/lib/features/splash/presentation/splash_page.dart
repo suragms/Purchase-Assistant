@@ -134,7 +134,7 @@ class _SplashPageState extends ConsumerState<SplashPage>
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(22),
                       child: Image.asset(
-                        'assets/images/app_logo.png',
+                        'assets/images/app_logo.webp',
                         fit: BoxFit.contain,
                         errorBuilder: (_, __, ___) => const Icon(
                           Icons.warehouse_rounded,

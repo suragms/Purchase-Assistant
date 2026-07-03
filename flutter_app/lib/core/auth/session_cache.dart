@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:developer' as developer;
 
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -15,11 +16,16 @@ class SessionCache {
 
   Future<void> saveBusinesses(List<BusinessBrief> list,
       {bool? isSuperAdmin}) async {
-    if (list.isEmpty) return;
-    final encoded = jsonEncode(list.map((e) => e.toJson()).toList());
-    await _prefs.setString(_k, encoded);
-    if (isSuperAdmin != null) {
-      await _prefs.setBool(_kSuper, isSuperAdmin);
+    try {
+      if (list.isEmpty) return;
+      final encoded = jsonEncode(list.map((e) => e.toJson()).toList());
+      await _prefs.setString(_k, encoded);
+      if (isSuperAdmin != null) {
+        await _prefs.setBool(_kSuper, isSuperAdmin);
+      }
+    } catch (e) {
+      developer.log('Failed to save businesses cache: $e',
+          name: 'SessionCache');
     }
   }
 
@@ -40,7 +46,12 @@ class SessionCache {
   }
 
   Future<void> clear() async {
-    await _prefs.remove(_k);
-    await _prefs.remove(_kSuper);
+    try {
+      await _prefs.remove(_k);
+      await _prefs.remove(_kSuper);
+    } catch (e) {
+      developer.log('Failed to clear session cache: $e',
+          name: 'SessionCache');
+    }
   }
 }

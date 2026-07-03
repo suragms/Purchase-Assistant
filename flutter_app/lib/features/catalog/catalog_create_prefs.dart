@@ -1,4 +1,4 @@
-import 'package:shared_preferences/shared_preferences.dart';
+import '../../../core/services/prefs_helper.dart';
 
 /// Remembers last supplier/broker/type on catalog item create (per business).
 class CatalogCreatePrefs {
@@ -14,7 +14,7 @@ class CatalogCreatePrefs {
         String? brokerId,
         String? typeId,
       })> load(String businessId) async {
-    final sp = await SharedPreferences.getInstance();
+    final sp = PrefsHelper.prefs;
     return (
       supplierId: sp.getString(_supplierKey(businessId)),
       brokerId: sp.getString(_brokerKey(businessId)),
@@ -28,24 +28,26 @@ class CatalogCreatePrefs {
     String? brokerId,
     String? typeId,
   }) async {
-    final sp = await SharedPreferences.getInstance();
+    final sp = PrefsHelper.prefs;
     final sup = supplierId?.trim();
     final bro = brokerId?.trim();
     final typ = typeId?.trim();
+    final futures = <Future<void>>[];
     if (sup == null || sup.isEmpty) {
-      await sp.remove(_supplierKey(businessId));
+      futures.add(sp.remove(_supplierKey(businessId)));
     } else {
-      await sp.setString(_supplierKey(businessId), sup);
+      futures.add(sp.setString(_supplierKey(businessId), sup));
     }
     if (bro == null || bro.isEmpty) {
-      await sp.remove(_brokerKey(businessId));
+      futures.add(sp.remove(_brokerKey(businessId)));
     } else {
-      await sp.setString(_brokerKey(businessId), bro);
+      futures.add(sp.setString(_brokerKey(businessId), bro));
     }
     if (typ == null || typ.isEmpty) {
-      await sp.remove(_typeKey(businessId));
+      futures.add(sp.remove(_typeKey(businessId)));
     } else {
-      await sp.setString(_typeKey(businessId), typ);
+      futures.add(sp.setString(_typeKey(businessId), typ));
     }
+    await Future.wait(futures);
   }
 }

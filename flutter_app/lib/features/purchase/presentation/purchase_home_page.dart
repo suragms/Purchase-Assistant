@@ -34,7 +34,7 @@ import '../../../core/purchase/purchase_stock_commit_flow.dart';
 import '../../../core/providers/trade_purchases_provider.dart';
 import '../providers/trade_purchase_detail_provider.dart';
 import '../state/purchase_local_wip_draft_provider.dart';
-import '../../../core/services/purchase_pdf.dart';
+import '../../../core/services/purchase_pdf.dart' deferred as purchasePdf;
 import '../../../core/theme/hexa_colors.dart';
 import '../../../core/widgets/friendly_load_error.dart'
     show FriendlyLoadError, kFriendlyLoadNetworkSubtitle;
@@ -1770,8 +1770,10 @@ class _PurchaseHomePageState extends ConsumerState<PurchaseHomePage> {
           return OperationalDateHeader(e.label);
         }
         final p = (e as PurchaseHistoryPurchaseRow).purchase;
-        return _PurchaseRow(
-          p: p,
+        return RepaintBoundary(
+          child: _PurchaseRow(
+            key: ValueKey(p.id),
+            p: p,
           serial: visible.indexOf(p) + 1,
           selectMode: _selectMode,
           selected: _selected.contains(p.id),
@@ -1807,7 +1809,8 @@ class _PurchaseHomePageState extends ConsumerState<PurchaseHomePage> {
             final biz = ref.read(invoiceBusinessProfileProvider);
             Future<void> doShare() async {
               try {
-                final result = await sharePurchasePdf(p, biz);
+                await purchasePdf.loadLibrary();
+                final result = await purchasePdf.sharePurchasePdf(p, biz);
                 if (!context.mounted) return;
                 if (result.ok) {
                   showTopSnack(context, result.message);
@@ -1835,6 +1838,7 @@ class _PurchaseHomePageState extends ConsumerState<PurchaseHomePage> {
 
             await doShare();
           },
+        ),
         );
       },
     );
@@ -2669,7 +2673,8 @@ class _PurchaseHistoryFullscreenSearchPageState
                   final biz = ref.read(invoiceBusinessProfileProvider);
                   Future<void> doShare() async {
                     try {
-                      final result = await sharePurchasePdf(p, biz);
+                      await purchasePdf.loadLibrary();
+                      final result = await purchasePdf.sharePurchasePdf(p, biz);
                       if (!context.mounted) return;
                       if (result.ok) {
                         showTopSnack(context, result.message);
@@ -2708,6 +2713,7 @@ class _PurchaseHistoryFullscreenSearchPageState
 
 class _PurchaseRow extends StatelessWidget {
   const _PurchaseRow({
+    super.key,
     required this.p,
     required this.serial,
     required this.selectMode,

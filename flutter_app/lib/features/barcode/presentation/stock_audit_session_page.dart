@@ -76,8 +76,11 @@ class StockAuditSessionPage extends ConsumerWidget {
                   itemBuilder: (_, i) {
                     final m = Map<String, dynamic>.from(lines[i] as Map);
                     final diff = coerceToDouble(m['difference_qty']);
-                    return ListTile(
-                      dense: true,
+                    final itemId = m['item_id']?.toString() ?? '';
+                    return RepaintBoundary(
+                      child: ListTile(
+                        key: itemId.isNotEmpty ? ValueKey(itemId) : null,
+                        dense: true,
                       title: Text('Item ${m['item_id']?.toString().substring(0, 8) ?? ''}…'),
                       subtitle: Text(
                         'System ${m['system_qty']} → counted ${m['counted_qty']}',
@@ -89,6 +92,7 @@ class StockAuditSessionPage extends ConsumerWidget {
                           color: diff == 0
                               ? const Color(0xFF3B6D11)
                               : const Color(0xFFA32D2D),
+                        ),
                         ),
                       ),
                     );

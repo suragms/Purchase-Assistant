@@ -141,7 +141,7 @@ final homeOutOfStockListProvider =
         perPage: kHomeOutOfStockListQuery.perPage,
         status: kHomeOutOfStockListQuery.status,
         sort: kHomeOutOfStockListQuery.sort,
-      );
+      ).timeout(const Duration(seconds: 15));
   if (providerWasDisposed(disposed)) {
     return {'items': <Map<String, dynamic>>[], 'total': 0};
   }
@@ -170,7 +170,7 @@ final stockItemIntelligenceProvider = FutureProvider.autoDispose
         itemId: itemId,
         periodStart: range.periodStart,
         periodEnd: range.periodEnd,
-      );
+      ).timeout(const Duration(seconds: 15));
   if (providerWasDisposed(disposed)) {
     throw const ProviderFetchAborted();
   }
@@ -195,7 +195,7 @@ final stockItemActivityProvider = FutureProvider.autoDispose
   final result = await ref.read(hexaApiProvider).getStockItemActivity(
         businessId: session.primaryBusiness.id,
         itemId: itemId,
-      );
+      ).timeout(const Duration(seconds: 15));
   if (providerWasDisposed(disposed)) {
     throw const ProviderFetchAborted();
   }
@@ -275,7 +275,8 @@ Map<String, dynamic>? stockListCachedDataForCurrentQuery(dynamic ref) {
   if (cacheKey != queryKey) return null;
   final cached = ref.read(stockListCachedBodyProvider);
   if (!stockListCacheBodyIsUsable(cached)) return null;
-  return Map<String, dynamic>.from(cached!);
+  if (cached == null) return null;
+  return Map<String, dynamic>.from(cached);
 }
 
 void _writeStockListRamCache(
@@ -394,7 +395,7 @@ final stockOnHandTotalsProvider =
   if (session == null) return {};
   final totals = await ref.read(hexaApiProvider).getStockTotals(
         businessId: session.primaryBusiness.id,
-      );
+      ).timeout(const Duration(seconds: 15));
   if (providerWasDisposed(disposed)) return {};
   return totals;
 });
@@ -411,7 +412,7 @@ final stockTotalsProvider =
           businessId: session.primaryBusiness.id,
           periodStart: appPeriodApiDateFrom(ref, period),
           periodEnd: appPeriodApiDateTo(ref, period),
-        );
+        ).timeout(const Duration(seconds: 15));
     if (providerWasDisposed(disposed)) return {};
     return totals;
   },
@@ -449,7 +450,7 @@ final stockShellBundleProvider =
     missingItemCode: op.missingItemCodeOnly,
     reorderOnly: op.reorderOnly,
     unit: op.unit,
-  );
+  ).timeout(const Duration(seconds: 30));
   if (providerWasDisposed(disposed)) return const {};
   return bundle;
 });
@@ -535,8 +536,8 @@ final stockListProvider = FutureProvider<Map<String, dynamic>>((ref) async {
   final skipApi = providerSkipApi(ref);
   if (skipApi) {
     final cachedBody = ref.read(stockListCachedBodyProvider);
-    if (stockListCacheBodyIsUsable(cachedBody)) {
-      return Map<String, dynamic>.from(cachedBody!);
+    if (stockListCacheBodyIsUsable(cachedBody) && cachedBody != null) {
+      return Map<String, dynamic>.from(cachedBody);
     }
     final canForceLiveOnWeb = kIsWeb &&
         !ref.read(auth401CircuitOpenProvider) &&
@@ -621,8 +622,8 @@ final stockListProvider = FutureProvider<Map<String, dynamic>>((ref) async {
     );
   } on DioException {
     if (providerWasDisposed(disposed)) {
-      if (stockListCacheBodyIsUsable(cachedBody)) {
-        return Map<String, dynamic>.from(cachedBody!);
+      if (stockListCacheBodyIsUsable(cachedBody) && cachedBody != null) {
+        return Map<String, dynamic>.from(cachedBody);
       }
       throw const ProviderFetchAborted();
     }
@@ -630,8 +631,8 @@ final stockListProvider = FutureProvider<Map<String, dynamic>>((ref) async {
   }
 
   if (res['_not_modified'] == true) {
-    if (stockListCacheBodyIsUsable(cachedBody)) {
-      return Map<String, dynamic>.from(cachedBody!);
+    if (stockListCacheBodyIsUsable(cachedBody) && cachedBody != null) {
+      return Map<String, dynamic>.from(cachedBody);
     }
     // ETag matched but RAM cache missing (dispose/race) — bust and pull once.
     clearStockListEtagCache(ref);
@@ -715,6 +716,10 @@ final bulkStockListProvider =
     return {'items': <Map<String, dynamic>>[], 'total': 0, 'loaded': 0};
   }
   final api = ref.read(hexaApiProvider);
+  final cancelToken = CancelToken();
+  safeRefOnDispose(ref, () {
+    if (!cancelToken.isCancelled) cancelToken.cancel('bulk_stock_disposed');
+  });
   // Smaller pages on web: large JSON over HTTP/3 (QUIC) often trips
   // ERR_QUIC_PROTOCOL_ERROR on flaky networks / Render cold paths.
   final pageSize = kIsWeb ? 50 : 500;
@@ -735,7 +740,7 @@ final bulkStockListProvider =
         includePeriod: query.includePeriod,
         periodStart: query.periodStart,
         periodEnd: query.periodEnd,
-      );
+      ).timeout(const Duration(seconds: 30));
       if (providerWasDisposed(disposed)) {
         return {
           'items': merged,
@@ -928,7 +933,7 @@ final stockItemDetailProvider =
       final row = await ref.read(hexaApiProvider).getStockItem(
             businessId: session.primaryBusiness.id,
             itemId: itemId,
-          );
+          ).timeout(const Duration(seconds: 15));
       if (providerWasDisposed(disposed)) {
         throw const ProviderFetchAborted();
       }
@@ -954,7 +959,7 @@ final stockItemAuditProvider =
     final rows = await ref.read(hexaApiProvider).listStockAuditForItem(
           businessId: session.primaryBusiness.id,
           itemId: itemId,
-        );
+        ).timeout(const Duration(seconds: 15));
     if (providerWasDisposed(disposed)) return [];
     return rows;
   },
@@ -1033,7 +1038,7 @@ final stockStatusCountsProvider =
     perPage: 1,
     status: 'all',
     sort: 'recent',
-  );
+  ).timeout(const Duration(seconds: 15));
   if (providerWasDisposed(disposed)) return {};
   return _stockStatusCountsFromAlertsSummary(
     summary,
@@ -1134,15 +1139,18 @@ final stockFilteredStatusCountsProvider =
     return (res['total'] as num?)?.toInt() ?? 0;
   }
 
-  final low = await totalFor('low');
-  if (providerWasDisposed(disposed)) return {};
-  final critical = await totalFor('critical');
+  final results = await Future.wait([
+    totalFor('all'),
+    totalFor('low'),
+    totalFor('critical'),
+    totalFor('out'),
+  ]);
   if (providerWasDisposed(disposed)) return {};
   return {
-    'all': await totalFor('all'),
-    'low': low,
-    'critical': critical,
-    'out': await totalFor('out'),
+    'all': results[0],
+    'low': results[1],
+    'critical': results[2],
+    'out': results[3],
   };
 });
 
@@ -1234,9 +1242,9 @@ final lowStockByCategoryProvider =
     final catKey = (cat != null && cat.isNotEmpty) ? cat : 'Unknown';
     final sub = item['subcategory_name']?.toString().trim();
     final subKey = (sub != null && sub.isNotEmpty) ? sub : 'Other';
-    result.putIfAbsent(catKey, () => {});
-    result[catKey]!.putIfAbsent(subKey, () => []);
-    result[catKey]![subKey]!.add(item);
+    final subMap = result.putIfAbsent(catKey, () => <String, List<Map<String, dynamic>>>{});
+    final subList = subMap.putIfAbsent(subKey, () => <Map<String, dynamic>>[]);
+    subList.add(item);
   }
   return result;
 });

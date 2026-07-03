@@ -192,10 +192,10 @@ class HexaGlassTheme extends ThemeExtension<HexaGlassTheme> {
       final sa = i < a.length ? a[i] : a.last;
       final sb = i < b.length ? b[i] : b.last;
       out.add(BoxShadow(
-        color: Color.lerp(sa.color, sb.color, t)!,
-        blurRadius: lerpDouble(sa.blurRadius, sb.blurRadius, t)!,
-        spreadRadius: lerpDouble(sa.spreadRadius, sb.spreadRadius, t)!,
-        offset: Offset.lerp(sa.offset, sb.offset, t)!,
+        color: Color.lerp(sa.color, sb.color, t) ?? sa.color,
+        blurRadius: lerpDouble(sa.blurRadius, sb.blurRadius, t) ?? 0.0,
+        spreadRadius: lerpDouble(sa.spreadRadius, sb.spreadRadius, t) ?? 0.0,
+        offset: Offset.lerp(sa.offset, sb.offset, t) ?? sa.offset,
       ));
     }
     return out;
@@ -205,24 +205,24 @@ class HexaGlassTheme extends ThemeExtension<HexaGlassTheme> {
   HexaGlassTheme lerp(ThemeExtension<HexaGlassTheme>? other, double t) {
     if (other is! HexaGlassTheme) return this;
     return HexaGlassTheme(
-      surfaceCanvas: Color.lerp(surfaceCanvas, other.surfaceCanvas, t)!,
-      surfaceCard: Color.lerp(surfaceCard, other.surfaceCard, t)!,
-      glassFill: Color.lerp(glassFill, other.glassFill, t)!,
-      glassStroke: Color.lerp(glassStroke, other.glassStroke, t)!,
-      inputFill: Color.lerp(inputFill, other.inputFill, t)!,
-      borderSubtle: Color.lerp(borderSubtle, other.borderSubtle, t)!,
-      textPrimary: Color.lerp(textPrimary, other.textPrimary, t)!,
-      textBody: Color.lerp(textBody, other.textBody, t)!,
-      textMuted: Color.lerp(textMuted, other.textMuted, t)!,
-      success: Color.lerp(success, other.success, t)!,
-      successForeground: Color.lerp(successForeground, other.successForeground, t)!,
+      surfaceCanvas: Color.lerp(surfaceCanvas, other.surfaceCanvas, t) ?? surfaceCanvas,
+      surfaceCard: Color.lerp(surfaceCard, other.surfaceCard, t) ?? surfaceCard,
+      glassFill: Color.lerp(glassFill, other.glassFill, t) ?? glassFill,
+      glassStroke: Color.lerp(glassStroke, other.glassStroke, t) ?? glassStroke,
+      inputFill: Color.lerp(inputFill, other.inputFill, t) ?? inputFill,
+      borderSubtle: Color.lerp(borderSubtle, other.borderSubtle, t) ?? borderSubtle,
+      textPrimary: Color.lerp(textPrimary, other.textPrimary, t) ?? textPrimary,
+      textBody: Color.lerp(textBody, other.textBody, t) ?? textBody,
+      textMuted: Color.lerp(textMuted, other.textMuted, t) ?? textMuted,
+      success: Color.lerp(success, other.success, t) ?? success,
+      successForeground: Color.lerp(successForeground, other.successForeground, t) ?? successForeground,
       canvasGradient: t < 0.5 ? canvasGradient : other.canvasGradient,
-      glassBlurSigma: lerpDouble(glassBlurSigma, other.glassBlurSigma, t)!,
+      glassBlurSigma: lerpDouble(glassBlurSigma, other.glassBlurSigma, t) ?? 0.0,
       cardShadow: _lerpShadows(cardShadow, other.cardShadow, t),
       inputRestShadow: _lerpShadows(inputRestShadow, other.inputRestShadow, t),
       inputFocusShadow: _lerpShadows(inputFocusShadow, other.inputFocusShadow, t),
-      segmentTrack: Color.lerp(segmentTrack, other.segmentTrack, t)!,
-      segmentSelected: Color.lerp(segmentSelected, other.segmentSelected, t)!,
+      segmentTrack: Color.lerp(segmentTrack, other.segmentTrack, t) ?? segmentTrack,
+      segmentSelected: Color.lerp(segmentSelected, other.segmentSelected, t) ?? segmentSelected,
     );
   }
 }

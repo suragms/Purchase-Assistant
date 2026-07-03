@@ -5,13 +5,13 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/auth/auth_error_messages.dart';
 import '../../../core/auth/session_notifier.dart';
 import '../../../core/router/navigation_ext.dart';
 import '../../../core/services/backup_auto_service.dart';
 import '../../../core/services/backup_deliver.dart';
+import '../../../core/services/prefs_helper.dart';
 import '../../../core/utils/snack.dart';
 
 const _kLastZipBackupKey = 'backup_last_zip_at';
@@ -46,7 +46,7 @@ class _BackupPageState extends ConsumerState<BackupPage> {
   }
 
   Future<void> _loadTimestamps() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = PrefsHelper.prefs;
     if (!mounted) return;
     setState(() {
       _lastZipAt = _ts(prefs.getInt(_kLastZipBackupKey));
@@ -62,7 +62,7 @@ class _BackupPageState extends ConsumerState<BackupPage> {
 
   Future<void> _record(String key) async {
     final now = DateTime.now();
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = PrefsHelper.prefs;
     await prefs.setInt(key, now.millisecondsSinceEpoch);
     if (!mounted) return;
     setState(() {
@@ -435,7 +435,7 @@ class _BackupPageState extends ConsumerState<BackupPage> {
             onChanged: _anyBusy
                 ? null
                 : (v) async {
-                    final prefs = await SharedPreferences.getInstance();
+                    final prefs = PrefsHelper.prefs;
                     await prefs.setBool(kAutoDailyBackupEnabledKey, v);
                     if (!mounted) return;
                     setState(() => _autoDaily = v);

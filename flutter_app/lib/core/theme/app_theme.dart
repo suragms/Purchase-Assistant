@@ -1,6 +1,5 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 import '../design_system/hexa_glass_theme.dart';
 import 'hexa_colors.dart';
@@ -17,8 +16,8 @@ ThemeData buildHexaTheme(Brightness brightness) {
     bodyColor: baseScheme.onSurface,
     displayColor: baseScheme.onSurface,
   );
-  final baseText = GoogleFonts.plusJakartaSansTextTheme(baseApplied);
-  // Harisree / fintech hierarchy — Plus Jakarta Sans (see [GoogleFonts] above).
+  final baseText = baseApplied;
+  // Harisree / fintech hierarchy — Plus Jakarta Sans (local bundle).
   final textTheme = baseText.copyWith(
     displayLarge: baseText.displayLarge?.copyWith(
       fontSize: 30,
@@ -111,7 +110,7 @@ ThemeData buildHexaTheme(Brightness brightness) {
   return ThemeData(
     useMaterial3: true,
     brightness: brightness,
-    fontFamily: GoogleFonts.plusJakartaSans().fontFamily,
+    fontFamily: 'PlusJakartaSans',
     colorScheme: baseScheme,
     splashFactory: InkRipple.splashFactory,
     pageTransitionsTheme: const PageTransitionsTheme(

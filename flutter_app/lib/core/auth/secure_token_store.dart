@@ -1,3 +1,5 @@
+import 'dart:developer' as developer;
+
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -26,45 +28,58 @@ class SecureTokenStore {
   /// Web Crypto / IndexedDB paths that can throw [OperationError] in some browser
   /// contexts. Tokens on web are stored only in [SharedPreferences] (localStorage).
   Future<void> write({required String access, required String refresh}) async {
-    if (kIsWeb) {
-      final p = _prefs;
-      if (p == null) return;
-      await p.setString(_accessBk, access);
-      await p.setString(_refreshBk, refresh);
-      return;
+    try {
+      if (kIsWeb) {
+        final p = _prefs;
+        if (p == null) return;
+        await p.setString(_accessBk, access);
+        await p.setString(_refreshBk, refresh);
+        return;
+      }
+      await Future.wait([
+        _s.write(key: _access, value: access),
+        _s.write(key: _refresh, value: refresh),
+      ]);
+    } catch (e) {
+      developer.log('Failed to write tokens: $e', name: 'SecureTokenStore');
     }
-    await Future.wait([
-      _s.write(key: _access, value: access),
-      _s.write(key: _refresh, value: refresh),
-    ]);
   }
 
   Future<({String? access, String? refresh})> read() async {
-    if (kIsWeb) {
-      final p = _prefs;
-      if (p == null) return (access: null, refresh: null);
-      return (
-        access: p.getString(_accessBk),
-        refresh: p.getString(_refreshBk),
-      );
+    try {
+      if (kIsWeb) {
+        final p = _prefs;
+        if (p == null) return (access: null, refresh: null);
+        return (
+          access: p.getString(_accessBk),
+          refresh: p.getString(_refreshBk),
+        );
+      }
+      final access = await _s.read(key: _access);
+      final refresh = await _s.read(key: _refresh);
+      return (access: access, refresh: refresh);
+    } catch (e) {
+      developer.log('Failed to read tokens: $e', name: 'SecureTokenStore');
+      return (access: null, refresh: null);
     }
-    final access = await _s.read(key: _access);
-    final refresh = await _s.read(key: _refresh);
-    return (access: access, refresh: refresh);
   }
 
   Future<void> clear() async {
-    if (kIsWeb) {
-      final p = _prefs;
-      if (p != null) {
-        await p.remove(_accessBk);
-        await p.remove(_refreshBk);
+    try {
+      if (kIsWeb) {
+        final p = _prefs;
+        if (p != null) {
+          await p.remove(_accessBk);
+          await p.remove(_refreshBk);
+        }
+        return;
       }
-      return;
+      await Future.wait([
+        _s.delete(key: _access),
+        _s.delete(key: _refresh),
+      ]);
+    } catch (e) {
+      developer.log('Failed to clear tokens: $e', name: 'SecureTokenStore');
     }
-    await Future.wait([
-      _s.delete(key: _access),
-      _s.delete(key: _refresh),
-    ]);
   }
 }

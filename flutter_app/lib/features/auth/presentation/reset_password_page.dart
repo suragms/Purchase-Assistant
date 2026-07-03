@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'dart:developer' as developer;
 import 'package:go_router/go_router.dart';
 
 import '../../../core/auth/auth_error_messages.dart';
@@ -113,7 +114,9 @@ class _ResetPasswordPageState extends ConsumerState<ResetPasswordPage> {
         msg = e.message!;
       }
       setState(() => _inlineError = msg);
-    } catch (_) {
+      developer.log('Password reset failed: $msg', name: 'reset_password_page');
+    } catch (e) {
+      developer.log('Password reset failed with unexpected error: $e', name: 'reset_password_page');
       if (mounted) {
         setState(() => _inlineError = 'Something went wrong. Try again.');
       }

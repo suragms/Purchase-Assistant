@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../platform/app_foreground_provider.dart';
@@ -75,7 +76,9 @@ void clearStuckAuthGates(dynamic ref) {
     if (!ref.read(auth401CircuitOpenProvider)) {
       ref.read(authApiGateProvider.notifier).clearSuspend();
     }
-  } catch (_) {}
+  } catch (e, st) {
+    debugPrint('clearStuckAuthGates failed: $e\n$st');
+  }
 }
 
 /// Wait for resume JWT / 401 gate to clear before item-detail fetches (avoids false "load failed").

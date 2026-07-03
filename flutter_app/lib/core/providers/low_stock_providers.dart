@@ -1,3 +1,5 @@
+import 'dart:developer' as developer;
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -119,18 +121,23 @@ final lowStockOperationsPageProvider =
   final bid = session.primaryBusiness.id;
   final periods = _periodStrings(ref);
 
-  return api.listLowStockOperations(
-    businessId: bid,
-    page: query.page,
-    perPage: query.perPage,
-    q: query.q,
-    filter: query.filter,
-    category: query.category,
-    subcategory: query.subcategory,
-    sort: query.sort,
-    periodStart: periods.periodStart,
-    periodEnd: periods.periodEnd,
-  );
+  try {
+    return await api.listLowStockOperations(
+      businessId: bid,
+      page: query.page,
+      perPage: query.perPage,
+      q: query.q,
+      filter: query.filter,
+      category: query.category,
+      subcategory: query.subcategory,
+      sort: query.sort,
+      periodStart: periods.periodStart,
+      periodEnd: periods.periodEnd,
+    );
+  } catch (e) {
+    developer.log('lowStockOperationsPage failed: $e', name: 'low_stock_providers');
+    rethrow;
+  }
 });
 
 /// Groups flat operations rows into the category tree shape used by the dashboard.
@@ -143,9 +150,10 @@ LowStockByCategoryMap groupLowStockOperationItems(
     final catKey = (cat != null && cat.isNotEmpty) ? cat : 'Unknown';
     final sub = item['subcategory_name']?.toString().trim();
     final subKey = (sub != null && sub.isNotEmpty) ? sub : 'Other';
-    result.putIfAbsent(catKey, () => {});
-    result[catKey]!.putIfAbsent(subKey, () => []);
-    result[catKey]![subKey]!.add(item);
+    result.putIfAbsent(catKey, () => <String, List<Map<String, dynamic>>>{});
+    final subMap = result[catKey]!;
+    subMap.putIfAbsent(subKey, () => <Map<String, dynamic>>[]);
+    subMap[subKey]!.add(item);
   }
   return result;
 }
@@ -167,9 +175,14 @@ final lowStockItemTimelineProvider = FutureProvider.autoDispose
     .family<Map<String, dynamic>, String>((ref, itemId) async {
   final session = ref.watch(sessionProvider);
   if (session == null) return {};
-  return ref.read(hexaApiProvider).getStockItemActivity(
-        businessId: session.primaryBusiness.id,
-        itemId: itemId,
-      );
+  try {
+    return ref.read(hexaApiProvider).getStockItemActivity(
+          businessId: session.primaryBusiness.id,
+          itemId: itemId,
+        );
+  } catch (e) {
+    developer.log('lowStockItemTimeline failed: $e', name: 'low_stock_providers');
+    rethrow;
+  }
 });
 

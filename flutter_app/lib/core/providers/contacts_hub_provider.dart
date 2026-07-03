@@ -85,7 +85,8 @@ final contactsCategoriesProvider =
   final r = contactsDefaultRange();
   try {
     return await api.tradeReportCategories(
-        businessId: session.primaryBusiness.id, from: r.from, to: r.to);
+        businessId: session.primaryBusiness.id, from: r.from, to: r.to)
+        .timeout(const Duration(seconds: 15));
   } catch (_) {
     return [];
   }
@@ -100,5 +101,6 @@ final contactsItemsProvider =
   final api = ref.read(hexaApiProvider);
   final r = contactsDefaultRange();
   return api.tradeReportItems(
-      businessId: session.primaryBusiness.id, from: r.from, to: r.to);
+      businessId: session.primaryBusiness.id, from: r.from, to: r.to)
+      .timeout(const Duration(seconds: 15));
 });
