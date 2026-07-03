@@ -71,7 +71,13 @@ Revisions **026** and **027** are absent in git (jump **025** → **028**). Do n
 | 059 | `staff_activity_action_types_v2` | Extend `staff_activity_log` action_type CHECK |
 | 060 | `stock_list_performance_indexes` | Stock list / low-stock / movement performance indexes |
 | 061 | `catalog_unit_simplify` | Canonical KG/BAG/BOX/TIN/PC unit profiles (data backfill) |
-| 062 | `trade_report_indexes` | Trade report + purchased-in-period query indexes (**head**) |
+| 062 | `trade_report_indexes` | Trade report + purchased-in-period query indexes |
+| 063 | `pg_hot_path_indexes` | PG hot-path performance indexes |
+| 064 | `critical_performance_indexes` | Critical performance indexes |
+| 065 | `archive_legacy_entries_tables` | Archive legacy entries tables |
+| 066 | `drop_scan_and_whatsapp` | Drop scan tables and WhatsApp columns |
+| 067 | `user_token_version` | `users.token_version` for JWT invalidation |
+| 068 | `physical_count_idempotency_key` | `stock_physical_counts.idempotency_key` + partial unique index (**head**) |
 
 Inspect live chain: `cd backend && python -m alembic heads` (production target: Render `harisree-db`, not Supabase)
 
@@ -124,6 +130,12 @@ Inspect live chain: `cd backend && python -m alembic heads` (production target: 
 | `059_staff_activity_action_types_v2.sql` | **059** | Staff activity action_type CHECK v2 |
 | `060_stock_list_performance_indexes.sql` | **060** | Stock list / low-stock / movement performance indexes |
 | `061_catalog_unit_simplify.sql` | **061** | Canonical 5-unit catalog profiles (data backfill) |
+| `063_pg_hot_path_indexes.sql` | **063** | PG hot-path performance indexes |
+| `064_critical_performance_indexes.sql` | **064** | Critical performance indexes |
+| `065_archive_legacy_entries_tables.sql` | **065** | Archive legacy entries tables |
+| `066_drop_scan_and_whatsapp.sql` | **066** | Drop scan tables and WhatsApp columns |
+| `067_user_token_version.sql` | **067** | JWT invalidation on block |
+| `068_physical_count_idempotency_key.sql` | **068** | Physical count idempotency key + partial unique index |
 
 **Note:** `033_catalog_public_qr` is the Alembic **033** revision. `033b_*` is a sibling supplemental script — do not rename to `033_` (avoids runner sort confusion).
 
@@ -143,7 +155,7 @@ Inspect live chain: `cd backend && python -m alembic heads` (production target: 
 ## C — Pairing rules
 
 1. **Production:** Prefer `alembic upgrade head` only. Do not apply numbered SQL manually unless ops runbook says so.
-2. **Alembic + SQL:** Revisions **029–057** (and **033**, **034**, etc.) often execute matching `backend/sql/NNN_*.sql` via `_SQL = Path(...)` in the revision module.
+2. **Alembic + SQL:** Revisions **029–068** (and **033**, **034**, etc.) often execute matching `backend/sql/NNN_*.sql` via `_SQL = Path(...)` in the revision module.
 3. **Supplemental:** `033b_trade_line_qty_in_stock_unit.sql`, `034b_master_fix_v3_prod_parity.sql`, `035b_schema_parity_confirm.sql`, `supabase_*`, `suggested_*`, `optional_*` — document in runbooks; not all have Alembic twins.
 4. **After manual SQL:** Set `alembic_version.version_num` to the revision you intend before the next `upgrade head`.
 

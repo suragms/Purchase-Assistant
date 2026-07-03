@@ -47,6 +47,20 @@ class DioAutoRetryInterceptor extends Interceptor {
 
   @override
   void onError(DioException err, ErrorInterceptorHandler handler) async {
+    final req = err.requestOptions;
+    final isIdempotentWrite = req.extra['idempotentWrite'] == true;
+    if (isIdempotentWrite &&
+        req.extra['idempotentWriteRetried'] != true &&
+        dioIsAutoRetryableTransport(err)) {
+      req.extra['idempotentWriteRetried'] = true;
+      await Future<void>.delayed(const Duration(seconds: 2));
+      try {
+        final res = await _dio.fetch(req);
+        return handler.resolve(res);
+      } on DioException catch (_) {
+        return handler.next(err);
+      }
+    }
     if (!_retryable(err)) {
       return handler.next(err);
     }

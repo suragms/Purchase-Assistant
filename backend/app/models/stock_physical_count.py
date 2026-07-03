@@ -35,4 +35,5 @@ class StockPhysicalCount(Base):
     )
     counted_by_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     counted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+    idempotency_key: Mapped[str | None] = mapped_column(String(120), nullable=True)
 

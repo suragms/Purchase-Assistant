@@ -772,6 +772,17 @@ async def record_physical_stock_count(
     item = r.scalar_one_or_none()
     if not item:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Item not found")
+    idem = (body.idempotency_key or "").strip() if body.idempotency_key else ""
+    if idem:
+        dup_r = await db.execute(
+            select(StockPhysicalCount).where(
+                StockPhysicalCount.business_id == business_id,
+                StockPhysicalCount.idempotency_key == idem,
+            ).limit(1)
+        )
+        dup = dup_r.scalar_one_or_none()
+        if dup is not None:
+            return _physical_count_out(item, dup)
     counted = Decimal(body.counted_qty)
     system_qty = catalog_stock_qty(item)
     ps, pe = sh._parse_period_dates(body.period_start, body.period_end)
@@ -794,6 +805,7 @@ async def record_physical_stock_count(
         notes=body.notes.strip() if body.notes else None,
         counted_by=user.id,
         counted_by_name=display,
+        idempotency_key=idem or None,
     )
     db.add(entry)
     await db.flush()
@@ -954,6 +966,18 @@ async def verify_stock_count(
     item = r.scalar_one_or_none()
     if not item:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Item not found")
+
+    idem = (body.idempotency_key or "").strip() if body.idempotency_key else ""
+    if idem:
+        dup_r = await db.execute(
+            select(StockMovement).where(
+                StockMovement.business_id == business_id,
+                StockMovement.idempotency_key == idem,
+            ).limit(1)
+        )
+        if dup_r.scalar_one_or_none() is not None:
+            await db.refresh(item)
+            return await get_stock_item(business_id, item_id, db, membership)
 
     old_qty = catalog_stock_qty(item)
     counted = Decimal(body.counted_qty)

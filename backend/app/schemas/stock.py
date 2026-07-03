@@ -327,6 +327,7 @@ class PhysicalStockCountIn(BaseModel):
     period_start: str | None = None
     period_end: str | None = None
     notes: str | None = Field(default=None, max_length=500)
+    idempotency_key: str | None = Field(default=None, max_length=120)
 
 
 class PhysicalStockCountOut(BaseModel):

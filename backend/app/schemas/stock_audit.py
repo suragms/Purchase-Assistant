@@ -97,6 +97,7 @@ class StockVerifyCountIn(BaseModel):
     adjustment_type: str = "verification"
     reason: str = Field(..., min_length=1, max_length=500)
     notes: str | None = None
+    idempotency_key: str | None = Field(default=None, max_length=120)
 
 
 class StockAuditKpisOut(BaseModel):

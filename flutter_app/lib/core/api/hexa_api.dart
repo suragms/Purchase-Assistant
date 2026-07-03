@@ -1,6 +1,5 @@
-import 'dart:math' show min;
-
-import 'dart:math' show Random;
+import 'dart:convert' show jsonEncode;
+import 'dart:math' show Random, min;
 
 import 'dart:typed_data';
 
@@ -48,7 +47,24 @@ List<Map<String, dynamic>> _parseJsonMapList(dynamic data) {
 Options get _stockWriteOptions => Options(
       sendTimeout: const Duration(seconds: 45),
       receiveTimeout: const Duration(seconds: 90),
+      connectTimeout: const Duration(seconds: 60),
     );
+
+/// Deterministic idempotency key: hash of the request body with a random
+/// fallback — mirrors `OfflineSyncService.fingerprintForTradePurchaseCreate`.
+String _idempotencyKeyFor(Map<String, dynamic> body) {
+  try {
+    final canonical = jsonEncode(body);
+    final h = canonical.hashCode;
+    final r = Random();
+    String seg(int n) =>
+        List.generate(n, (_) => '0123456789abcdef'[r.nextInt(16)]).join();
+    final uuid = '${seg(8)}-${seg(4)}-4${seg(3)}-${seg(4)}-${seg(12)}';
+    return '$h:$uuid';
+  } catch (_) {
+    return DateTime.now().millisecondsSinceEpoch.toString();
+  }
+}
 
 bool _isAuthEndpoint(String path) {
   return path.contains('/auth/login') ||
@@ -2844,7 +2860,7 @@ class HexaApi {
         if (idempotencyKey != null && idempotencyKey.trim().isNotEmpty)
           'idempotency_key': idempotencyKey.trim(),
       },
-      options: _stockWriteOptions,
+      options: _stockWriteOptions.copyWith(extra: {'idempotentWrite': true}),
     );
     return res.data ?? {};
   }
@@ -2907,6 +2923,7 @@ class HexaApi {
           'period_start': periodStart,
         if (periodEnd != null && periodEnd.isNotEmpty) 'period_end': periodEnd,
       },
+      options: _stockWriteOptions.copyWith(extra: {'idempotentWrite': true}),
     );
     return res.data ?? {};
   }
@@ -2954,15 +2971,22 @@ class HexaApi {
     required String reason,
     String adjustmentType = 'verification',
     String? notes,
+    String? idempotencyKey,
   }) async {
+    final body = <String, dynamic>{
+      'counted_qty': countedQty,
+      'adjustment_type': adjustmentType,
+      'reason': reason.trim(),
+      if (notes != null && notes.trim().isNotEmpty) 'notes': notes.trim(),
+    };
+    final idem = (idempotencyKey != null && idempotencyKey.trim().isNotEmpty)
+        ? idempotencyKey.trim()
+        : _idempotencyKeyFor(body);
+    body['idempotency_key'] = idem;
     final res = await _dio.post<Map<String, dynamic>>(
       '/v1/businesses/$businessId/stock/$itemId/verify-count',
-      data: {
-        'counted_qty': countedQty,
-        'adjustment_type': adjustmentType,
-        'reason': reason.trim(),
-        if (notes != null && notes.trim().isNotEmpty) 'notes': notes.trim(),
-      },
+      data: body,
+      options: _stockWriteOptions.copyWith(extra: {'idempotentWrite': true}),
     );
     return res.data ?? {};
   }
@@ -3001,17 +3025,23 @@ class HexaApi {
     String? periodStart,
     String? periodEnd,
     String? notes,
+    String? idempotencyKey,
   }) async {
+    final body = <String, dynamic>{
+      'counted_qty': countedQty,
+      if (periodStart != null && periodStart.isNotEmpty)
+        'period_start': periodStart,
+      if (periodEnd != null && periodEnd.isNotEmpty) 'period_end': periodEnd,
+      if (notes != null && notes.trim().isNotEmpty) 'notes': notes.trim(),
+    };
+    final idem = (idempotencyKey != null && idempotencyKey.trim().isNotEmpty)
+        ? idempotencyKey.trim()
+        : _idempotencyKeyFor(body);
+    body['idempotency_key'] = idem;
     final res = await _dio.post<Map<String, dynamic>>(
       '/v1/businesses/$businessId/stock/$itemId/physical-count',
-      data: {
-        'counted_qty': countedQty,
-        if (periodStart != null && periodStart.isNotEmpty)
-          'period_start': periodStart,
-        if (periodEnd != null && periodEnd.isNotEmpty) 'period_end': periodEnd,
-        if (notes != null && notes.trim().isNotEmpty) 'notes': notes.trim(),
-      },
-      options: _stockWriteOptions,
+      data: body,
+      options: _stockWriteOptions.copyWith(extra: {'idempotentWrite': true}),
     );
     return res.data ?? {};
   }
