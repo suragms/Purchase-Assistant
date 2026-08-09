@@ -206,7 +206,12 @@ class Settings(BaseSettings):
     admin_password: str | None = None
 
     enable_ai: bool = True
+    # When true, skip OpenRouter Tier 1 and use Gemini→Groq→OpenAI only.
+    ai_force_tier2_only: bool = False
     enable_ocr: bool = False
+    # Optional Meta WhatsApp Cloud phone_number_id for PO delivery (key from credentials).
+    whatsapp_phone_number_id: str | None = None
+    enable_whatsapp_po_delivery: bool = True
 
     enable_voice: bool = False
     enable_realtime: bool = True

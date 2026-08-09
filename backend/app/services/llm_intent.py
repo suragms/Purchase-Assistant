@@ -39,7 +39,7 @@ def _parse_json_loose(text: str) -> dict[str, Any]:
 
 
 async def _gemini_json(prompt: str, settings: Settings, api_key: str) -> dict[str, Any] | None:
-    model = settings.google_ai_model or "gemini-1.5-flash"
+    model = getattr(settings, "gemini_model", None) or "gemini-2.0-flash"
     url = (
         f"https://generativelanguage.googleapis.com/v1beta/models/"
         f"{model}:generateContent?key={api_key}"
@@ -72,7 +72,7 @@ async def _openai_json(
     base_url: str = "https://api.openai.com/v1",
     model: str | None = None,
 ) -> dict[str, Any] | None:
-    model = model or settings.openai_model or "gpt-4o-mini"
+    model = model or getattr(settings, "openai_model_parse", None) or "gpt-4o-mini"
     payload = {
         "model": model,
         "temperature": 0,
@@ -97,7 +97,7 @@ async def _openai_json(
 
 async def _groq_json(prompt: str, settings: Settings, api_key: str) -> dict[str, Any] | None:
     payload = {
-        "model": settings.groq_model or "llama-3.1-70b-versatile",
+        "model": getattr(settings, "groq_model", None) or "llama-3.3-70b-versatile",
         "temperature": 0,
         "response_format": {"type": "json_object"},
         "messages": [

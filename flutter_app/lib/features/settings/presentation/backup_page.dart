@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
@@ -34,16 +35,21 @@ class _BackupPageState extends ConsumerState<BackupPage> {
   bool _busyJson = false;
   bool _busyStock = false;
   bool _busyPdf = false;
+  bool _busyServer = false;
+  bool _busyDryRun = false;
   DateTime? _lastZipAt;
   DateTime? _lastJsonAt;
   DateTime? _lastStockAt;
   DateTime? _lastPdfAt;
   bool _autoDaily = false;
+  List<dynamic> _backupLogs = [];
+  Map<String, dynamic>? _dryRunResult;
 
   @override
   void initState() {
     super.initState();
     _loadTimestamps();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadBackupLogs());
   }
 
   Future<void> _loadTimestamps() async {
@@ -313,7 +319,105 @@ class _BackupPageState extends ConsumerState<BackupPage> {
   String _fmt(DateTime? t) =>
       t == null ? 'Never on this device' : DateFormat('dd MMM yyyy, HH:mm').format(t);
 
-  bool get _anyBusy => _busyZip || _busyJson || _busyStock || _busyPdf;
+  bool get _anyBusy =>
+      _busyZip || _busyJson || _busyStock || _busyPdf || _busyServer || _busyDryRun;
+
+  Future<void> _loadBackupLogs() async {
+    final bid = ref.read(sessionProvider)?.primaryBusiness.id;
+    if (bid == null || bid.isEmpty) return;
+    try {
+      final data =
+          await ref.read(hexaApiProvider).listBackupLogs(businessId: bid);
+      if (!mounted) return;
+      setState(() => _backupLogs = (data['items'] as List?) ?? []);
+    } catch (_) {
+      // Non-blocking — export page still works for client downloads.
+    }
+  }
+
+  Future<void> _runServerBackup() async {
+    final bid = ref.read(sessionProvider)?.primaryBusiness.id;
+    if (bid == null) return;
+    setState(() => _busyServer = true);
+    try {
+      final out =
+          await ref.read(hexaApiProvider).runServerBackup(businessId: bid);
+      if (!mounted) return;
+      showTopSnack(
+        context,
+        'Server backup ${out['status'] ?? 'done'}'
+        '${out['size_bytes'] != null ? ' · ${out['size_bytes']} B' : ''}',
+      );
+      await _loadBackupLogs();
+    } on DioException catch (e) {
+      if (mounted) showTopSnack(context, friendlyApiError(e), isError: true);
+    } finally {
+      if (mounted) setState(() => _busyServer = false);
+    }
+  }
+
+  Future<void> _dryRunRestore() async {
+    final bid = ref.read(sessionProvider)?.primaryBusiness.id;
+    if (bid == null) return;
+    final ctrl = TextEditingController();
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Restore dry-run'),
+        content: SizedBox(
+          width: 480,
+          child: TextField(
+            controller: ctrl,
+            maxLines: 12,
+            decoration: const InputDecoration(
+              hintText: 'Paste backup JSON here (never commits)',
+              border: OutlineInputBorder(),
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Validate'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    Map<String, dynamic> payload;
+    try {
+      final decoded = jsonDecode(ctrl.text);
+      if (decoded is! Map<String, dynamic>) {
+        throw const FormatException('JSON root must be an object');
+      }
+      payload = decoded;
+    } catch (_) {
+      showTopSnack(context, 'Invalid JSON', isError: true);
+      return;
+    }
+    setState(() => _busyDryRun = true);
+    try {
+      final out = await ref.read(hexaApiProvider).restoreDryRun(
+            businessId: bid,
+            payload: payload,
+          );
+      if (!mounted) return;
+      setState(() => _dryRunResult = out);
+      showTopSnack(
+        context,
+        out['ok'] == true ? 'Dry-run passed' : 'Dry-run failed',
+        isError: out['ok'] != true,
+      );
+    } on DioException catch (e) {
+      if (mounted) showTopSnack(context, friendlyApiError(e), isError: true);
+    } finally {
+      if (mounted) setState(() => _busyDryRun = false);
+    }
+  }
 
   String get _storageHint {
     if (kIsWeb) {
@@ -349,6 +453,71 @@ class _BackupPageState extends ConsumerState<BackupPage> {
             'Download reports for your records. $_storageHint',
             style: tt.bodyMedium?.copyWith(color: cs.onSurfaceVariant, height: 1.4),
           ),
+          const SizedBox(height: 20),
+          Text('Server backup',
+              style: tt.titleSmall?.copyWith(fontWeight: FontWeight.w800)),
+          const SizedBox(height: 4),
+          Text(
+            'Nightly JSON on the API host. Credentials are never included. '
+            'Restore commit stays blocked until production-copy sign-off — dry-run only.',
+            style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant, height: 1.35),
+          ),
+          const SizedBox(height: 8),
+          AppSecondaryButton(
+            label: _busyServer ? 'Running…' : 'Run server backup now',
+            loading: _busyServer,
+            enabled: !_anyBusy || _busyServer,
+            icon: const Icon(Icons.cloud_upload_outlined, size: 18),
+            onPressed: _runServerBackup,
+          ),
+          const SizedBox(height: 8),
+          AppSecondaryButton(
+            label: 'Refresh backup logs',
+            enabled: !_anyBusy,
+            icon: const Icon(Icons.history, size: 18),
+            onPressed: _loadBackupLogs,
+          ),
+          if (_backupLogs.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            for (final log in _backupLogs.take(8))
+              if (log is Map)
+                ListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  title: Text(
+                    '${log['run_type'] ?? '—'} · ${log['status'] ?? '—'}',
+                    style: const TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                  subtitle: Text(
+                    '${log['created_at'] ?? ''}'
+                    '${log['size_bytes'] != null ? ' · ${log['size_bytes']} B' : ''}',
+                    style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+                  ),
+                ),
+          ],
+          const SizedBox(height: 8),
+          AppSecondaryButton(
+            label: _busyDryRun ? 'Validating…' : 'Restore dry-run (pick JSON)',
+            loading: _busyDryRun,
+            enabled: !_anyBusy || _busyDryRun,
+            icon: const Icon(Icons.rule_folder_outlined, size: 18),
+            onPressed: _dryRunRestore,
+          ),
+          if (_dryRunResult != null) ...[
+            const SizedBox(height: 8),
+            Text(
+              _dryRunResult!['ok'] == true
+                  ? 'Dry-run OK — would add: ${_dryRunResult!['would_add']}. '
+                      'Commit restore is not available yet.'
+                  : 'Dry-run failed: ${_dryRunResult!['error'] ?? 'unknown'}',
+              style: tt.bodySmall?.copyWith(
+                color: _dryRunResult!['ok'] == true
+                    ? cs.primary
+                    : cs.error,
+                height: 1.35,
+              ),
+            ),
+          ],
           const SizedBox(height: 20),
           Text('Export & Backup',
               style: tt.titleSmall?.copyWith(fontWeight: FontWeight.w800)),

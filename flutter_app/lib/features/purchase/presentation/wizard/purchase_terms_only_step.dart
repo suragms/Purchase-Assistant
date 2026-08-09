@@ -26,6 +26,8 @@ class PurchaseTermsOnlyStep extends ConsumerWidget {
     /// When true (Party step embeds this under an outer scroll), skip nested
     /// [KeyboardSafeFormViewport] to avoid unbounded-height viewport crashes.
     this.embeddedInOuterScroll = false,
+    /// Desktop (≥1024px) arranges Payment Days | Discount % | Narration in one grid row.
+    this.desktop = false,
   });
 
   final FocusNode paymentDaysFocus;
@@ -38,6 +40,7 @@ class PurchaseTermsOnlyStep extends ConsumerWidget {
   final FocusNode? headerDiscFocus;
   final FocusNode? narrationFocus;
   final VoidCallback onDraftChanged;
+  final bool desktop;
   final bool embeddedInOuterScroll;
 
   static String _duePreview(WidgetRef ref, TextEditingController c) {
@@ -118,6 +121,71 @@ class PurchaseTermsOnlyStep extends ConsumerWidget {
       );
     }
 
+    final paymentDaysCol = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        orderedField(
+          order: 10,
+          c: paymentDaysCtrl,
+          label: 'Payment days',
+          focusNode: paymentDaysFocus,
+          keyboard: TextInputType.number,
+          onChanged: (s) {
+            ref
+                .read(purchaseDraftProvider.notifier)
+                .setPaymentDaysText(s);
+            onDraftChanged();
+          },
+        ),
+        ListenableBuilder(
+          listenable: paymentDaysCtrl,
+          builder: (_, __) {
+            final t = paymentDaysCtrl.text.trim();
+            if (t.isEmpty) return const SizedBox.shrink();
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 4),
+              child: Text(
+                _duePreview(ref, paymentDaysCtrl),
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: HexaColors.brandTealBright,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            );
+          },
+        ),
+      ],
+    );
+    final discountField = orderedField(
+      order: hasBroker ? 40 : 20,
+      c: headerDiscCtrl,
+      label: 'Discount %',
+      focusNode: headerDiscFocus,
+      keyboard:
+          const TextInputType.numberWithOptions(decimal: true),
+      onChanged: (s) {
+        ref
+            .read(purchaseDraftProvider.notifier)
+            .setHeaderDiscountFromText(s);
+        onDraftChanged();
+      },
+    );
+    final narrationField = orderedField(
+      order: hasBroker ? 50 : 30,
+      c: narrationCtrl,
+      label: 'Narration / ref (optional)',
+      focusNode: narrationFocus,
+      keyboard: TextInputType.text,
+      maxLines: 2,
+      textInputAction: TextInputAction.done,
+      onSubmitted: () => FocusManager.instance.primaryFocus?.unfocus(),
+      onChanged: (s) {
+        ref.read(purchaseDraftProvider.notifier).setInvoiceText(s);
+        onDraftChanged();
+      },
+    );
+
     final column = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
@@ -197,60 +265,21 @@ class PurchaseTermsOnlyStep extends ConsumerWidget {
               ),
         ),
         const SizedBox(height: 6),
-        AppFormRow(
-          children: [
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                orderedField(
-                  order: 10,
-                  c: paymentDaysCtrl,
-                  label: 'Payment days',
-                  focusNode: paymentDaysFocus,
-                  keyboard: TextInputType.number,
-                  onChanged: (s) {
-                    ref
-                        .read(purchaseDraftProvider.notifier)
-                        .setPaymentDaysText(s);
-                    onDraftChanged();
-                  },
-                ),
-                ListenableBuilder(
-                  listenable: paymentDaysCtrl,
-                  builder: (_, __) {
-                    final t = paymentDaysCtrl.text.trim();
-                    if (t.isEmpty) return const SizedBox.shrink();
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 4),
-                      child: Text(
-                        _duePreview(ref, paymentDaysCtrl),
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: HexaColors.brandTealBright,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    );
-                  },
-                ),
-              ],
-            ),
-            orderedField(
-              order: hasBroker ? 40 : 20,
-              c: headerDiscCtrl,
-              label: 'Discount %',
-              focusNode: headerDiscFocus,
-              keyboard:
-                  const TextInputType.numberWithOptions(decimal: true),
-              onChanged: (s) {
-                ref
-                    .read(purchaseDraftProvider.notifier)
-                    .setHeaderDiscountFromText(s);
-                onDraftChanged();
-              },
-            ),
-          ],
-        ),
+        if (desktop)
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(child: paymentDaysCol),
+              const SizedBox(width: 16),
+              Expanded(child: discountField),
+              const SizedBox(width: 16),
+              Expanded(child: narrationField),
+            ],
+          )
+        else
+          AppFormRow(
+            children: [paymentDaysCol, discountField],
+          ),
         if (hasBroker) ...[
           Text(
             'Broker commission',
@@ -423,20 +452,7 @@ class PurchaseTermsOnlyStep extends ConsumerWidget {
           ],
           const SizedBox(height: 8),
         ],
-        orderedField(
-          order: hasBroker ? 50 : 30,
-          c: narrationCtrl,
-          label: 'Narration / ref (optional)',
-          focusNode: narrationFocus,
-          keyboard: TextInputType.text,
-          maxLines: 2,
-          textInputAction: TextInputAction.done,
-          onSubmitted: () => FocusManager.instance.primaryFocus?.unfocus(),
-          onChanged: (s) {
-            ref.read(purchaseDraftProvider.notifier).setInvoiceText(s);
-            onDraftChanged();
-          },
-        ),
+        if (!desktop) narrationField,
       ],
     );
 

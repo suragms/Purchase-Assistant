@@ -102,4 +102,74 @@ void main() {
     controller.dispose();
     focus.dispose();
   });
+
+  testWidgets(
+      'lockedSelectionLabel keeps suggestions closed after focus regain',
+      (tester) async {
+    final controller = TextEditingController(text: 'Basmati Rice');
+    final focus = FocusNode();
+    final picks = <InlineSearchItem>[];
+
+    const items = [
+      InlineSearchItem(id: '1', label: 'Basmati Rice'),
+      InlineSearchItem(id: '2', label: 'Moong Dal'),
+    ];
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: PartyInlineSuggestField(
+            controller: controller,
+            focusNode: focus,
+            items: items,
+            hintText: 'Item',
+            minQueryLength: 0,
+            maxMatches: 20,
+            suggestionsAsOverlay: false,
+            lockedSelectionLabel: 'Basmati Rice',
+            onSelected: picks.add,
+          ),
+        ),
+      ),
+    );
+
+    focus.requestFocus();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+
+    final suggestion = find.byWidgetPredicate(
+      (w) =>
+          w is Text &&
+          w.data == 'Basmati Rice' &&
+          w.style?.fontSize == 13.5,
+    );
+    expect(suggestion, findsNothing);
+    expect(picks, isEmpty);
+
+    // Unlock by clearing lock (parent would clear selected id) → panel can open.
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: PartyInlineSuggestField(
+            controller: controller,
+            focusNode: focus,
+            items: items,
+            hintText: 'Item',
+            minQueryLength: 0,
+            maxMatches: 20,
+            suggestionsAsOverlay: false,
+            lockedSelectionLabel: null,
+            onSelected: picks.add,
+          ),
+        ),
+      ),
+    );
+    focus.requestFocus();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+    expect(suggestion, findsOneWidget);
+
+    controller.dispose();
+    focus.dispose();
+  });
 }

@@ -599,7 +599,8 @@ class _ReportsShellPageState extends ConsumerState<ReportsShellPage> {
     final screenW = MediaQuery.sizeOf(context).width;
     // Desktop sidebar from ≥1024 (same as isDesktopLayout); tablet keeps period in top bar.
     final showSidebar = screenW >= kDesktopMin;
-    final showFilterDrawer = context.isReportsDesktop;
+    // Filters drawer only on wide desktop — avoids period|main|insights|filters (4 cols).
+    final showFilterDrawer = context.isReportsDesktop && screenW >= 1366;
     final periodW = screenW < 1366
         ? HexaResponsive.reportsPeriodNavCompact
         : HexaResponsive.reportsPeriodNavWidth;

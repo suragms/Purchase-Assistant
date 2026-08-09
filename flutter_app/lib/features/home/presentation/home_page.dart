@@ -482,8 +482,8 @@ class _HomePageState extends ConsumerState<HomePage>
     });
 
     if (!_homeShellTabVisible(ref, context)) {
-      // IndexedStack keeps this widget mounted off-tab — avoid painting when another tab is active.
-      return const SizedBox.shrink();
+      // IndexedStack off-tab: keep warm canvas (not white flash) without work.
+      return const ColoredBox(color: HexaColors.brandBackground);
     }
 
     if (!providerSkipApi(ref) && ref.watch(homePageSatellitesEnabledProvider)) {

@@ -16,9 +16,10 @@ const _credentialTypes = <String>[
   'openai_key',
   'whatsapp_api_key',
   'whatsapp_staff_number',
+  'whatsapp_phone_number_id',
 ];
 
-/// Owner-only: write-only provider credentials (never shows plaintext).
+/// Owner or admin: write-only provider credentials (never shows plaintext).
 class OwnerCredentialsPage extends ConsumerStatefulWidget {
   const OwnerCredentialsPage({super.key});
 
@@ -128,14 +129,15 @@ class _OwnerCredentialsPageState extends ConsumerState<OwnerCredentialsPage> {
                   padding: const EdgeInsets.all(16),
                   children: [
                     const Text(
-                      'Keys are stored encrypted. Values are never shown again — '
-                      'only the last 4 characters after save.',
+                      'Owner and admin can update WhatsApp and AI keys. '
+                      'Stored encrypted — values are never shown again, only last 4 after save. '
+                      'Runtime uses DB value first, then server env.',
                       style: TextStyle(color: HexaColors.neutral, height: 1.35),
                     ),
                     const SizedBox(height: 16),
                     for (final type in _credentialTypes) ...[
                       Text(
-                        type,
+                        _labelFor(type),
                         style: const TextStyle(fontWeight: FontWeight.w800),
                       ),
                       const SizedBox(height: 4),
@@ -152,7 +154,8 @@ class _OwnerCredentialsPageState extends ConsumerState<OwnerCredentialsPage> {
                       AppTextField(
                         controller: _controllers[type]!,
                         label: 'New value',
-                        obscureText: true,
+                        obscureText: type != 'whatsapp_phone_number_id' &&
+                            type != 'whatsapp_staff_number',
                       ),
                       const SizedBox(height: 8),
                       AppPrimaryButton(
@@ -165,5 +168,26 @@ class _OwnerCredentialsPageState extends ConsumerState<OwnerCredentialsPage> {
                   ],
                 ),
     );
+  }
+
+  String _labelFor(String type) {
+    switch (type) {
+      case 'openrouter_key':
+        return 'OpenRouter API key';
+      case 'gemini_key':
+        return 'Gemini API key';
+      case 'groq_key':
+        return 'Groq API key';
+      case 'openai_key':
+        return 'OpenAI API key';
+      case 'whatsapp_api_key':
+        return 'WhatsApp Cloud API token';
+      case 'whatsapp_staff_number':
+        return 'Staff WhatsApp number (E.164)';
+      case 'whatsapp_phone_number_id':
+        return 'WhatsApp phone number ID';
+      default:
+        return type;
+    }
   }
 }

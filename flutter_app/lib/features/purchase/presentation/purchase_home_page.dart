@@ -1614,30 +1614,18 @@ class _PurchaseHomePageState extends ConsumerState<PurchaseHomePage> {
                                   flex: 5,
                                   child: LayoutBuilder(
                                     builder: (context, constraints) {
-                                      final windowW =
-                                          MediaQuery.sizeOf(context).width;
-                                      final cap = HexaResponsive
-                                          .desktopDetailContentMax(windowW);
-                                      final w = constraints.maxWidth < cap
-                                          ? constraints.maxWidth
-                                          : cap;
-                                      // Bind height — Align + maxWidth-only blanks
-                                      // detail panes with Expanded/ListView on web.
-                                      // Desktop: topLeft — flush with list/sidebar.
-                                      return Align(
-                                        alignment: Alignment.topLeft,
-                                        child: SizedBox(
-                                          width: w,
-                                          height: constraints.maxHeight,
-                                          child: PurchaseDesktopDetailPane(
-                                            purchaseId: effectiveSelectedId,
-                                            seedPurchase: selectedSeed ??
-                                                (visible.isNotEmpty &&
-                                                        effectiveSelectedId ==
-                                                            visible.first.id
-                                                    ? visible.first
-                                                    : null),
-                                          ),
+                                      // Fill flex pane — no width-cap gutter.
+                                      return SizedBox(
+                                        width: constraints.maxWidth,
+                                        height: constraints.maxHeight,
+                                        child: PurchaseDesktopDetailPane(
+                                          purchaseId: effectiveSelectedId,
+                                          seedPurchase: selectedSeed ??
+                                              (visible.isNotEmpty &&
+                                                      effectiveSelectedId ==
+                                                          visible.first.id
+                                                  ? visible.first
+                                                  : null),
                                         ),
                                       );
                                     },

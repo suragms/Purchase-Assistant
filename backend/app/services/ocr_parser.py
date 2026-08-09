@@ -202,3 +202,56 @@ def normalize_scan_text(text: str | bytes) -> str:
             return ""
         return decoded
     return text or ""
+
+
+async def extract_item_rows_via_ai(
+    text: str,
+    *,
+    db=None,
+    business_id=None,
+) -> tuple[list[dict[str, Any]], list[str], dict[str, Any]]:
+    """Optional AI assist for bill text — same validation shape as [extract_item_rows].
+
+    Uses tiered failover (OpenRouter → Gemini/Groq/OpenAI). Never invents money;
+    callers must still validate against catalog/DB before save.
+    """
+    from app.config import get_settings
+    from app.services.llm_failover import extract_json_with_failover
+
+    settings = get_settings()
+    if not settings.enable_ai or not settings.enable_ai_extraction:
+        rows, missing = extract_item_rows(text)
+        return rows, missing, {"provider_used": None, "skipped": "ai_disabled"}
+
+    prompt = (
+        "Extract purchase bill line items as JSON with keys: "
+        'lines (array of {item_name, qty, unit, landing_cost}), '
+        "confidence (0-1). Return JSON only.\n\n"
+        f"Bill text:\n{(text or '')[:8000]}"
+    )
+    data, meta = await extract_json_with_failover(
+        prompt,
+        settings=settings,
+        db=db,
+        business_id=business_id,
+        feature="ocr_lines",
+        endpoint="ocr_parser.extract_item_rows_via_ai",
+    )
+    if not isinstance(data, dict):
+        rows, missing = extract_item_rows(text)
+        return rows, missing, {**meta, "fallback": "heuristic"}
+
+    raw_lines = data.get("lines") or data.get("items") or []
+    if not isinstance(raw_lines, list) or not raw_lines:
+        rows, missing = extract_item_rows(text)
+        return rows, missing, {**meta, "fallback": "heuristic_empty_ai"}
+
+    # Reuse heuristic normalizer path by rebuilding a simple text table.
+    rebuilt = "\n".join(
+        f"{(ln.get('item_name') or '')} {ln.get('qty') or ''} "
+        f"{ln.get('unit') or 'kg'} {ln.get('landing_cost') or 0}"
+        for ln in raw_lines
+        if isinstance(ln, dict)
+    )
+    rows, missing = extract_item_rows(rebuilt or text)
+    return rows, missing, meta

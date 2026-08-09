@@ -20,13 +20,17 @@ class _OwnerCommandCenterPageState extends ConsumerState<OwnerCommandCenterPage>
   Map<String, dynamic>? _data;
   bool _loading = true;
   String? _error;
+  List<dynamic> _waItems = [];
 
   final _money = NumberFormat.currency(locale: 'en_IN', symbol: '₹');
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _load());
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await _load();
+      await _loadWa();
+    });
   }
 
   Future<void> _load() async {
@@ -56,6 +60,35 @@ class _OwnerCommandCenterPageState extends ConsumerState<OwnerCommandCenterPage>
         _loading = false;
         _error = loadStateErrorSubtitle(e);
       });
+    }
+  }
+
+  Future<void> _loadWa() async {
+    final bid = ref.read(sessionProvider)?.primaryBusiness.id;
+    if (bid == null || bid.isEmpty) return;
+    try {
+      final data =
+          await ref.read(hexaApiProvider).listWhatsappDeliveries(businessId: bid);
+      if (!mounted) return;
+      setState(() => _waItems = (data['items'] as List?) ?? []);
+    } catch (_) {
+      // Soft-fail — dashboard still useful without WA log.
+    }
+  }
+
+  Future<void> _resendWa(String poId) async {
+    final bid = ref.read(sessionProvider)?.primaryBusiness.id;
+    if (bid == null || poId.isEmpty) return;
+    try {
+      await ref.read(hexaApiProvider).resendWhatsappDelivery(
+            businessId: bid,
+            poId: poId,
+          );
+      await _loadWa();
+      await _load();
+    } catch (e) {
+      if (!mounted) return;
+      // Error surfaces via refresh; keep UI calm.
     }
   }
 
@@ -124,6 +157,49 @@ class _OwnerCommandCenterPageState extends ConsumerState<OwnerCommandCenterPage>
                       '${backup['last_at'] != null ? ' · ${backup['last_at']}' : ''}',
                       style: const TextStyle(color: HexaColors.neutral),
                     ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Damage pending: ${(_data?['damage'] as Map?)?['pending_count'] ?? 0}'
+                      ' · AI today: ${(_data?['ai_usage'] as Map?)?['requests_today'] ?? 0}'
+                      ' · WhatsApp queue: ${(_data?['whatsapp'] as Map?)?['needs_attention'] ?? 0}',
+                      style: const TextStyle(color: HexaColors.neutral),
+                    ),
+                    const Divider(height: 32),
+                    const Text(
+                      'WhatsApp PO deliveries',
+                      style: TextStyle(fontWeight: FontWeight.w800),
+                    ),
+                    const SizedBox(height: 8),
+                    TextButton(
+                      onPressed: _loadWa,
+                      child: const Text('Refresh delivery log'),
+                    ),
+                    if (_waItems.isEmpty)
+                      const Padding(
+                        padding: EdgeInsets.only(top: 8),
+                        child: Text(
+                          'No delivery attempts yet.',
+                          style: TextStyle(color: HexaColors.neutral),
+                        ),
+                      )
+                    else
+                      for (final w in _waItems.take(12))
+                        if (w is Map)
+                          ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            title: Text(
+                              '${w['status']} · PO ${w['po_id']}',
+                              style: const TextStyle(fontWeight: FontWeight.w600),
+                            ),
+                            subtitle: Text(w['error_message']?.toString() ?? ''),
+                            trailing: (w['status'] == 'failed' ||
+                                    w['status'] == 'pending_manual')
+                                ? TextButton(
+                                    onPressed: () => _resendWa('${w['po_id']}'),
+                                    child: const Text('Resend'),
+                                  )
+                                : null,
+                          ),
                     const Divider(height: 32),
                     const Text(
                       'Staff tasks',

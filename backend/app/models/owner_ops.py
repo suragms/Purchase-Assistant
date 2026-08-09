@@ -9,6 +9,7 @@ from sqlalchemy import (
     BigInteger,
     Boolean,
     DateTime,
+    Float,
     ForeignKey,
     Integer,
     JSON,
@@ -96,4 +97,56 @@ class StaffTask(Base):
     )
     created_by: Mapped[uuid.UUID | None] = mapped_column(
         Uuid(as_uuid=True), nullable=True
+    )
+
+
+class AiUsageLog(Base):
+    __tablename__ = "ai_usage_logs"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    business_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("businesses.id"), nullable=True, index=True
+    )
+    feature: Mapped[str] = mapped_column(String(64), default="json_extract")
+    endpoint: Mapped[str] = mapped_column(String(128), default="")
+    provider: Mapped[str] = mapped_column(String(64), default="none", index=True)
+    model: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    tier: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    tokens_in: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    tokens_out: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    latency_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    escalated: Mapped[bool] = mapped_column(Boolean, default=False)
+    confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
+    cost_estimate_paise: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, index=True
+    )
+
+
+class WhatsAppDeliveryLog(Base):
+    __tablename__ = "whatsapp_delivery_logs"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    business_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("businesses.id"), index=True
+    )
+    po_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), index=True)
+    staff_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("users.id"), nullable=True
+    )
+    recipient_number: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    status: Mapped[str] = mapped_column(
+        String(32), default="pending_manual", index=True
+    )  # sent|failed|pending_manual
+    attempt_count: Mapped[int] = mapped_column(Integer, default=0)
+    last_attempted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, index=True
     )

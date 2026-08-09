@@ -125,7 +125,7 @@ from app.services.stock_helpers import OpeningSetupStatus, SortBy, StatusFilter
 logger = logging.getLogger(__name__)
 
 
-from app.routers.stock.stock_audit import create_staff_purchase_log, _movement_out
+from app.routers.stock.stock_adjustments import create_staff_purchase_log, _movement_out
 from app.routers.stock.stock_detail import get_stock_item
 router = APIRouter()
 

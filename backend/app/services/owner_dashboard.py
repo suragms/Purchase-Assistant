@@ -1,26 +1,41 @@
-"""Owner command-center aggregate (single payload)."""
+"""Owner command-center aggregate (single payload, short in-process TTL cache)."""
 
 from __future__ import annotations
 
+import time
 import uuid
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import CatalogItem
-from app.models.owner_ops import BackupLog
+from app.models.owner_ops import AiUsageLog, BackupLog, WhatsAppDeliveryLog
+from app.models.purchase_damage_report import PurchaseDamageReport
 from app.services import staff_tasks as st
 from app.services import trade_query as tq
 from app.models.trade_purchase import TradePurchase
 
+_CACHE: dict[str, tuple[float, dict[str, Any]]] = {}
+_CACHE_TTL_SEC = 45.0
+
 
 async def build_owner_dashboard(
-    db: AsyncSession, business_id: uuid.UUID
+    db: AsyncSession, business_id: uuid.UUID, *, bypass_cache: bool = False
 ) -> dict[str, Any]:
+    key = str(business_id)
+    now = time.monotonic()
+    if not bypass_cache:
+        hit = _CACHE.get(key)
+        if hit and now - hit[0] < _CACHE_TTL_SEC:
+            return hit[1]
+
     today = date.today()
     week_ago = today - timedelta(days=6)
+    day_start = datetime.now(timezone.utc).replace(
+        hour=0, minute=0, second=0, microsecond=0
+    )
 
     staff = await st.performance_summary(db, business_id)
 
@@ -61,6 +76,17 @@ async def build_owner_dashboard(
         )
     ).scalar() or 0
 
+    damage_pending = (
+        await db.execute(
+            select(func.count())
+            .select_from(PurchaseDamageReport)
+            .where(
+                PurchaseDamageReport.business_id == business_id,
+                PurchaseDamageReport.status == "pending",
+            )
+        )
+    ).scalar() or 0
+
     last_backup = (
         await db.execute(
             select(BackupLog)
@@ -70,6 +96,28 @@ async def build_owner_dashboard(
         )
     ).scalar_one_or_none()
 
+    ai_today = (
+        await db.execute(
+            select(func.count())
+            .select_from(AiUsageLog)
+            .where(
+                AiUsageLog.business_id == business_id,
+                AiUsageLog.created_at >= day_start,
+            )
+        )
+    ).scalar() or 0
+
+    wa_pending = (
+        await db.execute(
+            select(func.count())
+            .select_from(WhatsAppDeliveryLog)
+            .where(
+                WhatsAppDeliveryLog.business_id == business_id,
+                WhatsAppDeliveryLog.status.in_(("pending_manual", "failed")),
+            )
+        )
+    ).scalar() or 0
+
     exceptions: list[dict[str, Any]] = []
     if int(out_of) > 0:
         exceptions.append(
@@ -78,6 +126,13 @@ async def build_owner_dashboard(
     if int(low) > 0:
         exceptions.append(
             {"kind": "low_stock", "message": f"{int(low)} items at/below reorder"}
+        )
+    if int(damage_pending) > 0:
+        exceptions.append(
+            {
+                "kind": "damage_pending",
+                "message": f"{int(damage_pending)} damage reports awaiting review",
+            }
         )
     if last_backup is None:
         exceptions.append(
@@ -99,8 +154,15 @@ async def build_owner_dashboard(
                 "message": f"{pending_tasks} staff tasks still open",
             }
         )
+    if int(wa_pending) > 0:
+        exceptions.append(
+            {
+                "kind": "whatsapp_delivery",
+                "message": f"{int(wa_pending)} WhatsApp PO deliveries need attention",
+            }
+        )
 
-    return {
+    payload = {
         "as_of": today.isoformat(),
         "exceptions": exceptions,
         "staff_performance": staff,
@@ -108,6 +170,7 @@ async def build_owner_dashboard(
             "low_count": int(low),
             "out_count": int(out_of),
         },
+        "damage": {"pending_count": int(damage_pending)},
         "comparison": {
             "spend_last_7_days": float(spend_week),
         },
@@ -117,7 +180,12 @@ async def build_owner_dashboard(
             "last_size_bytes": last_backup.size_bytes if last_backup else None,
         },
         "ai_usage": {
-            "note": "AI usage panel activates after provider credential logging (Wave 4/7).",
-            "requests_today": 0,
+            "requests_today": int(ai_today),
         },
+        "whatsapp": {
+            "needs_attention": int(wa_pending),
+        },
+        "cache_ttl_sec": int(_CACHE_TTL_SEC),
     }
+    _CACHE[key] = (now, payload)
+    return payload

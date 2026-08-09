@@ -25,6 +25,7 @@ import '../../../core/search/search_highlight.dart';
 import '../../../shared/widgets/app_settings_action.dart';
 import '../../../core/widgets/business_write_surface_listener.dart';
 import 'broker_wizard_page.dart';
+import 'supplier_create_simple.dart';
 import 'supplier_create_wizard_page.dart';
 
 String _fmtBrokerCommissionPct(double v) =>
@@ -534,7 +535,7 @@ class _ContactsPageState extends ConsumerState<ContactsPage>
     if (!mounted) return;
     await Navigator.of(context, rootNavigator: true).push(
       MaterialPageRoute<void>(
-        builder: (_) => const SupplierCreateWizardPage(),
+        builder: (_) => const SupplierCreateSimple(),
         fullscreenDialog: true,
       ),
     );

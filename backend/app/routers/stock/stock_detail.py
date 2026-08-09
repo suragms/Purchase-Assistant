@@ -123,7 +123,7 @@ from app.services.stock_helpers import OpeningSetupStatus, SortBy, StatusFilter
 logger = logging.getLogger(__name__)
 
 
-from app.routers.stock.stock_audit import _movement_out, _staff_purchase_out
+from app.routers.stock.stock_adjustments import _movement_out, _staff_purchase_out
 router = APIRouter()
 
 @router.get("/items/{item_id}/purchase-intelligence")

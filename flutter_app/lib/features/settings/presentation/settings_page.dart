@@ -13,7 +13,7 @@ import '../../../core/providers/prefs_provider.dart'
     show localNotificationsOptInProvider, notificationKindTogglesProvider;
 import '../../../core/router/navigation_ext.dart';
 import '../../../core/router/post_auth_route.dart'
-    show sessionCanAdminUsers, sessionIsStaff;
+    show sessionCanAdminUsers, sessionIsOwnerOrAdmin, sessionIsStaff;
 import '../../../core/theme/theme_context_ext.dart';
 import '../../../core/design_system/hexa_responsive.dart';
 import '../../../shared/widgets/desktop_page_shell.dart';
@@ -56,6 +56,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     final isStaff = session != null && sessionIsStaff(session);
     final isManager = role == 'manager';
     final isOwner = role == 'owner' || session?.isSuperAdmin == true;
+    final isOwnerOrAdmin = session != null && sessionIsOwnerOrAdmin(session);
     final canManageUsers = session != null && sessionCanAdminUsers(session);
     final notifOptIn = ref.watch(localNotificationsOptInProvider);
     final notifKinds = ref.watch(notificationKindTogglesProvider);
@@ -65,7 +66,6 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       physics: const BouncingScrollPhysics(
         parent: AlwaysScrollableScrollPhysics(),
       ),
-      shrinkWrap: true,
       children: [
           if (isOwner) const BackupMonthlyBanner(),
           _SectionTitle('Account'),
@@ -209,22 +209,37 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                       'Stock Excel, purchases PDF (this month), ZIP trade data',
                   onTap: () => context.push('/settings/backup'),
                 ),
-                _NavTile(
-                  icon: Icons.vpn_key_outlined,
-                  title: 'API credentials',
-                  subtitle: 'Owner-only encrypted provider keys',
-                  onTap: () => context.push('/settings/credentials'),
-                ),
-                _NavTile(
-                  icon: Icons.dashboard_customize_outlined,
-                  title: 'Owner command center',
-                  subtitle: 'Exceptions, stock, backup, staff tasks',
-                  onTap: () => context.push('/settings/owner-dashboard'),
-                ),
+                if (isOwnerOrAdmin) ...[
+                  _NavTile(
+                    icon: Icons.vpn_key_outlined,
+                    title: 'API credentials',
+                    subtitle: 'Encrypted WhatsApp and AI provider keys',
+                    onTap: () => context.push('/settings/credentials'),
+                  ),
+                  _NavTile(
+                    icon: Icons.dashboard_customize_outlined,
+                    title: 'Owner command center',
+                    subtitle: 'Exceptions, stock, backup, staff tasks',
+                    onTap: () => context.push('/settings/owner-dashboard'),
+                  ),
+                  _NavTile(
+                    icon: Icons.checklist_outlined,
+                    title: 'Staff tasks',
+                    subtitle: 'All assignments and pending work',
+                    onTap: () => context.push('/staff/tasks-board'),
+                  ),
+                ],
+              ],
+            ),
+          ],
+          if (!isStaff && !isOwnerOrAdmin) ...[
+            _SectionTitle('Team'),
+            _SettingsCard(
+              children: [
                 _NavTile(
                   icon: Icons.checklist_outlined,
                   title: 'Staff tasks',
-                  subtitle: 'Assignments and status',
+                  subtitle: 'Assignments for your team',
                   onTap: () => context.push('/staff/tasks-board'),
                 ),
               ],

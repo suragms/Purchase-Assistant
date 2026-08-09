@@ -3364,6 +3364,11 @@ class _PurchaseItemEntrySheetState extends ConsumerState<PurchaseItemEntrySheet>
                   focusNode: _itemFocus,
                   focusAfterSelection: _qtyFocus,
                   debugLabel: 'catalogItem',
+                  lockedSelectionLabel:
+                      (_selectedCatalogItemId != null &&
+                              _selectedCatalogItemId!.isNotEmpty)
+                          ? _itemCtrl.text
+                          : null,
                   hintText: 'Search item (name, code, HSN)…',
                   hintStyle: const TextStyle(
                     fontSize: 14,

@@ -1,4 +1,4 @@
-"""Owner-gated credentials, staff tasks, and command-center dashboard."""
+"""Owner/admin-gated credentials, staff tasks, and command-center dashboard."""
 
 from __future__ import annotations
 
@@ -10,7 +10,11 @@ from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.deps import get_current_user, require_owner_membership, require_membership
+from app.deps import (
+    get_current_user,
+    require_membership,
+    require_owner_or_admin_membership,
+)
 from app.models import Membership, User
 from app.models.admin_audit_log import AdminAuditLog
 from app.services import owner_dashboard as od
@@ -46,10 +50,16 @@ class StaffTaskComplete(BaseModel):
     correction_note: str | None = None
 
 
+def _sees_all_tasks(m: Membership, user: User | None = None) -> bool:
+    if user is not None and getattr(user, "is_super_admin", False):
+        return True
+    return m.role in ("owner", "admin", "manager")
+
+
 @credentials_router.get("")
 async def get_credentials(
     business_id: uuid.UUID,
-    _m: Annotated[Membership, Depends(require_owner_membership)],
+    _m: Annotated[Membership, Depends(require_owner_or_admin_membership)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     del _m
@@ -61,10 +71,11 @@ async def put_credential(
     business_id: uuid.UUID,
     credential_type: str,
     body: CredentialPut,
-    m: Annotated[Membership, Depends(require_owner_membership)],
+    m: Annotated[Membership, Depends(require_owner_or_admin_membership)],
     user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
+    del m
     try:
         row = await pc.upsert_credential(
             db,
@@ -101,13 +112,12 @@ async def put_credential(
 async def list_all_tasks(
     business_id: uuid.UUID,
     m: Annotated[Membership, Depends(require_membership)],
+    user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
     status_filter: str | None = None,
 ):
-    # Owner/manager see all; staff see own only.
-    staff_only = m.role not in ("owner", "manager") and not getattr(
-        m, "is_super_admin", False
-    )
+    # Owner/admin/manager see all; staff see own only.
+    staff_only = not _sees_all_tasks(m, user)
     staff_id = m.user_id if staff_only else None
     rows = await st.list_tasks(
         db, business_id, staff_id=staff_id, status=status_filter
@@ -120,9 +130,10 @@ async def list_staff_tasks(
     business_id: uuid.UUID,
     staff_id: uuid.UUID,
     m: Annotated[Membership, Depends(require_membership)],
+    user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
-    if m.role not in ("owner", "manager") and m.user_id != staff_id:
+    if not _sees_all_tasks(m, user) and m.user_id != staff_id:
         raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Forbidden")
     rows = await st.list_tasks(db, business_id, staff_id=staff_id)
     return {"items": [st.task_to_dict(t) for t in rows]}
@@ -132,7 +143,7 @@ async def list_staff_tasks(
 async def create_staff_task(
     business_id: uuid.UUID,
     body: StaffTaskCreate,
-    m: Annotated[Membership, Depends(require_owner_membership)],
+    m: Annotated[Membership, Depends(require_owner_or_admin_membership)],
     user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
@@ -195,7 +206,7 @@ async def complete_staff_task(
 @staff_router.get("/performance-summary")
 async def staff_performance_summary(
     business_id: uuid.UUID,
-    _m: Annotated[Membership, Depends(require_owner_membership)],
+    _m: Annotated[Membership, Depends(require_owner_or_admin_membership)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     del _m
@@ -205,8 +216,42 @@ async def staff_performance_summary(
 @owner_router.get("/dashboard")
 async def owner_dashboard(
     business_id: uuid.UUID,
-    _m: Annotated[Membership, Depends(require_owner_membership)],
+    _m: Annotated[Membership, Depends(require_owner_or_admin_membership)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> dict[str, Any]:
     del _m
     return await od.build_owner_dashboard(db, business_id)
+
+
+@owner_router.get("/whatsapp-deliveries")
+async def list_whatsapp_deliveries(
+    business_id: uuid.UUID,
+    _m: Annotated[Membership, Depends(require_owner_or_admin_membership)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    from app.services import whatsapp_po_delivery as wad
+
+    del _m
+    rows = await wad.list_deliveries(db, business_id)
+    return {"items": [wad.delivery_to_dict(r) for r in rows]}
+
+
+@owner_router.post("/whatsapp-deliveries/{po_id}/resend")
+async def resend_whatsapp_delivery(
+    business_id: uuid.UUID,
+    po_id: uuid.UUID,
+    _m: Annotated[Membership, Depends(require_owner_or_admin_membership)],
+    user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    from app.services import whatsapp_po_delivery as wad
+
+    del _m
+    row = await wad.deliver_po_whatsapp(
+        db,
+        business_id=business_id,
+        po_id=po_id,
+        actor_id=user.id,
+        force=True,
+    )
+    return wad.delivery_to_dict(row)

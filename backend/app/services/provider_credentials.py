@@ -25,6 +25,7 @@ ALLOWED_TYPES = frozenset(
         "openai_key",
         "whatsapp_api_key",
         "whatsapp_staff_number",
+        "whatsapp_phone_number_id",
     }
 )
 

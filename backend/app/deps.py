@@ -89,6 +89,21 @@ async def require_owner_membership(
     return membership
 
 
+async def require_owner_or_admin_membership(
+    membership: Annotated[Membership, Depends(require_membership)],
+    user: Annotated[User, Depends(get_current_user)],
+) -> Membership:
+    """Owner or workspace admin (owner-created) for credentials / ops dashboards."""
+    if user.is_super_admin:
+        return membership
+    if membership.role not in ("owner", "admin"):
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            detail="Owner or admin role required",
+        )
+    return membership
+
+
 def require_role(*roles: str):
     """RBAC: membership.role must be one of [roles] (or user is super_admin)."""
 

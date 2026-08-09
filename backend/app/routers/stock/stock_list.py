@@ -130,7 +130,7 @@ from app.services.app_cache import (
     stock_shell_bundle_cache_key,
     stock_shell_bundle_ttl_s,
 )
-from app.routers.stock.stock_audit import fetch_recent_adjustments
+from app.routers.stock.stock_adjustments import fetch_recent_adjustments
 
 logger = logging.getLogger(__name__)
 

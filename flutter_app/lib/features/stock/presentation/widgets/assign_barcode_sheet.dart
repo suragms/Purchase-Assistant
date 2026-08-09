@@ -9,6 +9,7 @@ import '../../../../core/providers/business_aggregates_invalidation.dart';
 import '../../../../core/providers/stock_providers.dart' show applyStockListRowPatch;
 import '../../../../core/providers/catalog_providers.dart';
 import '../../../../core/design_system/hexa_responsive.dart';
+import '../../../barcode/services/assign_barcode_helper.dart';
 
 Future<bool> showAssignBarcodeSheet({
   required BuildContext context,
@@ -99,13 +100,12 @@ Future<bool> showAssignBarcodeSheet({
                           }
                           return;
                         }
-                        final saved = await ref
-                            .read(hexaApiProvider)
-                            .patchCatalogItemBarcode(
-                              businessId: session.primaryBusiness.id,
-                              itemId: itemId,
-                              barcode: code,
-                            );
+                        final saved = await assignBarcodeToItem(
+                          api: ref.read(hexaApiProvider),
+                          businessId: session.primaryBusiness.id,
+                          itemId: itemId,
+                          barcode: code,
+                        );
                         applyStockListRowPatch(
                           ref,
                           itemId: itemId,

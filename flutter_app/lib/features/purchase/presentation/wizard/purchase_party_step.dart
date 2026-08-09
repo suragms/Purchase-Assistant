@@ -51,10 +51,13 @@ class PurchasePartyStep extends ConsumerWidget {
     required this.brokerMapLabel,
     required this.supplierLastPurchaseById,
     required this.supplierBalanceById,
+    this.desktop = false,
   });
 
   final Map<String, DateTime> supplierLastPurchaseById;
   final Map<String, double> supplierBalanceById;
+  /// Desktop (≥1024px) renders Supplier | Broker | Invoice Date in one grid row.
+  final bool desktop;
 
   final bool isEdit;
   final String? loadedDerivedStatus;
@@ -312,7 +315,10 @@ class PurchasePartyStep extends ConsumerWidget {
   }
 
   /// Full-width supplier (with suggestions under field), spacing, full-width broker.
-  Widget _partyFieldsColumn(BuildContext context, WidgetRef ref) {
+  /// Builds the supplier + broker search cells (incl. error wrappers) without
+  /// any outer layout, so both the mobile stack and the desktop grid can place
+  /// them. Mobile assembly in [build] renders the exact same tree as before.
+  ({Widget supplier, Widget broker}) _partyCells(BuildContext context, WidgetRef ref) {
     final draftParty = ref.watch(purchaseDraftProvider);
     String? supplierLockedLabel() {
       final sid = draftParty.supplierId?.trim();
@@ -792,6 +798,11 @@ class PurchasePartyStep extends ConsumerWidget {
       );
     }
 
+    return (supplier: supplierCell, broker: brokerCell);
+  }
+
+  Widget _partyFieldsColumn(BuildContext context, WidgetRef ref) {
+    final c = _partyCells(context, ref);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
@@ -803,7 +814,7 @@ class PurchasePartyStep extends ConsumerWidget {
               ),
         ),
         const SizedBox(height: 8),
-        supplierCell,
+        c.supplier,
         const SizedBox(height: 20),
         const Text(
           'Broker (optional)',
@@ -813,8 +824,119 @@ class PurchasePartyStep extends ConsumerWidget {
               color: Colors.black54),
         ),
         const SizedBox(height: 8),
-        brokerCell,
+        c.broker,
         const SizedBox(height: 16),
+      ],
+    );
+  }
+
+  /// Desktop: Supplier | Broker | Invoice Date in one grid row.
+  Widget _partyFieldsRowDesktop(BuildContext context, WidgetRef ref) {
+    final c = _partyCells(context, ref);
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'Supplier',
+                style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+              ),
+              const SizedBox(height: 8),
+              c.supplier,
+            ],
+          ),
+        ),
+        const SizedBox(width: 16),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'Broker (optional)',
+                style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.black54),
+              ),
+              const SizedBox(height: 8),
+              c.broker,
+            ],
+          ),
+        ),
+        const SizedBox(width: 16),
+        Expanded(child: _dateColumn(context, ref)),
+      ],
+    );
+  }
+
+  Widget _dateColumn(BuildContext context, WidgetRef ref) {
+    final draft = ref.watch(purchaseDraftProvider);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          'Invoice Date',
+          style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                fontWeight: FontWeight.w700,
+              ),
+        ),
+        const SizedBox(height: 8),
+        DatePickerButton(
+          value: draft.purchaseDate,
+          onChanged: (dt) {
+            ref.read(purchaseDraftProvider.notifier).setPurchaseDate(dt);
+            onDraftChanged();
+          },
+          label: 'Select Purchase Date',
+        ),
+      ],
+    );
+  }
+
+  /// Desktop slim read-only meta (Invoice Ref + warehouse) above the grid.
+  Widget _desktopMetaLine(BuildContext context, WidgetRef ref) {
+    final idVal = isEdit ? (editHumanId ?? '—') : (previewHumanId ?? 'Auto');
+    final sub = Theme.of(context).colorScheme.onSurfaceVariant;
+    final session = ref.watch(sessionProvider);
+    final warehouse = session?.primaryBusiness.effectiveDisplayTitle.trim() ?? '';
+    return Row(
+      children: [
+        Text(
+          'Invoice Ref',
+          style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                fontWeight: FontWeight.w700,
+              ),
+        ),
+        const SizedBox(width: 8),
+        Flexible(
+          child: Text(
+            idVal,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+              color: isEdit ? Colors.black87 : sub,
+            ),
+          ),
+        ),
+        const Spacer(),
+        Text(
+          warehouse.isEmpty ? 'Warehouse: —' : 'Warehouse: $warehouse',
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: sub,
+          ),
+        ),
       ],
     );
   }
@@ -826,6 +948,41 @@ class PurchasePartyStep extends ConsumerWidget {
         (d) => d.supplierId != null && d.supplierId!.trim().isNotEmpty,
       ),
     );
+
+    if (desktop) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (isEdit && loadedDerivedStatus != null) ...[
+            Text(
+              'Payment: $loadedDerivedStatus · Bal ₹${(loadedRemaining ?? 0).toStringAsFixed(2)}',
+              style: const TextStyle(fontSize: 11),
+            ),
+            const SizedBox(height: 4),
+          ],
+          _desktopMetaLine(context, ref),
+          const SizedBox(height: 12),
+          _partyFieldsRowDesktop(context, ref),
+          if (showClearSupplier)
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: GestureDetector(
+                onTap: onSupplierClear,
+                child: Text(
+                  'Clear supplier',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: Theme.of(context).colorScheme.error,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ),
+          const SizedBox(height: 12),
+        ],
+      );
+    }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,

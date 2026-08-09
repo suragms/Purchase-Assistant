@@ -37,9 +37,6 @@ router = APIRouter(
     tags=["stock-audits"],
 )
 
-# Legacy global prefix — forwards to business-scoped handlers where possible.
-legacy_router = APIRouter(prefix="/v1/stock-audits", tags=["stock-audits-legacy"])
-
 
 def _audit_to_out(audit: StockAudit) -> StockAuditOut:
     return StockAuditOut.model_validate(audit)

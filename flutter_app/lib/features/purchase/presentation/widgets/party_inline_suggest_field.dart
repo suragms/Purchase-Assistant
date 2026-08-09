@@ -781,9 +781,8 @@ class _PartyInlineSuggestFieldState extends State<PartyInlineSuggestField> {
 
   bool _panelVisibleForOverlay() {
     final lockLabel = widget.lockedSelectionLabel?.trim();
-    final locked = lockLabel != null &&
-        lockLabel.isNotEmpty &&
-        !widget.focusNode.hasFocus;
+    // Locked selection: keep panel closed even while focused (until parent clears lock).
+    final locked = lockLabel != null && lockLabel.isNotEmpty;
     final rows = _listRowsForUi();
     final suggestInteractive = widget.focusNode.hasFocus ||
         _suggestPanelGrace ||
@@ -930,9 +929,8 @@ class _PartyInlineSuggestFieldState extends State<PartyInlineSuggestField> {
         widget.showAddRow && suggestInteractive && widget.onAddRow != null;
 
     final lockLabel = widget.lockedSelectionLabel?.trim();
-    final locked = lockLabel != null &&
-        lockLabel.isNotEmpty &&
-        !widget.focusNode.hasFocus;
+    // Locked selection: keep panel closed even while focused (until parent clears lock).
+    final locked = lockLabel != null && lockLabel.isNotEmpty;
 
     final hasPanelSource = !locked &&
         !_suppressPanelAfterPick &&

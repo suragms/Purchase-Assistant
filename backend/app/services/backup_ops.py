@@ -106,6 +106,8 @@ async def build_backup_payload(
         "schema_version": SCHEMA_VERSION,
         "business_id": str(business_id),
         "exported_at": datetime.now(timezone.utc).isoformat(),
+        # provider_credentials intentionally omitted — never export secrets (even encrypted).
+        "excludes": ["provider_credentials"],
         "catalog": [
             {
                 "id": str(i.id),

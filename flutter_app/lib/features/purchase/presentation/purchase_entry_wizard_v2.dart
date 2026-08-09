@@ -57,7 +57,9 @@ import 'wizard/purchase_fast_items_step.dart';
 import 'wizard/purchase_party_step.dart';
 import 'wizard/purchase_review_tally_step.dart';
 import 'wizard/purchase_terms_only_step.dart';
+import 'widgets/purchase_fast_items_table.dart';
 import 'widgets/purchase_item_entry_sheet.dart';
+import 'widgets/purchase_summary_sidebar.dart';
 import 'widgets/purchase_saved_sheet.dart';
 
 enum _WizardExitDraftChoice { keepEditing, saveDraft, discard }
@@ -2115,86 +2117,140 @@ class _PurchaseEntryWizardV2State extends ConsumerState<PurchaseEntryWizardV2>
     }
   }
 
+  /// Party + Terms composition (shared by the mobile step and the desktop
+  /// single page). `desktop` arranges each step's fields into a 3-column grid.
+  Widget _step0Content(
+    BuildContext context,
+    List<Map<String, dynamic>> catalog,
+    bool isEdit, {
+    required bool desktop,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        PurchasePartyStep(
+          isEdit: isEdit,
+          loadedDerivedStatus: _loadedDerivedStatus,
+          loadedRemaining: _loadedRemaining,
+          previewHumanId: _previewHumanId,
+          editHumanId: _editHumanId,
+          supplierCtrl: _supplierCtrl,
+          brokerCtrl: _brokerCtrl,
+          supplierFocusNode: _partySupplierFocus,
+          brokerFocusNode: _partyBrokerFocus,
+          // Desktop single page has no step to advance to — broker submit just
+          // dismisses the keyboard instead of scrolling the whole page.
+          onProceedFromParty: desktop ? () {} : _partyAdvanceIfValid,
+          supplierFieldError: _supplierFieldError,
+          brokerFieldError: _brokerFieldError,
+          catalog: catalog,
+          lastGoodSuppliers: _lastGoodSuppliers,
+          lastGoodBrokers: _lastGoodBrokers,
+          lastAutoSupplierFromCatalogSig: _lastAutoSupplierFromCatalogSig,
+          onLastAutoSupplierFromCatalogSigChanged: (sig) {
+            setState(() => _lastAutoSupplierFromCatalogSig = sig);
+          },
+          onDraftChanged: _onDraftChanged,
+          supplierSubtitleFor: _supplierSearchSubtitle,
+          supplierRowId: _supplierRowId,
+          supplierMapLabel: _supplierMapLabel,
+          sortSuppliers: _sortSuppliersByPurchaseRecency,
+          filterSuppliersByCatalog: _filterSuppliersByCatalogLineDefaults,
+          onCatalogAutoSupplierSelected: _onUserSupplierSelected,
+          onSupplierSelectedSync: _onUserSupplierSelected,
+          openQuickSupplierCreate: _openQuickSupplierCreate,
+          partyUserSupplierActionGen: () => _partyUserSupplierActionGeneration,
+          onSupplierClear: () {
+            setState(() {
+              _partyUserSupplierActionGeneration++;
+              _supplierFieldError = null;
+              _brokerFieldError = null;
+            });
+            ref.read(purchaseDraftProvider.notifier).clearSupplier();
+            _supplierCtrl.clear();
+            _syncControllersFromDraft();
+            _onDraftChanged();
+          },
+          applyBrokerSelection: _applyBrokerSelection,
+          openQuickBrokerCreate: _openQuickBrokerCreate,
+          brokerRowId: _brokerRowId,
+          brokerMapLabel: _brokerMapLabel,
+          supplierLastPurchaseById: _supplierLastPurchaseById,
+          supplierBalanceById: _supplierBalanceById,
+          desktop: desktop,
+        ),
+        const SizedBox(height: 20),
+        Divider(height: 1, color: Colors.grey.shade300),
+        const SizedBox(height: 16),
+        Text(
+          'Terms & charges',
+          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w800,
+                color: HexaColors.textOnLightSurface,
+              ),
+        ),
+        const SizedBox(height: 12),
+        PurchaseTermsOnlyStep(
+          paymentDaysFocus: _termsPaymentDaysFocus,
+          paymentDaysCtrl: _paymentDaysCtrl,
+          commissionCtrl: _commissionCtrl,
+          headerDiscCtrl: _headerDiscCtrl,
+          narrationCtrl: _invoiceCtrl,
+          commissionFocus: _termsCommissionFocus,
+          headerDiscFocus: _termsHeaderDiscFocus,
+          narrationFocus: _termsNarrationFocus,
+          onDraftChanged: _onDraftChanged,
+          embeddedInOuterScroll: true,
+          desktop: desktop,
+        ),
+      ],
+    );
+  }
+
+  /// Desktop-only single scroll page: Party & Terms grid → items table →
+  /// review section (replaces the 3-step wizard on ≥1024px).
+  Widget _desktopSingleScrollPage(
+    BuildContext context,
+    List<Map<String, dynamic>> catalog,
+    bool isEdit,
+  ) {
+    return SingleChildScrollView(
+      controller: _wizardBodyScrollController,
+      keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.manual,
+      padding: const EdgeInsets.fromLTRB(24, 16, 24, 48),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _step0Content(context, catalog, isEdit, desktop: true),
+          const Divider(height: 28),
+          PurchaseFastItemsTable(
+            onDraftChanged: _onDraftChanged,
+            openAdvancedItemEditor: ({editIndex, initialOverride}) =>
+                _openItemSheet(
+              catalog,
+              editIndex: editIndex,
+              initialOverride: initialOverride,
+            ),
+            lineJustAdded: _lineJustAdded,
+            onDismissLineJustAdded: () => setState(() => _lineJustAdded = null),
+          ),
+          const Divider(height: 28),
+          PurchaseReviewTallyStep(
+            isEdit: isEdit,
+            previewHumanId: _previewHumanId,
+            editHumanId: _editHumanId,
+          ),
+          const SizedBox(height: 24),
+        ],
+      ),
+    );
+  }
+
   Widget _wizBody(BuildContext context, List<Map<String, dynamic>> catalog, bool isEdit) {
     Widget step;
     switch (_wizStep) {
       case 0:
-        step = Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            PurchasePartyStep(
-            isEdit: isEdit,
-            loadedDerivedStatus: _loadedDerivedStatus,
-            loadedRemaining: _loadedRemaining,
-            previewHumanId: _previewHumanId,
-            editHumanId: _editHumanId,
-            supplierCtrl: _supplierCtrl,
-            brokerCtrl: _brokerCtrl,
-            supplierFocusNode: _partySupplierFocus,
-            brokerFocusNode: _partyBrokerFocus,
-            onProceedFromParty: _partyAdvanceIfValid,
-            supplierFieldError: _supplierFieldError,
-            brokerFieldError: _brokerFieldError,
-            catalog: catalog,
-            lastGoodSuppliers: _lastGoodSuppliers,
-            lastGoodBrokers: _lastGoodBrokers,
-            lastAutoSupplierFromCatalogSig: _lastAutoSupplierFromCatalogSig,
-            onLastAutoSupplierFromCatalogSigChanged: (sig) {
-              setState(() => _lastAutoSupplierFromCatalogSig = sig);
-            },
-            onDraftChanged: _onDraftChanged,
-            supplierSubtitleFor: _supplierSearchSubtitle,
-            supplierRowId: _supplierRowId,
-            supplierMapLabel: _supplierMapLabel,
-            sortSuppliers: _sortSuppliersByPurchaseRecency,
-            filterSuppliersByCatalog: _filterSuppliersByCatalogLineDefaults,
-            onCatalogAutoSupplierSelected: _onUserSupplierSelected,
-            onSupplierSelectedSync: _onUserSupplierSelected,
-            openQuickSupplierCreate: _openQuickSupplierCreate,
-            partyUserSupplierActionGen: () => _partyUserSupplierActionGeneration,
-            onSupplierClear: () {
-              setState(() {
-                _partyUserSupplierActionGeneration++;
-                _supplierFieldError = null;
-                _brokerFieldError = null;
-              });
-              ref.read(purchaseDraftProvider.notifier).clearSupplier();
-              _supplierCtrl.clear();
-              _syncControllersFromDraft();
-              _onDraftChanged();
-            },
-            applyBrokerSelection: _applyBrokerSelection,
-            openQuickBrokerCreate: _openQuickBrokerCreate,
-            brokerRowId: _brokerRowId,
-            brokerMapLabel: _brokerMapLabel,
-            supplierLastPurchaseById: _supplierLastPurchaseById,
-            supplierBalanceById: _supplierBalanceById,
-          ),
-            const SizedBox(height: 20),
-            Divider(height: 1, color: Colors.grey.shade300),
-            const SizedBox(height: 16),
-            Text(
-              'Terms & charges',
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w800,
-                    color: HexaColors.textOnLightSurface,
-                  ),
-            ),
-            const SizedBox(height: 12),
-            PurchaseTermsOnlyStep(
-              paymentDaysFocus: _termsPaymentDaysFocus,
-              paymentDaysCtrl: _paymentDaysCtrl,
-              commissionCtrl: _commissionCtrl,
-              headerDiscCtrl: _headerDiscCtrl,
-              narrationCtrl: _invoiceCtrl,
-              commissionFocus: _termsCommissionFocus,
-              headerDiscFocus: _termsHeaderDiscFocus,
-              narrationFocus: _termsNarrationFocus,
-              onDraftChanged: _onDraftChanged,
-              embeddedInOuterScroll: true,
-            ),
-          ],
-        );
+        step = _step0Content(context, catalog, isEdit, desktop: false);
         break;
       case 1:
         step = Column(
@@ -2368,6 +2424,50 @@ class _PurchaseEntryWizardV2State extends ConsumerState<PurchaseEntryWizardV2>
       child: LayoutBuilder(
         builder: (ctx, _) {
           final kbInset = MediaQuery.viewInsetsOf(ctx).bottom;
+          // Desktop (≥1024px): 70/30 split — single scroll page left, sticky
+          // summary sidebar right. Mobile path below stays byte-identical.
+          if (context.isDesktopLayout) {
+            return Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(
+                  flex: 7,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      if (_inlineSaveError != null)
+                        Material(
+                          color: Colors.red[50],
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 12, vertical: 8),
+                            child: Text(
+                              _inlineSaveError!,
+                              style: TextStyle(
+                                color: Colors.red[900],
+                                fontSize: 12,
+                              ),
+                            ),
+                          ),
+                        ),
+                      Expanded(
+                        child: _desktopSingleScrollPage(context, catalog, isEdit),
+                      ),
+                    ],
+                  ),
+                ),
+                const VerticalDivider(width: 1, thickness: 1),
+                Expanded(
+                  flex: 3,
+                  child: PurchaseSummarySidebar(
+                    onConfirmSave: _validateAndSave,
+                    isSaving: _isSaving,
+                    onDraftChanged: _onDraftChanged,
+                  ),
+                ),
+              ],
+            );
+          }
             final stepScroll = wizStep == 2
               ? Padding(
                   padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
@@ -2712,11 +2812,22 @@ class _PurchaseEntryWizardV2State extends ConsumerState<PurchaseEntryWizardV2>
             child: LayoutBuilder(
               builder: (ctx, constraints) {
                 final windowW = MediaQuery.sizeOf(ctx).width;
-                final framed = HexaResponsiveCenter(
-                  maxWidth: HexaResponsive.desktopFormMax(windowW),
-                  padding: EdgeInsets.zero,
-                  child: purchaseWizardMainContent(),
-                );
+                // Desktop (≥1024px): centered max-width wrapper (~1440px) so the
+                // 70/30 split has symmetric gutters. Mobile keeps the flush form.
+                final framed = context.isDesktopLayout
+                    ? Center(
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(
+                            maxWidth: HexaResponsive.maxHomeContentWidth,
+                          ),
+                          child: purchaseWizardMainContent(),
+                        ),
+                      )
+                    : HexaResponsiveCenter(
+                        maxWidth: HexaResponsive.desktopFormMax(windowW),
+                        padding: EdgeInsets.zero,
+                        child: purchaseWizardMainContent(),
+                      );
                 // Height-bound so Expanded steps never meet unbounded parents.
                 if (!constraints.maxHeight.isFinite ||
                     constraints.maxHeight <= 0) {

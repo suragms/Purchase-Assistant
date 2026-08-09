@@ -92,58 +92,49 @@ class HomeOwnerDashboardBody extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          physics: const BouncingScrollPhysics(),
-          child: Row(
-            children: [
-              if (low > 0) ...[
-                _AlertChip(
-                  // Below reorder only (excludes out) — matches KPI "Low stock" base.
-                  label: 'Below reorder · $low',
-                  color: HexaColors.brandPrimary,
-                  onTap: () => pushLowStockDashboard(context),
-                  isSelected: low > 0,
-                ),
-                const SizedBox(width: 12),
-              ],
-              if (pending > 0) ...[
-                _AlertChip(
-                  label: 'Pending delivery · $pending',
-                  color: HexaColors.brandPrimary,
-                  onTap: () => context.go('/purchase?filter=pending_delivery'),
-                  isSelected: low <= 0 && pending > 0,
-                ),
-                const SizedBox(width: 12),
-              ],
-              if (openingN > 0) ...[
-                _AlertChip(
-                  label: 'Opening stock · $openingN',
-                  color: HexaColors.brandPrimary,
-                  onTap: () => pushOpeningStockSetup(context),
-                  isSelected: low <= 0 && pending <= 0 && openingN > 0,
-                ),
-                const SizedBox(width: 12),
-              ],
-              if (out > 0) ...[
-                _AlertChip(
-                  label: 'Out of stock · $out',
-                  color: HexaColors.brandPrimary,
-                  onTap: () => goShellTab(
-                        context,
-                        ref,
-                        branch: ShellBranch.stock,
-                        location: '/stock?status=out',
-                      ),
-                  isSelected: low <= 0 && pending <= 0 && openingN <= 0 && out > 0,
-                ),
-              ],
-            ],
-          ),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            if (low > 0)
+              _AlertChip(
+                label: 'Below reorder · $low',
+                color: HexaColors.brandPrimary,
+                onTap: () => pushLowStockDashboard(context),
+                isSelected: low > 0,
+              ),
+            if (pending > 0)
+              _AlertChip(
+                label: 'Pending delivery · $pending',
+                color: HexaColors.brandPrimary,
+                onTap: () => context.go('/purchase?filter=pending_delivery'),
+                isSelected: low <= 0 && pending > 0,
+              ),
+            if (openingN > 0)
+              _AlertChip(
+                label: 'Opening stock · $openingN',
+                color: HexaColors.brandPrimary,
+                onTap: () => pushOpeningStockSetup(context),
+                isSelected: low <= 0 && pending <= 0 && openingN > 0,
+              ),
+            if (out > 0)
+              _AlertChip(
+                label: 'Out of stock · $out',
+                color: HexaColors.brandPrimary,
+                onTap: () => goShellTab(
+                      context,
+                      ref,
+                      branch: ShellBranch.stock,
+                      location: '/stock?status=out',
+                    ),
+                isSelected:
+                    low <= 0 && pending <= 0 && openingN <= 0 && out > 0,
+              ),
+          ],
         ),
         SizedBox(height: gap),
         HexaDenseKpiGrid(
-          mainAxisExtent: context.isDesktopLayout ? 100 : 96,
+          mainAxisExtent: context.isDesktopLayout ? 88 : 96,
           children: [
             _KpiTile(
               label: 'Purchases',

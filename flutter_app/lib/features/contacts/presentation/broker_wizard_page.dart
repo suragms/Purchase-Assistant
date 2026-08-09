@@ -21,7 +21,7 @@ import '../../../core/widgets/form_feedback.dart';
 import '../../../core/widgets/form_field_scroll.dart';
 import '../../../core/widgets/friendly_load_error.dart';
 import '../../../shared/widgets/full_screen_form_scaffold.dart';
-import 'supplier_create_wizard_page.dart';
+import 'supplier_create_simple.dart';
 
 import '../../../core/theme/hexa_colors.dart';
 bool _validPhoneDigits(String raw) {
@@ -693,7 +693,7 @@ class _BrokerWizardPageState extends ConsumerState<BrokerWizardPage> {
                 label: 'Create Supplier',
                 onPressed: () => Navigator.of(context, rootNavigator: true).push(
                   MaterialPageRoute<void>(
-                    builder: (_) => const SupplierCreateWizardPage(),
+                    builder: (_) => const SupplierCreateSimple(),
                     fullscreenDialog: true,
                   ),
                 ),

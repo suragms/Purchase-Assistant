@@ -34,10 +34,10 @@ alwaysApply: false
 
 ## HEXA-Specific UX
 
-- **Preview before save** for every entry path (app + WhatsApp parity in messaging).
-- **Price Intelligence Panel:** compact card + expandable sheet; show avg/high/low/trend/% position when history exists.
+- **Preview before save** for every purchase entry path.
 - **Landing cost** is user-entered — never auto-filled from AI.
-- Bottom nav order: Home, Entries, Analytics, Contacts, Settings.
+- Follow root `DESIGN.md` and shell navigation already in the app (do not invent a second bottom-nav order).
+- Prefer `HexaColors` / `HexaDsType` over hardcoded Figma hex when tokens exist.
 
 ## Accessibility
 

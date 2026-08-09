@@ -2881,6 +2881,19 @@ async def transition_purchase_lifecycle(
     )
     await db.commit()
     bump_trade_read_caches_for_business(business_id)
+    if target == "approved":
+        try:
+            from app.services import whatsapp_po_delivery as wad
+
+            await wad.deliver_po_whatsapp(
+                db,
+                business_id=business_id,
+                po_id=purchase_id,
+                actor_id=actor.id,
+            )
+        except Exception:  # noqa: BLE001
+            # Delivery must never roll back purchase approval.
+            pass
     return await get_trade_purchase(db, business_id, purchase_id)
 
 

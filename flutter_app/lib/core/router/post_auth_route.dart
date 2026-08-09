@@ -26,6 +26,13 @@ bool sessionCanAdminUsers(Session session) {
   return r == 'owner' || r == 'admin' || session.isSuperAdmin;
 }
 
+/// Owner or workspace admin — credentials, command center, all pending tasks.
+bool sessionIsOwnerOrAdmin(Session session) {
+  if (session.isSuperAdmin) return true;
+  final r = session.primaryBusiness.role.toLowerCase();
+  return r == 'owner' || r == 'admin';
+}
+
 /// Main tab shell after sign-in / splash (owner vs staff).
 String authenticatedHomePath(Session session) =>
     sessionIsStaff(session) ? '/staff/home' : '/home';
