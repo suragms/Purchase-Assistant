@@ -41,36 +41,49 @@ Future<BulkLabelBatchResult> fetchBulkLabels({
   }
 
   final stock = stockById ?? const <String, Map<String, dynamic>>{};
-  const chunkSize = 50;
+  const chunkSize = 100;
+  const maxParallel = 3;
   final api = ref.read(hexaApiProvider);
   final labels = <BarcodeLabelData>[];
   final failedIds = <String>[];
   final failuresById = <String, String>{};
   final labeledIds = <String>{};
 
-  bool tryStockFallback(String rawId) {
+  bool tryStockFallback(
+    String rawId, {
+    required List<BarcodeLabelData> outLabels,
+    required Set<String> outLabeled,
+    required List<String> outFailed,
+    required Map<String, String> outFailures,
+  }) {
     final nid = normalizeItemId(rawId);
-    if (labeledIds.contains(nid)) {
-      failedIds.remove(rawId);
-      failuresById.remove(rawId);
+    if (outLabeled.contains(nid) || labeledIds.contains(nid)) {
+      outFailed.remove(rawId);
+      outFailures.remove(rawId);
       return true;
     }
     final built = labelDataFromStockRow(stock[nid]);
     if (built == null) return false;
-    labels.add(built);
-    labeledIds.add(nid);
-    failedIds.remove(rawId);
-    failuresById.remove(rawId);
+    outLabels.add(built);
+    outLabeled.add(nid);
+    outFailed.remove(rawId);
+    outFailures.remove(rawId);
     return true;
   }
 
-  for (var i = 0; i < ids.length; i += chunkSize) {
-    final end = (i + chunkSize < ids.length) ? i + chunkSize : ids.length;
-    final chunk = ids.sublist(i, end);
-    onProgress?.call(end, ids.length);
+  Future<
+      ({
+        List<BarcodeLabelData> labels,
+        List<String> failedIds,
+        Map<String, String> failuresById,
+        Set<String> labeledIds,
+      })> processChunk(List<String> chunk) async {
+    final chunkLabels = <BarcodeLabelData>[];
+    final chunkFailed = <String>[];
+    final chunkFailures = <String, String>{};
+    final chunkLabeled = <String>{};
 
     try {
-      final labelsBeforeChunk = labels.length;
       final rows = await api.barcodeLabelBatch(
         businessId: session.primaryBusiness.id,
         itemIds: chunk,
@@ -80,33 +93,44 @@ Future<BulkLabelBatchResult> fetchBulkLabels({
         final id = j['id']?.toString() ?? j['item_id']?.toString() ?? '';
         final label = BarcodeLabelData.fromApiMap(j);
         if (label != null) {
-          labels.add(label);
+          chunkLabels.add(label);
           if (id.isNotEmpty) {
             final nid = normalizeItemId(id);
             returned.add(nid);
-            labeledIds.add(nid);
+            chunkLabeled.add(nid);
           }
         } else if (id.isNotEmpty) {
-          failedIds.add(id);
-          failuresById[id] = 'Missing barcode and item code';
+          chunkFailed.add(id);
+          chunkFailures[id] = 'Missing barcode and item code';
         }
       }
-      final addedThisChunk = labels.length - labelsBeforeChunk;
-      if (addedThisChunk >= chunk.length) {
+      if (chunkLabels.length >= chunk.length) {
         for (final rawId in chunk) {
-          labeledIds.add(normalizeItemId(rawId));
+          chunkLabeled.add(normalizeItemId(rawId));
         }
       } else {
         for (final rawId in chunk) {
           final nid = normalizeItemId(rawId);
-          if (returned.contains(nid) || labeledIds.contains(nid)) continue;
-          if (failedIds.contains(rawId)) {
-            tryStockFallback(rawId);
+          if (returned.contains(nid) || chunkLabeled.contains(nid)) continue;
+          if (chunkFailed.contains(rawId)) {
+            tryStockFallback(
+              rawId,
+              outLabels: chunkLabels,
+              outLabeled: chunkLabeled,
+              outFailed: chunkFailed,
+              outFailures: chunkFailures,
+            );
             continue;
           }
-          failedIds.add(rawId);
-          failuresById[rawId] = 'No label data returned';
-          tryStockFallback(rawId);
+          chunkFailed.add(rawId);
+          chunkFailures[rawId] = 'No label data returned';
+          tryStockFallback(
+            rawId,
+            outLabels: chunkLabels,
+            outLabeled: chunkLabeled,
+            outFailed: chunkFailed,
+            outFailures: chunkFailures,
+          );
         }
       }
     } on DioException catch (e) {
@@ -124,35 +148,80 @@ Future<BulkLabelBatchResult> fetchBulkLabels({
           e.type == DioExceptionType.unknown;
       if (offline && stock.isNotEmpty) {
         for (final rawId in chunk) {
-          if (tryStockFallback(rawId)) {
-            failuresById.remove(rawId);
-          } else {
-            failedIds.add(rawId);
-            failuresById[rawId] =
+          if (!tryStockFallback(
+            rawId,
+            outLabels: chunkLabels,
+            outLabeled: chunkLabeled,
+            outFailed: chunkFailed,
+            outFailures: chunkFailures,
+          )) {
+            chunkFailed.add(rawId);
+            chunkFailures[rawId] =
                 'Offline — item needs a barcode or code on the list.';
           }
         }
-        continue;
-      }
-      if (offline) {
+      } else if (offline) {
         throw BarcodeOperationException(
           'No internet connection. Check your network and try again.',
           kind: BarcodeOperationKind.network,
         );
-      }
-      for (final rawId in chunk) {
-        failedIds.add(rawId);
-        failuresById[rawId] = friendlyApiError(e);
-        tryStockFallback(rawId);
+      } else {
+        for (final rawId in chunk) {
+          chunkFailed.add(rawId);
+          chunkFailures[rawId] = friendlyApiError(e);
+          tryStockFallback(
+            rawId,
+            outLabels: chunkLabels,
+            outLabeled: chunkLabeled,
+            outFailed: chunkFailed,
+            outFailures: chunkFailures,
+          );
+        }
       }
     } catch (e) {
       if (e is BarcodeOperationException) rethrow;
       for (final rawId in chunk) {
-        failedIds.add(rawId);
-        failuresById[rawId] = barcodeMessageForUser(e);
-        tryStockFallback(rawId);
+        chunkFailed.add(rawId);
+        chunkFailures[rawId] = barcodeMessageForUser(e);
+        tryStockFallback(
+          rawId,
+          outLabels: chunkLabels,
+          outLabeled: chunkLabeled,
+          outFailed: chunkFailed,
+          outFailures: chunkFailures,
+        );
       }
     }
+
+    return (
+      labels: chunkLabels,
+      failedIds: chunkFailed,
+      failuresById: chunkFailures,
+      labeledIds: chunkLabeled,
+    );
+  }
+
+  final chunks = <List<String>>[];
+  for (var i = 0; i < ids.length; i += chunkSize) {
+    final end = (i + chunkSize < ids.length) ? i + chunkSize : ids.length;
+    chunks.add(ids.sublist(i, end));
+  }
+
+  var done = 0;
+  for (var i = 0; i < chunks.length; i += maxParallel) {
+    final wave = chunks.sublist(
+      i,
+      (i + maxParallel < chunks.length) ? i + maxParallel : chunks.length,
+    );
+    final results = await Future.wait(wave.map(processChunk));
+    for (final r in results) {
+      labels.addAll(r.labels);
+      labeledIds.addAll(r.labeledIds);
+      failedIds.addAll(r.failedIds);
+      failuresById.addAll(r.failuresById);
+    }
+    done += wave.fold<int>(0, (n, c) => n + c.length);
+    onProgress?.call(done.clamp(0, ids.length), ids.length);
   }
 
   return BulkLabelBatchResult(

@@ -249,4 +249,239 @@ void main() {
     expect(find.text('Units'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets(
+      'phone compact sheet scrolls under keyboard without clipping top',
+      (tester) async {
+    const phone = Size(390, 844);
+    await tester.binding.setSurfaceSize(phone);
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(
+      MediaQuery(
+        data: const MediaQueryData(
+          size: phone,
+          viewInsets: EdgeInsets.only(bottom: 300),
+        ),
+        child: MaterialApp(
+          home: Builder(
+            builder: (context) {
+              return Scaffold(
+                body: ListView(
+                  children: List.generate(
+                    40,
+                    (i) => ListTile(title: Text('Stock row $i')),
+                  ),
+                ),
+                floatingActionButton: FilledButton(
+                  onPressed: () {
+                    showHexaBottomSheet<void>(
+                      context: context,
+                      compact: true,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          const Text('Physical stock'),
+                          const SizedBox(height: 8),
+                          const TextField(
+                            decoration: InputDecoration(
+                              labelText: 'Qty',
+                              border: OutlineInputBorder(),
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          const Text('Variance: 0 KG'),
+                          const SizedBox(height: 12),
+                          const Text('Reason'),
+                          const SizedBox(height: 8),
+                          Wrap(
+                            spacing: 8,
+                            children: const [
+                              Chip(label: Text('Physical count')),
+                              Chip(label: Text('Sale')),
+                              Chip(label: Text('Damage')),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          const Text('Notes (optional)'),
+                          const SizedBox(height: 8),
+                          const TextField(
+                            key: Key('notes_field'),
+                            decoration: InputDecoration(
+                              border: OutlineInputBorder(),
+                            ),
+                            maxLines: 3,
+                          ),
+                          const SizedBox(height: 16),
+                          FilledButton(
+                            onPressed: () {},
+                            child: const Text('SAVE SYSTEM STOCK'),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                  child: const Text('Open stock'),
+                ),
+              );
+            },
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Open stock'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(HexaResponsiveSheetViewport), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byType(HexaResponsiveSheetViewport),
+        matching: find.byWidgetPredicate(
+          (w) => w is ListView && (w as ListView).shrinkWrap,
+        ),
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('Physical stock'), findsOneWidget);
+    expect(find.text('SAVE SYSTEM STOCK'), findsOneWidget);
+
+    final topLabel = tester.getRect(find.text('Physical stock'));
+    expect(topLabel.top, greaterThanOrEqualTo(0));
+
+    await tester.ensureVisible(find.byKey(const Key('notes_field')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('notes_field')), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+      'phone compact short sheet hugs content (not adaptive max height blank)',
+      (tester) async {
+    const phone = Size(390, 844);
+    await tester.binding.setSurfaceSize(phone);
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(
+      MediaQuery(
+        data: const MediaQueryData(size: phone),
+        child: MaterialApp(
+          home: Builder(
+            builder: (context) {
+              return Scaffold(
+                body: Center(
+                  child: FilledButton(
+                    onPressed: () {
+                      showHexaBottomSheet<void>(
+                        context: context,
+                        compact: true,
+                        child: const Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text('Short action'),
+                            SizedBox(height: 12),
+                            Text('One line only'),
+                          ],
+                        ),
+                      );
+                    },
+                    child: const Text('Open short'),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Open short'));
+    await tester.pumpAndSettle();
+
+    final viewport = find.byType(HexaResponsiveSheetViewport);
+    expect(viewport, findsOneWidget);
+    final hostH = tester.getSize(viewport).height;
+    final adaptive = HexaResponsive.adaptiveSheetMaxHeight(
+      tester.element(viewport),
+    );
+    // Must hug content — not expand to ~86% screen white blank.
+    expect(hostH, lessThan(adaptive * 0.45));
+    expect(hostH, lessThan(280));
+    expect(find.text('Short action'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+      'phone compact:false host has no outer SCSV so Expanded list works under keyboard',
+      (tester) async {
+    const phone = Size(390, 844);
+    await tester.binding.setSurfaceSize(phone);
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(
+      MediaQuery(
+        data: const MediaQueryData(
+          size: phone,
+          viewInsets: EdgeInsets.only(bottom: 280),
+        ),
+        child: MaterialApp(
+          home: Builder(
+            builder: (context) {
+              return Scaffold(
+                body: Center(
+                  child: FilledButton(
+                    onPressed: () {
+                      showHexaBottomSheet<void>(
+                        context: context,
+                        compact: false,
+                        padding: EdgeInsets.zero,
+                        child: Column(
+                          children: [
+                            const Text('Pick item'),
+                            const TextField(
+                              decoration: InputDecoration(
+                                hintText: 'Type to search…',
+                                border: OutlineInputBorder(),
+                              ),
+                            ),
+                            Expanded(
+                              child: ListView(
+                                children: const [
+                                  ListTile(title: Text('Alpha')),
+                                  ListTile(title: Text('Beta')),
+                                  ListTile(title: Text('Gamma')),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                    child: const Text('Open picker'),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Open picker'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(HexaResponsiveSheetViewport), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byType(HexaResponsiveSheetViewport),
+        matching: find.byType(SingleChildScrollView),
+      ),
+      findsNothing,
+    );
+    expect(find.text('Pick item'), findsOneWidget);
+    expect(find.text('Alpha'), findsOneWidget);
+    expect(find.text('Beta'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
 }

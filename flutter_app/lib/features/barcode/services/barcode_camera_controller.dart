@@ -224,6 +224,26 @@ class BarcodeCameraController extends ChangeNotifier {
         return;
       }
 
+      // Native: reuse retained controller when still healthy.
+      if (BarcodeCameraSession.mobile != null &&
+          defaultTargetPlatform != TargetPlatform.iOS) {
+        mobile = BarcodeCameraSession.mobile;
+        try {
+          if (!mobile!.value.isRunning) {
+            await mobile!.start();
+          }
+          cameraDenied = false;
+          cameraPermanent = false;
+          cameraDeniedMessage = null;
+          _scheduleUnreadableNudge();
+          _notify();
+          return;
+        } catch (_) {
+          await BarcodeCameraSession.reset();
+          mobile = null;
+        }
+      }
+
       final status = await Permission.camera.status;
       if (status.isPermanentlyDenied) {
         cameraDenied = true;
@@ -306,17 +326,11 @@ class BarcodeCameraController extends ChangeNotifier {
     _disposed = true;
     _safariNoDetectTimer?.cancel();
     _unreadableNudgeTimer?.cancel();
-    if (BarcodeCameraSession.mobile == mobile) {
-      BarcodeCameraSession.mobile = null;
-    }
-    if (kIsWeb) {
-      webLiveScanner = null;
-      mobile = null;
-    } else {
-      unawaited(_stopWebLiveScanner());
-      unawaited(mobile?.stop());
-      mobile = null;
-    }
+    // Detach local handles only — keep BarcodeCameraSession retain bag so
+    // reopen reuses the stream (web no re-prompt; native no orphan after N visits).
+    // Full teardown is BarcodeCameraSession.reset() on logout / denied / retry.
+    webLiveScanner = null;
+    mobile = null;
     super.dispose();
   }
 

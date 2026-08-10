@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -80,7 +82,12 @@ final itemTodaySnapshotProvider = FutureProvider.autoDispose
 
 final operationalReportsProvider =
     FutureProvider.autoDispose<Map<String, dynamic>>((ref) async {
+  final link = ref.keepAlive();
+  final t = Timer(const Duration(minutes: 3), link.close);
+  ref.onDispose(t.cancel);
   if (!_checklistSessionActive(ref)) return {};
+  // IndexedStack mounts Reports off-screen — only fetch when Reports is visible.
+  if (!shellBranchIsVisible(ref, ShellBranch.reports)) return {};
   final session = ref.read(sessionProvider);
   if (session == null) return {};
   return ref

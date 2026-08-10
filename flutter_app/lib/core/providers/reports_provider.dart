@@ -126,7 +126,9 @@ Future<({List<TradePurchase> items, List<Map<String, dynamic>> raw})?>
   final fromD = DateTime(range.from.year, range.from.month, range.from.day);
   final toD = DateTime(range.to.year, range.to.month, range.to.day);
   final aggregated = <Map<String, dynamic>>[];
-  for (var offset = 0; offset < 50000; offset += 50) {
+  // Hard cap — never scan ≤50k rows when date-filtered fetch was empty.
+  const maxFallbackRows = 2000;
+  for (var offset = 0; offset < maxFallbackRows; offset += 50) {
     final page = await fetchTradePurchasesPageDeduped(
       api: api,
       businessId: bid,
@@ -220,7 +222,9 @@ Future<List<TradePurchase>> _loadReportsPurchases(Ref ref) async {
           }
         }
         final aggregated = <Map<String, dynamic>>[];
-        for (var offset = 0;; offset += 50) {
+        // Cap live pagination so Reports cannot hang on huge histories.
+        const maxLiveRows = 5000;
+        for (var offset = 0; offset < maxLiveRows; offset += 50) {
           // [Bug 5 fix] Hard timeout on each page so a cold/unreachable Render
           // host can never hang the Reports page forever — we just fall back to
           // cached data + a Retry banner.

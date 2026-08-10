@@ -199,6 +199,11 @@ Never invent endpoints, fields, screens, permissions, or financial numbers.
 **Why:** Double viewport produced blank/collapse on Flutter web.
 **Check:** Prefer `Column(mainAxisSize: min)` or explicit `SizedBox(height:)`.
 
+### Hexa sheet host owns keyboard inset; compact modes differ
+**Rule:** Bodies under `showHexaBottomSheet` must not add `MediaQuery.viewInsets` padding — `HexaResponsiveSheetViewport` already lifts once. Phone `compact: true` = maxHeight + **shrinkWrap** `ListView` (hugs short forms; scrolls when tall); `compact: false` = fixed height, **no** outer scroll (body owns `ListView`/`Expanded`). Never use a non-shrinkWrap `SingleChildScrollView` under compact maxHeight — it expands to a blank full-height sheet.
+**Why:** Double insets over-lift forms; outer expanding SCSV caused stock-update blank white sheets; outer SCSV around fixed-height filter/picker sheets causes nested-scroll bounce.
+**Check:** `sheet_compact_height_test.dart` (hug-height + keyboard + compact:false); grep sheet bodies for `viewInsetsOf` under Hexa host.
+
 ### Purchase history empty off History branch is intentional
 **Rule:** Do not “fix” empty `tradePurchasesListProvider` when shell branch is not History (unless fullscreen search).
 **Why:** IndexedStack keeps tabs alive; empty list ≠ empty KPI.

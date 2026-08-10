@@ -147,9 +147,9 @@ class _QuickCatalogUnitSetupSheetState
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final bottom = MediaQuery.viewInsetsOf(context).bottom;
+    // Keyboard inset is applied once by HexaResponsiveSheetViewport.
     return Padding(
-      padding: EdgeInsets.fromLTRB(20, 8, 20, 16 + bottom),
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,

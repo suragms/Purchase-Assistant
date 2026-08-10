@@ -393,6 +393,8 @@ class BarcodePdfService {
     };
     try {
       if (kIsWeb) {
+        // Yield once so the UI can paint progress before the sync PDF build.
+        await Future<void>.delayed(Duration.zero);
         return await _barcodeA4DenseFromPayload(payload);
       }
       return await compute(_barcodeA4DenseFromPayload, payload);

@@ -18,7 +18,8 @@ abstract final class BarcodeCameraSession {
   }
 
   static void retainMobile(MobileScannerController controller) {
-    if (!kIsWeb) return;
+    // Retain on all platforms so leave/reopen reuses the same controller
+    // (native stop-without-dispose was orphaning the camera after ~2 visits).
     mobile = controller;
   }
 
@@ -33,7 +34,15 @@ abstract final class BarcodeCameraSession {
     await webDetector?.stop();
     webDetector = null;
     useWebDetectorPreview = false;
-    await mobile?.dispose();
+    final cam = mobile;
     mobile = null;
+    if (cam != null) {
+      try {
+        await cam.stop();
+      } catch (_) {}
+      try {
+        await cam.dispose();
+      } catch (_) {}
+    }
   }
 }

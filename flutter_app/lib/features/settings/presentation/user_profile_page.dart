@@ -208,11 +208,12 @@ class _UserProfilePageState extends ConsumerState<UserProfilePage>
             }
           }
 
+          // Keyboard inset is applied once by HexaResponsiveSheetViewport.
           return Padding(
-            padding: EdgeInsets.only(
+            padding: const EdgeInsets.only(
               left: 16,
               right: 16,
-              bottom: MediaQuery.viewInsetsOf(ctx).bottom + 16,
+              bottom: 16,
               top: 8,
             ),
             child: Column(

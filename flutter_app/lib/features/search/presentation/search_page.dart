@@ -591,7 +591,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                 ActionChip(
                   avatar: const Icon(Icons.qr_code_2_rounded, size: 18),
                   label: const Text('Missing barcode'),
-                  onPressed: () => context.push('/barcode/print'),
+                  onPressed: () => context.push('/stock/missing-barcodes'),
                 ),
                 ActionChip(
                   avatar: const Icon(Icons.edit_note_rounded, size: 18),

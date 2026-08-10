@@ -8,6 +8,8 @@ import '../../../core/design_system/hexa_operational_tokens.dart';
 import '../../../core/providers/stock_providers.dart';
 import '../../../core/theme/hexa_colors.dart';
 import '../../../shared/widgets/hexa_empty_state.dart';
+import '../services/barcode_pdf_service.dart';
+
 class BulkBarcodePrintPreviewPanel extends ConsumerWidget {
   const BulkBarcodePrintPreviewPanel({
     super.key,
@@ -42,6 +44,9 @@ class BulkBarcodePrintPreviewPanel extends ConsumerWidget {
         ? item!['barcode'].toString()
         : item?['item_code']?.toString() ?? '—';
     final name = item?['name']?.toString() ?? 'Select an item';
+    final previewPayload = code == '—'
+        ? ''
+        : BarcodePdfService.sanitizePrintPayload(code, forQr: useQr);
 
     return Material(
       color: HexaColors.scaffoldWarm,
@@ -69,17 +74,19 @@ class BulkBarcodePrintPreviewPanel extends ConsumerWidget {
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    if (previewId != null && code != '—') ...[
+                    if (previewId != null &&
+                        code != '—' &&
+                        previewPayload.isNotEmpty) ...[
                       if (useQr)
                         QrImageView(
-                          data: code,
+                          data: previewPayload,
                           size: 120,
                           backgroundColor: Colors.white,
                         )
                       else
                         SvgPicture.string(
                           Barcode.code128().toSvg(
-                            code,
+                            previewPayload,
                             width: 200,
                             height: 56,
                           ),
@@ -94,8 +101,15 @@ class BulkBarcodePrintPreviewPanel extends ConsumerWidget {
                         ),
                       ),
                       Text(
-                        code,
+                        previewPayload,
                         style: const TextStyle(fontSize: 13, color: Colors.black54),
+                      ),
+                    ] else if (previewId != null && code != '—') ...[
+                      const HexaEmptyState(
+                        icon: Icons.qr_code_2_outlined,
+                        title: 'Cannot preview this code',
+                        subtitle:
+                            'Characters are not valid for this barcode type. Print still uses a sanitized payload.',
                       ),
                     ] else
                       const BulkBarcodePrintPreviewEmpty(),

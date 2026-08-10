@@ -220,7 +220,7 @@ class _OperationalFilterBodyState
     final suppliersAsync = ref.watch(suppliersListProvider);
     final typesAsync = ref.watch(categoryTypesIndexProvider);
 
-    final bottomInset = MediaQuery.viewInsetsOf(context).bottom;
+    // Keyboard inset is applied once by HexaResponsiveSheetViewport.
     return GestureDetector(
       behavior: HitTestBehavior.translucent,
       onTap: () => FocusScope.of(context).unfocus(),
@@ -250,7 +250,7 @@ class _OperationalFilterBodyState
                 HexaOp.pageGutter,
                 8,
                 HexaOp.pageGutter,
-                12 + bottomInset + widget.bottomNavInset,
+                12 + widget.bottomNavInset,
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,

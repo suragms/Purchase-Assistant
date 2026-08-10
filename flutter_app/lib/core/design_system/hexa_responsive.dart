@@ -353,26 +353,25 @@ class HexaResponsiveSheetViewport extends StatelessWidget {
           bottomExtra + bottomSafe,
         );
 
-    final padded = Padding(padding: effectivePadding, child: child);
-
-    if (compact) {
-      return AnimatedPadding(
-        duration: HexaDsMotion.fast,
-        curve: HexaDsMotion.enter,
-        padding: EdgeInsets.only(bottom: bottomInset),
-        child: SafeArea(
-          top: false,
-          child: Align(
-            alignment: Alignment.bottomCenter,
-            heightFactor: 1,
-            child: ConstrainedBox(
-              constraints: BoxConstraints(maxWidth: maxWidth),
-              child: padded,
-            ),
-          ),
-        ),
-      );
+    // Host owns keyboard lift once. Bodies must not add viewInsets padding.
+    // compact: shrinkWrap ListView under maxHeight — hugs short forms; scrolls when tall
+    // (mirrors desktop compact). Non-shrinkWrap SCSV expands to maxHeight = blank sheet.
+    // !compact: fixed height, no outer scroll — body owns ListView/Expanded.
+    final pad = padding;
+    final Widget body;
+    if (pad == null) {
+      body = Padding(padding: effectivePadding, child: child);
+    } else if (pad == EdgeInsets.zero) {
+      body = child;
+    } else {
+      body = Padding(padding: pad, child: child);
     }
+
+    final size = MediaQuery.sizeOf(context);
+    final compactMaxH = math.max(
+      280.0,
+      HexaResponsive.adaptiveSheetMaxHeight(context) - bottomInset,
+    );
 
     return AnimatedPadding(
       duration: HexaDsMotion.fast,
@@ -382,19 +381,30 @@ class HexaResponsiveSheetViewport extends StatelessWidget {
         top: false,
         child: Align(
           alignment: Alignment.bottomCenter,
+          // Always hug child height so sheets do not paint a full-screen blank.
           heightFactor: 1,
-          child: ConstrainedBox(
-            constraints: BoxConstraints(
-              maxWidth: maxWidth,
-              maxHeight: HexaResponsive.adaptiveSheetMaxHeight(context),
-            ),
-            child: SingleChildScrollView(
-              controller: scrollController,
-              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-              padding: effectivePadding,
-              child: child,
-            ),
-          ),
+          child: compact
+              ? ConstrainedBox(
+                  constraints: BoxConstraints(
+                    maxWidth: maxWidth,
+                    maxHeight: compactMaxH.clamp(280.0, size.height),
+                  ),
+                  child: ListView(
+                    shrinkWrap: true,
+                    controller: scrollController,
+                    keyboardDismissBehavior:
+                        ScrollViewKeyboardDismissBehavior.onDrag,
+                    padding: effectivePadding,
+                    children: [child],
+                  ),
+                )
+              : SizedBox(
+                  height: HexaResponsive.adaptiveSheetMaxHeight(context),
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(maxWidth: maxWidth),
+                    child: body,
+                  ),
+                ),
         ),
       ),
     );

@@ -281,10 +281,10 @@ class _SearchPickerBodyState<T> extends State<_SearchPickerBody<T>> {
     final sheetH =
         math.min(maxByFraction, naturalSheetH).clamp(200.0, mq.size.height * 0.55);
 
+    // Keyboard inset is applied once by HexaResponsiveSheetViewport.
     return SafeArea(
-      child: AnimatedPadding(
-        duration: const Duration(milliseconds: 180),
-        padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom + 8),
+      child: Padding(
+        padding: const EdgeInsets.only(bottom: 8),
         child: SizedBox(
           height: sheetH,
           child: Column(
