@@ -33,8 +33,8 @@ class LoginPage extends ConsumerStatefulWidget {
 
 class _LoginPageState extends ConsumerState<LoginPage>
     with TickerProviderStateMixin {
-  final _loginEmail = TextEditingController();
-  final _loginPass = TextEditingController();
+  final _loginEmail = TextEditingController(text: 'anandu@gmail.com');
+  final _loginPass = TextEditingController(text: '123456789');
   final _emailFocus = FocusNode();
   final _passFocus = FocusNode();
 
