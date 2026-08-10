@@ -417,26 +417,44 @@ void applyStockListRowPatchAndEmit(
 }
 
 /// Background/realtime/home poll: refresh stock + alerts only (no KPI storm).
-void invalidateWarehouseSurfacesLight(dynamic ref, {String? itemId, bool skipLowStockOps = false}) {
+///
+/// [forRealtimePoll]: narrower fan-out — invalidate shell bundle (page-1 owner)
+/// and counts/alerts, but skip [stockListProvider] and low-stock ops pages so
+/// 25s realtime ticks do not double-fetch list + ops.
+void invalidateWarehouseSurfacesLight(
+  dynamic ref, {
+  String? itemId,
+  bool skipLowStockOps = false,
+  bool forRealtimePoll = false,
+}) {
   markWarehouseGlobalInvalidated(ref);
   // Keep [stockListCacheProvider] entries alive so Stock tab does not flash
   // empty on every write/realtime tick — list re-reads cache when query matches.
   ref.invalidate(stockShellBundleProvider);
-  ref.invalidate(stockListProvider);
+  if (!forRealtimePoll) {
+    ref.invalidate(stockListProvider);
+  }
   ref.invalidate(stockDeliveryIndicatorCountsProvider);
-  ref.invalidate(bulkStockListProvider);
-  ref.invalidate(stockTotalsProvider);
-  ref.invalidate(stockOnHandTotalsProvider);
+  if (!forRealtimePoll) {
+    ref.invalidate(bulkStockListProvider);
+    ref.invalidate(stockTotalsProvider);
+    ref.invalidate(stockOnHandTotalsProvider);
+  }
   ref.invalidate(staffLowStockAlertsProvider);
-  ref.invalidate(lowStockByCategoryProvider);
+  if (!forRealtimePoll) {
+    ref.invalidate(lowStockByCategoryProvider);
+  }
   ref.invalidate(stockStatusCountsProvider);
   ref.invalidate(warehouseAlertsProvider);
   ref.invalidate(stockAlertCountsProvider);
   ref.invalidate(stockLowTopHomeProvider);
-  ref.invalidate(stockVariancesTodayProvider);
+  if (!forRealtimePoll) {
+    ref.invalidate(stockVariancesTodayProvider);
+  }
   _invalidateStockAuditFeeds(ref);
   ref.invalidate(homeInventorySummaryProvider);
-  if (!skipLowStockOps) {
+  final skipOps = skipLowStockOps || forRealtimePoll;
+  if (!skipOps) {
     ref.invalidate(lowStockOperationsSummaryProvider);
     ref.invalidate(lowStockOperationsPageProvider);
     ref.invalidate(lowStockOperationsGroupedProvider);

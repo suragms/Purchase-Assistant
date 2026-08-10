@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/errors/user_facing_errors.dart';
-import '../../../core/widgets/friendly_load_error.dart';
+import '../../../shared/widgets/hexa_empty_state.dart';
 import 'user_activity_timeline.dart';
 import 'user_profile_providers.dart';
 
@@ -26,12 +26,13 @@ class UserActivityTab extends ConsumerWidget {
       children: [
         Material(
           color: Theme.of(context).colorScheme.surface,
-          child: SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
+          child: Padding(
             padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
-            child: Row(
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 8,
               children: [
-                for (final s in UserActivitySection.values) ...[
+                for (final s in UserActivitySection.values)
                   _SectionChip(
                     label: _sectionLabel(s),
                     selected: section == s,
@@ -39,8 +40,6 @@ class UserActivityTab extends ConsumerWidget {
                         .read(userActivitySectionProvider.notifier)
                         .state = s,
                   ),
-                  const SizedBox(width: 8),
-                ],
               ],
             ),
           ),
@@ -98,12 +97,14 @@ class _FeedSection extends ConsumerWidget {
     final async = ref.watch(userActivityFeedProvider(userId));
     return async.when(
       loading: () => const Center(child: CircularProgressIndicator()),
-      error: (e, _) => FriendlyLoadError(
+      error: (e, _) => UserActivitySectionLoadError(
+        title: userFacingError(e),
         onRetry: () => ref.invalidate(userActivityFeedProvider(userId)),
-        message: userFacingError(e),
-        subtitle: null,
       ),
-      data: (rows) => UserActivityTimeline(rows: rows),
+      data: (rows) => UserActivityTimeline(
+        rows: rows,
+        onRefresh: () => ref.invalidate(userActivityFeedProvider(userId)),
+      ),
     );
   }
 }
@@ -117,13 +118,10 @@ class _StockSection extends ConsumerWidget {
     final async = ref.watch(userStockHistoryProvider(userId));
     return async.when(
       loading: () => const Center(child: CircularProgressIndicator()),
-      error: (e, _) => FriendlyLoadError(
+      error: (e, _) => UserActivitySectionLoadError(
         onRetry: () => ref.invalidate(userStockHistoryProvider(userId)),
       ),
       data: (rows) {
-        if (rows.isEmpty) {
-          return const Center(child: Text('No stock activity yet.'));
-        }
         final mapped = rows.map((r) {
           return {
             'created_at': r['created_at']?.toString(),
@@ -134,7 +132,9 @@ class _StockSection extends ConsumerWidget {
         }).toList();
         return UserActivityTimeline(
           rows: mapped,
-          emptyMessage: 'No stock activity yet.',
+          emptyTitle: 'No stock activity yet',
+          emptySubtitle: 'Stock changes by this user will show here.',
+          onRefresh: () => ref.invalidate(userStockHistoryProvider(userId)),
         );
       },
     );
@@ -150,13 +150,10 @@ class _PurchasesSection extends ConsumerWidget {
     final async = ref.watch(userPurchasesProvider(userId));
     return async.when(
       loading: () => const Center(child: CircularProgressIndicator()),
-      error: (e, _) => FriendlyLoadError(
+      error: (e, _) => UserActivitySectionLoadError(
         onRetry: () => ref.invalidate(userPurchasesProvider(userId)),
       ),
       data: (rows) {
-        if (rows.isEmpty) {
-          return const Center(child: Text('No purchase activity yet.'));
-        }
         final mapped = rows.map((p) {
           return {
             'created_at': p['purchase_date']?.toString() ??
@@ -166,7 +163,12 @@ class _PurchasesSection extends ConsumerWidget {
                 '${p['human_id'] ?? p['id']} · ${p['status'] ?? ''}',
           };
         }).toList();
-        return UserActivityTimeline(rows: mapped);
+        return UserActivityTimeline(
+          rows: mapped,
+          emptyTitle: 'No purchase activity yet',
+          emptySubtitle: 'Purchases created by this user will show here.',
+          onRefresh: () => ref.invalidate(userPurchasesProvider(userId)),
+        );
       },
     );
   }
@@ -181,13 +183,10 @@ class _ItemsSection extends ConsumerWidget {
     final async = ref.watch(userCreatedItemsProvider(userId));
     return async.when(
       loading: () => const Center(child: CircularProgressIndicator()),
-      error: (e, _) => FriendlyLoadError(
+      error: (e, _) => UserActivitySectionLoadError(
         onRetry: () => ref.invalidate(userCreatedItemsProvider(userId)),
       ),
       data: (rows) {
-        if (rows.isEmpty) {
-          return const Center(child: Text('No items created yet.'));
-        }
         final mapped = rows.map((it) {
           return {
             'created_at': it['created_at']?.toString(),
@@ -195,7 +194,12 @@ class _ItemsSection extends ConsumerWidget {
             'item_name': it['name']?.toString(),
           };
         }).toList();
-        return UserActivityTimeline(rows: mapped);
+        return UserActivityTimeline(
+          rows: mapped,
+          emptyTitle: 'No items created yet',
+          emptySubtitle: 'Catalog items created by this user will show here.',
+          onRefresh: () => ref.invalidate(userCreatedItemsProvider(userId)),
+        );
       },
     );
   }
@@ -210,7 +214,7 @@ class _LedgerSection extends ConsumerWidget {
     final async = ref.watch(userLedgerGroupedProvider(userId));
     return async.when(
       loading: () => const Center(child: CircularProgressIndicator()),
-      error: (e, _) => FriendlyLoadError(
+      error: (e, _) => UserActivitySectionLoadError(
         onRetry: () => ref.invalidate(userLedgerGroupedProvider(userId)),
       ),
       data: (grouped) {
@@ -230,9 +234,35 @@ class _LedgerSection extends ConsumerWidget {
         }
         return UserActivityTimeline(
           rows: all,
-          emptyMessage: 'No ledger activity yet.',
+          emptyTitle: 'No ledger activity yet',
+          emptySubtitle: 'Ledger entries linked to this user will show here.',
+          onRefresh: () => ref.invalidate(userLedgerGroupedProvider(userId)),
         );
       },
+    );
+  }
+}
+
+/// User profile activity subsection load failure.
+@visibleForTesting
+class UserActivitySectionLoadError extends StatelessWidget {
+  const UserActivitySectionLoadError({
+    super.key,
+    required this.onRetry,
+    this.title = 'Unable to load data',
+  });
+
+  final VoidCallback onRetry;
+  final String title;
+
+  @override
+  Widget build(BuildContext context) {
+    return HexaEmptyState(
+      icon: Icons.history_outlined,
+      title: title,
+      subtitle: 'Check your connection, then retry.',
+      primaryActionLabel: 'Retry',
+      onPrimaryAction: onRetry,
     );
   }
 }

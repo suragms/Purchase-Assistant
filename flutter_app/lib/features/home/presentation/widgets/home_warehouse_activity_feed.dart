@@ -4,11 +4,11 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../core/providers/home_dashboard_provider.dart';
 import '../../../../core/providers/home_owner_dashboard_providers.dart';
+import '../../../../core/theme/hexa_colors.dart';
+import '../../../../shared/widgets/hexa_empty_state.dart';
 import '../../../../shared/widgets/operational_ui.dart';
 import 'home_recent_changes_section.dart' show HomeSectionSkeleton;
 import 'home_warehouse_activity_row.dart';
-
-import '../../../../core/theme/hexa_colors.dart';
 /// Unified warehouse activity — collapsible on home (max 15 rows).
 class HomeWarehouseActivityFeed extends ConsumerStatefulWidget {
   const HomeWarehouseActivityFeed({
@@ -51,17 +51,8 @@ class _HomeWarehouseActivityFeedState
       error: (_, __) => OperationalSection(
         title: title,
         dense: true,
-        child: ListTile(
-          dense: true,
-          leading: const Icon(Icons.warning_amber_rounded, size: 16),
-          title: const Text(
-            'Activity unavailable',
-            style: TextStyle(fontSize: 13),
-          ),
-          trailing: TextButton(
-            onPressed: () => ref.invalidate(homeRecentActivityFeedProvider),
-            child: const Text('Retry'),
-          ),
+        child: HomeWarehouseActivityError(
+          onRetry: () => ref.invalidate(homeRecentActivityFeedProvider),
         ),
       ),
       data: (items) {
@@ -87,36 +78,7 @@ class _HomeWarehouseActivityFeedState
                     ),
                   ),
                   const SizedBox(height: 24),
-                  Center(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          Icons.history_rounded,
-                          size: 40,
-                          color: HexaColors.cost.withValues(alpha: 0.5),
-                        ),
-                        const SizedBox(height: 12),
-                        const Text(
-                          'No activity in this period',
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                            color: HexaColors.textBody,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        const Text(
-                          'Stock updates and purchases will appear here.',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: HexaColors.cost,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+                  const HomeWarehouseActivityEmpty(),
                   const SizedBox(height: 12),
                 ],
               ),
@@ -215,6 +177,40 @@ class _HomeWarehouseActivityFeedState
           ),
         );
       },
+    );
+  }
+}
+
+/// Home feed empty when the selected period has no warehouse activity.
+@visibleForTesting
+class HomeWarehouseActivityEmpty extends StatelessWidget {
+  const HomeWarehouseActivityEmpty({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return const HexaEmptyState(
+      icon: Icons.history_rounded,
+      title: 'No activity in this period',
+      subtitle: 'Stock updates and purchases will appear here.',
+    );
+  }
+}
+
+/// Home feed load failure (UX-114).
+@visibleForTesting
+class HomeWarehouseActivityError extends StatelessWidget {
+  const HomeWarehouseActivityError({super.key, required this.onRetry});
+
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return HexaEmptyState(
+      icon: Icons.cloud_off_outlined,
+      title: 'Activity unavailable',
+      subtitle: 'Check your connection, then retry.',
+      primaryActionLabel: 'Retry',
+      onPrimaryAction: onRetry,
     );
   }
 }

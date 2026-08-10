@@ -11,11 +11,11 @@ final suppliersListProvider =
   final link = ref.keepAlive();
   final timer = Timer(const Duration(minutes: 3), link.close);
   ref.onDispose(timer.cancel);
-  final session = ref.watch(sessionProvider);
-  if (session == null) return [];
+  final bid = ref.watch(sessionProvider.select((s) => s?.primaryBusiness.id));
+  if (bid == null || bid.isEmpty) return [];
   final api = ref.read(hexaApiProvider);
   return fetchContactsListWithApiGuard(
     ref,
-    () => api.listSuppliers(businessId: session.primaryBusiness.id),
+    () => api.listSuppliers(businessId: bid),
   );
 });

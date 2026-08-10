@@ -30,7 +30,6 @@ import '../../../core/router/post_auth_route.dart';
 import '../../../core/router/shell_navigation.dart';
 import '../../../features/shell/shell_branch_provider.dart';
 import '../../../features/staff/staff_shell_branch_provider.dart';
-import '../../../core/widgets/friendly_load_error.dart';
 import '../../../core/widgets/list_skeleton.dart';
 import '../../../shared/widgets/hexa_empty_state.dart';
 import '../stock_list_merge.dart';
@@ -1076,8 +1075,8 @@ class _StockPageState extends ConsumerState<StockPage>
     Widget body;
     if (authBlocked) {
       final stillSignedIn = sessionForAuth != null;
-      body = FriendlyLoadError(
-        message: apiLikelyDown && stillSignedIn
+      body = StockPageLoadError(
+        title: apiLikelyDown && stillSignedIn
             ? 'Cloud API unavailable'
             : 'Sign in to load stock',
         subtitle: apiLikelyDown && stillSignedIn
@@ -1099,8 +1098,8 @@ class _StockPageState extends ConsumerState<StockPage>
         _scheduleTransientStockListRetry();
         body = const ListSkeleton(rowCount: 12, rowHeight: 72);
       } else if (transient) {
-        body = FriendlyLoadError(
-          message: 'Stock list is still loading',
+        body = StockPageLoadError(
+          title: 'Stock list is still loading',
           subtitle:
               'Session refresh took too long. Tap Retry or sign in again if this persists.',
           onRetry: () {
@@ -1119,8 +1118,8 @@ class _StockPageState extends ConsumerState<StockPage>
           : null;
       final isAuth = isStockListAuthFailure(err) ||
           (err is DioException && err.response?.statusCode == 401);
-      body = FriendlyLoadError(
-        message: isAuth ? 'Sign in to load stock' : 'Unable to load stock',
+      body = StockPageLoadError(
+        title: isAuth ? 'Sign in to load stock' : 'Unable to load stock',
         subtitle: isAuth
             ? 'Warehouse list needs a valid session. Sign in and try again.'
             : blocked == 'tab_not_visible'
@@ -1129,7 +1128,7 @@ class _StockPageState extends ConsumerState<StockPage>
                     ? 'Session is refreshing. Wait a moment, then tap Retry.'
                     : blocked == 'etag_stale'
                         ? 'Cached stock list was stale. Tap Retry to reload.'
-                        : null,
+                        : 'Check your connection, then retry.',
         onRetry: () {
           if (isAuth) {
             ref.read(authApiGateProvider.notifier).reset();
@@ -1152,8 +1151,8 @@ class _StockPageState extends ConsumerState<StockPage>
         selectedItemId: selectedItemId,
       );
     } else if (listAsync.hasError) {
-      body = FriendlyLoadError(
-        message: 'Unable to load stock',
+      body = StockPageLoadError(
+        title: 'Unable to load stock',
         onRetry: () {
           clearStockListEtagCache(ref);
           _resetMerged();
@@ -1298,4 +1297,30 @@ class _StockWarehouseTableHeaderDelegate extends SliverPersistentHeaderDelegate 
 
   @override
   bool shouldRebuild(covariant _StockWarehouseTableHeaderDelegate old) => false;
+}
+
+/// Stock tab list / auth load failure (UX-152).
+@visibleForTesting
+class StockPageLoadError extends StatelessWidget {
+  const StockPageLoadError({
+    super.key,
+    required this.title,
+    required this.onRetry,
+    this.subtitle = 'Check your connection, then retry.',
+  });
+
+  final String title;
+  final String subtitle;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return HexaEmptyState(
+      icon: Icons.inventory_2_outlined,
+      title: title,
+      subtitle: subtitle,
+      primaryActionLabel: 'Retry',
+      onPrimaryAction: onRetry,
+    );
+  }
 }

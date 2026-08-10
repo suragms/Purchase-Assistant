@@ -11,8 +11,8 @@ import '../../../core/providers/trade_purchases_provider.dart'
     show staffTradePurchasesForAlertsProvider;
 import '../../../core/theme/hexa_colors.dart';
 import '../../../core/utils/unit_utils.dart';
-import '../../../core/widgets/friendly_load_error.dart';
 import '../../../core/widgets/list_skeleton.dart';
+import '../../../shared/widgets/hexa_empty_state.dart';
 
 class StaffPendingDeliveriesPage extends ConsumerWidget {
   const StaffPendingDeliveriesPage({super.key});
@@ -65,46 +65,46 @@ class StaffPendingDeliveriesPage extends ConsumerWidget {
             return const ListSkeleton(rowCount: 6);
           }
           if (fetch.hasError && sections == null) {
-            return FriendlyLoadError(
-              message: 'Could not load pending deliveries',
+            return StaffPendingDeliveriesError(
               onRetry: () => invalidateStaffDeliverySurfaces(ref),
             );
           }
           final data = sections ?? const StaffDeliverySections();
+          if (data.total == 0) {
+            return HexaEmptyState(
+              icon: Icons.local_shipping_outlined,
+              title: 'No pending deliveries',
+              subtitle: 'When a purchase is dispatched, it shows up here to receive.',
+              primaryActionLabel: 'Scan barcode',
+              onPrimaryAction: () => context.push('/barcode/scan'),
+            );
+          }
           return ListView(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 88),
             children: [
-              _DeliverySection(
-                title: 'Dispatched',
-                count: data.dispatched.length,
-                emptyMessage: 'No dispatches in transit.',
-                purchases: data.dispatched,
-              ),
-              const SizedBox(height: 16),
-              _DeliverySection(
-                title: 'Arrived',
-                count: data.arrived.length,
-                emptyMessage: 'Nothing waiting at the warehouse.',
-                purchases: data.arrived,
-                highlight: true,
-              ),
-              const SizedBox(height: 16),
-              _DeliverySection(
-                title: 'Pending verification',
-                count: data.pendingVerification.length,
-                emptyMessage: 'No purchases awaiting owner commit.',
-                purchases: data.pendingVerification,
-              ),
-              if (data.total == 0) ...[
-                const SizedBox(height: 32),
-                Center(
-                  child: Text(
-                    'No pending deliveries right now.',
-                    textAlign: TextAlign.center,
-                    style: HexaDsType.body(15, color: HexaDsColors.textMuted),
-                  ),
+              if (data.dispatched.isNotEmpty) ...[
+                _DeliverySection(
+                  title: 'Dispatched',
+                  purchases: data.dispatched,
                 ),
+                if (data.arrived.isNotEmpty ||
+                    data.pendingVerification.isNotEmpty)
+                  const SizedBox(height: 16),
               ],
+              if (data.arrived.isNotEmpty) ...[
+                _DeliverySection(
+                  title: 'Arrived',
+                  purchases: data.arrived,
+                  highlight: true,
+                ),
+                if (data.pendingVerification.isNotEmpty)
+                  const SizedBox(height: 16),
+              ],
+              if (data.pendingVerification.isNotEmpty)
+                _DeliverySection(
+                  title: 'Pending verification',
+                  purchases: data.pendingVerification,
+                ),
             ],
           );
         },
@@ -116,20 +116,17 @@ class StaffPendingDeliveriesPage extends ConsumerWidget {
 class _DeliverySection extends StatelessWidget {
   const _DeliverySection({
     required this.title,
-    required this.count,
-    required this.emptyMessage,
     required this.purchases,
     this.highlight = false,
   });
 
   final String title;
-  final int count;
-  final String emptyMessage;
   final List<TradePurchase> purchases;
   final bool highlight;
 
   @override
   Widget build(BuildContext context) {
+    final count = purchases.length;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -141,7 +138,7 @@ class _DeliverySection extends StatelessWidget {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: HexaDsType.heading(14).copyWith(
-                  color: highlight && count > 0
+                  color: highlight
                       ? HexaColors.accentOrange
                       : HexaColors.textOnLightSurface,
                 ),
@@ -150,39 +147,27 @@ class _DeliverySection extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 8),
-        if (purchases.isEmpty)
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(14),
-              child: Text(
-                emptyMessage,
-                style: HexaDsType.body(13, color: HexaDsColors.textMuted),
-              ),
-            ),
-          )
-        else
-          for (var i = 0; i < purchases.length; i++) ...[
-            if (i > 0) const SizedBox(height: 8),
-            _PendingDeliveryTile(
-              index: i + 1,
-              total: purchases.length,
-              purchase: purchases[i],
-            ),
-          ],
+        for (var i = 0; i < purchases.length; i++) ...[
+          if (i > 0) const SizedBox(height: 8),
+          StaffPendingDeliveryTile(
+            index: i + 1,
+            purchase: purchases[i],
+          ),
+        ],
       ],
     );
   }
 }
 
-class _PendingDeliveryTile extends StatelessWidget {
-  const _PendingDeliveryTile({
+/// Pending delivery list row — clear Receive affordance for staff mobile (UX-008).
+class StaffPendingDeliveryTile extends StatelessWidget {
+  const StaffPendingDeliveryTile({
+    super.key,
     required this.index,
-    required this.total,
     required this.purchase,
   });
 
   final int index;
-  final int total;
   final TradePurchase purchase;
 
   @override
@@ -191,6 +176,8 @@ class _PendingDeliveryTile extends StatelessWidget {
     final qty = StaffPendingDeliveriesPage._totalLineQty(p);
     final bagsLine = StaffPendingDeliveriesPage._bagsQtySummary(p);
     final days = DateTime.now().difference(p.purchaseDate).inDays;
+    final qtyLabel =
+        '${qty == qty.roundToDouble() ? qty.round() : qty.toStringAsFixed(1)} qty';
 
     return Material(
       color: Colors.white,
@@ -199,6 +186,9 @@ class _PendingDeliveryTile extends StatelessWidget {
         side: const BorderSide(color: HexaColors.brandBorder),
       ),
       child: ListTile(
+        isThreeLine: true,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+        minVerticalPadding: 10,
         leading: CircleAvatar(
           radius: 18,
           backgroundColor: HexaColors.brandPrimary.withValues(alpha: 0.1),
@@ -215,6 +205,8 @@ class _PendingDeliveryTile extends StatelessWidget {
           p.supplierName?.trim().isNotEmpty == true
               ? p.supplierName!
               : 'Supplier',
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
           style: const TextStyle(fontWeight: FontWeight.w800),
         ),
         subtitle: Column(
@@ -222,35 +214,65 @@ class _PendingDeliveryTile extends StatelessWidget {
           children: [
             Text(
               '${p.humanId} · ${DateFormat('d MMM').format(p.purchaseDate)}'
-              '${days > 0 ? ' · $days d pending' : ''}',
+              '${days > 0 ? ' · $days d pending' : ''}'
+              ' · $qtyLabel',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
             const SizedBox(height: 2),
             Text(
               bagsLine,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
               style: HexaDsType.label(11, color: HexaDsColors.textMuted),
             ),
           ],
         ),
-        trailing: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: [
-            Text(
-              '$index/$total',
-              style: const TextStyle(
-                fontWeight: FontWeight.w900,
-                fontSize: 11,
-                color: HexaColors.neutral,
-              ),
+        trailing: Semantics(
+          button: true,
+          label: 'Receive shipment',
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  'Receive',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w900,
+                    fontSize: 12,
+                    color: HexaColors.brandPrimary,
+                  ),
+                ),
+                Icon(
+                  Icons.chevron_right_rounded,
+                  color: HexaColors.brandPrimary,
+                ),
+              ],
             ),
-            Text(
-              '${qty == qty.roundToDouble() ? qty.round() : qty.toStringAsFixed(1)} qty',
-              style: const TextStyle(fontWeight: FontWeight.w800),
-            ),
-          ],
+          ),
         ),
         onTap: () => context.push('/staff/receive/${p.id}'),
       ),
+    );
+  }
+}
+
+/// Staff pending deliveries list load failure (UX-131).
+@visibleForTesting
+class StaffPendingDeliveriesError extends StatelessWidget {
+  const StaffPendingDeliveriesError({super.key, required this.onRetry});
+
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return HexaEmptyState(
+      icon: Icons.local_shipping_outlined,
+      title: 'Could not load pending deliveries',
+      subtitle: 'Check your connection, then retry.',
+      primaryActionLabel: 'Retry',
+      onPrimaryAction: onRetry,
     );
   }
 }

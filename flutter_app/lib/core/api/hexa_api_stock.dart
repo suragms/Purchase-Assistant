@@ -95,6 +95,8 @@ mixin HexaApiStockMethods on HexaApiBase {
     bool missingItemCode = false,
     bool reorderOnly = false,
     String unit = '',
+    /// All-time ledger variance — expensive; off for warehouse browsing.
+    bool includeLedger = false,
     String? ifNoneMatch,
   }) async {
     Future<Response<Map<String, dynamic>>> doGet({required bool cacheBust}) {
@@ -115,6 +117,7 @@ mixin HexaApiStockMethods on HexaApiBase {
           if (missingItemCode) 'missing_item_code': true,
           if (reorderOnly) 'reorder_only': true,
           if (unit.trim().isNotEmpty) 'unit': unit.trim(),
+          'include_ledger': includeLedger,
           if (periodStart != null && periodStart.isNotEmpty) ...{
             'period_start': periodStart,
             'date_from': periodStart,

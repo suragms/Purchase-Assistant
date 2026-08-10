@@ -1,11 +1,11 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../core/auth/auth_error_messages.dart';
-import '../../../core/design_system/hexa_ds_tokens.dart';
 import '../../../core/providers/operations_providers.dart';
-import '../../../core/widgets/friendly_load_error.dart';
+import '../../../shared/widgets/hexa_empty_state.dart';
 import '../stock/reports_stock_providers.dart';
 import '../stock/reports_stock_status.dart';
 import '../widgets/reports_stock_filter_sort_bar.dart';
@@ -27,7 +27,8 @@ class _ReportsStockTabState extends ConsumerState<ReportsStockTab> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      final chip = ReportsStockChipFilterX.fromHighlight(widget.highlightSection);
+      final chip =
+          ReportsStockChipFilterX.fromHighlight(widget.highlightSection);
       if (chip != null) {
         ref.read(reportsStockChipFilterProvider.notifier).state = chip;
       }
@@ -44,8 +45,8 @@ class _ReportsStockTabState extends ConsumerState<ReportsStockTab> {
         final dio = e is DioException ? e : null;
         final offline = dio != null && dioIsNetworkError(dio);
         return Center(
-          child: FriendlyLoadError(
-            message: offline
+          child: ReportsStockTabLoadError(
+            title: offline
                 ? 'Could not load stock intel — check connection'
                 : 'Could not load stock intel. Server error — tap to retry.',
             onRetry: () => ref.invalidate(operationalReportsProvider),
@@ -62,7 +63,7 @@ class _ReportsStockTabState extends ConsumerState<ReportsStockTab> {
             if (items.isEmpty)
               SliverFillRemaining(
                 hasScrollBody: false,
-                child: _EmptyState(filter: chip),
+                child: ReportsStockEmpty(filter: chip),
               )
             else
               SliverPadding(
@@ -81,38 +82,60 @@ class _ReportsStockTabState extends ConsumerState<ReportsStockTab> {
   }
 }
 
-class _EmptyState extends StatelessWidget {
-  const _EmptyState({required this.filter});
+/// Reports stock tab operational intel load failure (UX-149).
+@visibleForTesting
+class ReportsStockTabLoadError extends StatelessWidget {
+  const ReportsStockTabLoadError({
+    super.key,
+    required this.title,
+    required this.onRetry,
+    this.subtitle = 'Check your connection, then retry.',
+  });
+
+  final String title;
+  final String subtitle;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return HexaEmptyState(
+      icon: Icons.inventory_2_outlined,
+      title: title,
+      subtitle: subtitle,
+      primaryActionLabel: 'Retry',
+      onPrimaryAction: onRetry,
+    );
+  }
+}
+
+/// Empty stock intel list for the active chip / search filters.
+class ReportsStockEmpty extends ConsumerWidget {
+  const ReportsStockEmpty({super.key, required this.filter});
 
   final ReportsStockChipFilter filter;
 
   @override
-  Widget build(BuildContext context) {
-    final message = switch (filter) {
-      ReportsStockChipFilter.dead => 'No dead stock found.',
-      ReportsStockChipFilter.slow => 'No slow-moving items found.',
-      ReportsStockChipFilter.fast => 'No fast-moving items in this window.',
-      ReportsStockChipFilter.active => 'No active items with on-hand stock.',
-      ReportsStockChipFilter.all => 'No stock items match your search.',
+  Widget build(BuildContext context, WidgetRef ref) {
+    final filtered = filter != ReportsStockChipFilter.all;
+    final title = switch (filter) {
+      ReportsStockChipFilter.dead => 'No dead stock found',
+      ReportsStockChipFilter.slow => 'No slow-moving items found',
+      ReportsStockChipFilter.fast => 'No fast-moving items in this window',
+      ReportsStockChipFilter.active => 'No active items with on-hand stock',
+      ReportsStockChipFilter.all => 'No stock items match',
     };
 
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.inventory_2_outlined,
-                size: 48, color: Colors.grey.shade400),
-            const SizedBox(height: 12),
-            Text(
-              message,
-              textAlign: TextAlign.center,
-              style: HexaDsType.bodyPrimary(context),
-            ),
-          ],
-        ),
-      ),
+    return HexaEmptyState(
+      icon: Icons.inventory_2_outlined,
+      title: title,
+      subtitle: filtered
+          ? 'Clear the movement filter to see more items.'
+          : 'Try another search, or open stock to manage inventory.',
+      primaryActionLabel: filtered ? 'Clear filter' : 'Open stock',
+      onPrimaryAction: filtered
+          ? () => ref.read(reportsStockChipFilterProvider.notifier).state =
+              ReportsStockChipFilter.all
+          : () => context.push('/stock'),
     );
   }
 }

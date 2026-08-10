@@ -5,6 +5,7 @@ import '../../../core/auth/auth_error_messages.dart';
 import '../../../core/auth/session_notifier.dart';
 import '../../../core/design_system/hexa_ds_tokens.dart';
 import '../../../core/providers/operations_providers.dart';
+import '../../../shared/widgets/hexa_empty_state.dart';
 
 final ownerChecklistSummaryProvider =
     FutureProvider.autoDispose<Map<String, dynamic>>((ref) async {
@@ -189,7 +190,9 @@ class _OwnerTasksPageState extends ConsumerState<OwnerTasksPage>
   Widget _arrangeTab(AsyncValue<List<Map<String, dynamic>>> templatesAsync) {
     return templatesAsync.when(
       loading: () => const Center(child: CircularProgressIndicator()),
-      error: (e, _) => Center(child: Text(friendlyApiError(e))),
+      error: (e, _) => OwnerTasksTemplatesError(
+        onRetry: () => ref.invalidate(checklistTemplatesProvider),
+      ),
       data: (rows) {
         if (!_dirty && _draft.isEmpty && rows.isNotEmpty) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -289,7 +292,9 @@ class _OwnerTasksPageState extends ConsumerState<OwnerTasksPage>
             ),
           ),
           loading: () => const LinearProgressIndicator(),
-          error: (_, __) => const SizedBox.shrink(),
+          error: (_, __) => OwnerTasksTeamSummaryError(
+            onRetry: () => ref.invalidate(ownerChecklistSummaryProvider),
+          ),
         ),
         const SizedBox(height: 12),
         Text('Your checklist today', style: HexaDsType.heading(16)),
@@ -301,7 +306,14 @@ class _OwnerTasksPageState extends ConsumerState<OwnerTasksPage>
                 if (e is Map) Map<String, dynamic>.from(e),
             ];
             if (tasks.isEmpty) {
-              return const Text('No tasks — save a list in Arrange tab');
+              return HexaEmptyState(
+                icon: Icons.assignment_outlined,
+                title: 'No tasks for today',
+                subtitle:
+                    'Save a Morning / Midday / Evening list in Arrange first.',
+                primaryActionLabel: 'Edit task list',
+                onPrimaryAction: () => _tabs.animateTo(0),
+              );
             }
             return Column(
               children: [
@@ -322,7 +334,9 @@ class _OwnerTasksPageState extends ConsumerState<OwnerTasksPage>
             );
           },
           loading: () => const CircularProgressIndicator(),
-          error: (e, _) => Text(friendlyApiError(e)),
+          error: (e, _) => OwnerTasksChecklistTodayError(
+            onRetry: () => ref.invalidate(checklistTodayProvider),
+          ),
         ),
       ],
     );
@@ -341,4 +355,61 @@ class _EditableTask {
   final String taskKey;
   final TextEditingController labelCtrl;
   final int sortOrder;
+}
+
+/// Owner tasks team progress summary load failure (UX-120).
+@visibleForTesting
+class OwnerTasksTeamSummaryError extends StatelessWidget {
+  const OwnerTasksTeamSummaryError({super.key, required this.onRetry});
+
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return HexaEmptyState(
+      icon: Icons.groups_outlined,
+      title: 'Could not load team progress',
+      subtitle: 'Check your connection, then retry.',
+      primaryActionLabel: 'Retry',
+      onPrimaryAction: onRetry,
+    );
+  }
+}
+
+/// Owner tasks Arrange tab templates load failure (UX-128).
+@visibleForTesting
+class OwnerTasksTemplatesError extends StatelessWidget {
+  const OwnerTasksTemplatesError({super.key, required this.onRetry});
+
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return HexaEmptyState(
+      icon: Icons.assignment_outlined,
+      title: 'Could not load task templates',
+      subtitle: 'Check your connection, then retry.',
+      primaryActionLabel: 'Retry',
+      onPrimaryAction: onRetry,
+    );
+  }
+}
+
+/// Owner tasks Check today tab checklist load failure (UX-128).
+@visibleForTesting
+class OwnerTasksChecklistTodayError extends StatelessWidget {
+  const OwnerTasksChecklistTodayError({super.key, required this.onRetry});
+
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return HexaEmptyState(
+      icon: Icons.checklist_outlined,
+      title: 'Could not load today’s checklist',
+      subtitle: 'Check your connection, then retry.',
+      primaryActionLabel: 'Retry',
+      onPrimaryAction: onRetry,
+    );
+  }
 }

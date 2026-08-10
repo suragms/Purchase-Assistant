@@ -82,6 +82,17 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               ),
             ],
           ),
+          _SectionTitle('Support'),
+          _SettingsCard(
+            children: [
+              _NavTile(
+                icon: Icons.help_outline_rounded,
+                title: 'Help & guide',
+                subtitle: 'Daily stock, purchases, offline, and backup steps',
+                onTap: () => context.push('/settings/help'),
+              ),
+            ],
+          ),
           if (!isStaff) ...[
             _SectionTitle('Quick Actions'),
             _SettingsCard(
@@ -93,7 +104,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                 ),
                 _NavTile(
                   icon: Icons.history_rounded,
-                  title: 'Purchase history',
+                  title: 'Purchases',
                   onTap: () => context.go('/purchase'),
                 ),
               ],
@@ -209,26 +220,31 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                       'Stock Excel, purchases PDF (this month), ZIP trade data',
                   onTap: () => context.push('/settings/backup'),
                 ),
-                if (isOwnerOrAdmin) ...[
-                  _NavTile(
-                    icon: Icons.vpn_key_outlined,
-                    title: 'API credentials',
-                    subtitle: 'Encrypted WhatsApp and AI provider keys',
-                    onTap: () => context.push('/settings/credentials'),
-                  ),
-                  _NavTile(
-                    icon: Icons.dashboard_customize_outlined,
-                    title: 'Owner command center',
-                    subtitle: 'Exceptions, stock, backup, staff tasks',
-                    onTap: () => context.push('/settings/owner-dashboard'),
-                  ),
-                  _NavTile(
-                    icon: Icons.checklist_outlined,
-                    title: 'Staff tasks',
-                    subtitle: 'All assignments and pending work',
-                    onTap: () => context.push('/staff/tasks-board'),
-                  ),
-                ],
+              ],
+            ),
+          ],
+          if (isOwnerOrAdmin) ...[
+            _SectionTitle('Owner tools'),
+            _SettingsCard(
+              children: [
+                _NavTile(
+                  icon: Icons.vpn_key_outlined,
+                  title: 'API credentials',
+                  subtitle: 'Encrypted WhatsApp and AI provider keys',
+                  onTap: () => context.push('/settings/credentials'),
+                ),
+                _NavTile(
+                  icon: Icons.dashboard_customize_outlined,
+                  title: 'Owner command center',
+                  subtitle: 'Exceptions, stock, backup, staff tasks',
+                  onTap: () => context.push('/settings/owner-dashboard'),
+                ),
+                _NavTile(
+                  icon: Icons.checklist_outlined,
+                  title: 'Staff tasks',
+                  subtitle: 'All assignments and pending work',
+                  onTap: () => context.push('/staff/tasks-board'),
+                ),
               ],
             ),
           ],
@@ -248,12 +264,6 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           _SectionTitle('Data'),
           _SettingsCard(
             children: [
-              _NavTile(
-                icon: Icons.help_outline_rounded,
-                title: 'Help & guide',
-                subtitle: 'Daily stock, offline mode, backup steps',
-                onTap: () => context.push('/settings/help'),
-              ),
               _NavTile(
                 icon: Icons.groups_outlined,
                 title: 'Suppliers & brokers',
@@ -373,7 +383,8 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 _SettingsSidebar(
-                  isOwner: isOwner,
+                  showBackup: !isStaff,
+                  isOwnerOrAdmin: isOwnerOrAdmin,
                   canManageUsers: canManageUsers,
                 ),
                 const VerticalDivider(width: 1),
@@ -400,49 +411,81 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   }
 }
 
+/// Desktop settings shortcuts for admin discoverability (UX-010).
+List<({IconData icon, String label, String route})> settingsSidebarShortcuts({
+  required bool showBackup,
+  required bool isOwnerOrAdmin,
+  required bool canManageUsers,
+}) {
+  return [
+    (
+      icon: Icons.help_outline_rounded,
+      label: 'Help guide',
+      route: '/settings/help',
+    ),
+    (
+      icon: Icons.business_rounded,
+      label: 'Business profile',
+      route: '/settings/business',
+    ),
+    if (canManageUsers)
+      (
+        icon: Icons.people_outline_rounded,
+        label: 'Users',
+        route: '/settings/users',
+      ),
+    if (showBackup)
+      (
+        icon: Icons.cloud_download_outlined,
+        label: 'Backup & export',
+        route: '/settings/backup',
+      ),
+    if (isOwnerOrAdmin) ...[
+      (
+        icon: Icons.vpn_key_outlined,
+        label: 'API credentials',
+        route: '/settings/credentials',
+      ),
+      (
+        icon: Icons.dashboard_customize_outlined,
+        label: 'Command center',
+        route: '/settings/owner-dashboard',
+      ),
+    ],
+  ];
+}
+
 class _SettingsSidebar extends StatelessWidget {
   const _SettingsSidebar({
-    required this.isOwner,
+    required this.showBackup,
+    required this.isOwnerOrAdmin,
     required this.canManageUsers,
   });
 
-  final bool isOwner;
+  final bool showBackup;
+  final bool isOwnerOrAdmin;
   final bool canManageUsers;
 
   @override
   Widget build(BuildContext context) {
     final route = GoRouterState.of(context).uri.path;
+    final tiles = settingsSidebarShortcuts(
+      showBackup: showBackup,
+      isOwnerOrAdmin: isOwnerOrAdmin,
+      canManageUsers: canManageUsers,
+    );
     return SizedBox(
       width: 220,
       child: ListView(
         padding: const EdgeInsets.fromLTRB(8, 16, 8, 16),
         children: [
-          _SidebarTile(
-            icon: Icons.business_rounded,
-            label: 'Business profile',
-            route: '/settings/business',
-            currentRoute: route,
-          ),
-          if (canManageUsers)
+          for (final t in tiles)
             _SidebarTile(
-              icon: Icons.people_outline_rounded,
-              label: 'Users',
-              route: '/settings/users',
+              icon: t.icon,
+              label: t.label,
+              route: t.route,
               currentRoute: route,
             ),
-          if (isOwner)
-            _SidebarTile(
-              icon: Icons.cloud_download_outlined,
-              label: 'Backup & export',
-              route: '/settings/backup',
-              currentRoute: route,
-            ),
-          _SidebarTile(
-            icon: Icons.help_outline_rounded,
-            label: 'Help guide',
-            route: '/settings/help',
-            currentRoute: route,
-          ),
         ],
       ),
     );

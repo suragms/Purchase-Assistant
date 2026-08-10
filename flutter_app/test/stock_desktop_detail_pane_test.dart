@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:harisree_warehouse/features/stock/presentation/widgets/stock_desktop_detail_pane.dart';
+import 'package:harisree_warehouse/shared/widgets/hexa_empty_state.dart';
 
 void main() {
-  testWidgets('StockDesktopDetailPane empty selection at 1280px', (tester) async {
+  testWidgets('StockDesktopDetailPane empty selection uses HexaEmptyState',
+      (tester) async {
     await tester.binding.setSurfaceSize(const Size(1280, 900));
     addTearDown(() => tester.binding.setSurfaceSize(null));
 
@@ -18,7 +20,15 @@ void main() {
       ),
     );
 
+    expect(find.byType(HexaEmptyState), findsOneWidget);
+    expect(find.byType(StockDesktopDetailEmptySelection), findsOneWidget);
     expect(find.text('Select an item'), findsOneWidget);
+    expect(
+      find.text(
+        'Choose a row on the left to see stock metrics and recent activity.',
+      ),
+      findsOneWidget,
+    );
   });
 
   testWidgets('StockDesktopDetailPane shows 2x2 stats and More at 1280px',
@@ -61,5 +71,53 @@ void main() {
     expect(find.text('New purchase'), findsOneWidget);
     expect(find.text('More'), findsOneWidget);
     expect(find.text('Recent activity'), findsOneWidget);
+  });
+
+  testWidgets('stock desktop activity empty uses HexaEmptyState',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(420, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: StockDesktopDetailActivityEmpty(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byType(HexaEmptyState), findsOneWidget);
+    expect(find.text('No recent activity'), findsOneWidget);
+    expect(
+      find.text('Stock updates and purchases for this item will show here.'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('stock desktop activity error uses HexaEmptyState + Retry',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(420, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    var retried = false;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: StockDesktopDetailActivityError(
+            onRetry: () => retried = true,
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byType(HexaEmptyState), findsOneWidget);
+    expect(find.text('Could not load activity'), findsOneWidget);
+    expect(find.text('Retry'), findsOneWidget);
+
+    await tester.tap(find.text('Retry'));
+    await tester.pumpAndSettle();
+    expect(retried, isTrue);
   });
 }

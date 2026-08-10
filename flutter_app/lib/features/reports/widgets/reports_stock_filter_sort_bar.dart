@@ -37,12 +37,13 @@ class ReportsStockFilterSortBar extends ConsumerWidget {
               style: HexaDsType.labelCaps(context).copyWith(fontSize: 10),
             ),
           ),
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
+          Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12),
-            child: Row(
+            child: Wrap(
+              spacing: 6,
+              runSpacing: 6,
               children: [
-                for (final chip in _filters) ...[
+                for (final chip in _filters)
                   _FilterChip(
                     label: chip.label,
                     count: summary.countFor(chip),
@@ -51,8 +52,6 @@ class ReportsStockFilterSortBar extends ConsumerWidget {
                         .read(reportsStockChipFilterProvider.notifier)
                         .state = chip,
                   ),
-                  const SizedBox(width: 6),
-                ],
               ],
             ),
           ),

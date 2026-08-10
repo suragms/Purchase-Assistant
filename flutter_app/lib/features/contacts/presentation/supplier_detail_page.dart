@@ -14,7 +14,6 @@ import '../../../core/router/navigation_ext.dart';
 import '../../../core/models/trade_purchase_models.dart';
 import '../../../core/providers/purchase_prefill_provider.dart';
 import '../../../core/theme/hexa_colors.dart';
-import '../../../core/widgets/friendly_load_error.dart';
 import '../../../core/widgets/focused_search_chrome.dart';
 import '../../../shared/widgets/hexa_empty_state.dart';
 import '../../../shared/widgets/trade_purchase_ledger_cards.dart';
@@ -308,8 +307,7 @@ class _SupplierDetailPageState extends ConsumerState<SupplierDetailPage> {
       body: async.when(
         skipLoadingOnReload: true,
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (_, __) => FriendlyLoadError(
-          message: 'Could not load supplier',
+        error: (_, __) => SupplierDetailLoadError(
           onRetry: () => ref.invalidate(_supplierProvider(widget.supplierId)),
         ),
         data: (s) {
@@ -789,6 +787,25 @@ class _WeightChip extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Supplier detail load failure.
+@visibleForTesting
+class SupplierDetailLoadError extends StatelessWidget {
+  const SupplierDetailLoadError({super.key, required this.onRetry});
+
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return HexaEmptyState(
+      icon: Icons.cloud_off_outlined,
+      title: 'Could not load supplier',
+      subtitle: 'Check your connection, then retry.',
+      primaryActionLabel: 'Retry',
+      onPrimaryAction: onRetry,
     );
   }
 }

@@ -47,21 +47,25 @@
   </script>
   <style>
     * { -webkit-tap-highlight-color: transparent; }
+    /* Prefer dynamic viewport units so Chrome device mode / mobile URL chrome
+       match Flutter MediaQuery. Avoid body position:fixed + min-height:100vh
+       stretching past the visible CSS viewport. */
     html {
       height: 100%;
       width: 100%;
-      max-width: 100vw;
-      overflow-x: hidden;
+      max-width: 100%;
+      overflow: hidden;
     }
     body {
       margin: 0;
       padding: 0;
-      position: fixed;
-      height: 100vh;
+      position: relative;
       width: 100%;
-      max-width: 100vw;
-      overflow-x: hidden;
-      overflow-y: hidden;
+      max-width: 100%;
+      height: 100%;
+      min-height: 100vh;
+      min-height: 100dvh;
+      overflow: hidden;
       background: #F5F7FA;
       overscroll-behavior: none;
       -webkit-overflow-scrolling: touch;
@@ -79,19 +83,25 @@
     /* Flutter inserts <flutter-view> (custom element, not #flutter-view).
        Custom elements default to display:inline → 0×0 paint box. Size the host;
        also force glass-pane to block (without position:fixed) so CanvasKit gets
-       a non-zero layout box. */
+       a non-zero layout box. Bind to the visible host — not a taller 100vh
+       min-height that can disagree with DevTools device frames. */
     flutter-view {
       display: block;
       position: absolute;
       inset: 0;
       width: 100%;
       height: 100%;
-      min-height: 100vh;
+      min-height: 100%;
+      max-width: 100%;
+      max-height: 100%;
+      box-sizing: border-box;
     }
     flt-glass-pane {
       display: block !important;
       width: 100% !important;
       height: 100% !important;
+      max-width: 100% !important;
+      max-height: 100% !important;
       touch-action: auto !important;
     }
     #splash {
@@ -202,53 +212,6 @@
   </script>
   <script>
     (function () {
-      // #region agent log
-      function dbg(hyp, msg, data) {
-        try {
-          fetch('http://127.0.0.1:7388/ingest/8ef5481a-9163-494f-9f26-ab47a81c6701', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'X-Debug-Session-Id': '2a33ed'
-            },
-            body: JSON.stringify({
-              sessionId: '2a33ed',
-              runId: 'pre-fix',
-              hypothesisId: hyp,
-              location: 'index.html',
-              message: msg,
-              data: data || {},
-              timestamp: Date.now()
-            })
-          }).catch(function () {});
-        } catch (e) {}
-      }
-      dbg('H5', 'page_boot', {
-        host: location.hostname,
-        path: location.pathname,
-        w: window.innerWidth,
-        h: window.innerHeight
-      });
-      window.addEventListener('error', function (e) {
-        dbg('H4', 'window_error', { message: String(e.message || e) });
-      });
-      window.setTimeout(function () {
-        var fv = document.querySelector('flutter-view, flt-glass-pane');
-        var splash = document.getElementById('splash');
-        var boot = document.getElementById('boot');
-        var rect = fv ? fv.getBoundingClientRect() : null;
-        dbg('H5', 'blank_probe_3s', {
-          path: location.pathname,
-          hasFlutter: !!fv,
-          flutterH: rect ? rect.height : 0,
-          flutterW: rect ? rect.width : 0,
-          splashGone: !splash,
-          bootText: boot ? boot.textContent : null,
-          wrongHostShow: !!(document.getElementById('wrong-host') || {}).classList &&
-            document.getElementById('wrong-host').classList.contains('show')
-        });
-      }, 3000);
-      // #endregion
       var boot = document.getElementById('boot');
       function setBoot(msg) {
         if (boot && !boot.classList.contains('boot-error')) boot.textContent = msg;

@@ -28,6 +28,7 @@ import '../../../../core/utils/unit_classifier.dart';
 import '../../../../core/utils/unit_utils.dart';
 import '../../../../shared/widgets/inline_search_field.dart';
 import '../../../../shared/widgets/keyboard_safe_form_viewport.dart';
+import '../../../../shared/widgets/hexa_empty_state.dart';
 import 'item_entry/item_entry_minimal_form.dart';
 import 'item_entry/item_entry_payload.dart';
 import 'party_inline_suggest_field.dart';
@@ -212,8 +213,9 @@ class _PurchaseItemEntrySheetState extends ConsumerState<PurchaseItemEntrySheet>
   bool _keyboardVisible = false;
   late final Listenable _lineTotalsListenable;
 
-  /// Memoized catalog rows as [InlineSearchItem] (rebuilt when [widget.catalog] changes).
+  /// Memoized catalog rows as [InlineSearchItem] (rebuilt when catalog identity changes).
   List<InlineSearchItem> _catalogSearchItems = const [];
+  String _catalogSearchIdentity = '';
 
   /// Short hint driven by [_activeClassification()] after catalog/name changes.
   String? _unitDetectHint;
@@ -750,6 +752,10 @@ class _PurchaseItemEntrySheetState extends ConsumerState<PurchaseItemEntrySheet>
     _clearFieldErrors();
     final vLow = v.trim().toLowerCase();
 
+    // Set unit text **first** so recompute / catalog-kg seed / coerce see the
+    // new unit (previously ran before `_unitCtrl` update → bag never seeded).
+    _unitCtrl.text = v;
+
     // Default wholesale mode: BOX/TIN are count-only. Clear any weight fields so
     // we never accidentally derive kg totals or show hidden inputs.
     if (!_advancedInventoryEnabled && (vLow == 'box' || vLow == 'tin')) {
@@ -770,11 +776,10 @@ class _PurchaseItemEntrySheetState extends ConsumerState<PurchaseItemEntrySheet>
     _recomputeModeFromUnitAndCatalog();
     _maybeCoerceQtyModeForUnit();
     setState(() {
-      _unitCtrl.text = v;
       _adjustBoxFixedForClassification(_activeClassification());
     });
-    // [Bug 2] After switching to bag, seed kg-per-bag from item name if catalog
-    // didn't provide one (`SUGAR 50 KG` â†’ 50, `RICE 26 KG` â†’ 26).
+    // After switching to bag: catalog kg wins; else seed from name
+    // (`SUGAR 50 KG` → 50, `RICE 26 KG` → 26).
     _maybeAutoSeedKgFromName();
     if ((vLow == 'bag' || vLow == 'sack') &&
         widget.persistCatalogBagWeight != null &&
@@ -1426,6 +1431,26 @@ class _PurchaseItemEntrySheetState extends ConsumerState<PurchaseItemEntrySheet>
       );
     }
     _catalogSearchItems = out;
+    _catalogSearchIdentity = _catalogListIdentity(
+      widget.catalog,
+      preferredSupplierId: widget.preferredSupplierId,
+      priorityCatalogItemIds: widget.priorityCatalogItemIds,
+    );
+  }
+
+  /// Stable identity so list reference churn from Riverpod does not rebuild O(n) index.
+  static String _catalogListIdentity(
+    List<Map<String, dynamic>> catalog, {
+    String? preferredSupplierId,
+    List<String>? priorityCatalogItemIds,
+  }) {
+    final n = catalog.length;
+    final first = n == 0 ? '' : (catalog.first['id']?.toString() ?? '');
+    final last = n == 0 ? '' : (catalog.last['id']?.toString() ?? '');
+    final mid = n < 3 ? '' : (catalog[n ~/ 2]['id']?.toString() ?? '');
+    final pref = preferredSupplierId?.trim() ?? '';
+    final pri = (priorityCatalogItemIds ?? const []).join(',');
+    return '$n|$first|$mid|$last|$pref|$pri';
   }
 
   /// Space-joined lowercase tokens for typeahead (name + code + HSN).
@@ -1444,9 +1469,12 @@ class _PurchaseItemEntrySheetState extends ConsumerState<PurchaseItemEntrySheet>
   @override
   void didUpdateWidget(covariant PurchaseItemEntrySheet oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.catalog != widget.catalog ||
-        oldWidget.preferredSupplierId != widget.preferredSupplierId ||
-        oldWidget.priorityCatalogItemIds != widget.priorityCatalogItemIds) {
+    final nextId = _catalogListIdentity(
+      widget.catalog,
+      preferredSupplierId: widget.preferredSupplierId,
+      priorityCatalogItemIds: widget.priorityCatalogItemIds,
+    );
+    if (nextId != _catalogSearchIdentity) {
       _rebuildCatalogSearchItems();
     }
   }
@@ -2350,8 +2378,7 @@ class _PurchaseItemEntrySheetState extends ConsumerState<PurchaseItemEntrySheet>
     if (u0 != 'bag' && u0 != 'sack') return;
     final row = _catalogRowById(_selectedCatalogItemId!);
     if (row == null) return;
-    final kpb = row['default_kg_per_bag'];
-    final kpbD = kpb is num && kpb > 0 ? kpb.toDouble() : null;
+    final kpbD = _catalogKpb(row);
     if (kpbD == null) {
       if (_kgPerUnit != null && _hasCatalogKg() == false) {
         setState(() {
@@ -3195,7 +3222,9 @@ class _PurchaseItemEntrySheetState extends ConsumerState<PurchaseItemEntrySheet>
         height: 36,
         child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
       ),
-      error: (_, __) => const SizedBox.shrink(),
+      error: (_, __) => PurchaseItemEntryStockPreviewError(
+        onRetry: () => ref.invalidate(stockItemDetailProvider(id)),
+      ),
       data: (st) {
         final cur = _numD(st['current_stock']) ?? 0;
         final unit = (st['unit'] ?? _unitCtrl.text).toString().trim();
@@ -4484,6 +4513,28 @@ class _PurchaseItemEntrySheetState extends ConsumerState<PurchaseItemEntrySheet>
           ],
         );
       },
+    );
+  }
+}
+
+/// Purchase line entry stock preview load failure (UX-125).
+@visibleForTesting
+class PurchaseItemEntryStockPreviewError extends StatelessWidget {
+  const PurchaseItemEntryStockPreviewError({
+    super.key,
+    required this.onRetry,
+  });
+
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return HexaEmptyState(
+      icon: Icons.inventory_2_outlined,
+      title: 'Could not load stock preview',
+      subtitle: 'Check your connection, then retry.',
+      primaryActionLabel: 'Retry',
+      onPrimaryAction: onRetry,
     );
   }
 }

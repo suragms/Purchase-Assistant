@@ -19,6 +19,7 @@ import '../../../core/widgets/business_write_surface_listener.dart';
 import '../../../core/search/catalog_fuzzy.dart';
 import '../../../core/search/search_highlight.dart';
 import '../../../core/theme/hexa_colors.dart';
+import '../../../shared/widgets/hexa_empty_state.dart';
 import '../../../shared/widgets/search_picker_sheet.dart';
 import '../../../shared/widgets/trade_intel_cards.dart';
 
@@ -582,13 +583,29 @@ class _CatalogTypeItemsPageState extends ConsumerState<CatalogTypeItemsPage> {
             const SizedBox(height: 12),
             if (filtered.isEmpty)
               Padding(
-                padding: const EdgeInsets.only(top: 32),
-                child: Text(
-                  itemsInType.isEmpty ? 'No items yet — tap Add item.' : 'No matches.',
-                  textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      ),
+                padding: const EdgeInsets.only(top: 24),
+                child: HexaEmptyState(
+                  icon: itemsInType.isEmpty
+                      ? Icons.inventory_2_outlined
+                      : Icons.search_off_rounded,
+                  title: itemsInType.isEmpty ? 'No items yet' : 'No matches',
+                  subtitle: itemsInType.isEmpty
+                      ? 'Add an item to this subcategory.'
+                      : 'Try another spelling or clear the filter.',
+                  primaryActionLabel:
+                      itemsInType.isEmpty ? 'Add item' : 'Clear filter',
+                  onPrimaryAction: itemsInType.isEmpty
+                      ? () => context
+                          .push<bool>(
+                            '/catalog/category/${widget.categoryId}/type/${widget.typeId}/add-item',
+                          )
+                          .then(
+                              (_) => ref.invalidate(catalogItemsListProvider))
+                      : () {
+                          _searchDebounce?.cancel();
+                          _searchCtrl.clear();
+                          setState(() => _searchQuery = '');
+                        },
                 ),
               )
             else

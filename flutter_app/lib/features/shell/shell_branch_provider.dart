@@ -6,10 +6,21 @@ abstract final class ShellBranch {
   static const int home = 0;
   static const int stock = 1;
   static const int reports = 2;
+  /// Purchase list tab (`/purchase`). User-facing label is [ownerShellNavLabel] → Purchases.
   static const int history = 3;
   /// Global search (replaces former Assistant tab — Assistant opens from toolbar).
   static const int search = 4;
 }
+
+/// User-facing owner shell labels (UX-016: history branch reads as Purchases).
+String ownerShellNavLabel(int branch) => switch (branch) {
+      ShellBranch.home => 'Home',
+      ShellBranch.stock => 'Stock',
+      ShellBranch.reports => 'Reports',
+      ShellBranch.history => 'Purchases',
+      ShellBranch.search => 'Search',
+      _ => 'Tab',
+    };
 
 /// Last-selected main shell tab. Providers defer heavy network work until the
 /// matching branch is visible (see [reportsPurchasesPayloadProvider],

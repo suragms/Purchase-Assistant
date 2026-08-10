@@ -7,7 +7,7 @@ import '../../../core/design_system/widgets/app_text_field.dart';
 import '../../../core/theme/hexa_colors.dart';
 import '../../../core/utils/snack.dart';
 import '../../../core/errors/load_state_error.dart';
-import '../../../core/widgets/friendly_load_error.dart';
+import '../../../shared/widgets/hexa_empty_state.dart';
 
 const _credentialTypes = <String>[
   'openrouter_key',
@@ -124,7 +124,10 @@ class _OwnerCredentialsPageState extends ConsumerState<OwnerCredentialsPage> {
       body: _loading
           ? const LinearProgressIndicator(minHeight: 2)
           : _error != null
-              ? FriendlyLoadError(message: _error!, onRetry: _load)
+              ? OwnerCredentialsLoadError(
+                  title: _error!,
+                  onRetry: _load,
+                )
               : ListView(
                   padding: const EdgeInsets.all(16),
                   children: [
@@ -189,5 +192,29 @@ class _OwnerCredentialsPageState extends ConsumerState<OwnerCredentialsPage> {
       default:
         return type;
     }
+  }
+}
+
+/// Owner API credentials list load failure.
+@visibleForTesting
+class OwnerCredentialsLoadError extends StatelessWidget {
+  const OwnerCredentialsLoadError({
+    super.key,
+    required this.title,
+    required this.onRetry,
+  });
+
+  final String title;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return HexaEmptyState(
+      icon: Icons.vpn_key_outlined,
+      title: title,
+      subtitle: 'Check your connection, then retry.',
+      primaryActionLabel: 'Retry',
+      onPrimaryAction: onRetry,
+    );
   }
 }

@@ -10,8 +10,8 @@ import '../../../core/json_coerce.dart';
 import '../../../core/providers/stock_providers.dart';
 import '../../../core/router/post_auth_route.dart';
 import '../../../core/utils/unit_utils.dart';
-import '../../../core/widgets/friendly_load_error.dart';
 import '../../../core/widgets/list_skeleton.dart';
+import '../../../shared/widgets/hexa_empty_state.dart';
 import 'widgets/assign_barcode_sheet.dart';
 import 'widgets/edit_item_code_sheet.dart';
 
@@ -96,7 +96,7 @@ class _StockMissingLabelsPageState extends ConsumerState<StockMissingLabelsPage>
       ),
       body: listAsync.when(
         loading: () => const ListSkeleton(rowCount: 10, rowHeight: 64),
-        error: (_, __) => FriendlyLoadError(
+        error: (_, __) => StockMissingLabelsLoadError(
           onRetry: () => ref.invalidate(bulkStockListProvider),
         ),
         data: (blob) {
@@ -180,12 +180,16 @@ class _StockMissingLabelsPageState extends ConsumerState<StockMissingLabelsPage>
     Map<String, dynamic>? blob,
   }) {
     if (rows.isEmpty) {
-      return Center(
-        child: Text(
-          isBarcodeTab
-              ? 'All items have packaging barcodes'
-              : 'All items have internal codes',
-        ),
+      return HexaEmptyState(
+        icon: Icons.verified_outlined,
+        title: isBarcodeTab
+            ? 'All items have packaging barcodes'
+            : 'All items have internal codes',
+        subtitle: isBarcodeTab
+            ? 'No packaging barcodes are missing right now.'
+            : 'No internal item codes are missing right now.',
+        primaryActionLabel: 'Open stock',
+        onPrimaryAction: () => context.go('/stock'),
       );
     }
     return NotificationListener<ScrollNotification>(
@@ -303,6 +307,25 @@ class _StockMissingLabelsPageState extends ConsumerState<StockMissingLabelsPage>
         );
       },
     ),
+    );
+  }
+}
+
+/// Missing labels stock list load failure (UX-153).
+@visibleForTesting
+class StockMissingLabelsLoadError extends StatelessWidget {
+  const StockMissingLabelsLoadError({super.key, required this.onRetry});
+
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return HexaEmptyState(
+      icon: Icons.label_off_outlined,
+      title: 'Unable to load data',
+      subtitle: 'Check your connection, then retry.',
+      primaryActionLabel: 'Retry',
+      onPrimaryAction: onRetry,
     );
   }
 }

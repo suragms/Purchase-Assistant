@@ -7,6 +7,7 @@ import 'package:qr_flutter/qr_flutter.dart';
 import '../../../core/design_system/hexa_operational_tokens.dart';
 import '../../../core/providers/stock_providers.dart';
 import '../../../core/theme/hexa_colors.dart';
+import '../../../shared/widgets/hexa_empty_state.dart';
 class BulkBarcodePrintPreviewPanel extends ConsumerWidget {
   const BulkBarcodePrintPreviewPanel({
     super.key,
@@ -97,10 +98,7 @@ class BulkBarcodePrintPreviewPanel extends ConsumerWidget {
                         style: const TextStyle(fontSize: 13, color: Colors.black54),
                       ),
                     ] else
-                      Text(
-                        'Tap preview on a row',
-                        style: TextStyle(color: Colors.grey.shade600),
-                      ),
+                      const BulkBarcodePrintPreviewEmpty(),
                   ],
                 ),
               ),
@@ -127,6 +125,21 @@ class BulkBarcodePrintPreviewPanel extends ConsumerWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Desktop bulk-print preview pane when no row is selected for preview.
+@visibleForTesting
+class BulkBarcodePrintPreviewEmpty extends StatelessWidget {
+  const BulkBarcodePrintPreviewEmpty({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return const HexaEmptyState(
+      icon: Icons.qr_code_2_outlined,
+      title: 'Tap preview on a row',
+      subtitle: 'Choose an item on the left to see its label here.',
     );
   }
 }

@@ -18,7 +18,6 @@ import '../../../core/auth/session_notifier.dart';
 import '../../../core/json_coerce.dart' show coerceToDoubleNullable;
 import '../../../core/models/trade_purchase_models.dart';
 import '../../../core/widgets/form_field_scroll.dart';
-import '../../../core/widgets/friendly_load_error.dart';
 import '../../../core/widgets/hexa_page_error_boundary.dart';
 import '../../../core/providers/api_degraded_provider.dart';
 import '../../../core/providers/brokers_list_provider.dart';
@@ -46,12 +45,12 @@ import '../../../core/notifications/local_notifications_service.dart';
 import '../../purchase/domain/purchase_draft.dart';
 import '../../purchase/state/purchase_draft_provider.dart';
 import '../../purchase/state/purchase_smart_defaults.dart';
-import '../../purchase/state/purchase_trade_preview_provider.dart';
 import '../mapping/purchase_trade_seed.dart';
 import '../providers/trade_purchase_detail_provider.dart';
 
 import '../../contacts/presentation/broker_wizard_page.dart';
 import '../../contacts/presentation/supplier_create_simple.dart';
+import '../../../shared/widgets/hexa_empty_state.dart';
 import '../../../shared/widgets/inline_search_field.dart';
 import 'wizard/purchase_fast_items_step.dart';
 import 'wizard/purchase_party_step.dart';
@@ -2316,13 +2315,10 @@ class _PurchaseEntryWizardV2State extends ConsumerState<PurchaseEntryWizardV2>
       duration: const Duration(milliseconds: 200),
       switchInCurve: Curves.easeOut,
       switchOutCurve: Curves.easeIn,
-      // Do not stack previous step (Items uses Expanded; Party uses unbounded
-      // scroll). Keeping both in a Stack under mismatched parents blanks/crashes.
+      // Do not wrap [Expanded] steps in [Align] (unbounded height → blank pane).
+      // Bound to parent only; drop outgoing children (no Stack of mismatched steps).
       layoutBuilder: (Widget? currentChild, List<Widget> _) {
-        return Align(
-          alignment: Alignment.topCenter,
-          child: currentChild ?? const SizedBox.shrink(),
-        );
+        return currentChild ?? const SizedBox.shrink();
       },
       child: RepaintBoundary(
         key: ValueKey<int>(_wizStep),
@@ -2534,7 +2530,9 @@ class _PurchaseEntryWizardV2State extends ConsumerState<PurchaseEntryWizardV2>
 
   @override
   Widget build(BuildContext context) {
-    ref.watch(tradePurchasePreviewProvider);
+    // Do not watch tradePurchasePreviewProvider here — items/review/totals
+    // already subscribe; a root watch rebuilt the whole scaffold on every
+    // preview debounce (terms keystroke lag).
     ref.listen(catalogItemsListProvider, (_, next) {
       next.whenData((d) {
         _lastCatalogSnapshot = d
@@ -2632,8 +2630,8 @@ class _PurchaseEntryWizardV2State extends ConsumerState<PurchaseEntryWizardV2>
               return Center(
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 24),
-                  child: FriendlyLoadError(
-                    message:
+                  child: PurchaseWizardLoadError(
+                    title:
                         'Could not load your session. Sign in again to continue this purchase.',
                     subtitle: 'Tap Sign in to continue.',
                     onRetry: () {
@@ -2698,38 +2696,10 @@ class _PurchaseEntryWizardV2State extends ConsumerState<PurchaseEntryWizardV2>
 
           if (_editBootstrapError != null) {
             final err = _editBootstrapError!;
-            return Center(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(Icons.cloud_off_rounded,
-                        size: 48, color: Colors.orange.shade800),
-                    const SizedBox(height: 16),
-                    Text(
-                      err,
-                      textAlign: TextAlign.center,
-                      style: Theme.of(bodyContext).textTheme.bodyLarge,
-                    ),
-                    const SizedBox(height: 24),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        FilledButton(
-                          onPressed: () => _bootstrap(),
-                          child: const Text('Retry'),
-                        ),
-                        const SizedBox(width: 12),
-                        OutlinedButton(
-                          onPressed: () => bodyContext.pop(),
-                          child: const Text('Go back'),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
+            return PurchaseWizardEditBootstrapError(
+              message: err,
+              onRetry: () => _bootstrap(),
+              onGoBack: () => bodyContext.pop(),
             );
           }
 
@@ -2748,8 +2718,8 @@ class _PurchaseEntryWizardV2State extends ConsumerState<PurchaseEntryWizardV2>
                   child: LinearProgressIndicator(minHeight: 3),
                 ),
               if (showCatalogErrorStrip)
-                FriendlyLoadError(
-                  message:
+                PurchaseWizardLoadError(
+                  title:
                       'Catalog could not refresh. Check your connection and try again.',
                   onRetry: () => ref.invalidate(catalogItemsListProvider),
                 ),
@@ -2812,35 +2782,112 @@ class _PurchaseEntryWizardV2State extends ConsumerState<PurchaseEntryWizardV2>
             child: LayoutBuilder(
               builder: (ctx, constraints) {
                 final windowW = MediaQuery.sizeOf(ctx).width;
-                // Desktop (≥1024px): centered max-width wrapper (~1440px) so the
-                // 70/30 split has symmetric gutters. Mobile keeps the flush form.
-                final framed = context.isDesktopLayout
-                    ? Center(
-                        child: ConstrainedBox(
-                          constraints: const BoxConstraints(
-                            maxWidth: HexaResponsive.maxHomeContentWidth,
-                          ),
-                          child: purchaseWizardMainContent(),
-                        ),
-                      )
-                    : HexaResponsiveCenter(
-                        maxWidth: HexaResponsive.desktopFormMax(windowW),
-                        padding: EdgeInsets.zero,
-                        child: purchaseWizardMainContent(),
-                      );
-                // Height-bound so Expanded steps never meet unbounded parents.
-                if (!constraints.maxHeight.isFinite ||
-                    constraints.maxHeight <= 0) {
+                final h = constraints.maxHeight.isFinite &&
+                        constraints.maxHeight > 0
+                    ? constraints.maxHeight
+                    : MediaQuery.sizeOf(ctx).height * 0.85;
+                final w = constraints.maxWidth.isFinite &&
+                        constraints.maxWidth > 0
+                    ? constraints.maxWidth
+                    : windowW;
+                // Desktop (≥1024px): centered max-width (~1440) with height bind
+                // (AGENTS: Align/Center + maxWidth-only blanks Expanded panes).
+                final content = purchaseWizardMainContent();
+                if (context.isDesktopLayout) {
+                  final frameW = w < HexaResponsive.maxHomeContentWidth
+                      ? w
+                      : HexaResponsive.maxHomeContentWidth;
                   return SizedBox(
-                    height: MediaQuery.sizeOf(ctx).height * 0.85,
-                    child: framed,
+                    width: w,
+                    height: h,
+                    child: Align(
+                      alignment: Alignment.topCenter,
+                      child: SizedBox(
+                        width: frameW,
+                        height: h,
+                        child: content,
+                      ),
+                    ),
                   );
                 }
-                return framed;
+                return SizedBox(
+                  width: w,
+                  height: h,
+                  child: HexaResponsiveCenter(
+                    maxWidth: HexaResponsive.desktopFormMax(windowW),
+                    padding: EdgeInsets.zero,
+                    child: content,
+                  ),
+                );
               },
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// Purchase wizard session/catalog load failure (UI chrome only).
+@visibleForTesting
+class PurchaseWizardLoadError extends StatelessWidget {
+  const PurchaseWizardLoadError({
+    super.key,
+    required this.onRetry,
+    this.title = 'Could not load purchase data',
+    this.subtitle = 'Check your connection, then retry.',
+  });
+
+  final VoidCallback onRetry;
+  final String title;
+  final String subtitle;
+
+  @override
+  Widget build(BuildContext context) {
+    return HexaEmptyState(
+      icon: Icons.cloud_off_outlined,
+      title: title,
+      subtitle: subtitle,
+      primaryActionLabel: 'Retry',
+      onPrimaryAction: onRetry,
+    );
+  }
+}
+
+/// Edit-mode bootstrap failure — shared empty chrome + Retry / Go back.
+@visibleForTesting
+class PurchaseWizardEditBootstrapError extends StatelessWidget {
+  const PurchaseWizardEditBootstrapError({
+    super.key,
+    required this.message,
+    required this.onRetry,
+    required this.onGoBack,
+  });
+
+  final String message;
+  final VoidCallback onRetry;
+  final VoidCallback onGoBack;
+
+  @override
+  Widget build(BuildContext context) {
+    return HexaEmptyState(
+      icon: Icons.cloud_off_rounded,
+      title: "Couldn't load this purchase",
+      subtitle: message,
+      action: Wrap(
+        alignment: WrapAlignment.center,
+        spacing: 12,
+        runSpacing: 8,
+        children: [
+          FilledButton(
+            onPressed: onRetry,
+            child: const Text('Retry'),
+          ),
+          OutlinedButton(
+            onPressed: onGoBack,
+            child: const Text('Go back'),
+          ),
+        ],
       ),
     );
   }

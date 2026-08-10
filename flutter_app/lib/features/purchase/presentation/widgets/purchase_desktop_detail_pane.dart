@@ -6,8 +6,8 @@ import '../../../../core/design_system/desktop_detail_chrome.dart';
 import '../../../../core/models/trade_purchase_models.dart';
 import '../../../../core/router/post_auth_route.dart' show sessionCanSeeFinancials;
 import '../../../../core/theme/hexa_colors.dart';
-import '../../../../core/widgets/friendly_load_error.dart';
 import '../../../../core/widgets/list_skeleton.dart';
+import '../../../../shared/widgets/hexa_empty_state.dart';
 import '../../providers/trade_purchase_detail_provider.dart'
     show
         tradePurchaseDetailProvider,
@@ -30,12 +30,7 @@ class PurchaseDesktopDetailPane extends ConsumerWidget {
     if (purchaseId == null || purchaseId!.isEmpty) {
       return const ColoredBox(
         color: HexaColors.panelWarm,
-        child: Center(
-          child: Text(
-            'Select a purchase',
-            style: TextStyle(color: HexaColors.neutral, fontSize: 13),
-          ),
-        ),
+        child: PurchaseDesktopDetailEmptySelection(),
       );
     }
     final async = ref.watch(tradePurchaseDetailProvider(purchaseId!));
@@ -81,8 +76,7 @@ class PurchaseDesktopDetailPane extends ConsumerWidget {
           }
           return const Center(child: ListSkeleton());
         },
-        error: (e, _) => FriendlyLoadError(
-          message: 'Could not load purchase',
+        error: (e, _) => PurchaseDesktopDetailLoadError(
           onRetry: () =>
               ref.invalidate(tradePurchaseDetailProvider(purchaseId!)),
         ),
@@ -91,6 +85,48 @@ class PurchaseDesktopDetailPane extends ConsumerWidget {
           return paneFor(displayP);
         },
       ),
+    );
+  }
+}
+
+/// Desktop purchase detail pane load failure.
+@visibleForTesting
+class PurchaseDesktopDetailLoadError extends StatelessWidget {
+  const PurchaseDesktopDetailLoadError({
+    super.key,
+    required this.onRetry,
+    this.title = 'Could not load purchase',
+    this.subtitle = 'Check your connection, then retry.',
+  });
+
+  final VoidCallback onRetry;
+  final String title;
+  final String subtitle;
+
+  @override
+  Widget build(BuildContext context) {
+    return HexaEmptyState(
+      icon: Icons.receipt_long_outlined,
+      title: title,
+      subtitle: subtitle,
+      primaryActionLabel: 'Retry',
+      onPrimaryAction: onRetry,
+    );
+  }
+}
+
+/// Desktop master-detail empty right pane when no purchase row is selected.
+@visibleForTesting
+class PurchaseDesktopDetailEmptySelection extends StatelessWidget {
+  const PurchaseDesktopDetailEmptySelection({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return const HexaEmptyState(
+      icon: Icons.receipt_long_outlined,
+      title: 'Select a purchase',
+      subtitle:
+          'Choose a row on the left to see bill detail and delivery status.',
     );
   }
 }

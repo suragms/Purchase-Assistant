@@ -29,6 +29,7 @@ import '../../../core/widgets/focused_search_chrome.dart';
 import '../../../core/utils/trade_purchase_commission.dart';
 import '../../../core/utils/trade_purchase_rate_display.dart';
 import '../../../shared/widgets/hexa_empty_state.dart';
+import '../../../shared/widgets/hexa_cupertino_date_range_sheet.dart';
 import '../../../shared/widgets/trade_intel_cards.dart';
 import '../../../shared/widgets/trade_purchase_ledger_cards.dart';
 enum TradeLedgerKind { supplier, broker, catalogItem }
@@ -190,15 +191,12 @@ class _TradeLedgerPageState extends ConsumerState<TradeLedgerPage> {
 
   Future<void> _pickCustomRange() async {
     final now = DateTime.now();
-    final initial = DateTimeRange(
-      start: _from.isAfter(_to) ? _to : _from,
-      end: _to,
-    );
-    final r = await showDateRangePicker(
-      context: context,
+    final r = await showHexaCupertinoDateRangeSheet(
+      context,
       firstDate: DateTime(2020),
       lastDate: DateTime(now.year + 1, 12, 31),
-      initialDateRange: initial,
+      initialStart: _from.isAfter(_to) ? _to : _from,
+      initialEnd: _to,
     );
     if (!mounted || r == null) return;
     setState(() {
@@ -249,7 +247,7 @@ class _TradeLedgerPageState extends ConsumerState<TradeLedgerPage> {
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = e.toString();
+        _error = userFacingError(e);
         _loading = false;
       });
     }
@@ -548,14 +546,12 @@ class _TradeLedgerPageState extends ConsumerState<TradeLedgerPage> {
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _error != null
-              ? Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: Text(
-                      _error!,
-                      textAlign: TextAlign.center,
-                    ),
-                  ),
+              ? HexaEmptyState(
+                  icon: Icons.cloud_off_rounded,
+                  title: 'Could not load ledger',
+                  subtitle: _error,
+                  primaryActionLabel: 'Retry',
+                  onPrimaryAction: _load,
                 )
               : RefreshIndicator(
                   onRefresh: _load,

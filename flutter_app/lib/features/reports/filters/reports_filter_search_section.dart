@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/hexa_colors.dart';
+import '../../../shared/widgets/hexa_empty_state.dart';
 
 /// Searchable chip list with expand/collapse (avoids filter sheet overflow).
 class ReportsFilterSearchSection extends StatefulWidget {
@@ -130,10 +131,7 @@ class _ReportsFilterSearchSectionState extends State<ReportsFilterSearchSection>
           ),
           const SizedBox(height: 8),
           if (list.isEmpty)
-            const Text(
-              'No matches.',
-              style: TextStyle(fontSize: 12, color: HexaColors.neutral),
-            )
+            const ReportsFilterSearchEmpty()
           else
             Wrap(
               spacing: 6,
@@ -178,6 +176,21 @@ class _ReportsFilterSearchSectionState extends State<ReportsFilterSearchSection>
           const SizedBox(height: 8),
         ],
       ],
+    );
+  }
+}
+
+/// Filter-sheet searchable chip list when the query matches nothing.
+@visibleForTesting
+class ReportsFilterSearchEmpty extends StatelessWidget {
+  const ReportsFilterSearchEmpty({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return const HexaEmptyState(
+      icon: Icons.search_off_rounded,
+      title: 'No matches',
+      subtitle: 'Try another search term or clear the field.',
     );
   }
 }

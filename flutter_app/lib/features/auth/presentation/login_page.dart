@@ -313,7 +313,12 @@ class _LoginPageState extends ConsumerState<LoginPage>
       developer.log('Login failed with unexpected error: $e', name: 'login_page', error: e, stackTrace: st);
       if (mounted) {
         setState(() {
-          _inlineAuthError = 'Something went wrong. Please try again.';
+          // Empty-workspace / invite messages from [SessionNotifier.login].
+          if (e is StateError && e.message.trim().isNotEmpty) {
+            _inlineAuthError = e.message;
+          } else {
+            _inlineAuthError = 'Something went wrong. Please try again.';
+          }
         });
       }
     } finally {

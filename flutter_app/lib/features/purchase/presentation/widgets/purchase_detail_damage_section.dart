@@ -3,9 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import '../../../../core/auth/session_notifier.dart';
+import '../../../../core/errors/user_facing_errors.dart';
 import '../../../../core/providers/purchase_damage_reports_provider.dart';
-
-import '../../../../core/theme/hexa_colors.dart';
+import '../../../../shared/widgets/hexa_empty_state.dart';
 class PurchaseDetailDamageSection extends ConsumerStatefulWidget {
   const PurchaseDetailDamageSection({
     super.key,
@@ -42,6 +42,11 @@ class _PurchaseDetailDamageSectionState
           );
       ref.invalidate(purchaseDamageReportsProvider(widget.purchaseId));
       ref.invalidate(pendingDamageReportsCountProvider);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(userFacingError(e))),
+      );
     } finally {
       if (mounted) setState(() => _busyReportId = null);
     }
@@ -87,19 +92,14 @@ class _PurchaseDetailDamageSectionState
               padding: EdgeInsets.all(16),
               child: LinearProgressIndicator(),
             ),
-            error: (_, __) => const Padding(
-              padding: EdgeInsets.all(16),
-              child: Text('Could not load damage reports'),
+            error: (_, __) => PurchaseDetailDamageError(
+              onRetry: () => ref.invalidate(
+                purchaseDamageReportsProvider(widget.purchaseId),
+              ),
             ),
             data: (rows) {
               if (rows.isEmpty) {
-                return const Padding(
-                  padding: EdgeInsets.fromLTRB(16, 0, 16, 16),
-                  child: Text(
-                    'No damage or short-delivery reports for this purchase.',
-                    style: TextStyle(color: HexaColors.neutral),
-                  ),
-                );
+                return const PurchaseDetailDamageEmpty();
               }
               return Column(
                 children: [
@@ -243,6 +243,41 @@ class _DamageReportRow extends StatelessWidget {
           ],
         ],
       ),
+    );
+  }
+}
+
+/// Damage section when this purchase has no reports.
+@visibleForTesting
+class PurchaseDetailDamageEmpty extends StatelessWidget {
+  const PurchaseDetailDamageEmpty({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return const HexaEmptyState(
+      icon: Icons.report_gmailerrorred_outlined,
+      title: 'No damage reports',
+      subtitle:
+          'No damage or short-delivery reports for this purchase.',
+    );
+  }
+}
+
+/// Damage section when the reports feed failed to load.
+@visibleForTesting
+class PurchaseDetailDamageError extends StatelessWidget {
+  const PurchaseDetailDamageError({super.key, required this.onRetry});
+
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return HexaEmptyState(
+      icon: Icons.cloud_off_rounded,
+      title: 'Could not load damage reports',
+      subtitle: 'Check your connection, then retry.',
+      primaryActionLabel: 'Retry',
+      onPrimaryAction: onRetry,
     );
   }
 }

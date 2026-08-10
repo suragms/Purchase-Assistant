@@ -22,8 +22,23 @@ class TradePurchasePreviewNotifier
 
   @override
   AsyncValue<Map<String, dynamic>?> build() {
+    // Money / lines only — payment days, narration, invoice text must not
+    // schedule preview (wizard root rebuild + loading hitch on terms typing).
     ref.listen(
-      purchaseDraftProvider,
+      purchaseDraftProvider.select(
+        (d) => (
+          lines: d.lines,
+          headerDiscountPercent: d.headerDiscountPercent,
+          commissionMode: d.commissionMode,
+          commissionPercent: d.commissionPercent,
+          commissionMoney: d.commissionMoney,
+          freightAmount: d.freightAmount,
+          freightType: d.freightType,
+          billtyRate: d.billtyRate,
+          deliveredRate: d.deliveredRate,
+          supplierId: d.supplierId,
+        ),
+      ),
       (_, __) => _schedule(),
       fireImmediately: true,
     );
@@ -53,7 +68,10 @@ class TradePurchasePreviewNotifier
       state = const AsyncValue.data(null);
       return;
     }
-    state = const AsyncValue.loading();
+    // Keep prior totals visible while refreshing — avoid AsyncLoading rebuild storms.
+    final previous = state;
+    state = const AsyncValue<Map<String, dynamic>?>.loading()
+        .copyWithPrevious(previous);
     try {
       final api = ref.read(hexaApiProvider);
       final body =

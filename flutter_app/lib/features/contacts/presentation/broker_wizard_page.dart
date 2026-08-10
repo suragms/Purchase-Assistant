@@ -19,8 +19,8 @@ import '../../../core/providers/trade_purchases_provider.dart';
 import '../../../core/widgets/async_value_form.dart';
 import '../../../core/widgets/form_feedback.dart';
 import '../../../core/widgets/form_field_scroll.dart';
-import '../../../core/widgets/friendly_load_error.dart';
 import '../../../shared/widgets/full_screen_form_scaffold.dart';
+import '../../../shared/widgets/hexa_empty_state.dart';
 import 'supplier_create_simple.dart';
 
 import '../../../core/theme/hexa_colors.dart';
@@ -705,8 +705,7 @@ class _BrokerWizardPageState extends ConsumerState<BrokerWizardPage> {
         suppliersAsync.whenForm(
           initialLoading: () => const LinearProgressIndicator(),
           reloadingBanner: (_) => formReloadBanner(),
-          error: (e, __) => FriendlyLoadError(
-            message: 'Could not load suppliers',
+          error: (e, __) => BrokerWizardLoadError(
             onRetry: () => ref.invalidate(suppliersListProvider),
           ),
           data: (rows) {
@@ -939,6 +938,25 @@ class _BrokerWizardPageState extends ConsumerState<BrokerWizardPage> {
           child: _footer(),
         ),
       ),
+    );
+  }
+}
+
+/// Broker wizard supplier list load failure.
+@visibleForTesting
+class BrokerWizardLoadError extends StatelessWidget {
+  const BrokerWizardLoadError({super.key, required this.onRetry});
+
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return HexaEmptyState(
+      icon: Icons.cloud_off_outlined,
+      title: 'Could not load suppliers',
+      subtitle: 'Check your connection, then retry.',
+      primaryActionLabel: 'Retry',
+      onPrimaryAction: onRetry,
     );
   }
 }

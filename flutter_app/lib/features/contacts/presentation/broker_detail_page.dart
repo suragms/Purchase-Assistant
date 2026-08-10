@@ -16,7 +16,7 @@ import '../../../core/utils/trade_purchase_commission.dart';
 import '../../../core/providers/purchase_prefill_provider.dart';
 import '../../../core/theme/hexa_colors.dart';
 import '../../../core/utils/phone_launch.dart';
-import '../../../core/widgets/friendly_load_error.dart';
+import '../../../shared/widgets/hexa_empty_state.dart';
 import '../../../shared/widgets/trade_purchase_ledger_cards.dart';
 import '../../../shared/widgets/search_picker_sheet.dart';
 
@@ -273,8 +273,7 @@ class _BrokerDetailPageState extends ConsumerState<BrokerDetailPage> {
       body: async.when(
         skipLoadingOnReload: true,
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (_, __) => FriendlyLoadError(
-          message: 'Could not load broker',
+        error: (_, __) => BrokerDetailLoadError(
           onRetry: () => ref.invalidate(_brokerProvider(widget.brokerId)),
         ),
         data: (b) {
@@ -463,8 +462,8 @@ class _BrokerDetailPageState extends ConsumerState<BrokerDetailPage> {
                   ),
                   error: (_, __) => Padding(
                     padding: const EdgeInsets.only(top: 12),
-                    child: FriendlyLoadError(
-                      message: 'Could not load suppliers on bills',
+                    child: BrokerDetailLoadError(
+                      title: 'Could not load suppliers on bills',
                       onRetry: () => ref.invalidate(
                           _brokerLinkedSuppliersProvider(widget.brokerId)),
                     ),
@@ -575,12 +574,20 @@ class _BrokerDetailPageState extends ConsumerState<BrokerDetailPage> {
                     style: tt.titleSmall?.copyWith(fontWeight: FontWeight.w800),
                   ),
                   const SizedBox(height: 8),
-                  TradeLedgerCardList(
-                    trades: _rangeTrades,
-                    useCompactLines: compactLedger,
-                    emptyHint:
-                        'No PUR bills with this broker in this date range.',
-                  ),
+                  if (_rangeTrades.isEmpty)
+                    BrokerDetailPurEmpty(
+                      onAddPurchase: () {
+                        ref
+                            .read(pendingPurchaseBrokerIdProvider.notifier)
+                            .state = widget.brokerId;
+                        context.pushNamed('purchase_new');
+                      },
+                    )
+                  else
+                    TradeLedgerCardList(
+                      trades: _rangeTrades,
+                      useCompactLines: compactLedger,
+                    ),
                   ListTile(
                     contentPadding: EdgeInsets.zero,
                     dense: true,
@@ -596,20 +603,17 @@ class _BrokerDetailPageState extends ConsumerState<BrokerDetailPage> {
                     onTap: () =>
                         context.push('/broker/${widget.brokerId}/ledger'),
                   ),
-                  const SizedBox(height: 20),
-                  Text('Commission impact (monthly)',
-                      style:
-                          tt.titleSmall?.copyWith(fontWeight: FontWeight.w800)),
-                  const SizedBox(height: 6),
-                  Text('Teal = gross line profit · Green = after commission',
-                      style: tt.labelSmall
-                          ?.copyWith(color: HexaColors.textSecondary)),
-                  const SizedBox(height: 12),
-                  if (groups.isEmpty)
-                    Text('No broker-linked trade purchases in this range.',
-                        style: tt.bodySmall
-                            ?.copyWith(color: HexaColors.textSecondary))
-                  else
+                  if (groups.isNotEmpty) ...[
+                    const SizedBox(height: 20),
+                    Text('Commission impact (monthly)',
+                        style: tt.titleSmall
+                            ?.copyWith(fontWeight: FontWeight.w800)),
+                    const SizedBox(height: 6),
+                    Text(
+                        'Teal = gross line profit · Green = after commission',
+                        style: tt.labelSmall
+                            ?.copyWith(color: HexaColors.textSecondary)),
+                    const SizedBox(height: 12),
                     SizedBox(
                       height: 220,
                       child: BarChart(
@@ -662,6 +666,7 @@ class _BrokerDetailPageState extends ConsumerState<BrokerDetailPage> {
                         ),
                       ),
                     ),
+                  ],
                 ],
               ],
             ),
@@ -693,6 +698,51 @@ class _BrokerDetailPageState extends ConsumerState<BrokerDetailPage> {
           style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w800),
         ),
       ],
+    );
+  }
+}
+
+/// Empty PUR list on broker detail for the selected date range.
+class BrokerDetailPurEmpty extends StatelessWidget {
+  const BrokerDetailPurEmpty({super.key, required this.onAddPurchase});
+
+  final VoidCallback onAddPurchase;
+
+  @override
+  Widget build(BuildContext context) {
+    return HexaEmptyState(
+      icon: Icons.receipt_long_rounded,
+      title: 'No PUR bills in this range',
+      subtitle:
+          'Widen the date range, or add a purchase with this broker.',
+      primaryActionLabel: 'New purchase',
+      onPrimaryAction: onAddPurchase,
+    );
+  }
+}
+
+/// Broker detail load failure.
+@visibleForTesting
+class BrokerDetailLoadError extends StatelessWidget {
+  const BrokerDetailLoadError({
+    super.key,
+    required this.onRetry,
+    this.title = 'Could not load broker',
+    this.subtitle = 'Check your connection, then retry.',
+  });
+
+  final VoidCallback onRetry;
+  final String title;
+  final String subtitle;
+
+  @override
+  Widget build(BuildContext context) {
+    return HexaEmptyState(
+      icon: Icons.cloud_off_outlined,
+      title: title,
+      subtitle: subtitle,
+      primaryActionLabel: 'Retry',
+      onPrimaryAction: onRetry,
     );
   }
 }

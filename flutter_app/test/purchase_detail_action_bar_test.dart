@@ -50,15 +50,16 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets('shows full action labels at 320px without overflow', (tester) async {
+  testWidgets('shows full action labels at 320px via Wrap (no horizontal ListView)',
+      (tester) async {
     await pumpBar(tester, 320);
     expect(find.text('Mark as Paid'), findsOneWidget);
     expect(find.text('Edit'), findsOneWidget);
     expect(find.text('Export PDF'), findsOneWidget);
-    await tester.drag(find.byType(ListView), const Offset(-500, 0));
-    await tester.pumpAndSettle();
     expect(find.text('Share'), findsOneWidget);
     expect(find.text('Print'), findsOneWidget);
+    expect(find.byType(Wrap), findsOneWidget);
+    expect(find.byType(ListView), findsNothing);
     expect(tester.takeException(), isNull);
   });
 

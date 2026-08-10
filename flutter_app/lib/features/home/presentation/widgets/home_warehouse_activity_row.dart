@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
+import '../../../../core/auth/dashboard_role.dart';
+import '../../../../core/auth/session_notifier.dart';
 import '../../../../core/design_system/hexa_ds_tokens.dart';
 import '../../../../core/design_system/hexa_responsive.dart';
 import '../../../../core/providers/home_owner_dashboard_providers.dart';
@@ -10,6 +13,11 @@ import '../../../../core/theme/hexa_colors.dart';
 import '../../../purchase/presentation/purchase_home_page.dart'
     show formatPurchaseHumanDate;
 import 'home_formatters.dart';
+
+bool _showActivityMoney(BuildContext context) {
+  final session = ProviderScope.containerOf(context).read(sessionProvider);
+  return session != null && sessionCanSeeFinancialMoney(session);
+}
 
 void openHomeActivityItem(BuildContext context, HomeActivityItem item) {
   final id = item.routeId;
@@ -28,6 +36,7 @@ Future<void> showWarehouseActivityDetailSheet(
   final entered = item.createdBy ?? item.actor;
   final verified = item.verifiedBy;
   final supplier = item.supplierName?.trim();
+  final showMoney = _showActivityMoney(context);
   return showHexaBottomSheet<void>(
     context: context,
     compact: true,
@@ -77,7 +86,9 @@ Future<void> showWarehouseActivityDetailSheet(
                 valueColor: HexaColors.textSecondary,
               ),
             ],
-            if (item.amountInr != null && item.amountInr! > 0) ...[
+            if (showMoney &&
+                item.amountInr != null &&
+                item.amountInr! > 0) ...[
               const SizedBox(height: 8),
               _DetailLine(
                 label: 'Bill total',
@@ -351,7 +362,9 @@ class _DeliveryLayout extends StatelessWidget {
                   height: 1.2,
                 ),
               ),
-              if (item.amountInr != null && item.amountInr! > 0) ...[
+              if (_showActivityMoney(context) &&
+                  item.amountInr != null &&
+                  item.amountInr! > 0) ...[
                 const SizedBox(height: 4),
                 Text(
                   homeInr(item.amountInr!),

@@ -10,6 +10,7 @@ import '../../../../core/theme/hexa_colors.dart';
 import '../../../../core/router/post_auth_route.dart' show sessionIsStaff;
 import '../../../../core/providers/stock_providers.dart';
 import '../../../../core/utils/unit_utils.dart';
+import '../../../../shared/widgets/hexa_empty_state.dart';
 import '../quick_stock_action_sheet.dart';
 import '../stock_quick_purchase_sheet.dart';
 import 'staff_delivered_detail_sheet.dart';
@@ -25,33 +26,7 @@ class StockDesktopDetailPane extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     if (item == null) {
-      return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.inventory_2_outlined,
-              size: 48,
-              color: HexaColors.brandPrimary.withValues(alpha: 0.35),
-            ),
-            const SizedBox(height: 12),
-            const Text(
-              'Select an item',
-              style: TextStyle(
-                fontWeight: FontWeight.w800,
-                fontSize: 15,
-                color: HexaColors.slate700,
-              ),
-            ),
-            const SizedBox(height: 6),
-            const Text(
-              'Choose a row on the left to see stock metrics and recent activity.',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: HexaColors.neutral, fontSize: 13),
-            ),
-          ],
-        ),
-      );
+      return const StockDesktopDetailEmptySelection();
     }
     final id = item!['id']?.toString() ?? '';
     final name = item!['name']?.toString() ?? 'Item';
@@ -217,23 +192,13 @@ class StockDesktopDetailPane extends ConsumerWidget {
           padding: EdgeInsets.all(12),
           child: LinearProgressIndicator(minHeight: 2),
         ),
-        error: (_, __) => const Padding(
-          padding: EdgeInsets.all(12),
-          child: Text(
-            'Could not load activity',
-            style: TextStyle(fontSize: 12, color: Colors.black54),
-          ),
+        error: (_, __) => StockDesktopDetailActivityError(
+          onRetry: () => ref.invalidate(stockItemActivityProvider(id)),
         ),
         data: (data) {
           final events = (data['activity'] as List?) ?? [];
           if (events.isEmpty) {
-            return const Padding(
-              padding: EdgeInsets.all(12),
-              child: Text(
-                'No recent activity',
-                style: TextStyle(fontSize: 12, color: Colors.black54),
-              ),
-            );
+            return const StockDesktopDetailActivityEmpty();
           }
           return ListView.builder(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -326,6 +291,56 @@ class StockDesktopDetailPane extends ConsumerWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Desktop master-detail empty right pane when no stock row is selected.
+@visibleForTesting
+class StockDesktopDetailEmptySelection extends StatelessWidget {
+  const StockDesktopDetailEmptySelection({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return const HexaEmptyState(
+      icon: Icons.inventory_2_outlined,
+      title: 'Select an item',
+      subtitle:
+          'Choose a row on the left to see stock metrics and recent activity.',
+    );
+  }
+}
+
+/// Selected-item activity body when there are no events yet.
+@visibleForTesting
+class StockDesktopDetailActivityEmpty extends StatelessWidget {
+  const StockDesktopDetailActivityEmpty({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return const HexaEmptyState(
+      icon: Icons.history_rounded,
+      title: 'No recent activity',
+      subtitle: 'Stock updates and purchases for this item will show here.',
+    );
+  }
+}
+
+/// Selected-item activity body when the feed failed to load.
+@visibleForTesting
+class StockDesktopDetailActivityError extends StatelessWidget {
+  const StockDesktopDetailActivityError({super.key, required this.onRetry});
+
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return HexaEmptyState(
+      icon: Icons.cloud_off_rounded,
+      title: 'Could not load activity',
+      subtitle: 'Check your connection, then retry.',
+      primaryActionLabel: 'Retry',
+      onPrimaryAction: onRetry,
     );
   }
 }

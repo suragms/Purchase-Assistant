@@ -4,7 +4,6 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/auth/session_notifier.dart';
 import '../../../core/json_coerce.dart';
-import '../../../core/design_system/hexa_ds_tokens.dart';
 import '../../../core/errors/user_facing_errors.dart';
 import '../../../core/providers/catalog_providers.dart'
     show catalogItemDetailProvider, catalogItemsListProvider;
@@ -13,8 +12,8 @@ import '../../../core/providers/staff_home_providers.dart'
 import '../../../core/providers/stock_providers.dart';
 import '../../../core/providers/trade_purchases_provider.dart';
 import '../../../core/theme/hexa_colors.dart';
-import '../../../core/widgets/friendly_load_error.dart';
 import '../../../core/widgets/list_skeleton.dart';
+import '../../../shared/widgets/hexa_empty_state.dart';
 
 /// Items without item_code — generate ITM-#### and print labels.
 class CatalogMissingCodesPage extends ConsumerStatefulWidget {
@@ -78,8 +77,7 @@ class _CatalogMissingCodesPageState extends ConsumerState<CatalogMissingCodesPag
       ),
       body: listAsync.when(
         loading: () => const ListSkeleton(rowCount: 10, rowHeight: 64),
-        error: (_, __) => FriendlyLoadError(
-          message: 'Could not load items',
+        error: (_, __) => CatalogMissingCodesLoadError(
           onRetry: () => ref.invalidate(missingCodeItemsProvider),
         ),
         data: (rawRows) {
@@ -89,15 +87,12 @@ class _CatalogMissingCodesPageState extends ConsumerState<CatalogMissingCodesPag
                   .compareTo(coerceToDouble(a['current_stock'])),
             );
           if (rows.isEmpty) {
-            return Center(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Text(
-                  'All items have codes assigned.',
-                  style: HexaDsType.body(15, color: HexaDsColors.textMuted),
-                  textAlign: TextAlign.center,
-                ),
-              ),
+            return HexaEmptyState(
+              icon: Icons.verified_outlined,
+              title: 'All items have codes',
+              subtitle: 'Every catalog item already has an item code assigned.',
+              primaryActionLabel: 'Open catalog',
+              onPrimaryAction: () => context.go('/catalog'),
             );
           }
           return ListView.separated(
@@ -149,6 +144,25 @@ class _CatalogMissingCodesPageState extends ConsumerState<CatalogMissingCodesPag
           );
         },
       ),
+    );
+  }
+}
+
+/// Catalog missing item codes list load failure (UX-139).
+@visibleForTesting
+class CatalogMissingCodesLoadError extends StatelessWidget {
+  const CatalogMissingCodesLoadError({super.key, required this.onRetry});
+
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return HexaEmptyState(
+      icon: Icons.qr_code_2_outlined,
+      title: 'Could not load items',
+      subtitle: 'Check your connection, then retry.',
+      primaryActionLabel: 'Retry',
+      onPrimaryAction: onRetry,
     );
   }
 }

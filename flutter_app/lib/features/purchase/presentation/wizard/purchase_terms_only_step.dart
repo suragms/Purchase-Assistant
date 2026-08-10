@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
-import '../../../../core/design_system/widgets/app_form_layout.dart';
 import '../../../../core/widgets/form_field_scroll.dart';
 import '../../../../shared/widgets/keyboard_safe_form_viewport.dart';
 import '../../domain/purchase_draft.dart';
@@ -10,7 +9,8 @@ import '../../state/purchase_draft_provider.dart';
 import 'purchase_wizard_shared.dart';
 
 import '../../../../core/theme/hexa_colors.dart';
-/// Step 2 — deal terms once (Payment days + Discount % paired on tablet+).
+
+/// Step 2 — deal terms once (Payment days primary; discount/narration disclosed).
 class PurchaseTermsOnlyStep extends ConsumerWidget {
   const PurchaseTermsOnlyStep({
     super.key,
@@ -71,13 +71,29 @@ class PurchaseTermsOnlyStep extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final draft = ref.watch(purchaseDraftProvider);
-    final needsSupplierLink =
-        draft.supplierId == null || draft.supplierId!.trim().isEmpty;
-    final hasBroker =
-        draft.brokerId != null && draft.brokerId!.trim().isNotEmpty;
+    // Controllers own payment/discount/narration text — only watch fields that
+    // change chrome (supplier link, broker, commission mode), not every draft
+    // keystroke via full [purchaseDraftProvider].
+    final termsChrome = ref.watch(
+      purchaseDraftProvider.select(
+        (d) => (
+          supplierId: d.supplierId,
+          supplierName: d.supplierName,
+          brokerId: d.brokerId,
+          commissionMode: d.commissionMode,
+          lines: d.lines,
+        ),
+      ),
+    );
+    final needsSupplierLink = termsChrome.supplierId == null ||
+        termsChrome.supplierId!.trim().isEmpty;
+    final hasBroker = termsChrome.brokerId != null &&
+        termsChrome.brokerId!.trim().isNotEmpty;
     final sub = Theme.of(context).colorScheme.onSurfaceVariant;
-    final mode = draft.commissionMode;
+    final mode = termsChrome.commissionMode;
+    final draftSupplierName = termsChrome.supplierName;
+    final draftLines = termsChrome.lines;
+    final supplierNameTrimmed = draftSupplierName?.trim() ?? '';
 
     Widget orderedField({
       required int order,
@@ -207,9 +223,8 @@ class PurchaseTermsOnlyStep extends ConsumerWidget {
                     const SizedBox(width: 10),
                     Expanded(
                       child: Text(
-                        draft.supplierName != null &&
-                                draft.supplierName!.trim().isNotEmpty
-                            ? 'Bill shows “${draft.supplierName!.trim()}” — go back to Party and pick the matching directory supplier. You can still edit payment days and charges below.'
+                        supplierNameTrimmed.isNotEmpty
+                            ? 'Bill shows “$supplierNameTrimmed” — go back to Party and pick the matching directory supplier. You can still edit payment days and charges below.'
                             : 'Select a supplier on the Party step first. You can still edit payment days and charges below.',
                         style: TextStyle(
                           fontSize: 12,
@@ -225,9 +240,7 @@ class PurchaseTermsOnlyStep extends ConsumerWidget {
             ),
           ),
         ],
-        if (!needsSupplierLink &&
-            draft.supplierName != null &&
-            draft.supplierName!.trim().isNotEmpty)
+        if (!needsSupplierLink && supplierNameTrimmed.isNotEmpty)
           Padding(
             padding: const EdgeInsets.only(bottom: 8),
             child: Container(
@@ -246,7 +259,7 @@ class PurchaseTermsOnlyStep extends ConsumerWidget {
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      'Defaults from ${draft.supplierName!.trim()} (editable)',
+                      'Defaults from $supplierNameTrimmed (editable)',
                       style: const TextStyle(
                         fontSize: 12,
                         color: HexaColors.brandTealBright,
@@ -265,21 +278,57 @@ class PurchaseTermsOnlyStep extends ConsumerWidget {
               ),
         ),
         const SizedBox(height: 6),
-        if (desktop)
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(child: paymentDaysCol),
-              const SizedBox(width: 16),
-              Expanded(child: discountField),
-              const SizedBox(width: 16),
-              Expanded(child: narrationField),
-            ],
-          )
-        else
-          AppFormRow(
-            children: [paymentDaysCol, discountField],
-          ),
+        // Primary terms field always visible; keep first-screen scroll short.
+        paymentDaysCol,
+        // Progressive disclosure: discount + narration stay behind an expand
+        // when empty (UX-004). Auto-open when either already has a value.
+        Builder(
+          builder: (context) {
+            final hasOptionalTerms = headerDiscCtrl.text.trim().isNotEmpty ||
+                narrationCtrl.text.trim().isNotEmpty;
+            final optionalBody = desktop
+                ? Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(child: discountField),
+                      const SizedBox(width: 16),
+                      Expanded(child: narrationField),
+                    ],
+                  )
+                : Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      discountField,
+                      narrationField,
+                    ],
+                  );
+            return Theme(
+              data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+              child: ExpansionTile(
+                key: ValueKey<String>(
+                  'terms-optional-${hasOptionalTerms ? 'open' : 'closed'}',
+                ),
+                initiallyExpanded: hasOptionalTerms,
+                tilePadding: EdgeInsets.zero,
+                childrenPadding: const EdgeInsets.only(bottom: 4),
+                title: Text(
+                  'Discount & narration',
+                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w800,
+                        fontSize: 13,
+                      ),
+                ),
+                subtitle: hasOptionalTerms
+                    ? null
+                    : Text(
+                        'Optional',
+                        style: TextStyle(fontSize: 11, color: sub),
+                      ),
+                children: [optionalBody],
+              ),
+            );
+          },
+        ),
         if (hasBroker) ...[
           Text(
             'Broker commission',
@@ -321,7 +370,7 @@ class PurchaseTermsOnlyStep extends ConsumerWidget {
                     .setCommissionMode(kPurchaseCommissionModePercent);
               } else {
                 final sug =
-                    suggestedBrokerFigureModeFromLines(draft.lines);
+                    suggestedBrokerFigureModeFromLines(draftLines);
                 ref.read(purchaseDraftProvider.notifier).setCommissionMode(sug);
               }
               onDraftChanged();
@@ -352,11 +401,11 @@ class PurchaseTermsOnlyStep extends ConsumerWidget {
           ] else ...[
             Builder(
               builder: (context) {
-                final figOpts = brokerFigureUiOptions(draft.lines);
+                final figOpts = brokerFigureUiOptions(draftLines);
                 final allowed = figOpts.map((e) => e.$1).toSet();
                 final coerced = allowed.contains(mode)
                     ? mode
-                    : clampFigureModeToUiOptions(mode, draft.lines);
+                    : clampFigureModeToUiOptions(mode, draftLines);
                 if (coerced != mode) {
                   WidgetsBinding.instance.addPostFrameCallback((_) {
                     if (!context.mounted) return;
@@ -368,7 +417,7 @@ class PurchaseTermsOnlyStep extends ConsumerWidget {
                 }
 
                 final hint =
-                    brokerFigureBasisLineHint(draft.lines, coerced);
+                    brokerFigureBasisLineHint(draftLines, coerced);
 
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -452,7 +501,6 @@ class PurchaseTermsOnlyStep extends ConsumerWidget {
           ],
           const SizedBox(height: 8),
         ],
-        if (!desktop) narrationField,
       ],
     );
 

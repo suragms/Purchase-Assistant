@@ -13,8 +13,8 @@ import '../../../core/models/trade_purchase_models.dart';
 import '../../../core/providers/staff_home_providers.dart';
 import '../../../core/theme/hexa_colors.dart';
 import '../../../core/utils/unit_utils.dart';
-import '../../../core/widgets/friendly_load_error.dart';
 import '../../../core/widgets/list_skeleton.dart';
+import '../../../shared/widgets/hexa_empty_state.dart';
 import '../../purchase/presentation/widgets/purchase_history_grouping.dart';
 import 'widgets/staff_purchase_history_row.dart';
 
@@ -230,18 +230,21 @@ class _StaffPurchaseHistoryPageState extends ConsumerState<StaffPurchaseHistoryP
                 ? lowAsync.when(
                     loading: () =>
                         const ListSkeleton(rowCount: 8, rowHeight: 72),
-                    error: (_, __) => FriendlyLoadError(
-                      message: 'Could not load low stock items',
+                    error: (_, __) => StaffPurchaseHistoryLowStockError(
                       onRetry: () =>
                           ref.invalidate(staffLowStockAlertsProvider),
                     ),
                     data: (rows) {
                       final filtered = _filterLowStock(rows);
                       if (filtered.isEmpty) {
-                        return _emptyMessage(
-                          _query.isEmpty
-                              ? 'No low stock items'
-                              : 'No items match your search',
+                        return _historyEmpty(
+                          searchActive: _query.isNotEmpty,
+                          emptyTitle: 'No low stock items',
+                          emptySubtitle:
+                              'Nothing is below reorder level right now.',
+                          onRefresh: () =>
+                              ref.invalidate(staffLowStockAlertsProvider),
+                          openStock: true,
                         );
                       }
                       return ListView.separated(
@@ -256,7 +259,7 @@ class _StaffPurchaseHistoryPageState extends ConsumerState<StaffPurchaseHistoryP
                 : purchasesAsync!.when(
                     loading: () =>
                         const ListSkeleton(rowCount: 10, rowHeight: 88),
-                    error: (e, _) => FriendlyLoadError(
+                    error: (e, _) => StaffPurchaseHistoryLoadError(
                       message: _loadErrorMessage(e),
                       onRetry: () => ref.invalidate(
                         staffTradePurchasesHistoryProvider(_period),
@@ -265,10 +268,14 @@ class _StaffPurchaseHistoryPageState extends ConsumerState<StaffPurchaseHistoryP
                     data: (rows) {
                       final filtered = _filterPurchases(rows);
                       if (filtered.isEmpty) {
-                        return _emptyMessage(
-                          _query.isEmpty
-                              ? 'No purchase orders in this period'
-                              : 'No orders match your search',
+                        return _historyEmpty(
+                          searchActive: _query.isNotEmpty,
+                          emptyTitle: 'No purchase orders in this period',
+                          emptySubtitle:
+                              'Try another period tab, or refresh to check again.',
+                          onRefresh: () => ref.invalidate(
+                            staffTradePurchasesHistoryProvider(_period),
+                          ),
                         );
                       }
                       final grouped = buildGroupedPurchaseHistory(filtered);
@@ -311,16 +318,34 @@ class _StaffPurchaseHistoryPageState extends ConsumerState<StaffPurchaseHistoryP
     );
   }
 
-  Widget _emptyMessage(String text) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Text(
-          text,
-          style: HexaDsType.body(14, color: HexaDsColors.textMuted),
-          textAlign: TextAlign.center,
-        ),
-      ),
+  Widget _historyEmpty({
+    required bool searchActive,
+    required String emptyTitle,
+    required String emptySubtitle,
+    required VoidCallback onRefresh,
+    bool openStock = false,
+  }) {
+    if (searchActive) {
+      return HexaEmptyState(
+        icon: Icons.search_off_rounded,
+        title: 'No matches',
+        subtitle: 'Try another spelling, or clear search.',
+        primaryActionLabel: 'Clear search',
+        onPrimaryAction: () {
+          _debounce?.cancel();
+          _searchCtrl.clear();
+          setState(() => _query = '');
+        },
+      );
+    }
+    return HexaEmptyState(
+      icon: openStock
+          ? Icons.inventory_2_outlined
+          : Icons.receipt_long_outlined,
+      title: emptyTitle,
+      subtitle: emptySubtitle,
+      primaryActionLabel: openStock ? 'Open stock' : 'Refresh',
+      onPrimaryAction: openStock ? () => context.push('/stock') : onRefresh,
     );
   }
 }
@@ -400,6 +425,52 @@ class _StaffLowStockRow extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Staff purchase history — low stock tab load failure (UX-135).
+@visibleForTesting
+class StaffPurchaseHistoryLowStockError extends StatelessWidget {
+  const StaffPurchaseHistoryLowStockError({
+    super.key,
+    required this.onRetry,
+  });
+
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return HexaEmptyState(
+      icon: Icons.warning_amber_outlined,
+      title: 'Could not load low stock items',
+      subtitle: 'Check your connection, then retry.',
+      primaryActionLabel: 'Retry',
+      onPrimaryAction: onRetry,
+    );
+  }
+}
+
+/// Staff purchase history — purchases tabs load failure (UX-135).
+@visibleForTesting
+class StaffPurchaseHistoryLoadError extends StatelessWidget {
+  const StaffPurchaseHistoryLoadError({
+    super.key,
+    required this.onRetry,
+    this.message = 'Could not load purchases',
+  });
+
+  final VoidCallback onRetry;
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return HexaEmptyState(
+      icon: Icons.receipt_long_outlined,
+      title: message,
+      subtitle: 'Check your connection, then retry.',
+      primaryActionLabel: 'Retry',
+      onPrimaryAction: onRetry,
     );
   }
 }

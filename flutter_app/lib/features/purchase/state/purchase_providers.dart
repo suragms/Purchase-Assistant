@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/auth/session_notifier.dart';
 import '../../../core/calc_engine.dart';
+import '../../../core/errors/user_facing_errors.dart';
 import '../../../core/models/trade_purchase_models.dart';
 import '../../../core/providers/business_write_revision.dart';
 import '../../../core/utils/trade_purchase_commission.dart';
@@ -444,7 +445,7 @@ class LedgerFlattenNotifier extends StateNotifier<LedgerLinesState> {
       state = state.copyWith(
         loadingInitial: false,
         loadingMore: false,
-        errorMessage: e.toString(),
+        errorMessage: userFacingError(e),
       );
     }
   }

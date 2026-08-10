@@ -223,7 +223,9 @@ class OperationalLiveBanner extends StatelessWidget {
   }
 }
 
-/// Horizontal scroll filter pills (category / supplier / status).
+/// Filter pills — wraps (never horizontal scroll). Prefer [OperationalPillWrap].
+///
+/// [height] is retained for API compatibility but ignored (Wrap sizes naturally).
 class OperationalPillRow extends StatelessWidget {
   const OperationalPillRow({
     super.key,
@@ -240,24 +242,10 @@ class OperationalPillRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (labels.isEmpty) return const SizedBox.shrink();
-    return SizedBox(
-      height: height,
-      child: ListView.separated(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 12),
-        itemCount: labels.length,
-        separatorBuilder: (_, __) => const SizedBox(width: 6),
-        itemBuilder: (ctx, i) {
-          final label = labels[i];
-          final on = selected == label;
-          return _operationalPillChip(
-            label: label,
-            on: on,
-            onTap: () => onSelected(label),
-          );
-        },
-      ),
+    return OperationalPillWrap(
+      labels: labels,
+      selected: selected,
+      onSelected: onSelected,
     );
   }
 }

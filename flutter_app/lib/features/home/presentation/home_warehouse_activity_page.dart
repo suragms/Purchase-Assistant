@@ -10,7 +10,6 @@ import '../../../core/providers/home_dashboard_provider.dart';
 import '../../../core/providers/home_owner_dashboard_providers.dart';
 import '../../../core/router/navigation_ext.dart';
 import '../../../core/theme/hexa_colors.dart';
-import '../../../core/widgets/friendly_load_error.dart';
 import '../../../shared/widgets/hexa_empty_state.dart';
 import 'widgets/home_period_filter_row.dart';
 import 'widgets/home_recent_changes_section.dart' show HomeSectionSkeleton;
@@ -131,8 +130,7 @@ class _HomeWarehouseActivityPageState
             else if (feedAsync.hasError && displayItems == null)
               SliverFillRemaining(
                 hasScrollBody: false,
-                child: FriendlyLoadError(
-                  message: 'Could not load activity',
+                child: HomeWarehouseActivityPageError(
                   onRetry: _reload,
                 ),
               )
@@ -298,6 +296,25 @@ class _ActivityTableHeader extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Full warehouse activity page load failure (UX-130).
+@visibleForTesting
+class HomeWarehouseActivityPageError extends StatelessWidget {
+  const HomeWarehouseActivityPageError({super.key, required this.onRetry});
+
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return HexaEmptyState(
+      icon: Icons.cloud_off_outlined,
+      title: 'Could not load activity',
+      subtitle: 'Check your connection, then retry.',
+      primaryActionLabel: 'Retry',
+      onPrimaryAction: onRetry,
     );
   }
 }

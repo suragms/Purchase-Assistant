@@ -7,7 +7,8 @@ import '../../../../core/providers/api_degraded_provider.dart';
 import '../../../../core/providers/home_dashboard_provider.dart';
 
 import '../../../../core/theme/hexa_colors.dart';
-/// Shown when the user appears signed in but live API data is missing (often 401).
+
+/// Shown when signed-in Home cannot show live/auth-safe totals.
 class HomeSessionDataBanner extends ConsumerWidget {
   const HomeSessionDataBanner({super.key});
 
@@ -17,6 +18,7 @@ class HomeSessionDataBanner extends ConsumerWidget {
     final dashState = ref.watch(homeDashboardDataProvider);
     final dash = dashState.snapshot.data;
     final stale = dashState.snapshot.stale;
+    final failureBanner = dashState.snapshot.banner?.trim();
 
     final looksEmpty = dash.purchaseCount == 0 &&
         dash.totalPurchase <= 0 &&
@@ -27,16 +29,32 @@ class HomeSessionDataBanner extends ConsumerWidget {
         (degraded.toLowerCase().contains('session') ||
             degraded.toLowerCase().contains('sign in'));
 
-    if (!looksEmpty && !authHint) return const SizedBox.shrink();
-    if (looksEmpty && !authHint && !stale && !dashState.refreshing) {
+    final hasFailureBanner =
+        failureBanner != null && failureBanner.isNotEmpty;
+
+    // Explicit dashboard failure (API timeout/offline) must surface even when
+    // empty-DB heuristics would hide the strip — otherwise KPIs go silently blank.
+    if (!looksEmpty && !authHint && !hasFailureBanner) {
+      return const SizedBox.shrink();
+    }
+    if (looksEmpty &&
+        !authHint &&
+        !stale &&
+        !dashState.refreshing &&
+        !hasFailureBanner) {
       return const SizedBox.shrink();
     }
 
-    final message = authHint
-        ? degraded
-        : stale
-            ? 'Showing saved data — pull to refresh when online.'
-            : 'Could not load live totals — check connection and retry.';
+    final String message;
+    if (authHint) {
+      message = degraded!;
+    } else if (hasFailureBanner) {
+      message = failureBanner!;
+    } else if (stale) {
+      message = 'Showing saved data — pull to refresh when online.';
+    } else {
+      message = 'Could not load live totals — check connection and retry.';
+    }
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
@@ -48,12 +66,14 @@ class HomeSessionDataBanner extends ConsumerWidget {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Icon(Icons.lock_reset_rounded, size: 20, color: HexaColors.accentOrange),
+              const Icon(Icons.lock_reset_rounded,
+                  size: 20, color: HexaColors.accentOrange),
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
                   message,
-                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                  style: const TextStyle(
+                      fontSize: 12, fontWeight: FontWeight.w600),
                 ),
               ),
               if (authHint)
@@ -63,6 +83,14 @@ class HomeSessionDataBanner extends ConsumerWidget {
                     if (context.mounted) context.go('/login');
                   },
                   child: const Text('Sign in again'),
+                )
+              else if (hasFailureBanner || stale)
+                TextButton(
+                  onPressed: () {
+                    bustHomeDashboardVolatileCaches();
+                    ref.invalidate(homeDashboardDataProvider);
+                  },
+                  child: const Text('Retry'),
                 ),
             ],
           ),

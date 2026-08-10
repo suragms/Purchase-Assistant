@@ -26,17 +26,24 @@ import '../../../core/widgets/form_feedback.dart';
 import '../../../core/widgets/async_value_form.dart';
 import '../../catalog/catalog_taxonomy_utils.dart';
 import '../../../shared/widgets/keyboard_safe_form_viewport.dart';
+import '../../../shared/widgets/hexa_empty_state.dart';
 
 import '../../../core/theme/hexa_colors.dart';
 const _kDraftKey = 'supplier_create_wizard_draft_v1';
 
-const _stepTitles = <String>[
+/// Public for tests / step rail (UX-013).
+const kSupplierWizardStepTitles = <String>[
   'Basic details',
   'Business details',
   'Brokers',
   'Items & categories',
   'Review',
 ];
+
+const kSupplierWizardReviewStep = 4;
+
+/// Steps 1–3 are optional associations / business fields — skippable to review.
+bool supplierWizardStepIsOptional(int step) => step >= 1 && step <= 3;
 
 bool _validPhoneDigits(String raw) {
   final d = raw.replaceAll(RegExp(r'\D'), '');
@@ -839,7 +846,9 @@ class _SupplierCreateWizardPageState
           reloadingBanner: (_) => formReloadBanner(),
           data: (rows) {
             if (rows.isEmpty) {
-              return const Text('No brokers yet — create one above.');
+              return SupplierWizardBrokersEmpty(
+                onCreateBroker: _addBrokerInline,
+              );
             }
             return Column(
               children: rows.map((b) {
@@ -894,20 +903,12 @@ class _SupplierCreateWizardPageState
         cats.whenForm(
           initialLoading: () => const LinearProgressIndicator(),
           reloadingBanner: (_) => formReloadBanner(),
-          error: (_, __) => Padding(
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            child: Text(
-              'Could not load categories. Check your connection, then go back and open this step again.',
-              style: TextStyle(
-                color: Theme.of(context).colorScheme.error,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
+          error: (_, __) => SupplierWizardCategoriesError(
+            onRetry: () => ref.invalidate(itemCategoriesListProvider),
           ),
           data: (rows) => rows.isEmpty
-              ? Text(
-                  'No categories in catalog yet. Add categories under Catalog, then return here.',
-                  style: Theme.of(context).textTheme.bodySmall,
+              ? SupplierWizardCategoriesEmpty(
+                  onOpenCatalog: () => context.push('/catalog'),
                 )
               : Wrap(
             spacing: 8,
@@ -945,7 +946,9 @@ class _SupplierCreateWizardPageState
                   padding: EdgeInsets.all(8),
                   child: LinearProgressIndicator(),
                 ),
-                error: (_, __) => const SizedBox.shrink(),
+                error: (_, __) => SupplierWizardTypesError(
+                  onRetry: () => ref.invalidate(categoryTypesIndexProvider),
+                ),
                 data: (index) => Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
@@ -1393,50 +1396,69 @@ class _SupplierCreateWizardPageState
     }
   }
 
+  void _goToStep(int step) {
+    final target = step.clamp(0, kSupplierWizardReviewStep);
+    if (target > 0 && !_validateStep0()) return;
+    setState(() {
+      _step = target;
+      _dirty = true;
+    });
+    _unfocusForm();
+    _focusFirstFieldForStep(target);
+  }
+
   Widget _wizardBottomBar() {
-    final isSummary = _step == 4;
+    final isSummary = _step == kSupplierWizardReviewStep;
+    final canSkipToReview = supplierWizardStepIsOptional(_step);
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 10, 16, 8),
-      child: Row(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          if (isSummary) ...[
-            Expanded(
+          if (canSkipToReview)
+            Align(
+              alignment: Alignment.centerRight,
               child: TextButton(
-                onPressed: () => setState(() => _step = 0),
-                child: const Text('Edit'),
+                onPressed: () => _goToStep(kSupplierWizardReviewStep),
+                child: const Text('Skip to review'),
               ),
             ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: AppPrimaryButton(
-                label: 'Save',
-                onPressed: _saveSupplier,
-              ),
-            ),
-          ] else ...[
-            Expanded(
-              child: TextButton(
-                onPressed: _handleExitRequest,
-                child: const Text('Cancel'),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: AppPrimaryButton(
-                label: 'Next',
-                onPressed: () {
-                  if (_step == 0 && !_validateStep0()) return;
-                  final nextStep = (_step + 1).clamp(0, 4);
-                  setState(() {
-                    _step = nextStep;
-                    _dirty = true;
-                  });
-                  _unfocusForm();
-                  _focusFirstFieldForStep(nextStep);
-                },
-              ),
-            ),
-          ],
+          Row(
+            children: [
+              if (isSummary) ...[
+                Expanded(
+                  child: TextButton(
+                    onPressed: () => _goToStep(0),
+                    child: const Text('Edit'),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: AppPrimaryButton(
+                    label: 'Save',
+                    onPressed: _saveSupplier,
+                  ),
+                ),
+              ] else ...[
+                Expanded(
+                  child: TextButton(
+                    onPressed: _handleExitRequest,
+                    child: const Text('Cancel'),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: AppPrimaryButton(
+                    label: 'Next',
+                    onPressed: () {
+                      if (_step == 0 && !_validateStep0()) return;
+                      _goToStep(_step + 1);
+                    },
+                  ),
+                ),
+              ],
+            ],
+          ),
         ],
       ),
     );
@@ -1465,8 +1487,11 @@ class _SupplierCreateWizardPageState
 
   @override
   Widget build(BuildContext context) {
-    final title = widget.supplierId != null ? 'Edit supplier' : 'New supplier';
-    final subtitle = '${_stepTitles[_step]} · Step ${_step + 1} of ${_stepTitles.length}';
+    final isEdit =
+        widget.supplierId != null && widget.supplierId!.trim().isNotEmpty;
+    final title = isEdit ? 'Edit supplier' : 'New supplier';
+    final subtitle =
+        '${kSupplierWizardStepTitles[_step]} · Step ${_step + 1} of ${kSupplierWizardStepTitles.length}';
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, result) async {
@@ -1504,6 +1529,15 @@ class _SupplierCreateWizardPageState
               ),
             ],
           ),
+          bottom: isEdit
+              ? PreferredSize(
+                  preferredSize: const Size.fromHeight(88),
+                  child: SupplierWizardStepRail(
+                    currentStep: _step,
+                    onStepSelected: _goToStep,
+                  ),
+                )
+              : null,
         ),
         body: GestureDetector(
           behavior: HitTestBehavior.translucent,
@@ -1538,6 +1572,130 @@ class _SupplierCreateWizardPageState
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Non-linear step jumps for edit (Wrap — no horizontal 5-chip scroll).
+class SupplierWizardStepRail extends StatelessWidget {
+  const SupplierWizardStepRail({
+    super.key,
+    required this.currentStep,
+    required this.onStepSelected,
+  });
+
+  final int currentStep;
+  final ValueChanged<int> onStepSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+      child: Wrap(
+        spacing: 6,
+        runSpacing: 6,
+        children: [
+          for (var i = 0; i < kSupplierWizardStepTitles.length; i++)
+            FilterChip(
+              visualDensity: VisualDensity.compact,
+              selected: i == currentStep,
+              label: Text(
+                '${i + 1}. ${kSupplierWizardStepTitles[i]}',
+                style: const TextStyle(fontSize: 12),
+              ),
+              onSelected: (_) => onStepSelected(i),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Visible for widget tests (UX-064).
+@visibleForTesting
+class SupplierWizardBrokersEmpty extends StatelessWidget {
+  const SupplierWizardBrokersEmpty({
+    super.key,
+    required this.onCreateBroker,
+  });
+
+  final VoidCallback onCreateBroker;
+
+  @override
+  Widget build(BuildContext context) {
+    return HexaEmptyState(
+      icon: Icons.handshake_outlined,
+      title: 'No brokers yet',
+      subtitle: 'Create a broker to link commission contacts to this supplier.',
+      primaryActionLabel: 'Create new broker',
+      onPrimaryAction: onCreateBroker,
+    );
+  }
+}
+
+/// Visible for widget tests (UX-064).
+@visibleForTesting
+class SupplierWizardCategoriesEmpty extends StatelessWidget {
+  const SupplierWizardCategoriesEmpty({
+    super.key,
+    required this.onOpenCatalog,
+  });
+
+  final VoidCallback onOpenCatalog;
+
+  @override
+  Widget build(BuildContext context) {
+    return HexaEmptyState(
+      icon: Icons.category_outlined,
+      title: 'No categories in catalog yet',
+      subtitle: 'Add categories under Catalog, then return here.',
+      primaryActionLabel: 'Open catalog',
+      onPrimaryAction: onOpenCatalog,
+    );
+  }
+}
+
+/// Visible for widget tests (UX-112).
+@visibleForTesting
+class SupplierWizardCategoriesError extends StatelessWidget {
+  const SupplierWizardCategoriesError({
+    super.key,
+    required this.onRetry,
+  });
+
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return HexaEmptyState(
+      icon: Icons.cloud_off_outlined,
+      title: 'Could not load categories',
+      subtitle:
+          'Check your connection, then retry — or go back and open this step again.',
+      primaryActionLabel: 'Retry',
+      onPrimaryAction: onRetry,
+    );
+  }
+}
+
+/// Preferred subcategories (types) index load failure (UX-117).
+@visibleForTesting
+class SupplierWizardTypesError extends StatelessWidget {
+  const SupplierWizardTypesError({
+    super.key,
+    required this.onRetry,
+  });
+
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return HexaEmptyState(
+      icon: Icons.account_tree_outlined,
+      title: 'Could not load subcategories',
+      subtitle: 'Check your connection, then retry.',
+      primaryActionLabel: 'Retry',
+      onPrimaryAction: onRetry,
     );
   }
 }

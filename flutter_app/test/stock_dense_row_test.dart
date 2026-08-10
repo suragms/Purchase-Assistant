@@ -8,29 +8,36 @@ import 'package:harisree_warehouse/features/stock/presentation/widgets/stock_sta
 import 'package:harisree_warehouse/features/stock/presentation/widgets/stock_row_metrics.dart';
 
 void main() {
-  testWidgets('warehouse row shows SYSTEM PHYS DIFF metrics', (tester) async {
+  testWidgets('warehouse row shows SYSTEM PHYS DIFF metrics on desktop',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1440, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
     await tester.pumpWidget(
-      ProviderScope(
-        child: MaterialApp(
-          home: Consumer(
-            builder: (context, ref, _) {
-              return Scaffold(
-                body: StockWarehouseRow(
-                  ref: ref,
-                  item: const {
-                    'id': '1',
-                    'name': 'Rice Premium',
-                    'category_name': 'Grocery',
-                    'subcategory_name': 'Rice',
-                    'current_stock': 42,
-                    'physical_stock_qty': 40,
-                    'stock_status': 'low',
-                  },
-                  isStaffMode: false,
-                  onTap: () {},
-                ),
-              );
-            },
+      MediaQuery(
+        data: const MediaQueryData(size: Size(1440, 900)),
+        child: ProviderScope(
+          child: MaterialApp(
+            home: Consumer(
+              builder: (context, ref, _) {
+                return Scaffold(
+                  body: StockWarehouseRow(
+                    ref: ref,
+                    item: const {
+                      'id': '1',
+                      'name': 'Rice Premium',
+                      'category_name': 'Grocery',
+                      'subcategory_name': 'Rice',
+                      'current_stock': 42,
+                      'physical_stock_qty': 40,
+                      'stock_status': 'low',
+                    },
+                    isStaffMode: false,
+                    onTap: () {},
+                  ),
+                );
+              },
+            ),
           ),
         ),
       ),
@@ -43,31 +50,37 @@ void main() {
     expect(find.text('LOW'), findsNothing);
   });
 
-  testWidgets('header and staff row use four-column layout', (tester) async {
+  testWidgets('desktop header and row use four-column layout', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1440, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
     await tester.pumpWidget(
-      ProviderScope(
-        child: MaterialApp(
-          home: Consumer(
-            builder: (context, ref, _) {
-              return Scaffold(
-                body: Column(
-                  children: [
-                    const StockWarehouseTableHeader(),
-                    StockWarehouseRow(
-                      ref: ref,
-                      item: const {
-                        'id': '1',
-                        'name': 'Rice Premium',
-                        'physical_stock_qty': 10,
-                        'current_stock': 12,
-                      },
-                      isStaffMode: true,
-                      onTap: () {},
-                    ),
-                  ],
-                ),
-              );
-            },
+      MediaQuery(
+        data: const MediaQueryData(size: Size(1440, 900)),
+        child: ProviderScope(
+          child: MaterialApp(
+            home: Consumer(
+              builder: (context, ref, _) {
+                return Scaffold(
+                  body: Column(
+                    children: [
+                      const StockWarehouseTableHeader(),
+                      StockWarehouseRow(
+                        ref: ref,
+                        item: const {
+                          'id': '1',
+                          'name': 'Rice Premium',
+                          'physical_stock_qty': 10,
+                          'current_stock': 12,
+                        },
+                        isStaffMode: true,
+                        onTap: () {},
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
           ),
         ),
       ),
@@ -83,28 +96,83 @@ void main() {
     expect(find.text('-2'), findsOneWidget);
     expect(
       tester.getSize(find.byType(StockWarehouseRow)).height,
-      StockTableLayout.rowMinHeight,
+      greaterThanOrEqualTo(StockTableLayout.desktopRowMinHeight),
+    );
+  });
+
+  testWidgets('phone header/row use ITEM|PHYS only with Sys/Δ under name',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(
+      MediaQuery(
+        data: const MediaQueryData(size: Size(390, 844)),
+        child: ProviderScope(
+          child: MaterialApp(
+            home: Consumer(
+              builder: (context, ref, _) {
+                return Scaffold(
+                  body: Column(
+                    children: [
+                      const StockWarehouseTableHeader(),
+                      StockWarehouseRow(
+                        ref: ref,
+                        item: const {
+                          'id': '1',
+                          'name': 'Rice Premium',
+                          'physical_stock_qty': 10,
+                          'current_stock': 12,
+                        },
+                        isStaffMode: true,
+                        onTap: () {},
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('ITEM'), findsOneWidget);
+    expect(find.text('PHYS'), findsOneWidget);
+    expect(find.text('SYS'), findsNothing);
+    expect(find.text('DIFF'), findsNothing);
+    expect(find.text('10'), findsOneWidget);
+    expect(find.text('Sys 12 · Δ -2'), findsOneWidget);
+    expect(
+      tester.getSize(find.byType(StockWarehouseRow)).height,
+      greaterThanOrEqualTo(StockTableLayout.rowMinHeight),
     );
   });
 
   testWidgets('physical and diff show em dash when not counted', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1440, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
     await tester.pumpWidget(
-      ProviderScope(
-        child: MaterialApp(
-          home: Consumer(
-            builder: (context, ref, _) {
-              return Scaffold(
-                body: StockWarehouseRow(
-                  ref: ref,
-                  item: const {
-                    'id': '1',
-                    'name': 'Sugar',
-                    'current_stock': 20,
-                  },
-                  onTap: () {},
-                ),
-              );
-            },
+      MediaQuery(
+        data: const MediaQueryData(size: Size(1440, 900)),
+        child: ProviderScope(
+          child: MaterialApp(
+            home: Consumer(
+              builder: (context, ref, _) {
+                return Scaffold(
+                  body: StockWarehouseRow(
+                    ref: ref,
+                    item: const {
+                      'id': '1',
+                      'name': 'Sugar',
+                      'current_stock': 20,
+                    },
+                    onTap: () {},
+                  ),
+                );
+              },
+            ),
           ),
         ),
       ),

@@ -951,10 +951,15 @@ async def trade_home_overview(
         out = dict(full)
         home_shell: dict[str, Any] | None = None
         if shell_bundle:
+            items = list(out.get("item_slices") or [])
+            # Compact home shell: keep KPI breakdowns usable without shipping
+            # the full item_slices payload twice (snapshot + home_shell).
+            if compact and len(items) > 40:
+                items = items[:40]
             home_shell = {
                 "subcategories": list(out.get("subcategories") or []),
                 "suppliers": list(out.get("suppliers") or []),
-                "items": list(out.get("item_slices") or []),
+                "items": items,
             }
             stock = await compute_inventory_summary(db, business_id)
             _attach_analytics_panel_blocks(out, stock)

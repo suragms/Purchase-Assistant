@@ -37,7 +37,7 @@ import '../state/purchase_local_wip_draft_provider.dart';
 import '../../../core/services/purchase_pdf.dart' deferred as purchasePdf;
 import '../../../core/theme/hexa_colors.dart';
 import '../../../core/widgets/friendly_load_error.dart'
-    show FriendlyLoadError, kFriendlyLoadNetworkSubtitle;
+    show kFriendlyLoadNetworkSubtitle;
 import '../../../core/widgets/list_skeleton.dart';
 import '../../../core/widgets/focused_search_chrome.dart';
 import '../../../features/shell/shell_branch_provider.dart';
@@ -46,6 +46,7 @@ import '../../../shared/widgets/hexa_empty_state.dart';
 import '../../../shared/widgets/operational_ui.dart';
 import 'widgets/purchase_desktop_detail_pane.dart';
 import 'widgets/purchase_history_grouping.dart';
+import 'widgets/purchase_history_primary_filter_chips.dart';
 
 enum _HistPeriodPreset { today, week, month, year, allTime, custom }
 
@@ -680,7 +681,7 @@ class _PurchaseHomePageState extends ConsumerState<PurchaseHomePage> {
           const ListTile(
             title: Text('Period',
                 style: TextStyle(fontWeight: FontWeight.w800)),
-            subtitle: Text('Affects History + Reports totals'),
+            subtitle: Text('Affects Purchases + Reports totals'),
           ),
           for (final e in const [
             (_HistPeriodPreset.today, 'Today'),
@@ -1100,7 +1101,7 @@ class _PurchaseHomePageState extends ConsumerState<PurchaseHomePage> {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         const Text(
-                          'Purchase History',
+                          'Purchases',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
@@ -1260,9 +1261,9 @@ class _PurchaseHomePageState extends ConsumerState<PurchaseHomePage> {
                 final dio = e is DioException ? e : null;
                 final offline =
                     dio != null && dioIsNetworkError(dio);
-                return FriendlyLoadError(
+                return PurchaseHomeLoadError(
                   onRetry: () => unawaited(_refreshHistory()),
-                  message: offline
+                  title: offline
                       ? 'Showing saved purchases — reconnecting…'
                       : 'Could not load purchases. Server error — tap to retry.',
                   subtitle: offline ? kFriendlyLoadNetworkSubtitle : null,
@@ -1415,99 +1416,18 @@ class _PurchaseHomePageState extends ConsumerState<PurchaseHomePage> {
                       top: false,
                       bottom: false,
                       minimum: EdgeInsets.zero,
-                      child: SizedBox(
-                        height: 38,
-                        child: ListView(
-                          scrollDirection: Axis.horizontal,
-                          padding: const EdgeInsets.symmetric(horizontal: 10),
-                          children: [
-                            Padding(
-                              padding: const EdgeInsets.only(right: 6),
-                              child: FilterChip(
-                                padding: EdgeInsets.zero,
-                                labelPadding:
-                                    const EdgeInsets.symmetric(horizontal: 6),
-                                visualDensity: VisualDensity.compact,
-                                materialTapTargetSize:
-                                    MaterialTapTargetSize.shrinkWrap,
-                                avatar: Icon(
-                                  undeliveredSort
-                                      ? Icons.local_shipping_rounded
-                                      : Icons.local_shipping_outlined,
-                                  size: 14,
-                                  color: undeliveredSort
-                                      ? HexaColors.accentOrangeMid
-                                      : HexaColors.neutral,
-                                ),
-                                label: Text(
-                                  'Wait ↑',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w800,
-                                    color: undeliveredSort
-                                        ? HexaColors.brandTealBright
-                                        : null,
-                                  ),
-                                ),
-                                selected: undeliveredSort,
-                                showCheckmark: false,
-                                onSelected: (on) {
-                                  ref
-                                      .read(
-                                        purchaseHistoryUndeliveredSortProvider
-                                            .notifier,
-                                      )
-                                      .state = on;
-                                },
-                              ),
-                            ),
-                            for (final e in const [
-                              ('all', null, 'All'),
-                              ('due', null, 'Due'),
-                              ('paid', null, 'Paid'),
-                              ('draft', null, 'Draft'),
-                              (
-                                'pending_delivery',
-                                Icons.local_shipping_outlined,
-                                'Undelivered'
-                              ),
-                              (
-                                'delivery_stuck',
-                                Icons.warning_amber_rounded,
-                                'Stuck'
-                              ),
-                              (
-                                'received',
-                                Icons.check_circle_outline_rounded,
-                                'Done'
-                              ),
-                            ])
-                              Padding(
-                                padding: const EdgeInsets.only(right: 6),
-                                child: FilterChip(
-                                  padding: EdgeInsets.zero,
-                                  labelPadding:
-                                      const EdgeInsets.symmetric(horizontal: 6),
-                                  visualDensity: VisualDensity.compact,
-                                  materialTapTargetSize:
-                                      MaterialTapTargetSize.shrinkWrap,
-                                  avatar: e.$2 == null
-                                      ? null
-                                      : Icon(e.$2, size: 14),
-                                  label: Text(
-                                    e.$3,
-                                    style: const TextStyle(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w800,
-                                    ),
-                                  ),
-                                  selected:
-                                      secondary == null && primary == e.$1,
-                                  onSelected: (_) => _selectPrimary(e.$1),
-                                ),
-                              ),
-                          ],
-                        ),
+                      child: PurchaseHistoryPrimaryFilterChips(
+                        primary: primary,
+                        secondary: secondary,
+                        undeliveredSort: undeliveredSort,
+                        onSelectPrimary: _selectPrimary,
+                        onUndeliveredSortChanged: (on) {
+                          ref
+                              .read(
+                                purchaseHistoryUndeliveredSortProvider.notifier,
+                              )
+                              .state = on;
+                        },
                       ),
                     ),
                     if (secondary != null || hasAdv)
@@ -2359,7 +2279,7 @@ class _PurchaseHistoryFullscreenSearchPageState
           const ListTile(
             title: Text('Period',
                 style: TextStyle(fontWeight: FontWeight.w800)),
-            subtitle: Text('Affects History + Reports totals'),
+            subtitle: Text('Affects Purchases + Reports totals'),
           ),
           for (final e in const [
             (_HistPeriodPreset.today, 'Today'),
@@ -2583,8 +2503,8 @@ class _PurchaseHistoryFullscreenSearchPageState
         error: (_, __) => Center(
           child: Padding(
             padding: const EdgeInsets.all(24),
-            child: FriendlyLoadError(
-              message: 'Could not load purchases.',
+            child: PurchaseHomeLoadError(
+              title: 'Could not load purchases.',
               subtitle: kFriendlyLoadNetworkSubtitle,
               onRetry: () => ref.invalidate(tradePurchasesListProvider),
             ),
@@ -2599,9 +2519,7 @@ class _PurchaseHistoryFullscreenSearchPageState
             pendingDeleteIds: const {},
           );
           if (visible.isEmpty) {
-            final emptyMsg = searchQ.trim().isEmpty
-                ? 'No purchases in this period or filters.'
-                : 'No matches for your search.';
+            final hasSearch = searchQ.trim().isNotEmpty;
             return ListView(
               physics: const AlwaysScrollableScrollPhysics(
                 parent: BouncingScrollPhysics(),
@@ -2613,40 +2531,25 @@ class _PurchaseHistoryFullscreenSearchPageState
                 24 + MediaQuery.viewPaddingOf(context).bottom,
               ),
               children: [
-                Icon(
-                  Icons.inbox_outlined,
-                  size: 48,
-                  color: Colors.grey.shade500,
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  emptyMsg,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    color: HexaColors.textOnLightSurface,
-                    height: 1.35,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Try another period, clear filters, or pull to refresh on the History tab.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w500,
-                    color: Colors.grey.shade700,
-                    height: 1.35,
-                  ),
-                ),
-                const SizedBox(height: 20),
-                Align(
-                  child: FilledButton.icon(
-                    onPressed: () => ref.invalidate(tradePurchasesListProvider),
-                    icon: const Icon(Icons.refresh_rounded, size: 20),
-                    label: const Text('Retry load'),
-                  ),
+                HexaEmptyState(
+                  icon: hasSearch
+                      ? Icons.search_off_rounded
+                      : Icons.inbox_outlined,
+                  title: hasSearch
+                      ? 'No matches for your search'
+                      : 'No purchases in this period or filters',
+                  subtitle:
+                      'Try another period, clear filters, or refresh the list.',
+                  primaryActionLabel:
+                      hasSearch ? 'Clear search' : 'Refresh',
+                  onPrimaryAction: hasSearch
+                      ? () {
+                          _c.clear();
+                          ref
+                              .read(purchaseHistorySearchProvider.notifier)
+                              .state = '';
+                        }
+                      : () => ref.invalidate(tradePurchasesListProvider),
                 ),
               ],
             );
@@ -2842,65 +2745,21 @@ class _PurchaseRow extends StatelessWidget {
                       ),
                     ),
                   if (headline.isNotEmpty) const SizedBox(height: 4),
-                  Row(
-                    children: [
-                      if (pack.isNotEmpty) ...[
-                        Text(
-                          pack,
-                          style: const TextStyle(
-                            fontSize: 10.5,
-                            fontWeight: FontWeight.w700,
-                            color: HexaColors.brandTealBright,
-                            letterSpacing: 0.1,
-                          ),
-                        ),
-                        const _Dot(),
-                      ],
-                      if (p.humanId.isNotEmpty)
-                        _CompactDetailLabel(label: p.humanId),
-                      if (broker.isNotEmpty) ...[
-                        const _Dot(),
-                        _CompactDetailLabel(label: broker),
-                      ],
-                    ],
+                  PurchaseHistoryRowMetaLine(
+                    pack: pack,
+                    humanId: p.humanId,
+                    broker: broker,
                   ),
                   const SizedBox(height: 6),
-                  Row(
-                    children: [
-                      if (daysChip != null) ...[
-                        daysChip,
-                        const SizedBox(width: 6),
-                      ],
-                      _MiniBadge(st),
-                      const SizedBox(width: 6),
-                      PurchaseDeliveryBadge(
-                        status: p.deliveryStatusEnum,
-                        compact: true,
-                      ),
-                      const Spacer(),
-                      if (!selectMode &&
-                          (_showQuickDeliverIcon(p) || _showQuickPaidIcon(p)))
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            if (_showQuickDeliverIcon(p))
-                              _QuickActionBtn(
-                                label: 'COMMIT STOCK',
-                                color: HexaColors.accentOrangeMid,
-                                bg: HexaColors.accentOrangeSoft,
-                                onTap: onMarkDelivered,
-                              ),
-                            if (_showQuickPaidIcon(p))
-                              _QuickActionBtn(
-                                label: 'PAY',
-                                color: HexaColors.brandAccent,
-                                bg: HexaColors.brandAccent
-                                    .withValues(alpha: 0.1),
-                                onTap: onMarkPaid,
-                              ),
-                          ],
-                        ),
-                    ],
+                  PurchaseHistoryRowStatusLine(
+                    daysChip: daysChip,
+                    statusLabel: st,
+                    deliveryStatus: p.deliveryStatusEnum,
+                    selectMode: selectMode,
+                    showCommitStock: !selectMode && _showQuickDeliverIcon(p),
+                    showPay: !selectMode && _showQuickPaidIcon(p),
+                    onMarkDelivered: onMarkDelivered,
+                    onMarkPaid: onMarkPaid,
                   ),
                 ],
               ),
@@ -3026,12 +2885,122 @@ class _CompactDetailLabel extends StatelessWidget {
   Widget build(BuildContext context) {
     return Text(
       label,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
       style: const TextStyle(
         fontSize: 10,
         fontWeight: FontWeight.w800,
         color: HexaColors.neutral,
         letterSpacing: 0.1,
       ),
+    );
+  }
+}
+
+/// Overflow-safe pack / PO / broker meta for purchase history rows (UX-006).
+class PurchaseHistoryRowMetaLine extends StatelessWidget {
+  const PurchaseHistoryRowMetaLine({
+    super.key,
+    required this.pack,
+    required this.humanId,
+    required this.broker,
+  });
+
+  final String pack;
+  final String humanId;
+  final String broker;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        if (pack.isNotEmpty) ...[
+          Flexible(
+            flex: 2,
+            child: Text(
+              pack,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontSize: 10.5,
+                fontWeight: FontWeight.w700,
+                color: HexaColors.brandTealBright,
+                letterSpacing: 0.1,
+              ),
+            ),
+          ),
+          const _Dot(),
+        ],
+        if (humanId.isNotEmpty)
+          Flexible(
+            flex: 3,
+            child: _CompactDetailLabel(label: humanId),
+          ),
+        if (broker.isNotEmpty) ...[
+          const _Dot(),
+          Flexible(
+            flex: 2,
+            child: _CompactDetailLabel(label: broker),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+/// Status chips + quick actions; wraps on narrow master/phone (UX-006).
+class PurchaseHistoryRowStatusLine extends StatelessWidget {
+  const PurchaseHistoryRowStatusLine({
+    super.key,
+    required this.daysChip,
+    required this.statusLabel,
+    required this.deliveryStatus,
+    required this.selectMode,
+    required this.showCommitStock,
+    required this.showPay,
+    required this.onMarkDelivered,
+    required this.onMarkPaid,
+  });
+
+  final Widget? daysChip;
+  final PurchaseStatus statusLabel;
+  final DeliveryStatus deliveryStatus;
+  final bool selectMode;
+  final bool showCommitStock;
+  final bool showPay;
+  final VoidCallback onMarkDelivered;
+  final VoidCallback onMarkPaid;
+
+  @override
+  Widget build(BuildContext context) {
+    return Wrap(
+      spacing: 6,
+      runSpacing: 6,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        if (daysChip != null) daysChip!,
+        _MiniBadge(statusLabel),
+        PurchaseDeliveryBadge(
+          status: deliveryStatus,
+          compact: true,
+        ),
+        if (!selectMode && (showCommitStock || showPay)) ...[
+          if (showCommitStock)
+            _QuickActionBtn(
+              label: 'COMMIT STOCK',
+              color: HexaColors.accentOrangeMid,
+              bg: HexaColors.accentOrangeSoft,
+              onTap: onMarkDelivered,
+            ),
+          if (showPay)
+            _QuickActionBtn(
+              label: 'PAY',
+              color: HexaColors.brandAccent,
+              bg: HexaColors.brandAccent.withValues(alpha: 0.1),
+              onTap: onMarkPaid,
+            ),
+        ],
+      ],
     );
   }
 }
@@ -3102,47 +3071,35 @@ class _HistoryFiltersHideAll extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(28),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.filter_alt_off_rounded,
-              size: 52,
-              color: HexaColors.accentOrangeMid,
-            ),
-            const SizedBox(height: 14),
-            Text(
-              'Filters hide all purchases',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 17,
-                fontWeight: FontWeight.w800,
-                color: HexaColors.brandPrimary,
-              ),
-            ),
-            const SizedBox(height: 10),
-            Text(
-              'Search or filters hide every one of your $loadedCount loaded '
-              'purchases. Clear filters to see the list again.',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 13.5,
-                height: 1.35,
-                color: Colors.grey.shade800,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            const SizedBox(height: 22),
-            FilledButton(
-              onPressed: onClearAll,
-              child: const Text('Clear search & filters'),
-            ),
-          ],
-        ),
-      ),
+    return PurchaseHistoryFiltersHideAllEmpty(
+      loadedCount: loadedCount,
+      onClearAll: onClearAll,
+    );
+  }
+}
+
+/// Visible for widget tests (UX-063).
+@visibleForTesting
+class PurchaseHistoryFiltersHideAllEmpty extends StatelessWidget {
+  const PurchaseHistoryFiltersHideAllEmpty({
+    super.key,
+    required this.loadedCount,
+    required this.onClearAll,
+  });
+
+  final int loadedCount;
+  final VoidCallback onClearAll;
+
+  @override
+  Widget build(BuildContext context) {
+    return HexaEmptyState(
+      icon: Icons.filter_alt_off_rounded,
+      title: 'Filters hide all purchases',
+      subtitle:
+          'Search or filters hide every one of your $loadedCount loaded '
+          'purchases. Clear filters to see the list again.',
+      primaryActionLabel: 'Clear search & filters',
+      onPrimaryAction: onClearAll,
     );
   }
 }
@@ -3172,6 +3129,32 @@ class _SignInPrompt extends StatelessWidget {
   Widget build(BuildContext context) {
     return Center(
       child: FilledButton(onPressed: onTap, child: const Text('Sign In')),
+    );
+  }
+}
+
+/// Purchase history list load failure (UX-063).
+@visibleForTesting
+class PurchaseHomeLoadError extends StatelessWidget {
+  const PurchaseHomeLoadError({
+    super.key,
+    required this.onRetry,
+    this.title = 'Could not load purchases.',
+    this.subtitle = 'Check your connection, then retry.',
+  });
+
+  final VoidCallback onRetry;
+  final String title;
+  final String? subtitle;
+
+  @override
+  Widget build(BuildContext context) {
+    return HexaEmptyState(
+      icon: Icons.receipt_long_outlined,
+      title: title,
+      subtitle: subtitle,
+      primaryActionLabel: 'Retry',
+      onPrimaryAction: onRetry,
     );
   }
 }

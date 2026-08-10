@@ -176,7 +176,10 @@ class _OpeningStockSetupPageState
       ),
       body: listAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text(userFacingError(e))),
+        error: (e, _) => OpeningStockSetupLoadError(
+          subtitle: userFacingError(e),
+          onRetry: () => ref.invalidate(openingStockSetupProvider),
+        ),
         data: (data) {
           final summary = (data['summary'] as Map?)?.cast<String, dynamic>() ??
               const {};
@@ -295,21 +298,43 @@ class _OpeningStockSetupPageState
                 if (items.isEmpty)
                   SliverFillRemaining(
                     hasScrollBody: false,
-                    child: Center(
-                      child: desktop
-                          ? const HexaEmptyState(
-                              icon: Icons.inventory_2_outlined,
-                              title: 'No opening stock items',
-                              subtitle:
-                                  'No items match the current filters or search.',
-                            )
-                          : const Text(
-                              'No opening stock items match filters.',
-                              style: TextStyle(
-                                fontSize: 13,
-                                color: Colors.black54,
-                              ),
-                            ),
+                    child: Builder(
+                      builder: (context) {
+                        final filtersActive = q.q.trim().isNotEmpty ||
+                            q.status != 'all' ||
+                            q.stockStatus != 'all' ||
+                            q.missingBarcode ||
+                            q.missingItemCode ||
+                            q.category.isNotEmpty ||
+                            q.subcategory.isNotEmpty ||
+                            (q.supplierId != null &&
+                                q.supplierId!.trim().isNotEmpty) ||
+                            q.unit.isNotEmpty ||
+                            q.updatedToday ||
+                            q.updatedBy.trim().isNotEmpty;
+                        return HexaEmptyState(
+                          icon: Icons.inventory_2_outlined,
+                          title: filtersActive
+                              ? 'No items match filters'
+                              : 'No opening stock items',
+                          subtitle: filtersActive
+                              ? 'Clear search or filters to see more items.'
+                              : 'Items needing opening stock will show here.',
+                          primaryActionLabel:
+                              filtersActive ? 'Clear filters' : 'Refresh',
+                          onPrimaryAction: filtersActive
+                              ? () {
+                                  _searchCtrl.clear();
+                                  ref
+                                      .read(
+                                          openingStockSetupQueryProvider
+                                              .notifier)
+                                      .state = const OpeningStockSetupQuery();
+                                }
+                              : () =>
+                                  ref.invalidate(openingStockSetupProvider),
+                        );
+                      },
                     ),
                   ),
               ],
@@ -693,6 +718,30 @@ class _BulkOpeningSetSheetBodyState
         ),
         const SizedBox(height: 8),
       ],
+    );
+  }
+}
+
+/// Opening stock setup list load failure (UX-155).
+@visibleForTesting
+class OpeningStockSetupLoadError extends StatelessWidget {
+  const OpeningStockSetupLoadError({
+    super.key,
+    required this.onRetry,
+    this.subtitle,
+  });
+
+  final VoidCallback onRetry;
+  final String? subtitle;
+
+  @override
+  Widget build(BuildContext context) {
+    return HexaEmptyState(
+      icon: Icons.inventory_outlined,
+      title: 'Could not load opening stock',
+      subtitle: subtitle ?? 'Check your connection, then retry.',
+      primaryActionLabel: 'Retry',
+      onPrimaryAction: onRetry,
     );
   }
 }

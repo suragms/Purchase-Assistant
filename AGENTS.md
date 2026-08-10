@@ -144,6 +144,11 @@ Never invent endpoints, fields, screens, permissions, or financial numbers.
 
 ## Lessons learned (real bugs — do not remove, only add)
 
+### Home dashboard failure banner must be rendered
+**Rule:** If `HomeDashboardPayload.banner` is set, UI must show it (with Retry). Do not hide empty KPIs without surfacing the failure string.
+**Why:** Empty-DB heuristics hid cold API failures → silent blank Home totals.
+**Check:** `HomeSessionDataBanner` reads `snapshot.banner`; grep UI for unused `banner` fields.
+
 ### Verify agent edits actually persisted
 **Rule:** After any agent run, run `git diff` / `git diff --stat` before trusting the agent's summary.
 **Why:** Agents have reported complete work when edits never wrote to disk.

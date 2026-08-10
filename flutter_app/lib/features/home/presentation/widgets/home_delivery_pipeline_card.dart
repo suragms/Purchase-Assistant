@@ -2,11 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../core/auth/dashboard_role.dart';
+import '../../../../core/auth/session_notifier.dart';
 import '../../../../core/design_system/hexa_operational_tokens.dart';
 import '../../../../core/json_coerce.dart';
 import '../../../../core/providers/delivery_pipeline_provider.dart';
 import '../../../../core/theme/hexa_colors.dart';
-import '../../../../core/widgets/section_inline_error.dart';
+import '../../../../shared/widgets/hexa_empty_state.dart';
 import 'home_formatters.dart';
 import 'home_recent_changes_section.dart' show HomeSectionSkeleton;
 
@@ -19,6 +21,9 @@ class HomeDeliveryPipelineCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final pipeline = ref.watch(deliveryPipelineProvider);
+    final session = ref.watch(sessionProvider);
+    final showMoney =
+        session != null && sessionCanSeeFinancialMoney(session);
 
     return pipeline.when(
       loading: () => const Card(
@@ -28,9 +33,11 @@ class HomeDeliveryPipelineCard extends ConsumerWidget {
         ),
       ),
       error: (_, __) => Card(
-        child: SectionInlineError(
-          message: 'Could not load delivery pipeline',
-          onRetry: () => ref.invalidate(deliveryPipelineProvider),
+        child: Padding(
+          padding: const EdgeInsets.all(HexaOp.cardPadding),
+          child: HomeDeliveryPipelineError(
+            onRetry: () => ref.invalidate(deliveryPipelineProvider),
+          ),
         ),
       ),
       data: (p) {
@@ -119,7 +126,7 @@ class HomeDeliveryPipelineCard extends ConsumerWidget {
                       '/purchase?filter=delivery_commit',
                       highlight: true,
                     ),
-                  if (pendingAmt >= 0.01) ...[
+                  if (showMoney && pendingAmt >= 0.01) ...[
                     const SizedBox(height: 6),
                     Text(
                       'Pending value · ${homeInr(pendingAmt)}',
@@ -188,6 +195,25 @@ class HomeDeliveryPipelineCard extends ConsumerWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Owner home delivery pipeline load failure (UX-116).
+@visibleForTesting
+class HomeDeliveryPipelineError extends StatelessWidget {
+  const HomeDeliveryPipelineError({super.key, required this.onRetry});
+
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return HexaEmptyState(
+      icon: Icons.local_shipping_outlined,
+      title: 'Could not load delivery pipeline',
+      subtitle: 'Check your connection, then retry.',
+      primaryActionLabel: 'Retry',
+      onPrimaryAction: onRetry,
     );
   }
 }

@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/navigation/resolve_catalog_item_id.dart';
-import '../../../core/widgets/friendly_load_error.dart';
+import '../../../shared/widgets/hexa_empty_state.dart';
 
 /// Resolves item name → catalog detail.
 class ItemAnalyticsRedirectPage extends ConsumerStatefulWidget {
@@ -61,9 +61,7 @@ class _ItemAnalyticsRedirectPageState
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          FriendlyLoadError(
-            message:
-                'This item is not linked to the catalog yet. Open Catalog to create or link it.',
+          ItemAnalyticsRedirectUnresolved(
             onRetry: () {
               _resolved = false;
               _redirect();
@@ -71,6 +69,29 @@ class _ItemAnalyticsRedirectPageState
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Name→catalog resolve failed / not linked (UX-150).
+@visibleForTesting
+class ItemAnalyticsRedirectUnresolved extends StatelessWidget {
+  const ItemAnalyticsRedirectUnresolved({
+    super.key,
+    required this.onRetry,
+  });
+
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return HexaEmptyState(
+      icon: Icons.link_off_outlined,
+      title: 'Item not linked to catalog',
+      subtitle:
+          'This item is not linked to the catalog yet. Open Catalog to create or link it.',
+      primaryActionLabel: 'Retry',
+      onPrimaryAction: onRetry,
     );
   }
 }

@@ -6,8 +6,8 @@ import '../../../core/design_system/hexa_ds_tokens.dart';
 import '../../../core/json_coerce.dart';
 import '../../../core/theme/hexa_colors.dart';
 import '../../../core/utils/unit_utils.dart';
-import '../../../core/widgets/friendly_load_error.dart';
 import '../../../core/widgets/list_skeleton.dart';
+import '../../../shared/widgets/hexa_empty_state.dart';
 import 'widgets/scan_item_stock_summary_card.dart';
 
 /// Read-only stock view for QR label scans (no login required).
@@ -64,8 +64,8 @@ class _PublicItemScanPageState extends State<PublicItemScanPage> {
             );
           }
           if (snap.hasError) {
-            return FriendlyLoadError(
-              message: _publicLoadMessage(snap.error),
+            return PublicItemScanLoadError(
+              title: _publicLoadMessage(snap.error),
               onRetry: () => setState(() => _load = _fetch()),
             );
           }
@@ -266,5 +266,29 @@ class _PublicItemScanPageState extends State<PublicItemScanPage> {
       }
     }
     return 'Could not load item. Check your connection and try again.';
+  }
+}
+
+/// Public QR item lookup load failure.
+@visibleForTesting
+class PublicItemScanLoadError extends StatelessWidget {
+  const PublicItemScanLoadError({
+    super.key,
+    required this.title,
+    required this.onRetry,
+  });
+
+  final String title;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return HexaEmptyState(
+      icon: Icons.qr_code_scanner_outlined,
+      title: title,
+      subtitle: 'Check your connection, then retry.',
+      primaryActionLabel: 'Retry',
+      onPrimaryAction: onRetry,
+    );
   }
 }

@@ -27,6 +27,7 @@ import 'home_dashboard_provider.dart'
 import 'api_read_snapshots.dart';
 import 'delivery_pipeline_provider.dart';
 import 'notifications_provider.dart' show mergedNotificationFeedProvider;
+import 'trade_purchases_list_inflight.dart';
 import 'warehouse_alerts_provider.dart';
 
 String? _activityUnitsOrNull(String? raw) {
@@ -713,31 +714,50 @@ Future<List<HomeActivityItem>> _fetchHomeWarehouseActivity(
     custom: ref.read(homeCustomDateRangeProvider),
   );
 
+  // Prefer purchases already embedded in home-overview shell_bundle.
+  List<Map<String, dynamic>>? bundledPurchases;
+  final dash = ref.read(homeDashboardDataProvider);
+  final op = dash.snapshot.data.operational;
+  if (op != null &&
+      op.recentTradePurchases.isNotEmpty &&
+      purchaseLimit <= 15) {
+    bundledPurchases = op.recentTradePurchases;
+  }
+
   var purchases = <Map<String, dynamic>>[];
   var auditRows = <Map<String, dynamic>>[];
   var staffPurchases = <Map<String, dynamic>>[];
   try {
     final auditFuture = ref.read(stockAuditRecentSnapshotProvider.future);
-    final results = await Future.wait<dynamic>([
-      api.listTradePurchases(
-        businessId: bid,
-        limit: purchaseLimit,
-        offset: 0,
-        status: 'all',
-        purchaseFrom: q.from,
-        purchaseTo: q.to,
-      ),
+    final includeStaffLogs = maxItems > 15;
+    final futures = <Future<dynamic>>[
+      if (bundledPurchases == null)
+        fetchTradePurchasesPageDeduped(
+          api: api,
+          businessId: bid,
+          limit: purchaseLimit,
+          offset: 0,
+          status: 'all',
+          purchaseFrom: q.from,
+          purchaseTo: q.to,
+        )
+      else
+        Future<List<Map<String, dynamic>>>.value(bundledPurchases),
       auditFuture,
-      api.listStaffPurchaseLogs(
-        businessId: bid,
-        limit: 30,
-      ),
-    ]).timeout(feedTimeout);
+      if (includeStaffLogs)
+        api.listStaffPurchaseLogs(
+          businessId: bid,
+          limit: 30,
+        ),
+    ];
+    final results = await Future.wait<dynamic>(futures).timeout(feedTimeout);
     purchases = List<Map<String, dynamic>>.from(results[0] as List);
     auditRows = (results[1] as List)
         .map((e) => Map<String, dynamic>.from(e as Map))
         .toList();
-    staffPurchases = List<Map<String, dynamic>>.from(results[2] as List);
+    if (includeStaffLogs && results.length > 2) {
+      staffPurchases = List<Map<String, dynamic>>.from(results[2] as List);
+    }
   } on TimeoutException {
     throw Exception('Recent changes timed out. Pull to refresh.');
   }
@@ -876,6 +896,12 @@ Future<List<HomeActivityItem>> _fetchHomeWarehouseActivity(
 final homeRecentActivityFeedProvider =
     FutureProvider.autoDispose<List<HomeActivityItem>>((ref) async {
   if (!ref.watch(homeActivityFeedFetchEnabledProvider)) {
+    return const [];
+  }
+  // Wait for home-overview shell_bundle so recent_trade_purchases can be reused
+  // (avoids parallel GET …/trade-purchases on cold Home paint).
+  if (!homeOverviewReadyForSatellites(ref)) {
+    ref.watch(homeDashboardDataProvider);
     return const [];
   }
   final disposed = registerProviderDisposeGuard(ref);

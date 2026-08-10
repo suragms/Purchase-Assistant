@@ -6,6 +6,7 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import '../../../core/theme/hexa_colors.dart';
+import '../../../shared/widgets/hexa_empty_state.dart';
 import '../barcode_scan_controller.dart';
 import '../services/barcode_camera_controller.dart';
 import 'barcode_scan_web_stub.dart'
@@ -66,12 +67,12 @@ class BarcodeMobileScannerView extends StatelessWidget {
             ],
           ),
         if (camera.webCameraAwaitingGesture)
-          _GestureGate(
+          BarcodeCameraStartGate(
             busy: scan.lookingUp,
             onStart: () => unawaited(camera.startFromUserGesture()),
           )
         else if (camera.cameraDenied)
-          _DeniedPanel(
+          BarcodeCameraDeniedPanel(
             camera: camera,
             lookingUp: scan.lookingUp,
             onUploadPhoto: onUploadPhoto,
@@ -189,48 +190,41 @@ class BarcodeMobileScannerView extends StatelessWidget {
   }
 }
 
-class _GestureGate extends StatelessWidget {
-  const _GestureGate({required this.busy, required this.onStart});
+class BarcodeCameraStartGate extends StatelessWidget {
+  const BarcodeCameraStartGate({
+    super.key,
+    required this.busy,
+    required this.onStart,
+  });
+
   final bool busy;
   final VoidCallback onStart;
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Icon(Icons.touch_app_outlined,
-              size: 48, color: theme.colorScheme.primary),
-          const SizedBox(height: 12),
-          Text(
-            'Tap to start camera',
-            textAlign: TextAlign.center,
-            style: theme.textTheme.titleMedium?.copyWith(
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          const SizedBox(height: 8),
-          const Text(
-            'Browsers require a tap before opening the camera.',
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 16),
-          FilledButton.icon(
-            onPressed: busy ? null : onStart,
-            icon: const Icon(Icons.videocam_rounded),
-            label: const Text('Start camera'),
-          ),
-        ],
-      ),
+    return HexaEmptyState(
+      icon: Icons.touch_app_outlined,
+      title: 'Tap to start camera',
+      subtitle: 'Browsers require a tap before opening the camera.',
+      primaryActionLabel: busy ? null : 'Start camera',
+      onPrimaryAction: busy ? null : onStart,
+      action: busy
+          ? const Padding(
+              padding: EdgeInsets.only(top: 8),
+              child: SizedBox(
+                width: 28,
+                height: 28,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+            )
+          : null,
     );
   }
 }
 
-class _DeniedPanel extends StatelessWidget {
-  const _DeniedPanel({
+class BarcodeCameraDeniedPanel extends StatelessWidget {
+  const BarcodeCameraDeniedPanel({
+    super.key,
     required this.camera,
     required this.lookingUp,
     required this.onUploadPhoto,
@@ -245,28 +239,14 @@ class _DeniedPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.all(24),
-      child: Column(
+    return HexaEmptyState(
+      icon: Icons.videocam_off_outlined,
+      title: 'Camera access needed',
+      subtitle: camera.cameraDeniedMessage ??
+          'Allow camera access to scan barcodes.',
+      action: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Icon(Icons.videocam_off_outlined,
-              size: 48, color: theme.colorScheme.error),
-          const SizedBox(height: 12),
-          Text(
-            'Camera access needed',
-            textAlign: TextAlign.center,
-            style: theme.textTheme.titleMedium?.copyWith(
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            camera.cameraDeniedMessage ??
-                'Allow camera access to scan barcodes.',
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 16),
           if (!kIsWeb && camera.cameraPermanent) ...[
             FilledButton.icon(
               onPressed: openAppSettings,

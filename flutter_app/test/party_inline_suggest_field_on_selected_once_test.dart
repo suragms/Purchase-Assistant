@@ -172,4 +172,52 @@ void main() {
     controller.dispose();
     focus.dispose();
   });
+
+  testWidgets(
+      'lockedSelectionLabel keeps overlay suggestions closed after focus regain',
+      (tester) async {
+    // Catalog item field uses suggestionsAsOverlay: true (purchase_item_entry_sheet).
+    final controller = TextEditingController(text: 'Basmati Rice');
+    final focus = FocusNode();
+
+    const items = [
+      InlineSearchItem(id: '1', label: 'Basmati Rice'),
+      InlineSearchItem(id: '2', label: 'Moong Dal'),
+    ];
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: PartyInlineSuggestField(
+            controller: controller,
+            focusNode: focus,
+            items: items,
+            hintText: 'Item',
+            minQueryLength: 0,
+            maxMatches: 20,
+            suggestionsAsOverlay: true,
+            lockedSelectionLabel: 'Basmati Rice',
+            onSelected: (_) {},
+          ),
+        ),
+      ),
+    );
+
+    focus.requestFocus();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+
+    // Overlay suggestion rows use the same 13.5 label style as inline panel.
+    final suggestion = find.byWidgetPredicate(
+      (w) =>
+          w is Text &&
+          w.data == 'Basmati Rice' &&
+          w.style?.fontSize == 13.5,
+    );
+    expect(suggestion, findsNothing);
+    expect(find.text('Close'), findsNothing);
+
+    controller.dispose();
+    focus.dispose();
+  });
 }

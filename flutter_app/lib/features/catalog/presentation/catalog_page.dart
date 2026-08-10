@@ -14,9 +14,9 @@ import '../../../core/search/search_highlight.dart';
 import '../../../core/design_system/hexa_responsive.dart';
 import '../../../core/theme/hexa_colors.dart';
 import '../../../core/widgets/list_skeleton.dart';
-import '../../../core/widgets/friendly_load_error.dart';
 import '../../../core/widgets/business_write_surface_listener.dart';
 import '../../../shared/widgets/desktop_page_shell.dart';
+import '../../../shared/widgets/hexa_empty_state.dart';
 import 'widgets/quick_catalog_taxonomy_sheet.dart';
 
 /// Category list (layer 1). Subcategories and items live on deeper routes.
@@ -199,7 +199,12 @@ class _CatalogPageState extends ConsumerState<CatalogPage> {
             async.when(
               skipLoadingOnReload: true,
               loading: () => const SizedBox.shrink(),
-              error: (_, __) => const SizedBox.shrink(),
+              error: (_, __) => Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                child: CatalogSearchSuggestionsError(
+                  onRetry: () => ref.invalidate(itemCategoriesListProvider),
+                ),
+              ),
               data: (list) {
                 final q = _searchQuery.trim();
                 final sug = catalogFuzzyRank(
@@ -237,7 +242,7 @@ class _CatalogPageState extends ConsumerState<CatalogPage> {
               skipLoadingOnReload: true,
               skipLoadingOnRefresh: true,
               loading: () => const ListSkeleton(),
-              error: (_, __) => FriendlyLoadError(
+              error: (_, __) => CatalogCategoriesLoadError(
                 onRetry: () {
                   ref.invalidate(itemCategoriesListProvider);
                   ref.invalidate(catalogItemsListProvider);
@@ -278,23 +283,26 @@ class _CatalogPageState extends ConsumerState<CatalogPage> {
                               parent: BouncingScrollPhysics()),
                           padding: const EdgeInsets.fromLTRB(24, 48, 24, 100),
                           children: [
-                            Icon(Icons.folder_outlined,
-                                size: 48, color: Theme.of(context).colorScheme.primary),
-                            const SizedBox(height: 16),
-                            Text(
-                              list.isEmpty ? 'No categories yet' : 'No matches',
-                              textAlign: TextAlign.center,
-                              style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800),
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              list.isEmpty
+                            HexaEmptyState(
+                              icon: Icons.folder_outlined,
+                              title: list.isEmpty
+                                  ? 'No categories yet'
+                                  : 'No matches',
+                              subtitle: list.isEmpty
                                   ? 'Add a category, then subcategories and items — all from this catalog.'
                                   : 'Try a different spelling or clear search.',
-                              textAlign: TextAlign.center,
-                              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                                  ),
+                              primaryActionLabel: list.isEmpty
+                                  ? 'Add category'
+                                  : 'Clear search',
+                              onPrimaryAction: list.isEmpty
+                                  ? () => unawaited(
+                                        showQuickCatalogTaxonomySheet(context),
+                                      )
+                                  : () {
+                                      _searchDebounce?.cancel();
+                                      _searchCtrl.clear();
+                                      setState(() => _searchQuery = '');
+                                    },
                             ),
                           ],
                         )
@@ -452,6 +460,44 @@ class _CatalogPageState extends ConsumerState<CatalogPage> {
       ),
     ),
     ),
+    );
+  }
+}
+
+/// Catalog hub search suggestion chips load failure (UX-124).
+@visibleForTesting
+class CatalogSearchSuggestionsError extends StatelessWidget {
+  const CatalogSearchSuggestionsError({super.key, required this.onRetry});
+
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return HexaEmptyState(
+      icon: Icons.search_off_outlined,
+      title: 'Could not load search suggestions',
+      subtitle: 'Check your connection, then retry.',
+      primaryActionLabel: 'Retry',
+      onPrimaryAction: onRetry,
+    );
+  }
+}
+
+/// Catalog hub categories list load failure (UX-136).
+@visibleForTesting
+class CatalogCategoriesLoadError extends StatelessWidget {
+  const CatalogCategoriesLoadError({super.key, required this.onRetry});
+
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return HexaEmptyState(
+      icon: Icons.category_outlined,
+      title: 'Could not load categories',
+      subtitle: 'Check your connection, then retry.',
+      primaryActionLabel: 'Retry',
+      onPrimaryAction: onRetry,
     );
   }
 }

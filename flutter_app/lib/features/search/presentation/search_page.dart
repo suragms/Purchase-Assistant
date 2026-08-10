@@ -14,7 +14,8 @@ import '../../../core/router/navigation_ext.dart';
 import '../../../core/design_system/hexa_responsive.dart';
 import '../../../core/router/post_auth_route.dart';
 import 'widgets/search_desktop_preview_pane.dart';
-import '../../../core/widgets/friendly_load_error.dart';
+import 'widgets/search_section_filter_chips.dart';
+import '../../../shared/widgets/hexa_empty_state.dart';
 import '../../../shared/widgets/trade_intel_cards.dart';
 import '../../shell/shell_branch_provider.dart';
 import '../../staff/staff_shell_branch_provider.dart';
@@ -375,27 +376,10 @@ class _SearchPageState extends ConsumerState<SearchPage> {
             ('types', 'Types'),
             ('contacts', 'Contacts'),
           ];
-    return SizedBox(
-      height: 52,
-      child: ListView.separated(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.fromLTRB(16, 6, 16, 6),
-        itemCount: meta.length,
-        separatorBuilder: (_, __) => const SizedBox(width: 8),
-        itemBuilder: (context, i) {
-          final e = meta[i];
-          return ChoiceChip(
-            materialTapTargetSize: MaterialTapTargetSize.padded,
-            labelPadding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-            label: Text(
-              e.$2,
-              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
-            ),
-            selected: _section == e.$1,
-            onSelected: (_) => setState(() => _section = e.$1),
-          );
-        },
-      ),
+    return SearchSectionFilterChips(
+      sections: meta,
+      selected: _section,
+      onSelected: (id) => setState(() => _section = id),
     );
   }
 
@@ -674,8 +658,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
         error: (_, __) => ListView(
           padding: listPadding,
           children: [
-            FriendlyLoadError(
-              message: 'Search failed',
+            SearchLoadError(
               onRetry: () =>
                   ref.invalidate(unifiedSearchProvider(_debounced)),
             ),
@@ -843,115 +826,51 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                         ),
                       ),
                     if (!(widget.embeddedInShell || widget.staffShellEmbedded)) ...[
-                      SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        child: Row(
-                          children: [
-                            ChoiceChip(
-                              label: const Text(
-                                'All',
-                                style: TextStyle(
-                                    fontSize: 13, fontWeight: FontWeight.w700),
-                              ),
-                              labelPadding:
-                                  const EdgeInsets.symmetric(horizontal: 10),
-                              selected: _section == 'all',
-                              onSelected: (_) =>
-                                  setState(() => _section = 'all'),
-                            ),
-                            const SizedBox(width: 10),
-                            ChoiceChip(
-                              label: Text(
-                                'Types (${sectionCounts['types']})',
-                                style: const TextStyle(
-                                    fontSize: 13, fontWeight: FontWeight.w600),
-                              ),
-                              labelPadding:
-                                  const EdgeInsets.symmetric(horizontal: 10),
-                              selected: _section == 'types',
-                              onSelected: (_) =>
-                                  setState(() => _section = 'types'),
-                            ),
-                            const SizedBox(width: 10),
-                            ChoiceChip(
-                              label: Text(
-                                'Items (${sectionCounts['items']})',
-                                style: const TextStyle(
-                                    fontSize: 13, fontWeight: FontWeight.w600),
-                              ),
-                              labelPadding:
-                                  const EdgeInsets.symmetric(horizontal: 10),
-                              selected: _section == 'items',
-                              onSelected: (_) =>
-                                  setState(() => _section = 'items'),
-                            ),
-                            const SizedBox(width: 10),
-                            ChoiceChip(
-                              label: Text(
-                                'Bills (${sectionCounts['bills']})',
-                                style: const TextStyle(
-                                    fontSize: 13, fontWeight: FontWeight.w600),
-                              ),
-                              labelPadding:
-                                  const EdgeInsets.symmetric(horizontal: 10),
-                              selected: _section == 'bills',
-                              onSelected: (_) =>
-                                  setState(() => _section = 'bills'),
-                            ),
-                            const SizedBox(width: 10),
-                            ChoiceChip(
-                              label: Text(
-                                'Suppliers (${sectionCounts['suppliers']})',
-                                style: const TextStyle(
-                                    fontSize: 13, fontWeight: FontWeight.w600),
-                              ),
-                              labelPadding:
-                                  const EdgeInsets.symmetric(horizontal: 10),
-                              selected: _section == 'suppliers',
-                              onSelected: (_) =>
-                                  setState(() => _section = 'suppliers'),
-                            ),
-                            const SizedBox(width: 10),
-                            ChoiceChip(
-                              label: Text(
-                                'Brokers (${sectionCounts['brokers']})',
-                                style: const TextStyle(
-                                    fontSize: 13, fontWeight: FontWeight.w600),
-                              ),
-                              labelPadding:
-                                  const EdgeInsets.symmetric(horizontal: 10),
-                              selected: _section == 'brokers',
-                              onSelected: (_) =>
-                                  setState(() => _section = 'brokers'),
-                            ),
-                            const SizedBox(width: 10),
-                            ChoiceChip(
-                              label: Text(
-                                'Contacts (${sectionCounts['contacts']})',
-                                style: const TextStyle(
-                                    fontSize: 13, fontWeight: FontWeight.w600),
-                              ),
-                              labelPadding:
-                                  const EdgeInsets.symmetric(horizontal: 10),
-                              selected: _section == 'contacts',
-                              onSelected: (_) =>
-                                  setState(() => _section = 'contacts'),
-                            ),
-                          ],
-                        ),
+                      SearchSectionFilterChips(
+                        padding: EdgeInsets.zero,
+                        sections: [
+                          ('all', 'All'),
+                          ('types', 'Types (${sectionCounts['types']})'),
+                          ('items', 'Items (${sectionCounts['items']})'),
+                          ('bills', 'Bills (${sectionCounts['bills']})'),
+                          (
+                            'suppliers',
+                            'Suppliers (${sectionCounts['suppliers']})'
+                          ),
+                          ('brokers', 'Brokers (${sectionCounts['brokers']})'),
+                          (
+                            'contacts',
+                            'Contacts (${sectionCounts['contacts']})'
+                          ),
+                        ],
+                        selected: _section,
+                        onSelected: (id) => setState(() => _section = id),
                       ),
                       const SizedBox(height: 12),
                     ],
                     if (!hasAny)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 8),
-                        child: Text(
-                          'No matching items found. Try recent items, low stock, missing barcode, or scan history.',
-                          style: tt.bodySmall?.copyWith(
-                            color: cs.onSurfaceVariant,
-                          ),
+                      SizedBox(
+                        height: (MediaQuery.sizeOf(context).height * 0.55)
+                            .clamp(360.0, 520.0),
+                        child: HexaEmptyState(
+                          icon: Icons.search_off_rounded,
+                          title: 'No matching results',
+                          subtitle: widget.staffShellEmbedded
+                              ? 'Try another name or code, or scan a barcode.'
+                              : 'Try another term, or check low stock.',
+                          primaryActionLabel: widget.staffShellEmbedded
+                              ? 'Scan barcode'
+                              : 'Low stock',
+                          onPrimaryAction: () {
+                            if (widget.staffShellEmbedded) {
+                              context.go('/staff/scan');
+                            } else {
+                              context.push('/stock');
+                            }
+                          },
                         ),
-                      ),
+                      )
+                    else ...[
                     if (!widget.staffShellEmbedded &&
                         (_section == 'all' || _section == 'types')) ...[
                       Text(
@@ -1358,6 +1277,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                           );
                         }),
                     ],
+                    ],
                   ],
                     ),
                   ],
@@ -1460,13 +1380,20 @@ class _SearchLoadingFallback extends StatefulWidget {
 
 class _SearchLoadingFallbackState extends State<_SearchLoadingFallback> {
   bool _showFallback = false;
+  Timer? _fallbackTimer;
 
   @override
   void initState() {
     super.initState();
-    Timer(const Duration(seconds: 2), () {
+    _fallbackTimer = Timer(const Duration(seconds: 2), () {
       if (mounted) setState(() => _showFallback = true);
     });
+  }
+
+  @override
+  void dispose() {
+    _fallbackTimer?.cancel();
+    super.dispose();
   }
 
   @override
@@ -1485,20 +1412,67 @@ class _SearchLoadingFallbackState extends State<_SearchLoadingFallback> {
     return ListView(
       padding: widget.padding,
       children: [
-        const Text(
-          'Search is taking longer than expected. You can keep navigating or try a recent item.',
-          style: TextStyle(fontSize: 13, color: Colors.black54),
-        ),
-        const SizedBox(height: 12),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: [
-            for (final r in widget.recents.take(8))
-              ActionChip(label: Text(r), onPressed: () => widget.onApplyQuery(r)),
-          ],
+        SearchLoadingSlowFallback(
+          recents: widget.recents,
+          onApplyQuery: widget.onApplyQuery,
         ),
       ],
+    );
+  }
+}
+
+/// Shown after search loading exceeds the soft timeout.
+@visibleForTesting
+class SearchLoadingSlowFallback extends StatelessWidget {
+  const SearchLoadingSlowFallback({
+    super.key,
+    required this.recents,
+    required this.onApplyQuery,
+  });
+
+  final List<String> recents;
+  final ValueChanged<String> onApplyQuery;
+
+  @override
+  Widget build(BuildContext context) {
+    final chips = recents.take(8).toList();
+    return HexaEmptyState(
+      icon: Icons.hourglass_top_rounded,
+      title: 'Search is taking longer than expected',
+      subtitle: 'You can keep navigating or try a recent item.',
+      action: chips.isEmpty
+          ? null
+          : Wrap(
+              alignment: WrapAlignment.center,
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final r in chips)
+                  ActionChip(
+                    label: Text(r),
+                    onPressed: () => onApplyQuery(r),
+                  ),
+              ],
+            ),
+    );
+  }
+}
+
+/// Unified search results load failure.
+@visibleForTesting
+class SearchLoadError extends StatelessWidget {
+  const SearchLoadError({super.key, required this.onRetry});
+
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return HexaEmptyState(
+      icon: Icons.search_off_outlined,
+      title: 'Search failed',
+      subtitle: 'Check your connection, then retry.',
+      primaryActionLabel: 'Retry',
+      onPrimaryAction: onRetry,
     );
   }
 }

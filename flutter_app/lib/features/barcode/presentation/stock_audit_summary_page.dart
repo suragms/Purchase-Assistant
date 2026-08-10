@@ -6,6 +6,7 @@ import '../../../core/auth/session_notifier.dart';
 import '../../../core/json_coerce.dart';
 
 import '../../../core/theme/hexa_colors.dart';
+import '../../../shared/widgets/hexa_empty_state.dart';
 /// Post-audit summary (matched vs discrepant lines).
 class StockAuditSummaryPage extends ConsumerStatefulWidget {
   const StockAuditSummaryPage({super.key});
@@ -18,6 +19,7 @@ class StockAuditSummaryPage extends ConsumerStatefulWidget {
 class _StockAuditSummaryPageState extends ConsumerState<StockAuditSummaryPage> {
   Map<String, dynamic>? _audit;
   bool _loading = true;
+  Object? _error;
 
   @override
   void initState() {
@@ -29,20 +31,32 @@ class _StockAuditSummaryPageState extends ConsumerState<StockAuditSummaryPage> {
     final session = ref.read(sessionProvider);
     final id = GoRouterState.of(context).uri.queryParameters['id'];
     if (session == null || id == null) {
-      setState(() => _loading = false);
+      setState(() {
+        _loading = false;
+        _error = 'Missing audit session.';
+      });
       return;
     }
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
     try {
       final audit = await ref.read(hexaApiProvider).getStockAudit(
             businessId: session.primaryBusiness.id,
             auditId: id,
           );
+      if (!mounted) return;
       setState(() {
         _audit = audit;
         _loading = false;
       });
-    } catch (_) {
-      setState(() => _loading = false);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _error = e;
+      });
     }
   }
 
@@ -51,6 +65,21 @@ class _StockAuditSummaryPageState extends ConsumerState<StockAuditSummaryPage> {
     if (_loading) {
       return const Scaffold(
         body: Center(child: CircularProgressIndicator()),
+      );
+    }
+    if (_error != null || _audit == null) {
+      return Scaffold(
+        appBar: AppBar(
+          leading: BackButton(onPressed: () => context.pop()),
+          title: const Text('Audit summary'),
+        ),
+        body: HexaEmptyState(
+          icon: Icons.cloud_off_rounded,
+          title: 'Could not load audit summary',
+          subtitle: 'Check your connection, then retry.',
+          primaryActionLabel: 'Retry',
+          onPrimaryAction: _load,
+        ),
       );
     }
     final items = _audit?['items'];

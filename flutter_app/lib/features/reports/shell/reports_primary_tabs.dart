@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
 
-import '../../../core/theme/hexa_colors.dart';
 import '../reports_bi_tab.dart';
 
-/// Scrollable tab chips — avoids SegmentedButton label wrap/overlap on narrow screens.
-class ReportsPrimaryTabs extends StatelessWidget {
+/// Primary Reports BI tabs — [TabBar] chrome (not filter ChoiceChips).
+class ReportsPrimaryTabs extends StatefulWidget {
   const ReportsPrimaryTabs({
     super.key,
     required this.selected,
@@ -15,44 +14,62 @@ class ReportsPrimaryTabs extends StatelessWidget {
   final ValueChanged<ReportsBiTab> onSelected;
 
   @override
+  State<ReportsPrimaryTabs> createState() => _ReportsPrimaryTabsState();
+}
+
+class _ReportsPrimaryTabsState extends State<ReportsPrimaryTabs>
+    with SingleTickerProviderStateMixin {
+  static const _tabs = ReportsBiTabX.primaryTabs;
+
+  late final TabController _controller;
+
+  int _indexFor(ReportsBiTab tab) {
+    final i = _tabs.indexOf(tab);
+    return i < 0 ? 0 : i;
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TabController(
+      length: _tabs.length,
+      vsync: this,
+      initialIndex: _indexFor(widget.selected),
+    );
+    _controller.addListener(_onTabChanged);
+  }
+
+  void _onTabChanged() {
+    if (_controller.indexIsChanging) return;
+    final tab = _tabs[_controller.index];
+    if (tab != widget.selected) widget.onSelected(tab);
+  }
+
+  @override
+  void didUpdateWidget(covariant ReportsPrimaryTabs oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final next = _indexFor(widget.selected);
+    if (next != _controller.index) {
+      _controller.animateTo(next);
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.removeListener(_onTabChanged);
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      height: 36,
-      child: ListView(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.fromLTRB(12, 4, 12, 0),
-        children: [
-          for (final t in ReportsBiTabX.primaryTabs) ...[
-            Padding(
-              padding: const EdgeInsets.only(right: 6),
-              child: ChoiceChip(
-                label: Text(
-                  t.shortLabel,
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w800,
-                    color: selected == t
-                        ? HexaColors.brandPrimary
-                        : HexaColors.neutral,
-                  ),
-                ),
-                selected: selected == t,
-                showCheckmark: true,
-                checkmarkColor: HexaColors.brandPrimary,
-                visualDensity: VisualDensity.compact,
-                padding: const EdgeInsets.symmetric(horizontal: 4),
-                onSelected: (_) => onSelected(t),
-                selectedColor: HexaColors.brandPrimary.withValues(alpha: 0.14),
-                backgroundColor: HexaColors.brandCard,
-                side: BorderSide(
-                  color: selected == t
-                      ? HexaColors.brandPrimary.withValues(alpha: 0.35)
-                      : HexaColors.brandPrimary.withValues(alpha: 0.1),
-                ),
-              ),
-            ),
-          ],
-        ],
+    return Material(
+      color: Colors.transparent,
+      child: TabBar(
+        controller: _controller,
+        isScrollable: true,
+        tabAlignment: TabAlignment.start,
+        tabs: [for (final t in _tabs) Tab(text: t.shortLabel)],
       ),
     );
   }

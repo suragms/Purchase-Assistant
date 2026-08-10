@@ -562,6 +562,7 @@ class _PartyInlineSuggestFieldState extends State<PartyInlineSuggestField> {
     _revealDebounceTimer?.cancel();
     _suppressPanelAfterPick = true;
     _lastPickedLabel = it.label.trim();
+    // Flush filter query immediately so the list does not stick on the typed prefix.
     _filterQuery = it.label.trim().toLowerCase();
 
     final usedOverlay = widget.suggestionsAsOverlay && _overlayController.isShowing;
@@ -581,7 +582,12 @@ class _PartyInlineSuggestFieldState extends State<PartyInlineSuggestField> {
           selection: TextSelection.collapsed(offset: it.label.length),
         );
 
-        if (mounted) setState(() {});
+        if (mounted) {
+          setState(() {
+            _filterQuery = it.label.trim().toLowerCase();
+            _suppressPanelAfterPick = true;
+          });
+        }
         if (!usedOverlay) {
           _scheduleOverlaySync();
         }

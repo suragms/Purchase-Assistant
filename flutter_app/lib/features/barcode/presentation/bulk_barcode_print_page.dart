@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:printing/printing.dart';
 
@@ -13,10 +14,11 @@ import '../../../core/design_system/hexa_operational_tokens.dart';
 import '../../../core/design_system/hexa_responsive.dart';
 import '../../../core/errors/barcode_operation_errors.dart';
 import '../../../core/json_coerce.dart';
-import '../../../core/services/pdf_actions.dart' deferred as pdfActions;
+import '../../../core/services/pdf_actions.dart' deferred as pdf_actions;
 import '../../../core/providers/stock_providers.dart';
 import '../../stock/presentation/widgets/stock_row_metrics.dart';
 import '../../stock/presentation/widgets/stock_table_layout.dart';
+import '../../../shared/widgets/hexa_empty_state.dart';
 import '../../../shared/widgets/stock_summary_widget.dart';
 import '../../../core/widgets/hexa_error_card.dart';
 import '../../stock/presentation/widgets/operational_stock_filter_sheet.dart';
@@ -469,8 +471,8 @@ class _BulkBarcodePrintPageState extends ConsumerState<BulkBarcodePrintPage> {
   }
 
   Future<bool> _sharePdfSafe(Uint8List bytes, String filename) async {
-    await pdfActions.loadLibrary();
-    final result = await pdfActions.savePdfBytes(
+    await pdf_actions.loadLibrary();
+    final result = await pdf_actions.savePdfBytes(
       buildBytes: () async => bytes,
       filename: filename,
       subject: 'Harisree barcode labels',
@@ -679,8 +681,8 @@ class _BulkBarcodePrintPageState extends ConsumerState<BulkBarcodePrintPage> {
     }
     for (var i = 0; i < n; i++) {
       if (forPrint) {
-        await pdfActions.loadLibrary();
-        final result = await pdfActions.printPdfBytes(
+        await pdf_actions.loadLibrary();
+        final result = await pdf_actions.printPdfBytes(
           buildBytes: () async => pdfs[i],
           filename: names[i],
           source: 'bulk_barcode_print_page',
@@ -1275,81 +1277,128 @@ class _BulkBarcodePrintPageState extends ConsumerState<BulkBarcodePrintPage> {
           ),
         ),
         Expanded(
-          child: NotificationListener<ScrollNotification>(
-            onNotification: (n) =>
-                handleBulkStockListScrollNotification(n, ref, data),
-            child: ListView.builder(
-            itemCount: visible.length,
-            itemBuilder: (context, i) {
-              final it = visible[i];
-              final id = it['id']?.toString() ?? '';
-              final name = it['name']?.toString() ?? '';
-              final code = it['item_code']?.toString() ?? '';
-              final barcode = it['barcode']?.toString() ?? '';
-              final st = it['stock_status']?.toString() ?? '';
-              final cur = StockRowMetrics.systemQty(it);
-              final purchased = coerceToDouble(
-                it['total_delivered_qty'] ??
-                    it['period_purchased_qty'] ??
-                    it['purchased_today_qty'],
-              );
-              final unit = it['stock_unit']?.toString() ??
-                  it['unit']?.toString() ??
-                  'piece';
-              final hasPending = it['has_pending_order'] == true;
-              final pendingDays = (it['pending_order_days'] as num?)?.toInt();
-              final sub = barcode.isEmpty
-                  ? (code.isEmpty ? 'No barcode · $st' : '$code · $st')
-                  : (code.isEmpty
-                      ? '$barcode · $st'
-                      : '$code · $barcode · $st');
-              return RepaintBoundary(
-                child: _BulkPrintRow(
-                  key: id.isNotEmpty ? ValueKey(id) : null,
-                  selected: selected.contains(id),
-                isFirstRow: i == 0,
-                name: name,
-                subtitle: sub,
-                purchased: purchased,
-                current: cur,
-                unit: unit,
-                stockStatus: st,
-                hasPendingOrder: hasPending,
-                pendingOrderDays: pendingDays,
-                onChanged: (v) => _toggleSelected(id, v),
-                onPreview: id.isEmpty
-                    ? null
-                    : () {
-                        ref.read(bulkPreviewItemIdProvider.notifier).state = id;
-                        if (!desktop) {
-                          // Fixed preview height; compact host shrink-wraps (BLANK-002).
-                          showHexaBottomSheet<void>(
-                            context: context,
-                            compact: true,
-                            padding: EdgeInsets.zero,
-                            child: SizedBox(
-                              height: 280,
-                              child: BulkBarcodePrintPreviewPanel(
-                                denseA4: _denseA4,
-                                useQr: _useQr,
-                                copies: _copies,
-                                selectedCount: selected.length,
-                                onPreviewAll: () {
-                                  Navigator.pop(context);
-                                  unawaited(_preview());
+          child: visible.isEmpty
+              ? BulkBarcodePrintListEmpty(
+                  filtersActive: countOperationalActiveFilters(
+                            ref.read(stockListQueryProvider),
+                            ref.read(stockOperationalFiltersProvider),
+                          ) >
+                          0 ||
+                      ref.read(stockListQueryProvider).q.trim().isNotEmpty,
+                  onClearFilters: () {
+                    _searchCtrl.clear();
+                    ref.read(stockListQueryProvider.notifier).state =
+                        const StockListQuery();
+                    ref.read(stockOperationalFiltersProvider.notifier).state =
+                        const StockOperationalFilters();
+                  },
+                  onOpenCatalog: () => context.push('/catalog'),
+                )
+              : NotificationListener<ScrollNotification>(
+                  onNotification: (n) =>
+                      handleBulkStockListScrollNotification(n, ref, data),
+                  child: ListView.builder(
+                    itemCount: visible.length,
+                    itemBuilder: (context, i) {
+                      final it = visible[i];
+                      final id = it['id']?.toString() ?? '';
+                      final name = it['name']?.toString() ?? '';
+                      final code = it['item_code']?.toString() ?? '';
+                      final barcode = it['barcode']?.toString() ?? '';
+                      final st = it['stock_status']?.toString() ?? '';
+                      final cur = StockRowMetrics.systemQty(it);
+                      final purchased = coerceToDouble(
+                        it['total_delivered_qty'] ??
+                            it['period_purchased_qty'] ??
+                            it['purchased_today_qty'],
+                      );
+                      final unit = it['stock_unit']?.toString() ??
+                          it['unit']?.toString() ??
+                          'piece';
+                      final hasPending = it['has_pending_order'] == true;
+                      final pendingDays =
+                          (it['pending_order_days'] as num?)?.toInt();
+                      final sub = barcode.isEmpty
+                          ? (code.isEmpty ? 'No barcode · $st' : '$code · $st')
+                          : (code.isEmpty
+                              ? '$barcode · $st'
+                              : '$code · $barcode · $st');
+                      return RepaintBoundary(
+                        child: _BulkPrintRow(
+                          key: id.isNotEmpty ? ValueKey(id) : null,
+                          selected: selected.contains(id),
+                          isFirstRow: i == 0,
+                          name: name,
+                          subtitle: sub,
+                          purchased: purchased,
+                          current: cur,
+                          unit: unit,
+                          stockStatus: st,
+                          hasPendingOrder: hasPending,
+                          pendingOrderDays: pendingDays,
+                          onChanged: (v) => _toggleSelected(id, v),
+                          onPreview: id.isEmpty
+                              ? null
+                              : () {
+                                  ref
+                                      .read(bulkPreviewItemIdProvider.notifier)
+                                      .state = id;
+                                  if (!desktop) {
+                                    // Fixed preview height; compact host shrink-wraps (BLANK-002).
+                                    showHexaBottomSheet<void>(
+                                      context: context,
+                                      compact: true,
+                                      padding: EdgeInsets.zero,
+                                      child: SizedBox(
+                                        height: 280,
+                                        child: BulkBarcodePrintPreviewPanel(
+                                          denseA4: _denseA4,
+                                          useQr: _useQr,
+                                          copies: _copies,
+                                          selectedCount: selected.length,
+                                          onPreviewAll: () {
+                                            Navigator.pop(context);
+                                            unawaited(_preview());
+                                          },
+                                        ),
+                                      ),
+                                    );
+                                  }
                                 },
-                              ),
-                            ),
-                          );
-                        }
-                      },
+                        ),
+                      );
+                    },
+                  ),
                 ),
-              );
-            },
-          ),
-          ),
         ),
       ],
+    );
+  }
+}
+
+/// Empty stock list on bulk barcode print (filters or no catalog items).
+class BulkBarcodePrintListEmpty extends StatelessWidget {
+  const BulkBarcodePrintListEmpty({
+    super.key,
+    required this.filtersActive,
+    required this.onClearFilters,
+    required this.onOpenCatalog,
+  });
+
+  final bool filtersActive;
+  final VoidCallback onClearFilters;
+  final VoidCallback onOpenCatalog;
+
+  @override
+  Widget build(BuildContext context) {
+    return HexaEmptyState(
+      icon: Icons.qr_code_2_outlined,
+      title: filtersActive ? 'No items match filters' : 'No items to print',
+      subtitle: filtersActive
+          ? 'Clear search or filters to see more stock items.'
+          : 'Add catalog items with barcodes or item codes, then return here.',
+      primaryActionLabel: filtersActive ? 'Clear filters' : 'Open catalog',
+      onPrimaryAction: filtersActive ? onClearFilters : onOpenCatalog,
     );
   }
 }

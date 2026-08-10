@@ -63,6 +63,11 @@ class StockWarehouseRow extends StatelessWidget {
             : cat.isNotEmpty
                 ? cat
                 : '');
+    final wide = StockTableLayout.useWideMetricColumns(context);
+    // Narrow list: keep SYS/DIFF readable without a 4-column metric strip.
+    final sysDiffMeta = wide
+        ? null
+        : 'Sys ${StockRowMetrics.systemCellLabel(item)} · Δ ${StockRowMetrics.diffCellLabel(item)}';
 
     return Padding(
       padding: EdgeInsets.symmetric(
@@ -78,11 +83,8 @@ class StockWarehouseRow extends StatelessWidget {
           child: Container(
             constraints: BoxConstraints(
               minHeight: StockTableLayout.rowHeightFor(context),
-              // Desktop: do not clamp maxHeight — 2-line name + delivery cues
-              // overflowed and clipped under a fixed 56px max.
-              maxHeight: MediaQuery.sizeOf(context).width >= 1024
-                  ? double.infinity
-                  : StockTableLayout.rowHeightFor(context),
+              // Do not clamp maxHeight — name + Sys/Δ meta + delivery cues
+              // must not clip (phone compact columns; desktop dense min height).
             ),
             decoration: StockTableLayout.rowDecoration(isFirst: isFirstRow)
                 .copyWith(
@@ -137,7 +139,23 @@ class StockWarehouseRow extends StatelessWidget {
                               height: 1.12,
                             ),
                           ),
-                          if (deliveryCue != null || metaLine.isNotEmpty || pendingLine.isNotEmpty)
+                          if (sysDiffMeta != null)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 2),
+                              child: Text(
+                                sysDiffMeta,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: HexaDsType.label(9).copyWith(
+                                  color: HexaColors.neutral,
+                                  fontWeight: FontWeight.w700,
+                                  height: 1.1,
+                                ),
+                              ),
+                            ),
+                          if (deliveryCue != null ||
+                              metaLine.isNotEmpty ||
+                              pendingLine.isNotEmpty)
                             Padding(
                               padding: const EdgeInsets.only(top: 2),
                               child: Column(
@@ -188,22 +206,24 @@ class StockWarehouseRow extends StatelessWidget {
                       ),
                     ),
                   ),
-                  _boxedMetric(
-                    context,
-                    StockRowMetrics.systemCellLabel(item),
-                    StockRowMetrics.systemCellColor(item),
-                    subtitle: StockRowMetrics.systemCellTargetLabel(item),
-                  ),
+                  if (wide)
+                    _boxedMetric(
+                      context,
+                      StockRowMetrics.systemCellLabel(item),
+                      StockRowMetrics.systemCellColor(item),
+                      subtitle: StockRowMetrics.systemCellTargetLabel(item),
+                    ),
                   _boxedMetric(
                     context,
                     StockRowMetrics.physicalCellLabel(item),
                     HexaColors.brandTealMid,
                   ),
-                  _boxedMetric(
-                    context,
-                    StockRowMetrics.diffCellLabel(item),
-                    StockRowMetrics.diffColor(diff),
-                  ),
+                  if (wide)
+                    _boxedMetric(
+                      context,
+                      StockRowMetrics.diffCellLabel(item),
+                      StockRowMetrics.diffColor(diff),
+                    ),
                 ],
               ),
             ),

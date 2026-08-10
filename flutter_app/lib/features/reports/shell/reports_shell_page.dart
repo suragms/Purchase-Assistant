@@ -26,6 +26,7 @@ import '../../../core/theme/hexa_colors.dart';
 import '../../../core/utils/unit_utils.dart';
 import '../presentation/analytics_report_helpers.dart';
 import '../../../shared/widgets/hexa_empty_state.dart';
+import '../../../shared/widgets/hexa_cupertino_date_range_sheet.dart';
 import '../filters/reports_filter_sheet.dart';
 import '../filters/reports_filter_state.dart';
 import '../reports_bi_tab.dart';
@@ -230,11 +231,12 @@ class _ReportsShellPageState extends ConsumerState<ReportsShellPage> {
   Future<void> _pickCustomRange() async {
     final now = DateTime.now();
     final range = ref.read(analyticsDateRangeProvider);
-    final picked = await showDateRangePicker(
-      context: context,
+    final picked = await showHexaCupertinoDateRangeSheet(
+      context,
       firstDate: DateTime(now.year - 5),
       lastDate: DateTime(now.year + 1, 12, 31),
-      initialDateRange: DateTimeRange(start: range.from, end: range.to),
+      initialStart: range.from,
+      initialEnd: range.to,
     );
     if (picked == null || !mounted) return;
     ref.read(analyticsDateRangeProvider.notifier).state =
@@ -479,10 +481,10 @@ class _ReportsShellPageState extends ConsumerState<ReportsShellPage> {
     required AsyncValue<ReportsPurchasePayload> purchasesAsync,
     required Widget Function() emptyCard,
   }) {
-    if (showSkeleton && merged.isEmpty) {
+    if (showSkeleton && merged.isEmpty && _biTab != ReportsBiTab.overview) {
       return const Center(child: CircularProgressIndicator());
     }
-    if (hasFetchError && merged.isEmpty) {
+    if (hasFetchError && merged.isEmpty && _biTab != ReportsBiTab.overview) {
       return Padding(
         padding: const EdgeInsets.all(16),
         child: HexaEmptyState(
@@ -492,16 +494,22 @@ class _ReportsShellPageState extends ConsumerState<ReportsShellPage> {
         ),
       );
     }
-    if (showEmpty && _biTab != ReportsBiTab.stock) return emptyCard();
+    if (showEmpty &&
+        _biTab != ReportsBiTab.stock &&
+        _biTab != ReportsBiTab.overview) {
+      return emptyCard();
+    }
 
     switch (_biTab) {
       case ReportsBiTab.overview:
         return ReportsOverviewTab(
           agg: aggAll,
           merged: merged,
-          showSkeleton: showSkeleton,
+          // Charts load via their own providers — do not block shell/KPIs on
+          // purchases payload (was an infinite center spinner under Fast 4G).
+          showSkeleton: false,
           hasFetchError: hasFetchError,
-          showEmpty: showEmpty,
+          showEmpty: showEmpty && !purchasesAsync.isLoading,
           purchasesError: purchasesAsync.error,
           onRetry: _bumpInvalidate,
           onMatchHome: _syncRangeWithHome,
@@ -511,37 +519,32 @@ class _ReportsShellPageState extends ConsumerState<ReportsShellPage> {
         final cap = _visibleCap < filtered.items.length
             ? _visibleCap
             : filtered.items.length;
-        return SizedBox(
-          height: MediaQuery.sizeOf(context).height * 0.55,
-          child: ReportsItemsTab(
-            rows: filtered.items.take(cap).toList(),
-            merged: merged,
-            hasMore: cap < filtered.items.length,
-            onLoadMore: () => setState(() => _visibleCap += 40),
-            isLoading: showSkeleton,
-          ),
+        // Fill the shell Expanded pane — do not size from MediaQuery fraction
+        // (overflow when chrome shrinks the pane below 0.55× screen height).
+        return ReportsItemsTab(
+          rows: filtered.items.take(cap).toList(),
+          merged: merged,
+          hasMore: cap < filtered.items.length,
+          onLoadMore: () => setState(() => _visibleCap += 40),
+          isLoading: showSkeleton,
+          onChangePeriod: () => unawaited(_pickCustomRange()),
         );
       case ReportsBiTab.purchases:
         final purchases = filtered.purchases;
         final cap = _visibleCap < purchases.length
             ? _visibleCap
             : purchases.length;
-        return SizedBox(
-          height: MediaQuery.sizeOf(context).height * 0.62,
-          child: ReportsPurchasesTab(
-            agg: filtered.agg,
-            purchases: purchases.take(cap).toList(),
-            merged: merged,
-            hasMore: cap < purchases.length,
-            onLoadMore: () => setState(() => _visibleCap += 20),
-            isLoading: showSkeleton,
-          ),
+        return ReportsPurchasesTab(
+          agg: filtered.agg,
+          purchases: purchases.take(cap).toList(),
+          merged: merged,
+          hasMore: cap < purchases.length,
+          onLoadMore: () => setState(() => _visibleCap += 20),
+          isLoading: showSkeleton,
+          onChangePeriod: () => unawaited(_pickCustomRange()),
         );
       case ReportsBiTab.stock:
-        return SizedBox(
-          height: MediaQuery.sizeOf(context).height * 0.62,
-          child: ReportsStockTab(highlightSection: _stockHighlight),
-        );
+        return ReportsStockTab(highlightSection: _stockHighlight);
     }
   }
 

@@ -180,12 +180,13 @@ class UserListPrimaryFilterBar extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(userListFilterProvider);
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
+    return Padding(
       padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
-      child: Row(
+      child: Wrap(
+        spacing: 8,
+        runSpacing: 8,
         children: [
-          for (final f in _filters) ...[
+          for (final f in _filters)
             _Chip(
               label: _label(f),
               count: countForPrimaryFilter(rows, f),
@@ -193,8 +194,6 @@ class UserListPrimaryFilterBar extends ConsumerWidget {
               onTap: () => ref.read(userListFilterProvider.notifier).state =
                   state.copyWith(primary: f),
             ),
-            const SizedBox(width: 8),
-          ],
         ],
       ),
     );

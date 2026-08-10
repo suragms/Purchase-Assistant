@@ -10,7 +10,6 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../../core/auth/auth_error_messages.dart';
 import '../../../core/design_system/hexa_responsive.dart';
 import '../../../core/theme/hexa_colors.dart';
-import '../../../core/widgets/friendly_load_error.dart';
 import '../../../core/widgets/focused_search_chrome.dart';
 import '../../../core/widgets/list_skeleton.dart';
 import '../../../core/auth/session_notifier.dart';
@@ -23,10 +22,12 @@ import '../../../core/providers/suppliers_list_provider.dart';
 import '../../../core/providers/trade_purchases_provider.dart';
 import '../../../core/search/search_highlight.dart';
 import '../../../shared/widgets/app_settings_action.dart';
+import '../../../shared/widgets/hexa_empty_state.dart';
 import '../../../core/widgets/business_write_surface_listener.dart';
 import 'broker_wizard_page.dart';
 import 'supplier_create_simple.dart';
 import 'supplier_create_wizard_page.dart';
+import 'widgets/contacts_workspace_counts_strip.dart';
 
 String _fmtBrokerCommissionPct(double v) =>
     v == v.roundToDouble() ? v.round().toString() : v.toStringAsFixed(1);
@@ -369,6 +370,19 @@ int contactsTabIndexFromQuery(String? tab) {
   }
 }
 
+/// People (0–1) vs Catalog (2–4) hub for Contacts IA (UX-007).
+enum ContactsHubSection { people, catalog }
+
+ContactsHubSection contactsHubForTabIndex(int tab) {
+  final t = tab.clamp(0, 4);
+  return t <= 1 ? ContactsHubSection.people : ContactsHubSection.catalog;
+}
+
+int contactsLocalIndexForTab(int tab) {
+  final t = tab.clamp(0, 4);
+  return t <= 1 ? t : t - 2;
+}
+
 class ContactsPage extends ConsumerStatefulWidget {
   const ContactsPage({super.key, this.initialTab = 0});
 
@@ -379,36 +393,44 @@ class ContactsPage extends ConsumerStatefulWidget {
 }
 
 class _ContactsPageState extends ConsumerState<ContactsPage>
-    with SingleTickerProviderStateMixin {
-  late final TabController _tabController;
+    with TickerProviderStateMixin {
+  late final TabController _peopleTabs;
+  late final TabController _catalogTabs;
+  late ContactsHubSection _hub;
   final _searchCtrl = TextEditingController();
   final _searchFocus = FocusNode();
   String _searchQuery = '';
   Timer? _searchDebounce;
   static const _searchMinLen = 1;
 
-  void _onTabChanged() {
-    if (_tabController.indexIsChanging || !mounted) return;
-    // No setState needed — tab content is in separate ConsumerWidgets
-    // that manage their own rebuilds via Riverpod providers.
-  }
+  TabController get _activeTabs =>
+      _hub == ContactsHubSection.people ? _peopleTabs : _catalogTabs;
 
   @override
   void initState() {
     super.initState();
     final tab = widget.initialTab.clamp(0, 4);
-    _tabController = TabController(length: 5, vsync: this, initialIndex: tab);
-    _tabController.addListener(_onTabChanged);
+    _hub = contactsHubForTabIndex(tab);
+    _peopleTabs = TabController(
+      length: 2,
+      vsync: this,
+      initialIndex: tab <= 1 ? tab : 0,
+    );
+    _catalogTabs = TabController(
+      length: 3,
+      vsync: this,
+      initialIndex: tab >= 2 ? tab - 2 : 0,
+    );
     _searchFocus.addListener(() => setState(() {}));
   }
 
   @override
   void dispose() {
     _searchDebounce?.cancel();
-    _tabController.removeListener(_onTabChanged);
     _searchCtrl.dispose();
     _searchFocus.dispose();
-    _tabController.dispose();
+    _peopleTabs.dispose();
+    _catalogTabs.dispose();
     super.dispose();
   }
 
@@ -423,6 +445,11 @@ class _ContactsPageState extends ConsumerState<ContactsPage>
   }
 
   bool get _isSearching => _searchQuery.length >= _searchMinLen;
+
+  void _clearContactsSearch() {
+    _searchCtrl.clear();
+    setState(() => _searchQuery = '');
+  }
 
   static List<Map<String, dynamic>> _itemSearchRows(Map<String, dynamic> d) {
     final hits = d['item_hits'];
@@ -785,15 +812,17 @@ class _ContactsPageState extends ConsumerState<ContactsPage>
   }
 
   Widget _searchResultsForTab(Map<String, dynamic> d, int tabIndex) {
-    final tt = Theme.of(context).textTheme;
     switch (tabIndex) {
       case 0:
         final suppliers = (d['suppliers'] as List?) ?? [];
         if (suppliers.isEmpty) {
-          return Center(
-              child: Text('No supplier matches.',
-                  style: tt.bodyMedium
-                      ?.copyWith(color: HexaColors.textSecondary)));
+          return HexaEmptyState(
+            icon: Icons.storefront_outlined,
+            title: 'No supplier matches',
+            subtitle: 'Try another name, or clear search.',
+            primaryActionLabel: 'Clear search',
+            onPrimaryAction: _clearContactsSearch,
+          );
         }
         return ListView.separated(
           keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
@@ -818,10 +847,13 @@ class _ContactsPageState extends ConsumerState<ContactsPage>
       case 1:
         final brokers = (d['brokers'] as List?) ?? [];
         if (brokers.isEmpty) {
-          return Center(
-              child: Text('No broker matches.',
-                  style: tt.bodyMedium
-                      ?.copyWith(color: HexaColors.textSecondary)));
+          return HexaEmptyState(
+            icon: Icons.handshake_outlined,
+            title: 'No broker matches',
+            subtitle: 'Try another name, or clear search.',
+            primaryActionLabel: 'Clear search',
+            onPrimaryAction: _clearContactsSearch,
+          );
         }
         return ListView.separated(
           keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
@@ -845,10 +877,13 @@ class _ContactsPageState extends ConsumerState<ContactsPage>
       case 2:
         final cats = (d['categories'] as List?) ?? [];
         if (cats.isEmpty) {
-          return Center(
-              child: Text('No category matches.',
-                  style: tt.bodyMedium
-                      ?.copyWith(color: HexaColors.textSecondary)));
+          return HexaEmptyState(
+            icon: Icons.category_outlined,
+            title: 'No category matches',
+            subtitle: 'Try another name, or clear search.',
+            primaryActionLabel: 'Clear search',
+            onPrimaryAction: _clearContactsSearch,
+          );
         }
         return ListView.separated(
           keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
@@ -891,10 +926,13 @@ class _ContactsPageState extends ConsumerState<ContactsPage>
       case 3:
         final subs = (d['catalog_subcategories'] as List?) ?? [];
         if (subs.isEmpty) {
-          return Center(
-              child: Text('No catalog type matches.',
-                  style: tt.bodyMedium
-                      ?.copyWith(color: HexaColors.textSecondary)));
+          return HexaEmptyState(
+            icon: Icons.account_tree_outlined,
+            title: 'No catalog type matches',
+            subtitle: 'Try another name, or clear search.',
+            primaryActionLabel: 'Clear search',
+            onPrimaryAction: _clearContactsSearch,
+          );
         }
         return ListView.separated(
           keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
@@ -947,10 +985,13 @@ class _ContactsPageState extends ConsumerState<ContactsPage>
       case 4:
         final items = _itemSearchRows(d);
         if (items.isEmpty) {
-          return Center(
-              child: Text('No item name matches.',
-                  style: tt.bodyMedium
-                      ?.copyWith(color: HexaColors.textSecondary)));
+          return HexaEmptyState(
+            icon: Icons.inventory_2_outlined,
+            title: 'No item name matches',
+            subtitle: 'Try another name, or clear search.',
+            primaryActionLabel: 'Clear search',
+            onPrimaryAction: _clearContactsSearch,
+          );
         }
         return ListView.separated(
           keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
@@ -1007,8 +1048,6 @@ class _ContactsPageState extends ConsumerState<ContactsPage>
   }
 
   Widget _contactsHubCountsStrip() {
-    final cs = Theme.of(context).colorScheme;
-    final tt = Theme.of(context).textTheme;
     final sup = ref.watch(suppliersListProvider);
     final bro = ref.watch(brokersListProvider);
     final cats = ref.watch(itemCategoriesListProvider);
@@ -1027,70 +1066,39 @@ class _ContactsPageState extends ConsumerState<ContactsPage>
     }
     final tN = typeIds.length;
 
-    Widget chip(String label, int n) {
-      return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-        decoration: BoxDecoration(
-          color: cs.surfaceContainerHighest.withValues(alpha: 0.65),
-          borderRadius: BorderRadius.circular(999),
-          border: Border.all(color: HexaColors.borderSubtle),
-        ),
-        child: Text(
-          loading ? '$label …' : '$label $n',
-          style: tt.labelMedium?.copyWith(
-            fontWeight: FontWeight.w800,
-            fontSize: 12,
-          ),
-        ),
-      );
-    }
-
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 0, 12, 6),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Workspace',
-            style: tt.labelSmall?.copyWith(
-              fontWeight: FontWeight.w800,
-              color: cs.onSurfaceVariant,
-            ),
-          ),
-          const SizedBox(height: 6),
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: [
-                chip('Suppliers', sN),
-                const SizedBox(width: 8),
-                chip('Brokers', bN),
-                const SizedBox(width: 8),
-                chip('Categories', cN),
-                const SizedBox(width: 8),
-                chip('Types in use', tN),
-                const SizedBox(width: 8),
-                chip('Items', iN),
-              ],
-            ),
-          ),
-        ],
-      ),
+    return ContactsWorkspaceCountsStrip(
+      loading: loading,
+      suppliers: sN,
+      brokers: bN,
+      categories: cN,
+      typesInUse: tN,
+      items: iN,
     );
   }
 
+  int _searchCountForActiveTab(Map<String, dynamic> d, int localIndex) {
+    final global = _hub == ContactsHubSection.people
+        ? localIndex
+        : localIndex + 2;
+    return _searchCountForTab(d, global);
+  }
+
   void _addForCurrentTab() {
-    switch (_tabController.index) {
+    if (_hub == ContactsHubSection.people) {
+      switch (_peopleTabs.index) {
+        case 0:
+          _addSupplier();
+          break;
+        default:
+          _addBroker();
+      }
+      return;
+    }
+    switch (_catalogTabs.index) {
       case 0:
-        _addSupplier();
-        break;
-      case 1:
-        _addBroker();
-        break;
-      case 2:
         _addCategorySheet();
         break;
-      case 3:
+      case 1:
         if (!mounted) return;
         context.push('/catalog');
         break;
@@ -1139,7 +1147,9 @@ class _ContactsPageState extends ConsumerState<ContactsPage>
               chrome: Padding(
                 padding: const EdgeInsets.only(top: 2),
                 child: Text(
-                  'Suppliers · brokers · categories · catalog types · item names.',
+                  _hub == ContactsHubSection.people
+                      ? 'Suppliers and brokers for purchases.'
+                      : 'Categories, catalog types, and item names.',
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: tt.labelSmall?.copyWith(
@@ -1204,16 +1214,62 @@ class _ContactsPageState extends ConsumerState<ContactsPage>
                 border:
                     Border(bottom: BorderSide(color: HexaColors.borderSubtle)),
               ),
-              child: TabBar(
-                controller: _tabController,
-                isScrollable: true,
-                tabAlignment: TabAlignment.start,
-                tabs: [
-                  _tabWithBadge('Suppliers', _searchCountForTab(searchSnapshot, 0)),
-                  _tabWithBadge('Brokers', _searchCountForTab(searchSnapshot, 1)),
-                  _tabWithBadge('Categories', _searchCountForTab(searchSnapshot, 2)),
-                  _tabWithBadge('Types', _searchCountForTab(searchSnapshot, 3)),
-                  _tabWithBadge('Items', _searchCountForTab(searchSnapshot, 4)),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+                    child: SegmentedButton<ContactsHubSection>(
+                      segments: const [
+                        ButtonSegment<ContactsHubSection>(
+                          value: ContactsHubSection.people,
+                          label: Text('People'),
+                          icon: Icon(Icons.groups_outlined, size: 18),
+                        ),
+                        ButtonSegment<ContactsHubSection>(
+                          value: ContactsHubSection.catalog,
+                          label: Text('Catalog'),
+                          icon: Icon(Icons.category_outlined, size: 18),
+                        ),
+                      ],
+                      selected: {_hub},
+                      onSelectionChanged: (next) {
+                        if (next.isEmpty) return;
+                        setState(() => _hub = next.first);
+                      },
+                    ),
+                  ),
+                  TabBar(
+                    key: ValueKey<ContactsHubSection>(_hub),
+                    controller: _activeTabs,
+                    isScrollable: true,
+                    tabAlignment: TabAlignment.start,
+                    tabs: _hub == ContactsHubSection.people
+                        ? [
+                            _tabWithBadge(
+                              'Suppliers',
+                              _searchCountForActiveTab(searchSnapshot, 0),
+                            ),
+                            _tabWithBadge(
+                              'Brokers',
+                              _searchCountForActiveTab(searchSnapshot, 1),
+                            ),
+                          ]
+                        : [
+                            _tabWithBadge(
+                              'Categories',
+                              _searchCountForActiveTab(searchSnapshot, 0),
+                            ),
+                            _tabWithBadge(
+                              'Types',
+                              _searchCountForActiveTab(searchSnapshot, 1),
+                            ),
+                            _tabWithBadge(
+                              'Items',
+                              _searchCountForActiveTab(searchSnapshot, 2),
+                            ),
+                          ],
+                  ),
                 ],
               ),
             ),
@@ -1223,34 +1279,48 @@ class _ContactsPageState extends ConsumerState<ContactsPage>
             chrome: _contactsHubCountsStrip(),
           ),
           Expanded(
-            child: _isSearching
-                ? TabBarView(
-                    controller: _tabController,
-                    children: [
-                      _searchResultsForTab(searchSnapshot, 0),
-                      _searchResultsForTab(searchSnapshot, 1),
-                      _searchResultsForTab(searchSnapshot, 2),
-                      _searchResultsForTab(searchSnapshot, 3),
-                      _searchResultsForTab(searchSnapshot, 4),
-                    ],
-                  )
-                : TabBarView(
-                    controller: _tabController,
-                    children: [
-                      _SuppliersTab(
-                        onDial: _dial,
-                        onEdit: _editSupplier,
-                        onDelete: _deleteSupplier,
-                      ),
-                      _BrokersTab(
-                        onEdit: _editBroker,
-                        onDelete: _deleteBroker,
-                      ),
-                      _CategoriesTab(),
-                      const _CatalogTypesBrowseHint(),
-                      _ItemsTab(),
-                    ],
-                  ),
+            child: _hub == ContactsHubSection.people
+                ? (_isSearching
+                    ? TabBarView(
+                        controller: _peopleTabs,
+                        children: [
+                          _searchResultsForTab(searchSnapshot, 0),
+                          _searchResultsForTab(searchSnapshot, 1),
+                        ],
+                      )
+                    : TabBarView(
+                        controller: _peopleTabs,
+                        children: [
+                          _SuppliersTab(
+                            onDial: _dial,
+                            onEdit: _editSupplier,
+                            onDelete: _deleteSupplier,
+                            onAdd: _addSupplier,
+                          ),
+                          _BrokersTab(
+                            onEdit: _editBroker,
+                            onDelete: _deleteBroker,
+                            onAdd: _addBroker,
+                          ),
+                        ],
+                      ))
+                : (_isSearching
+                    ? TabBarView(
+                        controller: _catalogTabs,
+                        children: [
+                          _searchResultsForTab(searchSnapshot, 2),
+                          _searchResultsForTab(searchSnapshot, 3),
+                          _searchResultsForTab(searchSnapshot, 4),
+                        ],
+                      )
+                    : TabBarView(
+                        controller: _catalogTabs,
+                        children: [
+                          _CategoriesTab(onAdd: _addCategorySheet),
+                          const _CatalogTypesBrowseHint(),
+                          _ItemsTab(onAdd: _addItemSheet),
+                        ],
+                      )),
           ),
         ],
       ),
@@ -1303,11 +1373,13 @@ class _SuppliersTab extends ConsumerStatefulWidget {
     required this.onDial,
     required this.onEdit,
     required this.onDelete,
+    required this.onAdd,
   });
 
   final void Function(String?) onDial;
   final Future<void> Function(Map<String, dynamic>) onEdit;
   final Future<void> Function(Map<String, dynamic>) onDelete;
+  final Future<void> Function() onAdd;
 
   @override
   ConsumerState<_SuppliersTab> createState() => _SuppliersTabState();
@@ -1321,7 +1393,7 @@ class _SuppliersTabState extends ConsumerState<_SuppliersTab> {
       skipLoadingOnReload: true,
       skipLoadingOnRefresh: true,
       loading: () => const ListSkeleton(),
-      error: (_, __) => FriendlyLoadError(
+      error: (_, __) => ContactsHubLoadError(
         onRetry: () => ref.invalidate(contactsSuppliersEnrichedProvider),
       ),
       data: (list) {
@@ -1333,10 +1405,19 @@ class _SuppliersTabState extends ConsumerState<_SuppliersTab> {
             },
             child: ListView(
               keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-              physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
-              children: const [
+              physics: const AlwaysScrollableScrollPhysics(
+                  parent: BouncingScrollPhysics()),
+              children: [
                 SizedBox(
-                    height: 120, child: Center(child: Text('No suppliers yet')))
+                  height: MediaQuery.sizeOf(context).height * 0.55,
+                  child: HexaEmptyState(
+                    icon: Icons.storefront_outlined,
+                    title: 'No suppliers yet',
+                    subtitle: 'Add a supplier to start purchases and rates.',
+                    primaryActionLabel: 'Add supplier',
+                    onPrimaryAction: () => widget.onAdd(),
+                  ),
+                ),
               ],
             ),
           );
@@ -1380,10 +1461,15 @@ class _SuppliersTabState extends ConsumerState<_SuppliersTab> {
 }
 
 class _BrokersTab extends ConsumerStatefulWidget {
-  const _BrokersTab({required this.onEdit, required this.onDelete});
+  const _BrokersTab({
+    required this.onEdit,
+    required this.onDelete,
+    required this.onAdd,
+  });
 
   final Future<void> Function(Map<String, dynamic>) onEdit;
   final Future<void> Function(Map<String, dynamic>) onDelete;
+  final Future<void> Function() onAdd;
 
   @override
   ConsumerState<_BrokersTab> createState() => _BrokersTabState();
@@ -1397,7 +1483,7 @@ class _BrokersTabState extends ConsumerState<_BrokersTab> {
       skipLoadingOnReload: true,
       skipLoadingOnRefresh: true,
       loading: () => const ListSkeleton(),
-      error: (_, __) => FriendlyLoadError(
+      error: (_, __) => ContactsHubLoadError(
         onRetry: () => ref.invalidate(contactsBrokersEnrichedProvider),
       ),
       data: (list) {
@@ -1411,10 +1497,16 @@ class _BrokersTabState extends ConsumerState<_BrokersTab> {
               keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
               physics: const AlwaysScrollableScrollPhysics(
                   parent: BouncingScrollPhysics()),
-              children: const [
+              children: [
                 SizedBox(
-                  height: 120,
-                  child: Center(child: Text('No brokers yet')),
+                  height: MediaQuery.sizeOf(context).height * 0.55,
+                  child: HexaEmptyState(
+                    icon: Icons.handshake_outlined,
+                    title: 'No brokers yet',
+                    subtitle: 'Add a broker to link commissions on purchases.',
+                    primaryActionLabel: 'Add broker',
+                    onPrimaryAction: () => widget.onAdd(),
+                  ),
                 ),
               ],
             ),
@@ -1458,6 +1550,10 @@ class _BrokersTabState extends ConsumerState<_BrokersTab> {
 }
 
 class _CategoriesTab extends ConsumerWidget {
+  const _CategoriesTab({required this.onAdd});
+
+  final Future<void> Function() onAdd;
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final catsAsync = ref.watch(itemCategoriesListProvider);
@@ -1466,7 +1562,7 @@ class _CategoriesTab extends ConsumerWidget {
       skipLoadingOnReload: true,
       skipLoadingOnRefresh: true,
       loading: () => const Center(child: CircularProgressIndicator()),
-      error: (_, __) => FriendlyLoadError(
+      error: (_, __) => ContactsHubLoadError(
         onRetry: () {
           ref.invalidate(itemCategoriesListProvider);
           ref.invalidate(catalogItemsListProvider);
@@ -1477,7 +1573,7 @@ class _CategoriesTab extends ConsumerWidget {
           skipLoadingOnReload: true,
           skipLoadingOnRefresh: true,
           loading: () => const Center(child: CircularProgressIndicator()),
-          error: (_, __) => FriendlyLoadError(
+          error: (_, __) => ContactsHubLoadError(
             onRetry: () {
               ref.invalidate(itemCategoriesListProvider);
               ref.invalidate(catalogItemsListProvider);
@@ -1485,7 +1581,6 @@ class _CategoriesTab extends ConsumerWidget {
           ),
           data: (items) {
             if (cats.isEmpty) {
-              final cs = Theme.of(context).colorScheme;
               return RefreshIndicator(
                 onRefresh: () async {
                   ref.invalidate(itemCategoriesListProvider);
@@ -1497,19 +1592,16 @@ class _CategoriesTab extends ConsumerWidget {
                       ScrollViewKeyboardDismissBehavior.onDrag,
                   physics: const AlwaysScrollableScrollPhysics(
                       parent: BouncingScrollPhysics()),
-                  padding: const EdgeInsets.all(24),
                   children: [
                     SizedBox(
-                      height: 200,
-                      child: Center(
-                        child: Text(
-                          'No categories yet. Use ＋ Category to add one — same list as Settings → Item catalog.',
-                          textAlign: TextAlign.center,
-                          style: Theme.of(context)
-                              .textTheme
-                              .bodyMedium
-                              ?.copyWith(color: cs.onSurfaceVariant),
-                        ),
+                      height: MediaQuery.sizeOf(context).height * 0.55,
+                      child: HexaEmptyState(
+                        icon: Icons.category_outlined,
+                        title: 'No categories yet',
+                        subtitle:
+                            'Add a category to organize items (same list as Settings → Item catalog).',
+                        primaryActionLabel: 'Add category',
+                        onPrimaryAction: () => onAdd(),
                       ),
                     ),
                   ],
@@ -1570,6 +1662,10 @@ class _CategoriesTab extends ConsumerWidget {
 }
 
 class _ItemsTab extends ConsumerWidget {
+  const _ItemsTab({required this.onAdd});
+
+  final Future<void> Function() onAdd;
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final catsAsync = ref.watch(itemCategoriesListProvider);
@@ -1578,7 +1674,7 @@ class _ItemsTab extends ConsumerWidget {
       skipLoadingOnReload: true,
       skipLoadingOnRefresh: true,
       loading: () => const Center(child: CircularProgressIndicator()),
-      error: (_, __) => FriendlyLoadError(
+      error: (_, __) => ContactsHubLoadError(
         onRetry: () {
           ref.invalidate(itemCategoriesListProvider);
           ref.invalidate(catalogItemsListProvider);
@@ -1592,7 +1688,7 @@ class _ItemsTab extends ConsumerWidget {
           skipLoadingOnReload: true,
           skipLoadingOnRefresh: true,
           loading: () => const Center(child: CircularProgressIndicator()),
-          error: (_, __) => FriendlyLoadError(
+          error: (_, __) => ContactsHubLoadError(
             onRetry: () {
               ref.invalidate(itemCategoriesListProvider);
               ref.invalidate(catalogItemsListProvider);
@@ -1600,7 +1696,6 @@ class _ItemsTab extends ConsumerWidget {
           ),
           data: (items) {
             if (items.isEmpty) {
-              final cs = Theme.of(context).colorScheme;
               return RefreshIndicator(
                 onRefresh: () async {
                   ref.invalidate(itemCategoriesListProvider);
@@ -1613,19 +1708,16 @@ class _ItemsTab extends ConsumerWidget {
                       ScrollViewKeyboardDismissBehavior.onDrag,
                   physics: const AlwaysScrollableScrollPhysics(
                       parent: BouncingScrollPhysics()),
-                  padding: const EdgeInsets.all(24),
                   children: [
                     SizedBox(
-                      height: 200,
-                      child: Center(
-                        child: Text(
-                          'No catalog items yet. Use ＋ Item or Settings → Item catalog.',
-                          textAlign: TextAlign.center,
-                          style: Theme.of(context)
-                              .textTheme
-                              .bodyMedium
-                              ?.copyWith(color: cs.onSurfaceVariant),
-                        ),
+                      height: MediaQuery.sizeOf(context).height * 0.55,
+                      child: HexaEmptyState(
+                        icon: Icons.inventory_2_outlined,
+                        title: 'No catalog items yet',
+                        subtitle:
+                            'Add an item, or open the full catalog under Settings.',
+                        primaryActionLabel: 'Add item',
+                        onPrimaryAction: () => onAdd(),
                       ),
                     ),
                   ],
@@ -1682,6 +1774,32 @@ class _ItemsTab extends ConsumerWidget {
           },
         );
       },
+    );
+  }
+}
+
+/// Contacts hub tab load failure.
+@visibleForTesting
+class ContactsHubLoadError extends StatelessWidget {
+  const ContactsHubLoadError({
+    super.key,
+    required this.onRetry,
+    this.title = 'Unable to load data',
+    this.subtitle = 'Tap to retry.',
+  });
+
+  final VoidCallback onRetry;
+  final String title;
+  final String subtitle;
+
+  @override
+  Widget build(BuildContext context) {
+    return HexaEmptyState(
+      icon: Icons.cloud_off_outlined,
+      title: title,
+      subtitle: subtitle,
+      primaryActionLabel: 'Retry',
+      onPrimaryAction: onRetry,
     );
   }
 }

@@ -5,12 +5,13 @@ import 'package:intl/intl.dart';
 import '../../../../core/json_coerce.dart';
 import '../../../../core/providers/stock_providers.dart';
 import '../../../../core/utils/stock_audit_rows.dart';
-import '../../../../core/widgets/friendly_load_error.dart';
 import '../../../../core/widgets/list_skeleton.dart';
 
 import '../../../../core/theme/hexa_colors.dart';
+import '../../../../shared/widgets/hexa_empty_state.dart';
+import 'stock_item_history_filter_chips.dart';
 
-enum StockItemHistoryFilter { all, today, week, month, physical }
+export 'stock_item_history_filter_chips.dart' show StockItemHistoryFilter;
 
 /// Per-item stock audit + physical remaining timeline.
 class StockItemHistoryPanel extends ConsumerStatefulWidget {
@@ -68,33 +69,10 @@ class _StockItemHistoryPanelState extends ConsumerState<StockItemHistoryPanel> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          padding: EdgeInsets.fromLTRB(
-            widget.compact ? 0 : 12,
-            widget.compact ? 0 : 8,
-            widget.compact ? 0 : 12,
-            4,
-          ),
-          child: Row(
-            children: [
-              for (final f in StockItemHistoryFilter.values)
-                Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: FilterChip(
-                    label: Text(switch (f) {
-                      StockItemHistoryFilter.all => 'All time',
-                      StockItemHistoryFilter.today => 'Today',
-                      StockItemHistoryFilter.week => 'This week',
-                      StockItemHistoryFilter.month => 'This month',
-                      StockItemHistoryFilter.physical => 'Physical',
-                    }),
-                    selected: _filter == f,
-                    onSelected: (_) => setState(() => _filter = f),
-                  ),
-                ),
-            ],
-          ),
+        StockItemHistoryFilterChips(
+          compact: widget.compact,
+          selected: _filter,
+          onSelected: (f) => setState(() => _filter = f),
         ),
         Expanded(child: _buildList(auditAsync, physAsync, context)),
       ],
@@ -109,26 +87,18 @@ class _StockItemHistoryPanelState extends ConsumerState<StockItemHistoryPanel> {
     if (auditAsync.isLoading && physAsync.isLoading) {
       return const ListSkeleton(rowCount: 8);
     }
-    if (auditAsync.hasError && physAsync.hasError) {
-      if (widget.compact) {
-        return Center(
-          child: TextButton(
-            onPressed: () {
-              ref.invalidate(stockItemAuditProvider(widget.itemId));
-              ref.invalidate(stockItemPhysicalCountsProvider(widget.itemId));
-            },
-            child: const Text('Could not load history — tap to retry'),
-          ),
+    if (auditAsync.hasError || physAsync.hasError) {
+      final auditOk = !auditAsync.hasError;
+      final physOk = !physAsync.hasError;
+      // Both failed → full error. One failed → still show the other feed + banner.
+      if (!auditOk && !physOk) {
+        return StockItemHistoryLoadError(
+          onRetry: () {
+            ref.invalidate(stockItemAuditProvider(widget.itemId));
+            ref.invalidate(stockItemPhysicalCountsProvider(widget.itemId));
+          },
         );
       }
-      return FriendlyLoadError(
-        message: 'Could not load stock history',
-        subtitle: 'Please check your connection and try again.',
-        onRetry: () {
-          ref.invalidate(stockItemAuditProvider(widget.itemId));
-          ref.invalidate(stockItemPhysicalCountsProvider(widget.itemId));
-        },
-      );
     }
 
     final audit = auditAsync.valueOrNull ?? const <Map<String, dynamic>>[];
@@ -142,40 +112,26 @@ class _StockItemHistoryPanelState extends ConsumerState<StockItemHistoryPanel> {
         if (_matchesFilter(parseStockAuditTimestamp(r))) r,
     ];
 
-    if (filtered.isEmpty) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.history_rounded, size: 48, color: Colors.grey.shade400),
-              const SizedBox(height: 12),
-              Text(
-                rows.isEmpty
-                    ? 'No stock changes recorded'
-                    : 'No changes in this date range',
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  fontWeight: FontWeight.w800,
-                  fontSize: 16,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                rows.isEmpty
-                    ? 'Physical remaining and system updates will appear here'
-                    : 'Try All time or Physical filter',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
-              ),
-            ],
-          ),
-        ),
+    final partialFail = auditAsync.hasError || physAsync.hasError;
+
+    if (filtered.isEmpty && !partialFail) {
+      final filtersActive = _filter != StockItemHistoryFilter.all;
+      return HexaEmptyState(
+        icon: Icons.history_rounded,
+        title: rows.isEmpty
+            ? 'No stock changes recorded'
+            : 'No changes in this date range',
+        subtitle: rows.isEmpty
+            ? 'Physical remaining and system updates will appear here'
+            : 'Try All time or Physical filter',
+        primaryActionLabel: filtersActive ? 'Show all time' : null,
+        onPrimaryAction: filtersActive
+            ? () => setState(() => _filter = StockItemHistoryFilter.all)
+            : null,
       );
     }
 
-    return ListView.separated(
+    final list = ListView.separated(
       padding: EdgeInsets.fromLTRB(
         0,
         0,
@@ -272,6 +228,58 @@ class _StockItemHistoryPanelState extends ConsumerState<StockItemHistoryPanel> {
           ),
         );
       },
+    );
+
+    if (!partialFail) return list;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Material(
+          color: const Color(0xFFFFF8E1),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            child: Row(
+              children: [
+                const Expanded(
+                  child: Text(
+                    'Some history failed to load — showing what we have.',
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                  ),
+                ),
+                TextButton(
+                  onPressed: () {
+                    ref.invalidate(stockItemAuditProvider(widget.itemId));
+                    ref.invalidate(
+                        stockItemPhysicalCountsProvider(widget.itemId));
+                  },
+                  child: const Text('Retry'),
+                ),
+              ],
+            ),
+          ),
+        ),
+        Expanded(child: list),
+      ],
+    );
+  }
+}
+
+/// Stock item audit + physical history dual-load failure (UX-126).
+@visibleForTesting
+class StockItemHistoryLoadError extends StatelessWidget {
+  const StockItemHistoryLoadError({super.key, required this.onRetry});
+
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return HexaEmptyState(
+      icon: Icons.history_toggle_off_outlined,
+      title: 'Could not load stock history',
+      subtitle: 'Check your connection, then retry.',
+      primaryActionLabel: 'Retry',
+      onPrimaryAction: onRetry,
     );
   }
 }

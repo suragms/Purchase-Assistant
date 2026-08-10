@@ -13,7 +13,7 @@ import '../../../core/json_coerce.dart';
 import '../../../core/providers/analytics_breakdown_providers.dart';
 import '../../../core/reporting/trade_report_aggregate.dart';
 import '../../../core/theme/hexa_colors.dart';
-import '../../../core/widgets/friendly_load_error.dart';
+import '../../../shared/widgets/hexa_empty_state.dart';
 import '../../../widgets/spend_ring_chart.dart';
 
 String _inr0(num n) =>
@@ -92,38 +92,27 @@ class ReportsOverviewChartSection extends ConsumerWidget {
     }
 
     if (loadFailed) {
-      final detail = loadError == null ? '' : userFacingError(loadError!);
       return Padding(
         padding: const EdgeInsets.only(bottom: 12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Center(
-              child: Icon(Icons.cloud_off_rounded,
-                  size: 48, color: Colors.grey.shade400),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              'Could not load report data',
-              textAlign: TextAlign.center,
-              style: HexaDsType.h3(context),
-            ),
-            if (detail.isNotEmpty) ...[
-              const SizedBox(height: 6),
-              Text(detail, textAlign: TextAlign.center, style: HexaDsType.bodySm(context)),
+        child: HexaEmptyState(
+          icon: Icons.cloud_off_rounded,
+          title: 'Could not load report data',
+          subtitle: loadError == null ? null : userFacingError(loadError!),
+          action: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              FilledButton.icon(
+                onPressed: canRetry ? onRetry : null,
+                icon: const Icon(Icons.refresh_rounded),
+                label: const Text('Retry'),
+              ),
+              const SizedBox(height: 8),
+              OutlinedButton(
+                onPressed: canRetry ? onMatchHome : null,
+                child: const Text('Match Home period'),
+              ),
             ],
-            const SizedBox(height: 16),
-            FilledButton.icon(
-              onPressed: canRetry ? onRetry : null,
-              icon: const Icon(Icons.refresh_rounded),
-              label: const Text('Retry'),
-            ),
-            const SizedBox(height: 8),
-            OutlinedButton(
-              onPressed: canRetry ? onMatchHome : null,
-              child: const Text('Match Home period'),
-            ),
-          ],
+          ),
         ),
       );
     }
@@ -131,37 +120,24 @@ class ReportsOverviewChartSection extends ConsumerWidget {
     if (isEmpty) {
       return Padding(
         padding: const EdgeInsets.only(bottom: 12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Center(
-              child: SpendRingChart(
-                diameter: chartSize * 0.85,
-                strokeWidth: 7,
-                values: const [1],
-                colors: const [HexaColors.slateBorder],
-                centerChild: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.analytics_outlined,
-                        size: 30, color: Colors.grey.shade400),
-                    const SizedBox(height: 8),
-                    Text(
-                      'No purchases in selected range',
-                      textAlign: TextAlign.center,
-                      style: HexaDsType.bodyPrimary(context).copyWith(
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                  ],
-                ),
+        child: HexaEmptyState(
+          icon: Icons.analytics_outlined,
+          title: 'No purchases in selected range',
+          subtitle: 'Try another period, or retry loading.',
+          action: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              FilledButton.tonal(
+                onPressed: canRetry ? onRetry : null,
+                child: const Text('Retry'),
               ),
-            ),
-            const SizedBox(height: 12),
-            FilledButton.tonal(onPressed: canRetry ? onRetry : null, child: const Text('Retry')),
-            const SizedBox(height: 8),
-            OutlinedButton(onPressed: canRetry ? onPickRange : null, child: const Text('Change period')),
-          ],
+              const SizedBox(height: 8),
+              OutlinedButton(
+                onPressed: canRetry ? onPickRange : null,
+                child: const Text('Change period'),
+              ),
+            ],
+          ),
         ),
       );
     }
@@ -197,8 +173,8 @@ class ReportsOverviewChartSection extends ConsumerWidget {
         ],
         catsAsync.when(
           loading: () => _chartPlaceholder(chartSize),
-          error: (e, _) => FriendlyLoadError(
-            message: 'Could not load category chart.',
+          error: (e, _) => ReportsOverviewChartLoadError(
+            title: 'Could not load category chart.',
             onRetry: () => ref.invalidate(analyticsCategoriesTableProvider),
           ),
           data: (rows) => _CategoryPieCard(rows: rows, size: chartSize),
@@ -206,8 +182,8 @@ class ReportsOverviewChartSection extends ConsumerWidget {
         const SizedBox(height: 8),
         typesAsync.when(
           loading: () => const SizedBox.shrink(),
-          error: (e, _) => FriendlyLoadError(
-            message: 'Could not load subcategory breakdown.',
+          error: (e, _) => ReportsOverviewChartLoadError(
+            title: 'Could not load subcategory breakdown.',
             onRetry: () => ref.invalidate(analyticsTypesTableProvider),
           ),
           data: (rows) => _RankedSpendListCard(
@@ -221,8 +197,8 @@ class ReportsOverviewChartSection extends ConsumerWidget {
         const SizedBox(height: 8),
         itemsAsync.when(
           loading: () => const SizedBox.shrink(),
-          error: (e, _) => FriendlyLoadError(
-            message: 'Could not load item breakdown.',
+          error: (e, _) => ReportsOverviewChartLoadError(
+            title: 'Could not load item breakdown.',
             onRetry: () => ref.invalidate(analyticsItemsTableProvider),
           ),
           data: (rows) => _RankedSpendListCard(
@@ -236,8 +212,8 @@ class ReportsOverviewChartSection extends ConsumerWidget {
         const SizedBox(height: 8),
         supsAsync.when(
           loading: () => _chartPlaceholder(chartSize),
-          error: (e, _) => FriendlyLoadError(
-            message: 'Could not load supplier chart.',
+          error: (e, _) => ReportsOverviewChartLoadError(
+            title: 'Could not load supplier chart.',
             onRetry: () => ref.invalidate(analyticsSuppliersTableProvider),
           ),
           data: (rows) => _SupplierDonutCard(
@@ -265,6 +241,30 @@ class ReportsOverviewChartSection extends ConsumerWidget {
           child: const Center(child: CircularProgressIndicator(strokeWidth: 2)),
         ),
       );
+}
+
+/// Overview chart / breakdown load failure (UX-148).
+@visibleForTesting
+class ReportsOverviewChartLoadError extends StatelessWidget {
+  const ReportsOverviewChartLoadError({
+    super.key,
+    required this.title,
+    required this.onRetry,
+  });
+
+  final String title;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return HexaEmptyState(
+      icon: Icons.analytics_outlined,
+      title: title,
+      subtitle: 'Check your connection, then retry.',
+      primaryActionLabel: 'Retry',
+      onPrimaryAction: onRetry,
+    );
+  }
 }
 
 class _OverviewStatCard extends StatelessWidget {

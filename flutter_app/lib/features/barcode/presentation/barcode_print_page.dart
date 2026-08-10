@@ -13,11 +13,11 @@ import 'package:printing/printing.dart';
 import '../../../core/auth/session_notifier.dart';
 import '../../../core/router/post_auth_route.dart' show sessionCanSeeFinancials;
 import '../../../core/errors/barcode_operation_errors.dart';
-import '../../../core/widgets/friendly_load_error.dart';
 import '../../../core/design_system/hexa_ds_tokens.dart';
 import '../../../core/theme/hexa_colors.dart';
 import '../../../core/widgets/list_skeleton.dart';
-import '../../../core/services/pdf_actions.dart' deferred as pdfActions;
+import '../../../core/services/pdf_actions.dart' deferred as pdf_actions;
+import '../../../shared/widgets/hexa_empty_state.dart';
 import '../../stock/presentation/widgets/edit_item_code_sheet.dart';
 import '../services/barcode_pdf_service.dart';
 
@@ -115,7 +115,7 @@ class _BarcodePrintPageState extends ConsumerState<BarcodePrintPage> {
       final session = ref.read(sessionProvider);
       final hideFinancials =
           session == null || !sessionCanSeeFinancials(session);
-      await pdfActions.loadLibrary();
+      await pdf_actions.loadLibrary();
       final bytes = await BarcodePdfService.generateSingleLabel(
         data: label,
         size: _size,
@@ -127,7 +127,7 @@ class _BarcodePrintPageState extends ConsumerState<BarcodePrintPage> {
         await _openLabelPdfPreview(bytes, label);
         return;
       }
-      final result = await pdfActions.printPdfBytes(
+      final result = await pdf_actions.printPdfBytes(
         buildBytes: () async => bytes,
         filename: _singleBarcodeFilename(label),
         source: 'barcode_print_page',
@@ -158,8 +158,8 @@ class _BarcodePrintPageState extends ConsumerState<BarcodePrintPage> {
             actions: [
               TextButton.icon(
                 onPressed: () async {
-                  await pdfActions.loadLibrary();
-                  final result = await pdfActions.savePdfBytes(
+                  await pdf_actions.loadLibrary();
+                  final result = await pdf_actions.savePdfBytes(
                     buildBytes: () async => bytes,
                     filename: name,
                     subject: 'Barcode label - ${label.itemName}',
@@ -198,7 +198,7 @@ class _BarcodePrintPageState extends ConsumerState<BarcodePrintPage> {
       final session = ref.read(sessionProvider);
       final hideFinancials =
           session == null || !sessionCanSeeFinancials(session);
-      await pdfActions.loadLibrary();
+      await pdf_actions.loadLibrary();
       final bytes = await BarcodePdfService.generateSingleLabel(
         data: label,
         size: _size,
@@ -210,7 +210,7 @@ class _BarcodePrintPageState extends ConsumerState<BarcodePrintPage> {
         await _openLabelPdfPreview(bytes, label);
         return;
       }
-      final result = await pdfActions.savePdfBytes(
+      final result = await pdf_actions.savePdfBytes(
         buildBytes: () async => bytes,
         filename: _singleBarcodeFilename(label),
         subject: 'Barcode label - ${label.itemName}',
@@ -294,8 +294,8 @@ class _BarcodePrintPageState extends ConsumerState<BarcodePrintPage> {
 
   Widget _buildBody(BarcodeLabelData? label) {
     if (_loadError) {
-      return FriendlyLoadError(
-        message: _loadErrorMessage ?? 'Could not load label data',
+      return BarcodePrintLoadError(
+        title: _loadErrorMessage ?? 'Could not load label data',
         onRetry: _load,
       );
     }
@@ -306,7 +306,26 @@ class _BarcodePrintPageState extends ConsumerState<BarcodePrintPage> {
       );
     }
     if (label == null || label.symbologyValue.isEmpty) {
-      return const Center(child: Text('No label data'));
+      final itemId = _resolveItemId();
+      return BarcodePrintNoLabelEmpty(
+        onEditItemCode: itemId.isEmpty
+            ? null
+            : () async {
+                final name = _data?['item_name']?.toString() ??
+                    _data?['itemName']?.toString() ??
+                    'Item';
+                final code = _data?['item_code']?.toString() ??
+                    _data?['itemCode']?.toString();
+                final ok = await showEditItemCodeSheet(
+                  context: context,
+                  ref: ref,
+                  itemId: itemId,
+                  itemName: name,
+                  currentCode: code,
+                );
+                if (ok) await _load();
+              },
+      );
     }
 
     return ListView(
@@ -452,6 +471,53 @@ class _BarcodePrintPageState extends ConsumerState<BarcodePrintPage> {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// Empty chrome when label payload has nothing printable.
+class BarcodePrintNoLabelEmpty extends StatelessWidget {
+  const BarcodePrintNoLabelEmpty({super.key, this.onEditItemCode});
+
+  final Future<void> Function()? onEditItemCode;
+
+  @override
+  Widget build(BuildContext context) {
+    return HexaEmptyState(
+      icon: Icons.qr_code_2_outlined,
+      title: 'No label data',
+      subtitle: 'Add an item code or barcode so this label can print.',
+      primaryActionLabel:
+          onEditItemCode != null ? 'Edit item code' : null,
+      onPrimaryAction: onEditItemCode == null
+          ? null
+          : () {
+              unawaited(onEditItemCode!());
+            },
+    );
+  }
+}
+
+/// Barcode print label payload load failure.
+@visibleForTesting
+class BarcodePrintLoadError extends StatelessWidget {
+  const BarcodePrintLoadError({
+    super.key,
+    required this.title,
+    required this.onRetry,
+  });
+
+  final String title;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return HexaEmptyState(
+      icon: Icons.qr_code_2_outlined,
+      title: title,
+      subtitle: 'Check your connection, then retry.',
+      primaryActionLabel: 'Retry',
+      onPrimaryAction: onRetry,
     );
   }
 }

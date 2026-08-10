@@ -26,6 +26,7 @@ import '../../stock/stock_list_row_patch.dart' show stockStatusForPatchRow;
 import '../../../core/providers/suppliers_list_provider.dart';
 import '../../../core/theme/hexa_colors.dart';
 import '../../../core/utils/unit_utils.dart';
+import '../../../shared/widgets/hexa_empty_state.dart';
 import '../../../shared/widgets/inline_search_field.dart';
 import '../../purchase/presentation/widgets/party_inline_suggest_field.dart';
 
@@ -470,28 +471,8 @@ class _StockQuickPurchaseBodyState
       if (kDebugMode) {
         debugPrint('[QUICK_PURCHASE] build failed: $e\n$st');
       }
-      return Padding(
-        padding: const EdgeInsets.fromLTRB(8, 16, 8, 16),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const Text(
-              'Could not open add purchase quantity',
-              style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15),
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              'Close and try again from the stock list.',
-              style: TextStyle(fontSize: 13, color: HexaColors.neutral),
-            ),
-            const SizedBox(height: 16),
-            OutlinedButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('Close'),
-            ),
-          ],
-        ),
+      return StockQuickPurchaseSheetOpenError(
+        onClose: () => Navigator.of(context).pop(false),
       );
     }
   }
@@ -667,23 +648,8 @@ class _StockQuickPurchaseBodyState
         if (suppliersFailed)
           Padding(
             padding: const EdgeInsets.only(bottom: 6),
-            child: Row(
-              children: [
-                const Expanded(
-                  child: Text(
-                    'Could not load suppliers',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: HexaDsColors.error,
-                    ),
-                  ),
-                ),
-                TextButton(
-                  onPressed: () => ref.invalidate(suppliersListProvider),
-                  child: const Text('Retry'),
-                ),
-              ],
+            child: StockQuickPurchaseSuppliersError(
+              onRetry: () => ref.invalidate(suppliersListProvider),
             ),
           ),
         PartyInlineSuggestField(
@@ -725,23 +691,8 @@ class _StockQuickPurchaseBodyState
         if (brokersFailed)
           Padding(
             padding: const EdgeInsets.only(bottom: 6),
-            child: Row(
-              children: [
-                const Expanded(
-                  child: Text(
-                    'Could not load brokers',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: HexaDsColors.error,
-                    ),
-                  ),
-                ),
-                TextButton(
-                  onPressed: () => ref.invalidate(brokersListProvider),
-                  child: const Text('Retry'),
-                ),
-              ],
+            child: StockQuickPurchaseBrokersError(
+              onRetry: () => ref.invalidate(brokersListProvider),
             ),
           ),
         PartyInlineSuggestField(
@@ -859,6 +810,63 @@ class _StockQuickPurchaseBodyState
                   ),
           ),
       ],
+    );
+  }
+}
+
+/// Fallback when the quick-purchase sheet fails to build its form.
+@visibleForTesting
+class StockQuickPurchaseSheetOpenError extends StatelessWidget {
+  const StockQuickPurchaseSheetOpenError({super.key, required this.onClose});
+
+  final VoidCallback onClose;
+
+  @override
+  Widget build(BuildContext context) {
+    return HexaEmptyState(
+      icon: Icons.error_outline_rounded,
+      title: 'Could not open add purchase quantity',
+      subtitle: 'Close and try again from the stock list.',
+      primaryActionLabel: 'Close',
+      onPrimaryAction: onClose,
+    );
+  }
+}
+
+/// Quick-purchase sheet suppliers list load failure (UX-115).
+@visibleForTesting
+class StockQuickPurchaseSuppliersError extends StatelessWidget {
+  const StockQuickPurchaseSuppliersError({super.key, required this.onRetry});
+
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return HexaEmptyState(
+      icon: Icons.store_outlined,
+      title: 'Could not load suppliers',
+      subtitle: 'Check your connection, then retry.',
+      primaryActionLabel: 'Retry',
+      onPrimaryAction: onRetry,
+    );
+  }
+}
+
+/// Quick-purchase sheet brokers list load failure (UX-115).
+@visibleForTesting
+class StockQuickPurchaseBrokersError extends StatelessWidget {
+  const StockQuickPurchaseBrokersError({super.key, required this.onRetry});
+
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return HexaEmptyState(
+      icon: Icons.handshake_outlined,
+      title: 'Could not load brokers',
+      subtitle: 'Check your connection, then retry.',
+      primaryActionLabel: 'Retry',
+      onPrimaryAction: onRetry,
     );
   }
 }

@@ -3,6 +3,12 @@ import 'package:harisree_warehouse/core/router/shell_navigation.dart';
 import 'package:harisree_warehouse/features/shell/shell_branch_provider.dart';
 
 void main() {
+  test('owner shell history branch is labeled Purchases', () {
+    expect(ownerShellNavLabel(ShellBranch.history), 'Purchases');
+    expect(ownerShellNavLabel(ShellBranch.home), 'Home');
+    expect(ownerShellNavLabel(ShellBranch.reports), 'Reports');
+  });
+
   group('shellIsPrimaryTabLocation', () {
     test('matches shell tab roots only', () {
       expect(shellIsPrimaryTabLocation('/home'), isTrue);

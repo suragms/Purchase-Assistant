@@ -3,25 +3,32 @@ import 'package:intl/intl.dart';
 
 import '../../../core/design_system/hexa_ds_tokens.dart';
 import '../../../core/theme/hexa_colors.dart';
+import '../../../shared/widgets/hexa_empty_state.dart';
 
 class UserActivityTimeline extends StatelessWidget {
   const UserActivityTimeline({
     super.key,
     required this.rows,
-    this.emptyMessage = 'No activity in the last 30 days.',
+    this.emptyTitle = 'No activity in the last 30 days',
+    this.emptySubtitle =
+        'Actions by this user will show here when available.',
+    this.onRefresh,
   });
 
   final List<Map<String, dynamic>> rows;
-  final String emptyMessage;
+  final String emptyTitle;
+  final String? emptySubtitle;
+  final VoidCallback? onRefresh;
 
   @override
   Widget build(BuildContext context) {
     if (rows.isEmpty) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Text(emptyMessage, style: HexaDsType.bodyPrimary(context)),
-        ),
+      return HexaEmptyState(
+        icon: Icons.history_outlined,
+        title: emptyTitle,
+        subtitle: emptySubtitle,
+        primaryActionLabel: onRefresh == null ? null : 'Refresh',
+        onPrimaryAction: onRefresh,
       );
     }
 
@@ -34,8 +41,7 @@ class UserActivityTimeline extends StatelessWidget {
             padding: const EdgeInsets.only(top: 8, bottom: 6),
             child: Text(entry.key, style: HexaDsType.h3(context)),
           ),
-          for (final row in entry.value)
-            _TimelineRow(row: row),
+          for (final row in entry.value) _TimelineRow(row: row),
         ],
       ],
     );

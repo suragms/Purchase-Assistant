@@ -8,7 +8,8 @@ import '../../../../core/design_system/hexa_ds_tokens.dart';
 import '../../../../core/theme/hexa_colors.dart';
 import '../../domain/purchase_draft.dart';
 import '../../state/purchase_draft_provider.dart';
-import '../wizard/purchase_fast_items_step.dart' show OpenAdvancedItemSheet;
+import '../wizard/purchase_fast_items_step.dart'
+    show OpenAdvancedItemSheet, PurchaseFastItemsEmpty;
 
 String _inr2(num n) =>
     NumberFormat.currency(locale: 'en_IN', symbol: '₹', decimalDigits: 2)
@@ -150,16 +151,9 @@ class _PurchaseFastItemsTableState
         _ColumnHeaderRow(),
         const SizedBox(height: 6),
         if (lines.isEmpty)
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 32),
-            child: Center(
-              child: Text(
-                blocked
-                    ? 'Supplier required for catalog links.'
-                    : 'No items yet. Tap + Add Item below.',
-                style: TextStyle(color: Colors.grey[700], fontSize: 14),
-              ),
-            ),
+          PurchaseFastItemsEmpty(
+            blocked: blocked,
+            onAddItem: () => widget.openAdvancedItemEditor(),
           )
         else
           Column(

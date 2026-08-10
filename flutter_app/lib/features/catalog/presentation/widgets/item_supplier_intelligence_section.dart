@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../../../core/catalog/item_trade_history.dart';
@@ -8,7 +9,7 @@ import '../../../../core/router/post_auth_route.dart';
 import '../../../../core/auth/session_notifier.dart';
 import '../../../../core/design_system/hexa_operational_tokens.dart';
 import '../../../../core/utils/unit_utils.dart';
-import '../../../../core/widgets/friendly_load_error.dart';
+import '../../../../shared/widgets/hexa_empty_state.dart';
 
 import '../../../../core/theme/hexa_colors.dart';
 class ItemSupplierIntelligenceSection extends ConsumerWidget {
@@ -46,8 +47,7 @@ class ItemSupplierIntelligenceSection extends ConsumerWidget {
               ),
               error: (_, __) {
                 if (suppressInlineError) return const SizedBox.shrink();
-                return FriendlyLoadError(
-                  message: 'Could not load supplier intelligence',
+                return ItemSupplierIntelligenceLoadError(
                   onRetry: () =>
                       ref.invalidate(tradePurchasesForItemProvider(itemId)),
                 );
@@ -59,12 +59,13 @@ class ItemSupplierIntelligenceSection extends ConsumerWidget {
                   catalogItemName: itemName,
                 );
                 if (rows.isEmpty) {
-                  return const Padding(
-                    padding: EdgeInsets.fromLTRB(12, 14, 12, 14),
-                    child: Text(
-                      'No purchases recorded yet.',
-                      style: TextStyle(fontSize: 12, color: HexaColors.neutral),
-                    ),
+                  return HexaEmptyState(
+                    icon: Icons.storefront_outlined,
+                    title: 'No purchases recorded yet',
+                    subtitle:
+                        'Supplier averages appear after this item is bought at least once.',
+                    primaryActionLabel: 'New purchase',
+                    onPrimaryAction: () => context.push('/purchase/new'),
                   );
                 }
                 final bySupplier = <String, _SupplierAgg>{};
@@ -205,5 +206,27 @@ class _SupplierRow extends StatelessWidget {
         visualDensity: VisualDensity.compact,
         materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
       );
+}
+
+/// Item detail supplier intelligence load failure (UX-148).
+@visibleForTesting
+class ItemSupplierIntelligenceLoadError extends StatelessWidget {
+  const ItemSupplierIntelligenceLoadError({
+    super.key,
+    required this.onRetry,
+  });
+
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return HexaEmptyState(
+      icon: Icons.storefront_outlined,
+      title: 'Could not load supplier intelligence',
+      subtitle: 'Check your connection, then retry.',
+      primaryActionLabel: 'Retry',
+      onPrimaryAction: onRetry,
+    );
+  }
 }
 

@@ -7,8 +7,8 @@ import '../../../../core/auth/session_notifier.dart';
 import '../../../../core/design_system/hexa_responsive.dart';
 import '../../../../core/providers/catalog_providers.dart';
 import '../../../../core/search/catalog_fuzzy.dart';
-import '../../../../core/theme/hexa_colors.dart';
 import '../../../../core/widgets/form_feedback.dart';
+import '../../../../shared/widgets/hexa_empty_state.dart';
 import '../../catalog_taxonomy_utils.dart';
 
 /// What the quick sheet should create.
@@ -261,9 +261,8 @@ class _QuickCatalogTaxonomySheetState
           if (_subOnly)
             catsAsync.when(
               loading: () => const LinearProgressIndicator(minHeight: 2),
-              error: (_, __) => Text(
-                'Could not load categories',
-                style: TextStyle(color: HexaColors.loss, fontSize: 13),
+              error: (_, __) => QuickCatalogTaxonomyCategoriesError(
+                onRetry: () => ref.invalidate(itemCategoriesListProvider),
               ),
               data: (cats) {
                 if (cats.isEmpty) {
@@ -358,5 +357,27 @@ extension _FirstOrNull<T> on Iterable<T> {
     final it = iterator;
     if (!it.moveNext()) return null;
     return it.current;
+  }
+}
+
+/// Categories dropdown load failure in quick taxonomy sheet (UX-118).
+@visibleForTesting
+class QuickCatalogTaxonomyCategoriesError extends StatelessWidget {
+  const QuickCatalogTaxonomyCategoriesError({
+    super.key,
+    required this.onRetry,
+  });
+
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return HexaEmptyState(
+      icon: Icons.category_outlined,
+      title: 'Could not load categories',
+      subtitle: 'Check your connection, then retry.',
+      primaryActionLabel: 'Retry',
+      onPrimaryAction: onRetry,
+    );
   }
 }

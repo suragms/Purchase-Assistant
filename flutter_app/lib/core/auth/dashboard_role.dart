@@ -7,6 +7,14 @@ bool sessionHasOwnerDashboard(Session s) {
   return r == 'owner' || r == 'admin' || r == 'manager' || r == 'super_admin';
 }
 
+/// ₹ prices, rates, profit, UPI, and financial totals (AGENTS role display).
+/// Managers still get purchase history / reports via other gates — not Home profit strips.
+bool sessionCanSeeFinancialMoney(Session s) {
+  if (s.isSuperAdmin) return true;
+  final r = s.primaryBusiness.role.toLowerCase();
+  return r == 'owner' || r == 'admin' || r == 'super_admin';
+}
+
 String dashboardRoleLabel(Session s) {
   if (s.isSuperAdmin) return 'Admin';
   final r = s.primaryBusiness.role.toLowerCase();

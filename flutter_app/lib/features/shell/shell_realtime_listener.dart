@@ -15,6 +15,9 @@ import '../../core/providers/home_owner_dashboard_providers.dart'
     show homeInventorySummaryProvider, homeRecentActivityFeedProvider;
 import '../../core/providers/realtime_events_provider.dart';
 
+/// Coalesce window for warehouse fan-out after realtime signals.
+const Duration kRealtimeWarehouseCoalesce = Duration(seconds: 8);
+
 /// Single shell-level realtime fan-out (not tied to Home tab mount).
 class ShellRealtimeListener extends ConsumerStatefulWidget {
   const ShellRealtimeListener({super.key, required this.child});
@@ -28,19 +31,8 @@ class ShellRealtimeListener extends ConsumerStatefulWidget {
 
 class _ShellRealtimeListenerState extends ConsumerState<ShellRealtimeListener> {
   int _lastTick = 0;
-  DateTime? _lastWarehouseInvalidate;
   Timer? _warehouseDebounce;
   RealtimeInvalidationSignal? _pendingWarehouseSignal;
-
-  bool _throttleWarehouse() {
-    final now = DateTime.now();
-    if (_lastWarehouseInvalidate != null &&
-        now.difference(_lastWarehouseInvalidate!).inSeconds < 8) {
-      return true;
-    }
-    _lastWarehouseInvalidate = now;
-    return false;
-  }
 
   @override
   void dispose() {
@@ -48,10 +40,25 @@ class _ShellRealtimeListenerState extends ConsumerState<ShellRealtimeListener> {
     super.dispose();
   }
 
+  RealtimeInvalidationSignal _mergeWarehouse(
+    RealtimeInvalidationSignal? prev,
+    RealtimeInvalidationSignal next,
+  ) {
+    if (prev == null) return next;
+    return RealtimeInvalidationSignal(
+      tick: next.tick,
+      notifications: prev.notifications || next.notifications,
+      warehouse: prev.warehouse || next.warehouse,
+      delivery: prev.delivery || next.delivery,
+      affectedItemIds: {...prev.affectedItemIds, ...next.affectedItemIds},
+    );
+  }
+
   void _scheduleWarehouseInvalidate(RealtimeInvalidationSignal signal) {
-    _pendingWarehouseSignal = signal;
-    _warehouseDebounce?.cancel();
-    _warehouseDebounce = Timer(const Duration(milliseconds: 300), () {
+    _pendingWarehouseSignal = _mergeWarehouse(_pendingWarehouseSignal, signal);
+    // Leading edge: start one timer; later signals merge until it fires.
+    _warehouseDebounce ??= Timer(kRealtimeWarehouseCoalesce, () {
+      _warehouseDebounce = null;
       if (!mounted || providerSkipApi(ref)) return;
       final pending = _pendingWarehouseSignal;
       _pendingWarehouseSignal = null;
@@ -76,26 +83,23 @@ class _ShellRealtimeListenerState extends ConsumerState<ShellRealtimeListener> {
   }
 
   void _applyRealtimeSignal(RealtimeInvalidationSignal signal) {
-      if (signal.notifications) {
-        invalidateNotificationSurfaces(ref);
-      }
-      if (signal.delivery) {
-        invalidateStaffDeliverySurfacesLight(ref);
-      }
-      if (signal.warehouse) {
-        final urgent = signal.affectedItemIds.isNotEmpty;
-        if (urgent || !_throttleWarehouse()) {
-          _scheduleWarehouseInvalidate(signal);
-        }
-      }
-      final singleItemWarehouseOnly = signal.warehouse &&
-          !signal.notifications &&
-          !signal.delivery &&
-          signal.affectedItemIds.length == 1;
-      if (!singleItemWarehouseOnly &&
-          (signal.notifications || signal.delivery || signal.warehouse)) {
-        bumpRemoteBusinessDataRevision(ref);
-      }
+    if (signal.notifications) {
+      invalidateNotificationSurfaces(ref);
+    }
+    if (signal.delivery) {
+      invalidateStaffDeliverySurfacesLight(ref);
+    }
+    if (signal.warehouse) {
+      _scheduleWarehouseInvalidate(signal);
+    }
+    final singleItemWarehouseOnly = signal.warehouse &&
+        !signal.notifications &&
+        !signal.delivery &&
+        signal.affectedItemIds.length == 1;
+    if (!singleItemWarehouseOnly &&
+        (signal.notifications || signal.delivery || signal.warehouse)) {
+      bumpRemoteBusinessDataRevision(ref);
+    }
   }
 
   void _applyWarehouseSignal(RealtimeInvalidationSignal signal) {
@@ -104,10 +108,8 @@ class _ShellRealtimeListenerState extends ConsumerState<ShellRealtimeListener> {
     final ids = signal.affectedItemIds.where((id) => id.isNotEmpty).toSet();
     if (ids.length == 1) {
       unawaited(patchStockItemInCache(ref, itemId: ids.first));
-    } else if (ids.isEmpty) {
-      invalidateWarehouseSurfacesLight(ref);
     } else {
-      invalidateWarehouseSurfacesLight(ref);
+      invalidateWarehouseSurfacesLight(ref, forRealtimePoll: true);
       for (final id in ids) {
         invalidateWarehouseItemSurfacesLight(ref, itemId: id);
       }

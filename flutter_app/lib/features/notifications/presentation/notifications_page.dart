@@ -24,9 +24,9 @@ import '../../../core/router/post_auth_route.dart' show sessionIsStaff;
 import '../../../shared/widgets/hexa_empty_state.dart';
 import '../../../core/errors/load_state_error.dart';
 import '../../../core/design_system/hexa_responsive.dart';
-import '../../../core/theme/hexa_colors.dart';
 import '../../../core/theme/theme_context_ext.dart';
 import 'widgets/notification_alert_card.dart';
+import 'widgets/notifications_category_filter_chips.dart';
 
 class NotificationsPage extends ConsumerStatefulWidget {
   const NotificationsPage({super.key});
@@ -184,28 +184,10 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
           const SizedBox(height: 6),
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                children: [
-                  for (final f in _visibleFilters)
-                    Padding(
-                      padding: const EdgeInsets.only(right: 8),
-                      child: _FilterChip(
-                        label: switch (f) {
-                          NotificationCategoryFilter.all => 'All',
-                          NotificationCategoryFilter.critical => 'Critical',
-                          NotificationCategoryFilter.warehouse => 'Warehouse',
-                          NotificationCategoryFilter.purchases => 'Purchases',
-                          NotificationCategoryFilter.staff => 'Staff',
-                          NotificationCategoryFilter.system => 'System',
-                        },
-                        selected: _filter == f,
-                        onTap: () => setState(() => _filter = f),
-                      ),
-                    ),
-                ],
-              ),
+            child: NotificationsCategoryFilterChips(
+              filters: _visibleFilters,
+              selected: _filter,
+              onSelected: (f) => setState(() => _filter = f),
             ),
           ),
           if (_filter != NotificationCategoryFilter.all || q.isNotEmpty)
@@ -578,40 +560,3 @@ String _emptySubtitleForFilter(NotificationCategoryFilter filter) {
   };
 }
 
-class _FilterChip extends StatelessWidget {
-  const _FilterChip(
-      {required this.label, required this.selected, required this.onTap});
-
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final tt = Theme.of(context).textTheme;
-    final cs = Theme.of(context).colorScheme;
-    return Padding(
-      padding: const EdgeInsets.only(right: 8),
-      child: Material(
-        color: selected
-            ? HexaColors.primaryMid
-            : cs.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(20),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(20),
-          onTap: onTap,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-            child: Text(
-              label,
-              style: tt.labelMedium?.copyWith(
-                fontWeight: FontWeight.w700,
-                color: selected ? Colors.white : cs.onSurfaceVariant,
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}

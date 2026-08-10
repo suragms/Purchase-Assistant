@@ -5,7 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/auth/auth_error_messages.dart';
 import '../../../core/providers/reports_item_bundle_provider.dart';
 import '../../../core/theme/hexa_colors.dart';
-import '../../../core/widgets/friendly_load_error.dart';
+import '../../../shared/widgets/hexa_empty_state.dart';
 import 'reports_breadcrumb_bar.dart';
 import '../presentation/reports_item_detail_page.dart';
 import 'widgets/reports_item_report_body.dart';
@@ -89,8 +89,7 @@ class _ReportsItemReportPageState extends ConsumerState<ReportsItemReportPage> {
       ),
       body: bundleAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => FriendlyLoadError(
-          message: 'Could not load item report',
+        error: (e, _) => ReportsItemReportLoadError(
           subtitle: friendlyApiError(e),
           onRetry: _retryBundle,
         ),
@@ -133,11 +132,15 @@ class _ReportsItemReportPageState extends ConsumerState<ReportsItemReportPage> {
                 ),
               ),
               if (lines.isEmpty)
-                const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                  child: Text(
-                    'No purchases for this item in the selected period. '
-                    'Change the date range on Reports.',
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                  child: HexaEmptyState(
+                    icon: Icons.receipt_long_outlined,
+                    title: 'No purchases in this period',
+                    subtitle:
+                        'Change the date range on Reports, or pick another item.',
+                    primaryActionLabel: 'Back to Reports',
+                    onPrimaryAction: () => context.go('/reports?tab=items'),
                   ),
                 )
               else
@@ -164,6 +167,30 @@ class _ReportsItemReportPageState extends ConsumerState<ReportsItemReportPage> {
           );
         },
       ),
+    );
+  }
+}
+
+/// Reports item drill-down bundle load failure (UX-150).
+@visibleForTesting
+class ReportsItemReportLoadError extends StatelessWidget {
+  const ReportsItemReportLoadError({
+    super.key,
+    required this.onRetry,
+    this.subtitle,
+  });
+
+  final VoidCallback onRetry;
+  final String? subtitle;
+
+  @override
+  Widget build(BuildContext context) {
+    return HexaEmptyState(
+      icon: Icons.assessment_outlined,
+      title: 'Could not load item report',
+      subtitle: subtitle ?? 'Check your connection, then retry.',
+      primaryActionLabel: 'Retry',
+      onPrimaryAction: onRetry,
     );
   }
 }

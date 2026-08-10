@@ -4,10 +4,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/auth/auth_error_messages.dart';
 import '../../../core/auth/session_notifier.dart';
-import '../../../core/theme/hexa_colors.dart';
 import '../../../core/errors/load_state_error.dart';
 import '../../../core/utils/snack.dart';
-import '../../../core/widgets/friendly_load_error.dart';
+import '../../../shared/widgets/hexa_empty_state.dart';
 
 /// Staff / owner view of assignment tasks (Wave 5).
 class StaffTasksPage extends ConsumerStatefulWidget {
@@ -43,7 +42,8 @@ class _StaffTasksPageState extends ConsumerState<StaffTasksPage> {
       _error = null;
     });
     try {
-      final data = await ref.read(hexaApiProvider).listStaffTasks(businessId: bid);
+      final data =
+          await ref.read(hexaApiProvider).listStaffTasks(businessId: bid);
       if (!mounted) return;
       setState(() {
         _items = (data['items'] as List?) ?? [];
@@ -103,11 +103,13 @@ class _StaffTasksPageState extends ConsumerState<StaffTasksPage> {
     if (bid == null || session == null) return;
     final role = session.primaryBusiness.role.toLowerCase();
     if (role != 'owner' && role != 'admin' && !session.isSuperAdmin) {
-      showTopSnack(context, 'Only owners or admins can create tasks', isError: true);
+      showTopSnack(context, 'Only owners or admins can create tasks',
+          isError: true);
       return;
     }
 
-    final users = await ref.read(hexaApiProvider).listBusinessUsers(businessId: bid);
+    final users =
+        await ref.read(hexaApiProvider).listBusinessUsers(businessId: bid);
     if (!mounted) return;
     final staffIdCtrl = TextEditingController();
     final typeCtrl = TextEditingController(text: 'general');
@@ -143,14 +145,19 @@ class _StaffTasksPageState extends ConsumerState<StaffTasksPage> {
               ),
               TextField(
                 controller: refCtrl,
-                decoration: const InputDecoration(labelText: 'Reference (optional)'),
+                decoration:
+                    const InputDecoration(labelText: 'Reference (optional)'),
               ),
             ],
           ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Create')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel')),
+          FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Create')),
         ],
       ),
     );
@@ -164,8 +171,11 @@ class _StaffTasksPageState extends ConsumerState<StaffTasksPage> {
       await ref.read(hexaApiProvider).createStaffTask(
             businessId: bid,
             staffId: staffIdCtrl.text,
-            taskType: typeCtrl.text.trim().isEmpty ? 'general' : typeCtrl.text.trim(),
-            referenceId: refCtrl.text.trim().isEmpty ? null : refCtrl.text.trim(),
+            taskType: typeCtrl.text.trim().isEmpty
+                ? 'general'
+                : typeCtrl.text.trim(),
+            referenceId:
+                refCtrl.text.trim().isEmpty ? null : refCtrl.text.trim(),
           );
       if (mounted) showTopSnack(context, 'Task assigned');
       await _load();
@@ -203,13 +213,15 @@ class _StaffTasksPageState extends ConsumerState<StaffTasksPage> {
       body: _loading
           ? const LinearProgressIndicator(minHeight: 2)
           : _error != null
-              ? FriendlyLoadError(message: _error!, onRetry: _load)
+              ? StaffTasksLoadError(
+                  message: _error!,
+                  onRetry: _load,
+                )
               : _items.isEmpty
-                  ? const Center(
-                      child: Text(
-                        'No tasks assigned.',
-                        style: TextStyle(color: HexaColors.neutral),
-                      ),
+                  ? StaffTasksEmpty(
+                      canAssign: isOwner && !_busy,
+                      onAssign: _createTask,
+                      onRefresh: _load,
                     )
                   : ListView.separated(
                       padding: const EdgeInsets.all(16),
@@ -256,6 +268,57 @@ class _StaffTasksPageState extends ConsumerState<StaffTasksPage> {
                         );
                       },
                     ),
+    );
+  }
+}
+
+/// Empty assignment list on [StaffTasksPage].
+class StaffTasksEmpty extends StatelessWidget {
+  const StaffTasksEmpty({
+    super.key,
+    required this.canAssign,
+    required this.onAssign,
+    required this.onRefresh,
+  });
+
+  final bool canAssign;
+  final VoidCallback onAssign;
+  final VoidCallback onRefresh;
+
+  @override
+  Widget build(BuildContext context) {
+    return HexaEmptyState(
+      icon: Icons.assignment_outlined,
+      title: 'No tasks assigned',
+      subtitle: canAssign
+          ? 'Assign a task to staff, or refresh to check again.'
+          : 'When a task is assigned to you, it will show here.',
+      primaryActionLabel: canAssign ? 'Assign task' : 'Refresh',
+      onPrimaryAction: canAssign ? onAssign : onRefresh,
+    );
+  }
+}
+
+/// Staff tasks list load failure (UX-134).
+@visibleForTesting
+class StaffTasksLoadError extends StatelessWidget {
+  const StaffTasksLoadError({
+    super.key,
+    required this.onRetry,
+    this.message = 'Could not load tasks',
+  });
+
+  final VoidCallback onRetry;
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return HexaEmptyState(
+      icon: Icons.cloud_off_outlined,
+      title: message,
+      subtitle: 'Check your connection, then retry.',
+      primaryActionLabel: 'Retry',
+      onPrimaryAction: onRetry,
     );
   }
 }

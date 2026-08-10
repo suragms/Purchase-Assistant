@@ -22,6 +22,7 @@ import '../../shell/shell_realtime_listener.dart';
 import '../../shell/web_compact_side_nav.dart';
 import 'widgets/staff_shell_auto_refresh_listener.dart';
 import '../staff_shell_branch_provider.dart';
+import '../staff_shell_nav.dart';
 
 /// Staff shell: Home | Stock | Scan | Search — same offline banner pattern as [ShellScreen].
 class StaffShellScreen extends ConsumerStatefulWidget {
@@ -108,49 +109,40 @@ class _StaffShellScreenState extends ConsumerState<StaffShellScreen> {
       onDestinationSelected: go,
       showLabels: width >= kDesktopMin,
       destinations: [
-        const WebCompactSideNavItem(
-          icon: Icons.home_outlined,
-          selectedIcon: Icons.home_rounded,
-          label: 'Home',
-        ),
-        const WebCompactSideNavItem(
-          icon: Icons.inventory_2_outlined,
-          selectedIcon: Icons.inventory_2_rounded,
-          label: 'Stock',
-        ),
-        const WebCompactSideNavItem(
-          icon: Icons.qr_code_scanner_outlined,
-          selectedIcon: Icons.qr_code_scanner_rounded,
-          label: 'Scan',
-        ),
-        const WebCompactSideNavItem(
-          icon: Icons.search_rounded,
-          selectedIcon: Icons.manage_search_rounded,
-          label: 'Search',
-        ),
-        WebCompactSideNavItem(
-          icon: Icons.local_shipping_outlined,
-          selectedIcon: Icons.local_shipping_rounded,
-          label: 'Deliveries',
-          badgeCount: pendingDel,
-        ),
-        const WebCompactSideNavItem(
-          icon: Icons.checklist_outlined,
-          selectedIcon: Icons.checklist_rounded,
-          label: 'Tasks',
-        ),
+        for (var branch = StaffShellBranch.home;
+            branch <= StaffShellBranch.tasks;
+            branch++)
+          WebCompactSideNavItem(
+            icon: staffShellNavIcon(branch, selected: false),
+            selectedIcon: staffShellNavIcon(branch, selected: true),
+            label: staffShellNavLabel(branch),
+            badgeCount:
+                branch == StaffShellBranch.deliveries ? pendingDel : 0,
+          ),
       ],
-      footer: Tooltip(
-        message: 'Notifications',
-        child: IconButton(
-          onPressed: () => context.push('/notifications'),
-          icon: notifN > 0
-              ? Badge(
-                  label: Text(notifN > 99 ? '99+' : '$notifN'),
-                  child: const Icon(Icons.notifications_outlined),
-                )
-              : const Icon(Icons.notifications_outlined),
-        ),
+      footer: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Tooltip(
+            message: 'Notifications',
+            child: IconButton(
+              onPressed: () => context.push('/notifications'),
+              icon: notifN > 0
+                  ? Badge(
+                      label: Text(notifN > 99 ? '99+' : '$notifN'),
+                      child: const Icon(Icons.notifications_outlined),
+                    )
+                  : const Icon(Icons.notifications_outlined),
+            ),
+          ),
+          Tooltip(
+            message: 'Help & guide',
+            child: IconButton(
+              onPressed: () => context.push('/settings/help'),
+              icon: const Icon(Icons.help_outline_rounded),
+            ),
+          ),
+        ],
       ),
     );
 
@@ -282,70 +274,37 @@ class _StaffShellBottomBar extends StatelessWidget {
                 padding: const EdgeInsets.fromLTRB(4, 6, 4, 6),
                 child: Row(
                   children: [
-                    Expanded(
-                      child: _StaffNavTile(
-                        selected: selectedIndex == StaffShellBranch.home,
-                        icon: Icons.home_outlined,
-                        selectedIcon: Icons.home_rounded,
-                        label: 'Home',
-                        onTap: () =>
-                            onDestinationSelected(StaffShellBranch.home),
+                    for (final branch in staffShellBottomPrimaryBranches)
+                      Expanded(
+                        child: _StaffNavTile(
+                          selected: selectedIndex == branch,
+                          icon: staffShellNavIcon(branch, selected: false),
+                          selectedIcon:
+                              staffShellNavIcon(branch, selected: true),
+                          label: staffShellNavLabel(branch),
+                          badge: branch == StaffShellBranch.deliveries
+                              ? pendingDeliveryCount
+                              : null,
+                          badgeColor: branch == StaffShellBranch.deliveries
+                              ? HexaColors.accentOrangeMid
+                              : null,
+                          onTap: () => onDestinationSelected(branch),
+                        ),
                       ),
-                    ),
                     Expanded(
                       child: _StaffNavTile(
-                        selected: selectedIndex == StaffShellBranch.stock,
-                        icon: Icons.inventory_2_outlined,
-                        selectedIcon: Icons.inventory_2_rounded,
-                        label: 'Stock',
-                        onTap: () =>
-                            onDestinationSelected(StaffShellBranch.stock),
-                      ),
-                    ),
-                    Expanded(
-                      child: _StaffNavTile(
-                        selected: selectedIndex == StaffShellBranch.scan,
-                        icon: Icons.qr_code_scanner_outlined,
-                        selectedIcon: Icons.qr_code_scanner_rounded,
-                        label: 'Scan',
-                        compact: true,
-                        onTap: () =>
-                            onDestinationSelected(StaffShellBranch.scan),
-                      ),
-                    ),
-                    Expanded(
-                      child: _StaffNavTile(
-                        selected: selectedIndex == StaffShellBranch.search,
-                        icon: Icons.search_rounded,
-                        selectedIcon: Icons.manage_search_rounded,
-                        label: 'Search',
-                        compact: true,
-                        onTap: () =>
-                            onDestinationSelected(StaffShellBranch.search),
-                      ),
-                    ),
-                    Expanded(
-                      child: _StaffNavTile(
-                        selected: selectedIndex == StaffShellBranch.deliveries,
-                        icon: Icons.local_shipping_outlined,
-                        selectedIcon: Icons.local_shipping_rounded,
-                        label: 'Deliver',
-                        compact: true,
-                        badge: pendingDeliveryCount,
-                        badgeColor: HexaColors.accentOrangeMid,
-                        onTap: () => onDestinationSelected(
-                            StaffShellBranch.deliveries),
-                      ),
-                    ),
-                    Expanded(
-                      child: _StaffNavTile(
-                        selected: selectedIndex == StaffShellBranch.tasks,
-                        icon: Icons.checklist_outlined,
-                        selectedIcon: Icons.checklist_rounded,
-                        label: 'Tasks',
-                        compact: true,
-                        onTap: () =>
-                            onDestinationSelected(StaffShellBranch.tasks),
+                        selected: staffShellBranchIsInMoreMenu(selectedIndex),
+                        icon: Icons.more_horiz_rounded,
+                        selectedIcon: Icons.more_horiz_rounded,
+                        label: 'More',
+                        onTap: () {
+                          HapticFeedback.selectionClick();
+                          showStaffShellMoreNavSheet(
+                            context: context,
+                            currentBranch: selectedIndex,
+                            onBranchSelected: onDestinationSelected,
+                          );
+                        },
                       ),
                     ),
                   ],
@@ -368,7 +327,6 @@ class _StaffNavTile extends StatelessWidget {
     required this.onTap,
     this.badge,
     this.badgeColor,
-    this.compact = false,
   });
 
   final bool selected;
@@ -378,7 +336,6 @@ class _StaffNavTile extends StatelessWidget {
   final VoidCallback onTap;
   final int? badge;
   final Color? badgeColor;
-  final bool compact;
 
   @override
   Widget build(BuildContext context) {
@@ -411,7 +368,7 @@ class _StaffNavTile extends StatelessWidget {
                   backgroundColor: badgeColor ?? HexaDsColors.error,
                   child: Icon(
                     ic,
-                    size: compact ? 22 : 24,
+                    size: 24,
                     color:
                         selected ? HexaColors.brandPrimary : cs.onSurfaceVariant,
                   ),
@@ -423,7 +380,7 @@ class _StaffNavTile extends StatelessWidget {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
-                  fontSize: compact ? 10 : 11,
+                  fontSize: 11,
                   fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
                   color:
                       selected ? HexaColors.brandPrimary : cs.onSurfaceVariant,

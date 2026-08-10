@@ -17,8 +17,8 @@ import '../../../core/design_system/widgets/app_button.dart';
 import '../../../core/design_system/widgets/app_text_field.dart';
 import '../../../core/router/navigation_ext.dart';
 import '../../../core/utils/unit_utils.dart';
-import '../../../core/widgets/friendly_load_error.dart';
 import '../../../shared/widgets/desktop_page_shell.dart';
+import '../../../shared/widgets/hexa_empty_state.dart';
 import 'widgets/catalog_item_defaults_edit_form.dart';
 
 class ItemEditPage extends ConsumerStatefulWidget {
@@ -264,8 +264,7 @@ class _ItemEditPageState extends ConsumerState<ItemEditPage> {
                     refreshing: true,
                   );
                 },
-                error: (_, __) => FriendlyLoadError(
-                  message: 'Could not load catalog item',
+                error: (_, __) => ItemEditLoadError(
                   onRetry: () =>
                       ref.invalidate(catalogItemDetailProvider(widget.itemId)),
                 ),
@@ -412,6 +411,25 @@ class _EditOpeningStockSheetState extends ConsumerState<_EditOpeningStockSheet> 
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Item edit catalog detail load failure (UX-144).
+@visibleForTesting
+class ItemEditLoadError extends StatelessWidget {
+  const ItemEditLoadError({super.key, required this.onRetry});
+
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return HexaEmptyState(
+      icon: Icons.edit_off_outlined,
+      title: 'Could not load catalog item',
+      subtitle: 'Check your connection, then retry.',
+      primaryActionLabel: 'Retry',
+      onPrimaryAction: onRetry,
     );
   }
 }

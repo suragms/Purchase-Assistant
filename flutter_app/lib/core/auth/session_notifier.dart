@@ -292,6 +292,9 @@ class SessionNotifier extends Notifier<Session?> {
   /// `NotifierProviderRef`. Flipped by [Ref.onDispose] in [build].
   bool _disposed = false;
 
+  /// Business id last warmed — skip re-warm on Session identity rewrite.
+  String? _warmedWorkspaceBusinessId;
+
   @override
   Session? build() {
     _disposed = false;
@@ -476,9 +479,17 @@ class SessionNotifier extends Notifier<Session?> {
   }
 
   /// Fire-and-forget parallel fetches so party/catalog screens hit warm caches.
+  /// Once per business id — Session token/list rewrites must not re-fetch page1.
   void _warmWorkspaceListCaches() {
     Future<void>.microtask(() async {
       if (_disposed || state == null) return;
+      final bid = state!.primaryBusiness.id;
+      if (bid.isEmpty) return;
+      if (_warmedWorkspaceBusinessId == bid) {
+        final catalog = ref.read(catalogItemsListProvider);
+        if (catalog.hasValue) return;
+      }
+      _warmedWorkspaceBusinessId = bid;
       try {
         await Future.wait<void>([
           ref.read(suppliersListProvider.future),
@@ -869,6 +880,7 @@ class SessionNotifier extends Notifier<Session?> {
     // Drop session + Bearer immediately so home/stock providers stop polling
     // while secure-store clears run (401 storms on web).
     state = null;
+    _warmedWorkspaceBusinessId = null;
     api.setAuthToken(null);
     authRefresh.value++;
     unawaited(BarcodeCameraSession.reset());

@@ -12,6 +12,7 @@ import '../../../core/design_system/hexa_responsive.dart';
 import '../../../core/router/navigation_ext.dart';
 import '../../../core/utils/line_display.dart';
 import '../../../core/widgets/focused_search_chrome.dart';
+import '../../../shared/widgets/ledger_history_list_empty.dart';
 import '../../purchase/state/purchase_providers.dart';
 
 /// Live purchase-history surface for a catalog item.
@@ -315,7 +316,12 @@ class _ItemHistoryPageState extends ConsumerState<ItemHistoryPage> {
               else ...[
                 Expanded(
                   child: state.visibleRows().isEmpty
-                      ? const Center(child: Text('No matching lines'))
+                      ? LedgerHistoryListEmpty(
+                          searchActive: state.searchEffective.trim().isNotEmpty,
+                          onClearSearch: state.searchEffective.trim().isEmpty
+                              ? null
+                              : () => notifier.setSearchTyping(''),
+                        )
                       : ListView.separated(
                           itemCount: state.visibleRows().length,
                           separatorBuilder: (_, __) =>

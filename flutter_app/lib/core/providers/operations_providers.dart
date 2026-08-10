@@ -83,7 +83,13 @@ final operationalReportsProvider =
   if (!_checklistSessionActive(ref)) return {};
   final session = ref.read(sessionProvider);
   if (session == null) return {};
-  return ref.read(hexaApiProvider).getOperationalReports(
+  return ref
+      .read(hexaApiProvider)
+      .getOperationalReports(
         businessId: session.primaryBusiness.id,
+      )
+      .timeout(
+        const Duration(seconds: 12),
+        onTimeout: () => <String, dynamic>{},
       );
 });

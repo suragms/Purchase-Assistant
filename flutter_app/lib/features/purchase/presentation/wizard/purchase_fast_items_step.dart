@@ -15,6 +15,7 @@ import '../../state/purchase_trade_preview_provider.dart';
 
 import '../../../../core/design_system/hexa_ds_tokens.dart';
 import '../../../../core/design_system/widgets/app_form_layout.dart';
+import '../../../../shared/widgets/hexa_empty_state.dart';
 
 String _inr0(num n) =>
     NumberFormat.currency(locale: 'en_IN', symbol: '₹', decimalDigits: 0)
@@ -242,17 +243,9 @@ class _PurchaseFastItemsStepState extends ConsumerState<PurchaseFastItemsStep> {
         const Divider(height: 16),
         Expanded(
           child: lines.isEmpty
-              ? Center(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 24),
-                    child: Text(
-                      blocked
-                          ? 'Supplier required for catalog links.'
-                          : 'No items yet. Tap + Add Item below.',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(color: Colors.grey[700], fontSize: 14),
-                    ),
-                  ),
+              ? PurchaseFastItemsEmpty(
+                  blocked: blocked,
+                  onAddItem: () => widget.openAdvancedItemEditor(),
                 )
               : ListView.separated(
                   controller: widget.listScrollController,
@@ -392,6 +385,36 @@ class _PurchaseFastItemsStepState extends ConsumerState<PurchaseFastItemsStep> {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// Empty list chrome for purchase fast-items (mobile step + desktop table).
+class PurchaseFastItemsEmpty extends StatelessWidget {
+  const PurchaseFastItemsEmpty({
+    super.key,
+    required this.blocked,
+    required this.onAddItem,
+  });
+
+  final bool blocked;
+  final VoidCallback onAddItem;
+
+  @override
+  Widget build(BuildContext context) {
+    if (blocked) {
+      return const HexaEmptyState(
+        icon: Icons.storefront_outlined,
+        title: 'Supplier required',
+        subtitle: 'Pick a supplier first so catalog links and rates work.',
+      );
+    }
+    return HexaEmptyState(
+      icon: Icons.add_shopping_cart_outlined,
+      title: 'No items yet',
+      subtitle: 'Add a line to build this purchase.',
+      primaryActionLabel: 'Add item',
+      onPrimaryAction: onAddItem,
     );
   }
 }

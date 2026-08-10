@@ -124,15 +124,12 @@ class ItemQuickActionsBar extends ConsumerWidget {
       ),
     ];
 
-    return SizedBox(
-      height: 52,
-      child: ListView.separated(
-        scrollDirection: Axis.horizontal,
-        padding: EdgeInsets.zero,
-        itemCount: actions.length,
-        separatorBuilder: (_, __) => const SizedBox(width: 8),
-        itemBuilder: (context, i) => _ActionChip(spec: actions[i]),
-      ),
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        for (final a in actions) _ActionChip(spec: a),
+      ],
     );
   }
 }

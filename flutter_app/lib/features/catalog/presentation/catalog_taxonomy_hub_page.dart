@@ -7,13 +7,12 @@ import '../../../core/design_system/hexa_operational_tokens.dart';
 import '../../../core/providers/catalog_providers.dart';
 import '../../../core/router/navigation_ext.dart';
 import '../../../core/router/post_auth_route.dart';
-import '../../../core/widgets/friendly_load_error.dart';
 import '../../../core/widgets/list_skeleton.dart';
 import '../../../shared/widgets/hexa_empty_state.dart';
 import '../catalog_taxonomy_utils.dart';
 import 'widgets/quick_catalog_taxonomy_sheet.dart';
 
-/// Staff + owner hub: quick create and browse categories → subcategories.
+/// Staff + owner hub: browse categories → subcategories without deep nav first.
 class CatalogTaxonomyHubPage extends ConsumerStatefulWidget {
   const CatalogTaxonomyHubPage({super.key});
 
@@ -100,38 +99,29 @@ class _CatalogTaxonomyHubPageState extends ConsumerState<CatalogTaxonomyHubPage>
           Padding(
             padding: const EdgeInsets.fromLTRB(
               HexaOp.pageGutter,
-              8,
+              4,
               HexaOp.pageGutter,
               0,
             ),
-            child: Text(
-              'Categories group your items. Subcategories are the type under each category (e.g. Rice → Biriyani rice).',
-              style: TextStyle(
-                fontSize: 13,
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(
-              HexaOp.pageGutter,
-              12,
-              HexaOp.pageGutter,
-              8,
-            ),
-            child: Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                ActionChip(
-                  avatar: const Icon(Icons.add_rounded, size: 18),
-                  label: const Text('Category'),
-                  onPressed: _openCategorySheet,
+            child: ExpansionTile(
+              tilePadding: EdgeInsets.zero,
+              childrenPadding: const EdgeInsets.only(bottom: 8),
+              title: Text(
+                'How categories work',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
                 ),
-                ActionChip(
-                  avatar: const Icon(Icons.subdirectory_arrow_right_rounded, size: 18),
-                  label: const Text('Subcategory'),
-                  onPressed: () => _openSubcategorySheet(),
+              ),
+              children: [
+                Text(
+                  'Categories group your items. Expand a row to see subcategories '
+                  '(types), e.g. Rice → Biriyani rice. Use + on a row to add a subcategory.',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
                 ),
               ],
             ),
@@ -154,19 +144,13 @@ class _CatalogTaxonomyHubPageState extends ConsumerState<CatalogTaxonomyHubPage>
           Expanded(
             child: catsAsync.when(
               loading: () => const ListSkeleton(),
-              error: (_, __) => FriendlyLoadError(
+              error: (_, __) => CatalogTaxonomyHubLoadError(
                 onRetry: () {
                   invalidateCatalogTaxonomy(ref);
                 },
               ),
               data: (cats) {
-                final typeCountByCat = <String, int>{};
                 final index = indexAsync.valueOrNull ?? [];
-                for (final t in index) {
-                  final cid = t['category_id']?.toString();
-                  if (cid == null) continue;
-                  typeCountByCat[cid] = (typeCountByCat[cid] ?? 0) + 1;
-                }
 
                 var list = cats;
                 if (_query.isNotEmpty) {
@@ -183,7 +167,7 @@ class _CatalogTaxonomyHubPageState extends ConsumerState<CatalogTaxonomyHubPage>
                     title: _query.isEmpty
                         ? 'No categories yet'
                         : 'No matches',
-                    subtitle: 'Tap Category to add your first one.',
+                    subtitle: 'Tap + to add your first category.',
                     primaryActionLabel: 'Add category',
                     onPrimaryAction: _openCategorySheet,
                   );
@@ -199,7 +183,7 @@ class _CatalogTaxonomyHubPageState extends ConsumerState<CatalogTaxonomyHubPage>
                       HexaOp.pageGutter,
                       4,
                       HexaOp.pageGutter,
-                      MediaQuery.paddingOf(context).bottom + 24,
+                      MediaQuery.paddingOf(context).bottom + 88,
                     ),
                     itemCount: list.length,
                     separatorBuilder: (_, __) => const Divider(height: 1),
@@ -207,45 +191,26 @@ class _CatalogTaxonomyHubPageState extends ConsumerState<CatalogTaxonomyHubPage>
                       final c = list[i];
                       final id = c['id']?.toString() ?? '';
                       final name = c['name']?.toString() ?? '—';
-                      final subN = typeCountByCat[id] ?? 0;
-                      return ListTile(
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 4),
-                        leading: CircleAvatar(
-                          backgroundColor: Theme.of(context)
-                              .colorScheme
-                              .primaryContainer,
-                          child: Icon(
-                            Icons.folder_outlined,
-                            color: Theme.of(context).colorScheme.primary,
-                            size: 20,
-                          ),
-                        ),
-                        title: Text(
-                          name,
-                          style: const TextStyle(fontWeight: FontWeight.w800),
-                        ),
-                        subtitle: Text(
-                          subN == 0
-                              ? 'No subcategories · General created automatically'
-                              : '$subN subcategories',
-                          style: const TextStyle(fontSize: 12),
-                        ),
-                        trailing: IconButton(
-                          tooltip: 'Add subcategory',
-                          icon: const Icon(Icons.add_circle_outline_rounded),
-                          onPressed: id.isEmpty
-                              ? null
-                              : () => _openSubcategorySheet(categoryId: id),
-                        ),
-                        onTap: id.isEmpty
+                      final types = id.isEmpty
+                          ? const <Map<String, dynamic>>[]
+                          : typesForCategory(index, id);
+                      final subN = types.length;
+                      return CatalogTaxonomyCategoryTile(
+                        categoryId: id,
+                        categoryName: name,
+                        types: types,
+                        subcategoryCount: subN,
+                        showOpenDetail: !isStaff,
+                        onAddSubcategory: id.isEmpty
                             ? null
-                            : () {
-                                if (isStaff) {
-                                  _openSubcategorySheet(categoryId: id);
-                                } else {
-                                  context.push('/catalog/category/$id');
-                                }
-                              },
+                            : () => _openSubcategorySheet(categoryId: id),
+                        onOpenDetail: !isStaff && id.isNotEmpty
+                            ? () => context.push('/catalog/category/$id')
+                            : null,
+                        onOpenType: (typeId) {
+                          if (id.isEmpty || typeId.isEmpty) return;
+                          context.push('/catalog/category/$id/type/$typeId');
+                        },
                       );
                     },
                   ),
@@ -256,10 +221,145 @@ class _CatalogTaxonomyHubPageState extends ConsumerState<CatalogTaxonomyHubPage>
         ],
       ),
       floatingActionButton: FloatingActionButton(
-        tooltip: 'Quick add category',
+        tooltip: 'Add category',
         onPressed: _openCategorySheet,
         child: const Icon(Icons.add_rounded),
       ),
+    );
+  }
+}
+
+/// Expandable category row with inline subcategory (type) children.
+class CatalogTaxonomyCategoryTile extends StatelessWidget {
+  const CatalogTaxonomyCategoryTile({
+    super.key,
+    required this.categoryId,
+    required this.categoryName,
+    required this.types,
+    required this.subcategoryCount,
+    required this.showOpenDetail,
+    this.onAddSubcategory,
+    this.onOpenDetail,
+    required this.onOpenType,
+  });
+
+  final String categoryId;
+  final String categoryName;
+  final List<Map<String, dynamic>> types;
+  final int subcategoryCount;
+  final bool showOpenDetail;
+  final VoidCallback? onAddSubcategory;
+  final VoidCallback? onOpenDetail;
+  final ValueChanged<String> onOpenType;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return ExpansionTile(
+      key: ValueKey('taxonomy-cat-$categoryId'),
+      tilePadding: const EdgeInsets.symmetric(horizontal: 4),
+      childrenPadding: const EdgeInsets.only(bottom: 8),
+      leading: CircleAvatar(
+        backgroundColor: scheme.primaryContainer,
+        child: Icon(
+          Icons.folder_outlined,
+          color: scheme.primary,
+          size: 20,
+        ),
+      ),
+      title: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  categoryName,
+                  style: const TextStyle(fontWeight: FontWeight.w800),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  subcategoryCount == 0
+                      ? 'No subcategories · General created automatically'
+                      : '$subcategoryCount subcategories',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: scheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          IconButton(
+            tooltip: 'Add subcategory',
+            icon: const Icon(Icons.add_circle_outline_rounded),
+            onPressed: onAddSubcategory,
+          ),
+          if (showOpenDetail)
+            IconButton(
+              tooltip: 'Open category',
+              icon: const Icon(Icons.arrow_forward_ios_rounded, size: 16),
+              onPressed: onOpenDetail,
+            ),
+        ],
+      ),
+      children: [
+        if (types.isEmpty)
+          ListTile(
+            contentPadding: const EdgeInsets.only(left: 56, right: 8),
+            dense: true,
+            title: Text(
+              'No subcategories yet',
+              style: TextStyle(
+                fontSize: 13,
+                color: scheme.onSurfaceVariant,
+              ),
+            ),
+            trailing: TextButton(
+              onPressed: onAddSubcategory,
+              child: const Text('Add'),
+            ),
+          )
+        else
+          for (final t in types)
+            ListTile(
+              contentPadding: const EdgeInsets.only(left: 56, right: 8),
+              dense: true,
+              leading: Icon(
+                Icons.subdirectory_arrow_right_rounded,
+                size: 18,
+                color: scheme.onSurfaceVariant,
+              ),
+              title: Text(
+                t['name']?.toString() ?? '—',
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
+              trailing: const Icon(Icons.chevron_right_rounded, size: 18),
+              onTap: () {
+                final typeId = t['id']?.toString() ?? '';
+                onOpenType(typeId);
+              },
+            ),
+      ],
+    );
+  }
+}
+
+/// Catalog taxonomy hub categories load failure (UX-141).
+@visibleForTesting
+class CatalogTaxonomyHubLoadError extends StatelessWidget {
+  const CatalogTaxonomyHubLoadError({super.key, required this.onRetry});
+
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return HexaEmptyState(
+      icon: Icons.category_outlined,
+      title: 'Could not load categories',
+      subtitle: 'Check your connection, then retry.',
+      primaryActionLabel: 'Retry',
+      onPrimaryAction: onRetry,
     );
   }
 }

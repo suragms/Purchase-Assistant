@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/auth/session_notifier.dart';
@@ -8,6 +9,7 @@ import '../../../core/theme/hexa_colors.dart';
 import '../../../core/router/navigation_ext.dart';
 import '../../../core/widgets/hexa_error_card.dart';
 import '../../../core/widgets/list_skeleton.dart';
+import '../../../shared/widgets/hexa_empty_state.dart';
 
 String _staffActivityLabel(String actionType) {
   switch (actionType.toUpperCase()) {
@@ -99,33 +101,13 @@ class StaffActivityPage extends ConsumerWidget {
                 ),
                 data: (rows) {
                   if (rows.isEmpty) {
-                    return Center(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            Icons.history_rounded,
-                            size: 48,
-                            color: Theme.of(context).colorScheme.outline,
-                          ),
-                          const SizedBox(height: 12),
-                          Text(
-                            'No activity in this period',
-                            style: tt.titleMedium?.copyWith(
-                              fontWeight: FontWeight.w800,
-                              color: onSurf,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            'Scans, stock updates, and purchases appear here.',
-                            textAlign: TextAlign.center,
-                            style: tt.bodySmall?.copyWith(
-                              color: Theme.of(context).colorScheme.onSurfaceVariant,
-                            ),
-                          ),
-                        ],
-                      ),
+                    return HexaEmptyState(
+                      icon: Icons.history_rounded,
+                      title: 'No activity in this period',
+                      subtitle:
+                          'Scans, stock updates, and purchases appear here.',
+                      primaryActionLabel: 'Scan barcode',
+                      onPrimaryAction: () => context.go('/staff/scan'),
                     );
                   }
                   final fmt = DateFormat.MMMd().add_Hm();

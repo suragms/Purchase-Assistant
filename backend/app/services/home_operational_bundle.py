@@ -66,6 +66,9 @@ async def build_home_operational_bundle(
 
     Sequential awaits on the shared AsyncSession — concurrent asyncio.gather on one
     session raises InvalidRequestError (isce) and 500s home-overview shell_bundle.
+
+    Also embeds ``recent_trade_purchases`` (compact, no lines) so Home activity
+    feed can reuse the shell_bundle payload instead of a second list GET.
     """
     stock = await stock_alerts_summary(
         business_id=business_id,
@@ -81,10 +84,20 @@ async def build_home_operational_bundle(
     )
     low_top = await fetch_low_stock_top_rows(db, business_id, limit=3)
     warehouse = await warehouse_alerts_from_stock(db, business_id, stock)
+    recent_rows = await tps.list_trade_purchases(
+        db,
+        business_id,
+        limit=15,
+        offset=0,
+        status_filter="all",
+        include_lines=False,
+    )
+    recent = [r.model_dump(mode="json") for r in recent_rows]
     return {
         "stock_status_counts": _stock_status_counts_from_alerts(stock),
         "warehouse_alerts": warehouse.model_dump(),
         "delivery_pipeline": pipeline.model_dump(mode="json"),
         "notifications_unread": unread,
         "low_stock_top": low_top,
+        "recent_trade_purchases": recent,
     }

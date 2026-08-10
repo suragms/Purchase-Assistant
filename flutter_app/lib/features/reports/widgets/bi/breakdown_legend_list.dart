@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import '../../../../shared/widgets/hexa_empty_state.dart';
 import '../../../../shared/widgets/warehouse_units_breakdown_line.dart';
 import 'reports_bi_slice.dart';
 
@@ -26,13 +27,7 @@ class BreakdownLegendList extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (slices.isEmpty) {
-      return const Padding(
-        padding: EdgeInsets.symmetric(vertical: 8),
-        child: Text(
-          'No purchases in selected period.',
-          style: TextStyle(fontSize: 12, color: Colors.black54),
-        ),
-      );
+      return const BreakdownLegendEmpty();
     }
     final show = slices.take(maxRows).toList();
     return Column(
@@ -141,6 +136,21 @@ class _LegendRow extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Legend under ring charts when the selected period has no slices.
+@visibleForTesting
+class BreakdownLegendEmpty extends StatelessWidget {
+  const BreakdownLegendEmpty({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return const HexaEmptyState(
+      icon: Icons.pie_chart_outline_rounded,
+      title: 'No purchases in selected period',
+      subtitle: 'Change the period or filters to see a breakdown.',
     );
   }
 }

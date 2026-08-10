@@ -19,6 +19,7 @@ import '../../../core/router/post_auth_route.dart';
 import '../../../core/theme/theme_context_ext.dart';
 import '../../../core/widgets/hexa_error_card.dart';
 import '../../../core/widgets/list_skeleton.dart';
+import '../../../shared/widgets/hexa_empty_state.dart';
 import '../users/user_compact_card.dart';
 import '../users/user_list_filters.dart';
 import '../users/user_profile_providers.dart';
@@ -568,11 +569,32 @@ class _UserManagementPageState extends ConsumerState<UserManagementPage> {
 
           Widget userList({required bool desktopSelect}) {
             if (filtered.isEmpty) {
-              return Center(
-                child: Text(
-                  'No users match your filters.',
-                  style: tt.bodyLarge,
-                ),
+              final filtersActive = filterState.search.trim().isNotEmpty ||
+                  filterState.primary != UserListPrimaryFilter.all ||
+                  filterState.roles.isNotEmpty;
+              if (filtersActive) {
+                return HexaEmptyState(
+                  icon: Icons.search_off_rounded,
+                  title: 'No users match filters',
+                  subtitle: 'Clear search or role filters to see more users.',
+                  primaryActionLabel: 'Clear filters',
+                  onPrimaryAction: () {
+                    _searchCtl.clear();
+                    ref.read(userListFilterProvider.notifier).state =
+                        const UserListFilterState();
+                  },
+                );
+              }
+              return HexaEmptyState(
+                icon: Icons.group_outlined,
+                title: 'No users yet',
+                subtitle: canCreate
+                    ? 'Add a warehouse user to get started.'
+                    : 'Users will appear here once they are added.',
+                primaryActionLabel: canCreate ? 'Add user' : 'Refresh',
+                onPrimaryAction: canCreate
+                    ? _openCreateSheet
+                    : () => invalidateUserManagementCaches(ref),
               );
             }
             return RefreshIndicator(

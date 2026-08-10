@@ -21,6 +21,7 @@ import '../../purchase/presentation/widgets/party_inline_suggest_field.dart';
 import '../catalog_create_prefs.dart';
 import '../../../shared/widgets/inline_search_field.dart';
 import '../../../shared/widgets/packaging_type_selector.dart';
+import '../../../shared/widgets/hexa_empty_state.dart';
 
 /// Simple catalog item create — supplier, broker, name, unit, optional more fields.
 class CatalogItemCreatePage extends ConsumerStatefulWidget {
@@ -835,24 +836,16 @@ class _CatalogItemCreatePageState extends ConsumerState<CatalogItemCreatePage> {
     return [
       suppliersAsync.when(
         loading: () => const LinearProgressIndicator(),
-        error: (_, __) => Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text(
-              'Could not load suppliers.',
-              style: TextStyle(color: Theme.of(context).colorScheme.error),
-            ),
-            TextButton(
-              onPressed: () => ref.invalidate(suppliersListProvider),
-              child: const Text('Retry'),
-            ),
-          ],
+        error: (_, __) => CatalogItemCreateSuppliersError(
+          onRetry: () => ref.invalidate(suppliersListProvider),
         ),
         data: (sups) {
           if (sups.isEmpty) {
-            return const Padding(
-              padding: EdgeInsets.only(bottom: 12),
-              child: Text('No suppliers yet — add in Contacts.'),
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: CatalogItemCreateSuppliersEmpty(
+                onOpenContacts: () => context.push('/contacts'),
+              ),
             );
           }
           final supplierLock =
@@ -886,18 +879,8 @@ class _CatalogItemCreatePageState extends ConsumerState<CatalogItemCreatePage> {
       ),
       brokersAsync.when(
         loading: () => const SizedBox.shrink(),
-        error: (_, __) => Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text(
-              'Could not load brokers.',
-              style: TextStyle(color: Theme.of(context).colorScheme.error),
-            ),
-            TextButton(
-              onPressed: () => ref.invalidate(brokersListProvider),
-              child: const Text('Retry'),
-            ),
-          ],
+        error: (_, __) => CatalogItemCreateBrokersError(
+          onRetry: () => ref.invalidate(brokersListProvider),
         ),
         data: (rows) {
           if (rows.isEmpty) return const SizedBox.shrink();
@@ -939,11 +922,14 @@ class _CatalogItemCreatePageState extends ConsumerState<CatalogItemCreatePage> {
     return [
       typesAsync.when(
         loading: () => const LinearProgressIndicator(),
-        error: (_, __) =>
-            const Text('Could not load subcategories.'),
+        error: (_, __) => CatalogItemCreateSubcategoriesError(
+          onRetry: () => ref.invalidate(categoryTypesIndexProvider),
+        ),
         data: (types) {
           if (types.isEmpty) {
-            return const Text('No subcategories — add in Catalog first.');
+            return CatalogItemCreateSubcategoriesEmpty(
+              onOpenCatalog: () => context.push('/catalog'),
+            );
           }
           return Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1044,6 +1030,107 @@ class _CatalogItemCreatePageState extends ConsumerState<CatalogItemCreatePage> {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Visible for widget tests (UX-065).
+@visibleForTesting
+class CatalogItemCreateSuppliersEmpty extends StatelessWidget {
+  const CatalogItemCreateSuppliersEmpty({
+    super.key,
+    required this.onOpenContacts,
+  });
+
+  final VoidCallback onOpenContacts;
+
+  @override
+  Widget build(BuildContext context) {
+    return HexaEmptyState(
+      icon: Icons.storefront_outlined,
+      title: 'No suppliers yet',
+      subtitle: 'Add suppliers in Contacts, then return to link one (optional).',
+      primaryActionLabel: 'Open Contacts',
+      onPrimaryAction: onOpenContacts,
+    );
+  }
+}
+
+/// Visible for widget tests (UX-065).
+@visibleForTesting
+class CatalogItemCreateSubcategoriesEmpty extends StatelessWidget {
+  const CatalogItemCreateSubcategoriesEmpty({
+    super.key,
+    required this.onOpenCatalog,
+  });
+
+  final VoidCallback onOpenCatalog;
+
+  @override
+  Widget build(BuildContext context) {
+    return HexaEmptyState(
+      icon: Icons.category_outlined,
+      title: 'No subcategories yet',
+      subtitle: 'Add subcategories in Catalog first, then pick one here.',
+      primaryActionLabel: 'Open catalog',
+      onPrimaryAction: onOpenCatalog,
+    );
+  }
+}
+
+/// Visible for widget tests (UX-110).
+@visibleForTesting
+class CatalogItemCreateSuppliersError extends StatelessWidget {
+  const CatalogItemCreateSuppliersError({super.key, required this.onRetry});
+
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return HexaEmptyState(
+      icon: Icons.cloud_off_rounded,
+      title: 'Could not load suppliers',
+      subtitle: 'Check your connection, then retry.',
+      primaryActionLabel: 'Retry',
+      onPrimaryAction: onRetry,
+    );
+  }
+}
+
+/// Visible for widget tests (UX-110).
+@visibleForTesting
+class CatalogItemCreateBrokersError extends StatelessWidget {
+  const CatalogItemCreateBrokersError({super.key, required this.onRetry});
+
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return HexaEmptyState(
+      icon: Icons.cloud_off_rounded,
+      title: 'Could not load brokers',
+      subtitle: 'Check your connection, then retry.',
+      primaryActionLabel: 'Retry',
+      onPrimaryAction: onRetry,
+    );
+  }
+}
+
+/// Visible for widget tests (UX-110).
+@visibleForTesting
+class CatalogItemCreateSubcategoriesError extends StatelessWidget {
+  const CatalogItemCreateSubcategoriesError({super.key, required this.onRetry});
+
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return HexaEmptyState(
+      icon: Icons.cloud_off_rounded,
+      title: 'Could not load subcategories',
+      subtitle: 'Check your connection, then retry.',
+      primaryActionLabel: 'Retry',
+      onPrimaryAction: onRetry,
     );
   }
 }

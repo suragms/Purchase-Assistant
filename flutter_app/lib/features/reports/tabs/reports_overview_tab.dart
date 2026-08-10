@@ -10,6 +10,7 @@ import '../../../core/design_system/hexa_responsive.dart';
 import '../../../core/models/trade_purchase_models.dart';
 import '../../../core/reporting/trade_report_aggregate.dart';
 import '../../../core/theme/hexa_colors.dart';
+import '../../../shared/widgets/hexa_empty_state.dart';
 import '../presentation/reports_overview_chart_section.dart';
 import '../shell/reports_layout.dart';
 import '../widgets/reports_overview_kpi_grid.dart';
@@ -131,11 +132,14 @@ class ReportsOverviewTab extends ConsumerWidget {
                   onTap: () => goTab('stock'),
                 ),
                 if (showEmpty)
-                  const Padding(
-                    padding: EdgeInsets.all(12),
-                    child: Text(
-                      'No purchases in this period.',
-                      style: TextStyle(color: HexaColors.neutral, fontSize: 12),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(4, 8, 4, 4),
+                    child: HexaEmptyState(
+                      icon: Icons.analytics_outlined,
+                      title: 'No purchases in this period',
+                      subtitle: 'Change the date range to see period insights.',
+                      primaryActionLabel: 'Change period',
+                      onPrimaryAction: onPickRange,
                     ),
                   ),
               ],

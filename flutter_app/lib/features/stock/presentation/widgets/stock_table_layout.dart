@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/design_system/hexa_responsive.dart';
+
 /// Shared column geometry for warehouse stock table.
 abstract final class StockTableLayout {
   static const double metricColWidth = 52;
@@ -15,14 +17,20 @@ abstract final class StockTableLayout {
   static const Color headerFill = Color(0xFFE8E6E1);
   static const Color rowFill = Colors.white;
 
+  /// Desktop master-detail: ITEM | SYS | PHYS | DIFF.
+  /// Phone/tablet list: ITEM | PHYS only (SYS/DIFF in item meta — no 4-col row).
+  static bool useWideMetricColumns(BuildContext context) {
+    return MediaQuery.sizeOf(context).width >= kDesktopMin;
+  }
+
   static double metricWidthFor(BuildContext context) {
-    final w = MediaQuery.sizeOf(context).width;
-    return w >= 1024 ? desktopMetricColWidth : metricColWidth;
+    return useWideMetricColumns(context)
+        ? desktopMetricColWidth
+        : metricColWidth;
   }
 
   static double rowHeightFor(BuildContext context) {
-    final w = MediaQuery.sizeOf(context).width;
-    return w >= 1024 ? desktopRowMinHeight : rowMinHeight;
+    return useWideMetricColumns(context) ? desktopRowMinHeight : rowMinHeight;
   }
 
   static const BorderSide cellBorder = BorderSide(color: borderColor, width: 1);

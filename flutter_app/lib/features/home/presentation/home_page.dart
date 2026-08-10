@@ -7,7 +7,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/config/app_config.dart';
-import '../../../core/debug/agent_debug_log.dart';
 import '../../../core/design_system/hexa_responsive.dart';
 import '../../../core/design_system/hexa_web_page_frame.dart';
 import '../../../core/router/shell_navigation.dart';
@@ -20,7 +19,7 @@ import '../../../core/auth/session_notifier.dart'
 import '../../../core/platform/app_foreground_provider.dart';
 import '../../../core/providers/api_degraded_provider.dart';
 import '../../../core/providers/api_health_snapshot_provider.dart';
-import '../../../core/widgets/friendly_load_error.dart';
+import '../../../shared/widgets/hexa_empty_state.dart';
 import '../../../core/models/trade_purchase_models.dart';
 import '../../../core/navigation/surface_refresh_policy.dart';
 import '../../../core/providers/app_period_provider.dart'
@@ -28,6 +27,7 @@ import '../../../core/providers/app_period_provider.dart'
 import '../../../core/providers/home_dashboard_provider.dart'
     show
         bustHomeDashboardVolatileCaches,
+        HomeDashboardDashState,
         homeDashboardDataProvider,
         homePageSatellitesEnabledProvider,
         homeTabHasOperationalBundle;
@@ -106,7 +106,8 @@ class _HomePageState extends ConsumerState<HomePage>
   DateTime? _lastThrottledInvalidate;
   DateTime? _lastWriteRevisionRefresh;
   DateTime? _homeLastRefreshedAt;
-  bool _coldStartRetried = false;
+  /// First overview settle (or soft skip) — blocks lifecycle resume storm on cold start.
+  bool _homeInitialFetchCompleted = false;
   ProviderSubscription<AsyncValue<({int low, int critical})>>? _stockAlertSub;
   bool _throttleHomeInvalidate({bool force = false}) {
     if (force) {
@@ -248,11 +249,11 @@ class _HomePageState extends ConsumerState<HomePage>
       );
       // IndexedStack keeps Home mounted on other tabs — never reset shell branch here
       // (ShellScreen owns branch sync). Doing so broke Reports error handling.
+      // First home-overview GET is owned by [homeDashboardDataProvider] watch —
+      // do NOT force-bust here (that cleared inflight and caused overview ×2–4).
       if (ref.read(shellCurrentBranchProvider) == ShellBranch.home &&
           !providerSkipApi(ref)) {
         _setHomePollingActive(true);
-        _scheduleRefresh(force: true);
-        unawaited(_maybeColdStartHomeRetry());
       }
     });
   }
@@ -340,6 +341,9 @@ class _HomePageState extends ConsumerState<HomePage>
       _lastUnread = ref.read(notificationsUnreadCountProvider);
     }
     if (s != AppLifecycleState.resumed) return;
+    // Gate until the first provider-owned overview settles — resume during
+    // cold start was a third identical home-overview GET.
+    if (!_homeInitialFetchCompleted) return;
     if (ref.read(shellCurrentBranchProvider) != ShellBranch.home) return;
     if (!_isHomeDashboardRoot(context)) return;
     if (!shouldRefreshOnShellTabReturn(_homeLastRefreshedAt)) return;
@@ -362,29 +366,6 @@ class _HomePageState extends ConsumerState<HomePage>
       }
       unawaited(_refresh());
     });
-  }
-
-  Future<void> _maybeColdStartHomeRetry() async {
-    if (_coldStartRetried || !mounted) return;
-    await Future<void>.delayed(const Duration(seconds: 4));
-    if (!mounted || _coldStartRetried) return;
-    if (providerSkipApi(ref)) return;
-    if (ref.read(shellCurrentBranchProvider) != ShellBranch.home) return;
-    if (!_isHomeDashboardRoot(context)) return;
-
-    final dash = ref.read(homeDashboardDataProvider);
-    if (!dash.refreshing && dash.snapshot.data.purchaseCount > 0) return;
-
-    try {
-      final snap = await ref.read(apiHealthSnapshotProvider.future);
-      if (!snap.readyOk) return;
-    } catch (_) {
-      return;
-    }
-    if (!mounted || _coldStartRetried) return;
-    _coldStartRetried = true;
-    ref.read(apiDegradedProvider.notifier).clear();
-    _invalidateHomeDataProviders();
   }
 
   Future<void> _retryHomeAfterAuthOrApiBlock() async {
@@ -463,6 +444,16 @@ class _HomePageState extends ConsumerState<HomePage>
 
   @override
   Widget build(BuildContext context) {
+    ref.listen<HomeDashboardDashState>(homeDashboardDataProvider, (prev, next) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        if (!next.refreshing) {
+          _homeInitialFetchCompleted = true;
+          _homeLastRefreshedAt ??= DateTime.now();
+        }
+      });
+    });
+
     ref.listen<int>(shellCurrentBranchProvider, (prev, next) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
@@ -562,11 +553,8 @@ class _HomePageState extends ConsumerState<HomePage>
         body: SafeArea(
           child: Padding(
             padding: EdgeInsets.all(gutter),
-            child: FriendlyLoadError(
-              message: 'Session expired',
-              subtitle:
-                  'Your sign-in is no longer valid. Tap below to sign in again and load warehouse data.',
-              onRetry: () async {
+            child: HomeSessionExpiredError(
+              onSignIn: () async {
                 await ref.read(sessionProvider.notifier).logout();
                 if (context.mounted) context.go('/login');
               },
@@ -582,8 +570,8 @@ class _HomePageState extends ConsumerState<HomePage>
         body: SafeArea(
           child: Padding(
             padding: EdgeInsets.all(gutter),
-            child: FriendlyLoadError(
-              message: apiLikelyDown
+            child: HomeAuthRecoveryError(
+              title: apiLikelyDown
                   ? 'Cloud API unavailable'
                   : 'Connection paused after auth errors',
               subtitle: apiLikelyDown
@@ -596,24 +584,6 @@ class _HomePageState extends ConsumerState<HomePage>
       );
     }
 
-    // #region agent log
-    agentDebugLog(
-      hypothesisId: 'H1',
-      location: 'home_page.dart:scaffold',
-      message: 'Home painting scaffold',
-      data: {
-        'hasDashboard': hasDashboard,
-        'authBlocked': authBlocked,
-        'authRestoring': authRestoring,
-        'authRecovery': authRecovery,
-        'desktop': context.isDesktopLayout,
-        'mqW': MediaQuery.sizeOf(context).width,
-        'mqH': MediaQuery.sizeOf(context).height,
-        'branch': ref.read(shellCurrentBranchProvider),
-        'path': GoRouter.maybeOf(context)?.state.uri.path ?? '',
-      },
-    );
-    // #endregion
     return Scaffold(
       backgroundColor: HexaColors.brandBackground,
       body: ColoredBox(
@@ -754,5 +724,51 @@ class _HomePageState extends ConsumerState<HomePage>
     c.invalidate(stockVariancesTodayProvider);
     c.invalidate(homeRecentActivityFeedProvider);
     c.invalidate(homeDashboardDataProvider);
+  }
+}
+
+/// Home full-page session expired (UX-151).
+@visibleForTesting
+class HomeSessionExpiredError extends StatelessWidget {
+  const HomeSessionExpiredError({super.key, required this.onSignIn});
+
+  final VoidCallback onSignIn;
+
+  @override
+  Widget build(BuildContext context) {
+    return HexaEmptyState(
+      icon: Icons.lock_outline,
+      title: 'Session expired',
+      subtitle:
+          'Your sign-in is no longer valid. Tap below to sign in again and load warehouse data.',
+      primaryActionLabel: 'Sign in',
+      onPrimaryAction: onSignIn,
+    );
+  }
+}
+
+/// Home full-page auth/API recovery (UX-151).
+@visibleForTesting
+class HomeAuthRecoveryError extends StatelessWidget {
+  const HomeAuthRecoveryError({
+    super.key,
+    required this.title,
+    required this.subtitle,
+    required this.onRetry,
+  });
+
+  final String title;
+  final String subtitle;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return HexaEmptyState(
+      icon: Icons.cloud_off_outlined,
+      title: title,
+      subtitle: subtitle,
+      primaryActionLabel: 'Retry',
+      onPrimaryAction: onRetry,
+    );
   }
 }

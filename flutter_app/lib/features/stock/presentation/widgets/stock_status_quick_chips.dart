@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/providers/stock_providers.dart';
 import '../../../../core/theme/hexa_colors.dart';
+import '../../../../shared/widgets/hexa_empty_state.dart';
 import 'stock_warehouse_filter_sheet.dart';
 
 import '../../../../core/design_system/hexa_ds_tokens.dart';
@@ -27,7 +28,9 @@ class StockStatusQuickChips extends ConsumerWidget {
 
     return countsAsync.when(
       loading: () => const SizedBox(height: 36),
-      error: (_, __) => const SizedBox.shrink(),
+      error: (_, __) => StockStatusQuickChipsError(
+        onRetry: () => ref.invalidate(stockFilteredStatusCountsProvider),
+      ),
       data: (counts) {
         int? lowCount() => (counts['low'] ?? 0) + (counts['critical'] ?? 0);
 
@@ -144,6 +147,25 @@ class StockStatusQuickChips extends ConsumerWidget {
       backgroundColor: color.withValues(alpha: 0.08),
       side: BorderSide(color: selected ? color : color.withValues(alpha: 0.35)),
       onSelected: (_) => onTap(),
+    );
+  }
+}
+
+/// Stock All/Low/Out count badges load failure (UX-123).
+@visibleForTesting
+class StockStatusQuickChipsError extends StatelessWidget {
+  const StockStatusQuickChipsError({super.key, required this.onRetry});
+
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return HexaEmptyState(
+      icon: Icons.filter_list_off_outlined,
+      title: 'Could not load stock counts',
+      subtitle: 'Check your connection, then retry.',
+      primaryActionLabel: 'Retry',
+      onPrimaryAction: onRetry,
     );
   }
 }

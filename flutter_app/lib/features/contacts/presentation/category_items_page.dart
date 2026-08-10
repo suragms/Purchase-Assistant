@@ -7,9 +7,9 @@ import '../../../core/auth/session_notifier.dart';
 import '../../../core/navigation/open_trade_item_from_report.dart';
 import '../../../core/router/navigation_ext.dart';
 import '../../../core/providers/contacts_hub_provider.dart';
-import '../../../core/widgets/friendly_load_error.dart';
+import '../../../shared/widgets/hexa_empty_state.dart';
 
-final _categoryItemsProvider = FutureProvider.autoDispose
+final contactsCategoryItemsProvider = FutureProvider.autoDispose
     .family<List<Map<String, dynamic>>, String>((ref, category) async {
   ref.keepAlive();
   final session = ref.watch(sessionProvider);
@@ -31,7 +31,7 @@ class CategoryItemsPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final async = ref.watch(_categoryItemsProvider(category));
+    final async = ref.watch(contactsCategoryItemsProvider(category));
     return Scaffold(
       appBar: AppBar(
         leading: IconButton(
@@ -42,20 +42,19 @@ class CategoryItemsPage extends ConsumerWidget {
       body: async.when(
         skipLoadingOnReload: true,
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (_, __) => FriendlyLoadError(
-          message: 'Could not load category items',
-          onRetry: () => ref.invalidate(_categoryItemsProvider(category)),
+        error: (_, __) => CategoryItemsLoadError(
+          onRetry: () =>
+              ref.invalidate(contactsCategoryItemsProvider(category)),
         ),
         data: (rows) {
           if (rows.isEmpty) {
-            return const Center(
-              child: Padding(
-                padding: EdgeInsets.all(24),
-                child: Text(
-                  'No line items in this category for the last $contactsLookbackDays days.',
-                  textAlign: TextAlign.center,
-                ),
-              ),
+            return HexaEmptyState(
+              icon: Icons.inventory_2_outlined,
+              title: 'No line items in this period',
+              subtitle:
+                  'No purchase lines in this category for the last $contactsLookbackDays days.',
+              primaryActionLabel: 'Back to Contacts',
+              onPrimaryAction: () => context.popOrGo('/contacts'),
             );
           }
           return ListView.separated(
@@ -84,6 +83,25 @@ class CategoryItemsPage extends ConsumerWidget {
           );
         },
       ),
+    );
+  }
+}
+
+/// Category items page load failure.
+@visibleForTesting
+class CategoryItemsLoadError extends StatelessWidget {
+  const CategoryItemsLoadError({super.key, required this.onRetry});
+
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return HexaEmptyState(
+      icon: Icons.cloud_off_outlined,
+      title: 'Could not load category items',
+      subtitle: 'Check your connection, then retry.',
+      primaryActionLabel: 'Retry',
+      onPrimaryAction: onRetry,
     );
   }
 }

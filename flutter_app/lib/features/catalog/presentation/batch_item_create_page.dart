@@ -15,6 +15,7 @@ import '../catalog_taxonomy_utils.dart';
 import '../../../core/router/navigation_ext.dart';
 import '../../../core/unit_engine/stock_tracking_profile.dart';
 import '../../../shared/widgets/packaging_type_selector.dart';
+import '../../../shared/widgets/hexa_empty_state.dart';
 
 class _BatchLine {
   _BatchLine() : name = TextEditingController();
@@ -248,7 +249,9 @@ class _BatchItemCreatePageState extends ConsumerState<BatchItemCreatePage> {
                       },
                       data: (cats) {
                         if (cats.isEmpty) {
-                          return const Text('No categories — create in Catalog.');
+                          return BatchItemCreateCategoriesEmpty(
+                            onOpenCatalog: () => context.push('/catalog'),
+                          );
                         }
                         return DropdownButtonFormField<String>(
                           key: ValueKey('cat_${i}_${line.categoryId}'),
@@ -311,8 +314,8 @@ class _BatchItemCreatePageState extends ConsumerState<BatchItemCreatePage> {
                               return const SizedBox.shrink();
                             }
                             if (types.isEmpty) {
-                              return const Text(
-                                'No subcategories in this category.',
+                              return BatchItemCreateSubcategoriesEmpty(
+                                onOpenCatalog: () => context.push('/catalog'),
                               );
                             }
                             return DropdownButtonFormField<String>(
@@ -395,6 +398,50 @@ class _BatchItemCreatePageState extends ConsumerState<BatchItemCreatePage> {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Visible for widget tests (UX-066).
+@visibleForTesting
+class BatchItemCreateCategoriesEmpty extends StatelessWidget {
+  const BatchItemCreateCategoriesEmpty({
+    super.key,
+    required this.onOpenCatalog,
+  });
+
+  final VoidCallback onOpenCatalog;
+
+  @override
+  Widget build(BuildContext context) {
+    return HexaEmptyState(
+      icon: Icons.category_outlined,
+      title: 'No categories yet',
+      subtitle: 'Create categories in Catalog, then return to batch-add items.',
+      primaryActionLabel: 'Open catalog',
+      onPrimaryAction: onOpenCatalog,
+    );
+  }
+}
+
+/// Visible for widget tests (UX-066).
+@visibleForTesting
+class BatchItemCreateSubcategoriesEmpty extends StatelessWidget {
+  const BatchItemCreateSubcategoriesEmpty({
+    super.key,
+    required this.onOpenCatalog,
+  });
+
+  final VoidCallback onOpenCatalog;
+
+  @override
+  Widget build(BuildContext context) {
+    return HexaEmptyState(
+      icon: Icons.account_tree_outlined,
+      title: 'No subcategories in this category',
+      subtitle: 'Add a subcategory in Catalog, then pick it here.',
+      primaryActionLabel: 'Open catalog',
+      onPrimaryAction: onOpenCatalog,
     );
   }
 }

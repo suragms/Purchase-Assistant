@@ -8,7 +8,8 @@ import '../../../core/providers/reorder_list_provider.dart';
 import '../../../core/design_system/hexa_responsive.dart';
 import '../../../core/theme/hexa_colors.dart';
 import '../../../core/utils/unit_utils.dart';
-import '../../../core/widgets/friendly_load_error.dart';
+import '../../../shared/widgets/hexa_empty_state.dart';
+
 class ReorderListPage extends ConsumerStatefulWidget {
   const ReorderListPage({super.key});
 
@@ -106,6 +107,7 @@ class _ReorderListPageState extends ConsumerState<ReorderListPage>
             _ReorderTab(
               status: st,
               query: _search,
+              onClearSearch: () => _searchCtrl.clear(),
               onSetStatus: _setStatus,
               onRemove: _remove,
             ),
@@ -145,12 +147,14 @@ class _ReorderTab extends ConsumerWidget {
   const _ReorderTab({
     required this.status,
     required this.query,
+    required this.onClearSearch,
     required this.onSetStatus,
     required this.onRemove,
   });
 
   final String status;
   final String query;
+  final VoidCallback onClearSearch;
   final Future<void> Function(Map<String, dynamic> row, String status) onSetStatus;
   final Future<void> Function(Map<String, dynamic> row) onRemove;
 
@@ -160,9 +164,7 @@ class _ReorderTab extends ConsumerWidget {
 
     return async.when(
       loading: () => const Center(child: CircularProgressIndicator(strokeWidth: 2)),
-      error: (_, __) => FriendlyLoadError(
-        message: 'Could not load reorder list',
-        subtitle: 'Please check your connection and try again.',
+      error: (_, __) => ReorderListLoadError(
         onRetry: () => ref.invalidate(reorderListProvider(status)),
       ),
       data: (rows) {
@@ -180,33 +182,25 @@ class _ReorderTab extends ConsumerWidget {
               }).toList();
 
         if (visible.isEmpty) {
-          return Center(
-            child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.check_circle_outline, size: 48, color: Colors.grey.shade400),
-                  const SizedBox(height: 12),
-                  Text(
-                    rows.isEmpty
-                        ? (status == 'pending'
-                            ? 'No pending reorders'
-                            : 'No $status items')
-                        : 'No items match search',
-                    style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    rows.isEmpty
-                        ? 'Add items from stock or item detail'
-                        : 'Try a different search term',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
-                  ),
-                ],
-              ),
-            ),
+          final listEmpty = rows.isEmpty;
+          return HexaEmptyState(
+            icon: listEmpty
+                ? (status == 'pending'
+                    ? Icons.playlist_add_check_outlined
+                    : Icons.inventory_2_outlined)
+                : Icons.search_off_rounded,
+            title: listEmpty
+                ? (status == 'pending'
+                    ? 'No pending reorders'
+                    : 'No $status items')
+                : 'No items match search',
+            subtitle: listEmpty
+                ? 'Add items from stock or item detail.'
+                : 'Try a different search term, or clear search.',
+            primaryActionLabel: listEmpty ? 'Open stock' : 'Clear search',
+            onPrimaryAction: listEmpty
+                ? () => context.push('/stock')
+                : onClearSearch,
           );
         }
         return RefreshIndicator(
@@ -382,6 +376,25 @@ class _ReorderTab extends ConsumerWidget {
           ),
         );
       },
+    );
+  }
+}
+
+/// Reorder list tab load failure (UX-154).
+@visibleForTesting
+class ReorderListLoadError extends StatelessWidget {
+  const ReorderListLoadError({super.key, required this.onRetry});
+
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return HexaEmptyState(
+      icon: Icons.playlist_add_check_outlined,
+      title: 'Could not load reorder list',
+      subtitle: 'Please check your connection and try again.',
+      primaryActionLabel: 'Retry',
+      onPrimaryAction: onRetry,
     );
   }
 }

@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/auth/session_notifier.dart';
-import '../../../core/errors/user_facing_errors.dart';
+import '../../../core/errors/load_state_error.dart';
 import '../../../core/json_coerce.dart';
+import '../../../core/router/post_auth_route.dart' show sessionIsStaff;
 import '../../../core/utils/unit_utils.dart';
+import '../../../shared/widgets/hexa_empty_state.dart';
 
 final staffPurchaseLogsProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
@@ -22,15 +25,28 @@ class StaffPurchaseLogsPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final async = ref.watch(staffPurchaseLogsProvider);
+    final session = ref.watch(sessionProvider);
+    final isStaff = session != null && sessionIsStaff(session);
     final df = DateFormat('d MMM, h:mm a');
     return Scaffold(
       appBar: AppBar(title: const Text('Staff cash purchases')),
       body: async.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text(userFacingError(e))),
+        error: (e, _) => StaffPurchaseLogsLoadError(
+          subtitle: loadStateErrorSubtitle(e),
+          onRetry: () => ref.invalidate(staffPurchaseLogsProvider),
+        ),
         data: (rows) {
           if (rows.isEmpty) {
-            return const Center(child: Text('No staff cash purchases yet.'));
+            return HexaEmptyState(
+              icon: Icons.receipt_long_outlined,
+              title: 'No staff cash purchases yet',
+              subtitle:
+                  'Quick buys logged from the stock list will show up here.',
+              primaryActionLabel: isStaff ? 'Open stock' : 'Go to stock',
+              onPrimaryAction: () =>
+                  context.go(isStaff ? '/staff/stock' : '/stock'),
+            );
           }
           return RefreshIndicator(
             onRefresh: () async =>
@@ -62,6 +78,30 @@ class StaffPurchaseLogsPage extends ConsumerWidget {
           );
         },
       ),
+    );
+  }
+}
+
+/// Staff cash purchase logs load failure (UX-156).
+@visibleForTesting
+class StaffPurchaseLogsLoadError extends StatelessWidget {
+  const StaffPurchaseLogsLoadError({
+    super.key,
+    required this.onRetry,
+    this.subtitle,
+  });
+
+  final VoidCallback onRetry;
+  final String? subtitle;
+
+  @override
+  Widget build(BuildContext context) {
+    return HexaEmptyState(
+      icon: Icons.receipt_long_outlined,
+      title: 'Could not load staff cash purchases',
+      subtitle: subtitle ?? 'Check your connection, then retry.',
+      primaryActionLabel: 'Retry',
+      onPrimaryAction: onRetry,
     );
   }
 }

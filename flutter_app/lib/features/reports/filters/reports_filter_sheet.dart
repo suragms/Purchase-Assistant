@@ -5,6 +5,7 @@ import '../../../core/design_system/hexa_responsive.dart';
 import '../../../core/providers/analytics_breakdown_providers.dart';
 import '../../../core/providers/reports_filtered_provider.dart';
 import '../../../core/theme/hexa_colors.dart';
+import '../../../shared/widgets/hexa_empty_state.dart';
 import '../filters/reports_filter_search_section.dart';
 import '../filters/reports_filter_state.dart';
 import '../reports_bi_tab.dart';
@@ -297,10 +298,7 @@ class _ReportsFilterPanelBodyState extends ConsumerState<ReportsFilterPanelBody>
     required ValueChanged<Set<String>> onChanged,
   }) {
     if (items.isEmpty) {
-      return const Text(
-        'No options in this period.',
-        style: TextStyle(fontSize: 12, color: HexaColors.neutral),
-      );
+      return const ReportsFilterSimpleChipsEmpty();
     }
     return Wrap(
       spacing: 6,
@@ -368,3 +366,18 @@ Future<void> showReportsFilterSheet({
   required WidgetRef ref,
 }) =>
     showReportsFilterPanel(context: context, ref: ref);
+
+/// Filter chip group when the period has no options to pick.
+@visibleForTesting
+class ReportsFilterSimpleChipsEmpty extends StatelessWidget {
+  const ReportsFilterSimpleChipsEmpty({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return const HexaEmptyState(
+      icon: Icons.filter_list_off_rounded,
+      title: 'No options in this period',
+      subtitle: 'Change the date range to load filter choices.',
+    );
+  }
+}

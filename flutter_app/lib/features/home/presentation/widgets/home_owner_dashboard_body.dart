@@ -136,20 +136,21 @@ class HomeOwnerDashboardBody extends ConsumerWidget {
         HexaDenseKpiGrid(
           mainAxisExtent: context.isDesktopLayout ? 88 : 96,
           children: [
-            _KpiTile(
+            HomeOwnerKpiTile(
               label: 'Purchases',
               value: '${dash.purchaseCount}',
               subtitle: dash.period.label,
+              secondary: true,
               onTap: () => context.go('/purchase'),
             ),
-            _KpiTile(
+            HomeOwnerKpiTile(
               label: 'Pending delivery',
               value: '$pending',
               subtitle: pending > 0 ? 'Needs action' : 'Clear',
               accent: pending > 0 ? HexaDsColors.error : null,
               onTap: () => context.go('/purchase?filter=pending_delivery'),
             ),
-            _KpiTile(
+            HomeOwnerKpiTile(
               // Authoritative attention figure: low + critical + out (same as chips combined).
               label: 'Need attention',
               value: '$lowCount',
@@ -158,7 +159,7 @@ class HomeOwnerDashboardBody extends ConsumerWidget {
                   : 'Below reorder + out of stock',
               onTap: () => pushLowStockDashboard(context),
             ),
-            _KpiTile(
+            HomeOwnerKpiTile(
               label: 'Warehouse',
               value: invSummary != null &&
                       inventoryUnitsLine(invSummary).isNotEmpty
@@ -168,6 +169,7 @@ class HomeOwnerDashboardBody extends ConsumerWidget {
                       inventoryUnitsLine(invSummary).isNotEmpty
                   ? '${invSummary.itemCount} items on hand'
                   : 'Active items',
+              secondary: true,
               onTap: () => goShellTab(
                     context,
                     ref,
@@ -238,7 +240,6 @@ class _AlertChip extends StatelessWidget {
       elevation: isSelected ? 2 : 0,
       shadowColor: Colors.black12,
       color: isSelected ? color : Colors.white,
-      borderRadius: BorderRadius.circular(8),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(8),
         side: BorderSide(
@@ -265,13 +266,16 @@ class _AlertChip extends StatelessWidget {
   }
 }
 
-class _KpiTile extends StatelessWidget {
-  const _KpiTile({
+/// Owner Home KPI tile. [secondary] demotes snapshot metrics vs action KPIs (UX-009).
+class HomeOwnerKpiTile extends StatelessWidget {
+  const HomeOwnerKpiTile({
+    super.key,
     required this.label,
     required this.value,
     required this.subtitle,
     required this.onTap,
     this.accent,
+    this.secondary = false,
   });
 
   final String label;
@@ -279,28 +283,37 @@ class _KpiTile extends StatelessWidget {
   final String subtitle;
   final VoidCallback onTap;
   final Color? accent;
+  final bool secondary;
 
   @override
   Widget build(BuildContext context) {
+    final desktop = context.isDesktopLayout;
     final valueStyle = TextStyle(
-      fontSize: context.isDesktopLayout ? 20 : 22,
-      fontWeight: FontWeight.bold,
-      color: accent ?? HexaColors.textOnLightSurface,
+      fontSize: secondary
+          ? (desktop ? 16 : 17)
+          : (desktop ? 20 : 22),
+      fontWeight: secondary ? FontWeight.w700 : FontWeight.bold,
+      color: accent ??
+          (secondary ? HexaColors.slate700 : HexaColors.textOnLightSurface),
       height: 1.15,
     );
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: secondary ? const Color(0xFFF7F8FA) : Colors.white,
         borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
+        boxShadow: secondary
+            ? null
+            : [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.04),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                ),
+              ],
         border: Border.all(
-          color: HexaColors.slateBorder,
+          color: secondary
+              ? HexaColors.slateBorder.withValues(alpha: 0.7)
+              : HexaColors.slateBorder,
           width: 1,
         ),
       ),
@@ -319,10 +332,10 @@ class _KpiTile extends StatelessWidget {
                   label,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
-                    color: HexaColors.neutral,
+                    color: secondary ? HexaColors.cost : HexaColors.neutral,
                   ),
                 ),
                 const SizedBox(height: 6),
@@ -332,7 +345,7 @@ class _KpiTile extends StatelessWidget {
                     child: value.contains(' · ')
                         ? WarehouseUnitsSubtitleText(
                             subtitle: value,
-                            fontSize: 14,
+                            fontSize: secondary ? 12 : 14,
                             fallbackStyle: valueStyle,
                           )
                         : Text(

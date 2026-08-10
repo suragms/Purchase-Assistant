@@ -6,7 +6,7 @@ import 'package:intl/intl.dart';
 import '../../../../core/auth/session_notifier.dart';
 import '../../../../core/design_system/hexa_operational_tokens.dart';
 import '../../../../core/providers/stock_providers.dart';
-import '../../../../core/widgets/friendly_load_error.dart';
+import '../../../../shared/widgets/hexa_empty_state.dart';
 
 import '../../../../core/theme/hexa_colors.dart';
 enum _TimelineKindFilter {
@@ -134,31 +134,27 @@ class _ItemTimelineSectionState extends ConsumerState<ItemTimelineSection> {
               ),
             ),
             const SizedBox(height: 8),
-            SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                children: [
-                  for (final f in _TimelineKindFilter.values)
-                    Padding(
-                      padding: const EdgeInsets.only(right: 6),
-                      child: FilterChip(
-                        label: Text(switch (f) {
-                          _TimelineKindFilter.all => 'All',
-                          _TimelineKindFilter.purchase => 'Purchases',
-                          _TimelineKindFilter.adjustment => 'Adjustments',
-                          _TimelineKindFilter.transfer => 'Transfers',
-                          _TimelineKindFilter.sale => 'Sales',
-                          _TimelineKindFilter.physical => 'Physical',
-                        }),
-                        selected: _kind == f,
-                        onSelected: (_) => setState(() {
-                          _kind = f;
-                          _visibleLimit = 12;
-                        }),
-                      ),
-                    ),
-                ],
-              ),
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: [
+                for (final f in _TimelineKindFilter.values)
+                  FilterChip(
+                    label: Text(switch (f) {
+                      _TimelineKindFilter.all => 'All',
+                      _TimelineKindFilter.purchase => 'Purchases',
+                      _TimelineKindFilter.adjustment => 'Adjustments',
+                      _TimelineKindFilter.transfer => 'Transfers',
+                      _TimelineKindFilter.sale => 'Sales',
+                      _TimelineKindFilter.physical => 'Physical',
+                    }),
+                    selected: _kind == f,
+                    onSelected: (_) => setState(() {
+                      _kind = f;
+                      _visibleLimit = 12;
+                    }),
+                  ),
+              ],
             ),
             const SizedBox(height: 8),
             async.when(
@@ -166,8 +162,7 @@ class _ItemTimelineSectionState extends ConsumerState<ItemTimelineSection> {
                 padding: EdgeInsets.symmetric(vertical: 14),
                 child: Center(child: CircularProgressIndicator()),
               ),
-              error: (_, __) => FriendlyLoadError(
-                message: 'Could not load timeline',
+              error: (_, __) => ItemTimelineSectionLoadError(
                 onRetry: () =>
                     ref.invalidate(stockItemActivityProvider(widget.itemId)),
               ),
@@ -180,36 +175,25 @@ class _ItemTimelineSectionState extends ConsumerState<ItemTimelineSection> {
                     .where((r) => _matchesSearch(r, q))
                     .toList();
                 if (allRows.isEmpty) {
-                  return Padding(
-                    padding: const EdgeInsets.fromLTRB(8, 20, 8, 20),
-                    child: Column(
-                      children: [
-                        Icon(
-                          Icons.timeline_outlined,
-                          size: 40,
-                          color: Colors.grey.shade400,
-                        ),
-                        const SizedBox(height: 10),
-                        const Text(
-                          'No activity yet',
-                          style: TextStyle(
-                            fontWeight: FontWeight.w800,
-                            fontSize: 15,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          q.isNotEmpty || _kind != _TimelineKindFilter.all
-                              ? 'No movements match these filters'
-                              : 'Purchases, adjustments, and stock moves will show here',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.grey.shade600,
-                          ),
-                        ),
-                      ],
-                    ),
+                  final filtersActive =
+                      q.isNotEmpty || _kind != _TimelineKindFilter.all;
+                  return HexaEmptyState(
+                    icon: Icons.timeline_outlined,
+                    title: filtersActive ? 'No movements match' : 'No activity yet',
+                    subtitle: filtersActive
+                        ? 'Clear search or kind filters to see all movements.'
+                        : 'Purchases, adjustments, and stock moves will show here.',
+                    primaryActionLabel:
+                        filtersActive ? 'Clear filters' : 'Full timeline',
+                    onPrimaryAction: filtersActive
+                        ? () => setState(() {
+                              _searchCtrl.clear();
+                              _kind = _TimelineKindFilter.all;
+                              _visibleLimit = 12;
+                            })
+                        : () => context.push(
+                              '/catalog/item/${widget.itemId}/timeline',
+                            ),
                   );
                 }
                 final rows = allRows.take(_visibleLimit).toList();
@@ -310,6 +294,25 @@ class _TimelineRow extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// Item detail timeline section load failure (UX-147).
+@visibleForTesting
+class ItemTimelineSectionLoadError extends StatelessWidget {
+  const ItemTimelineSectionLoadError({super.key, required this.onRetry});
+
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return HexaEmptyState(
+      icon: Icons.timeline_outlined,
+      title: 'Could not load timeline',
+      subtitle: 'Check your connection, then retry.',
+      primaryActionLabel: 'Retry',
+      onPrimaryAction: onRetry,
     );
   }
 }

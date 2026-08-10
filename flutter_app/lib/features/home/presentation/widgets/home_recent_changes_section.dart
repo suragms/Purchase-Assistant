@@ -6,7 +6,7 @@ import '../../../../core/design_system/hexa_ds_tokens.dart';
 import '../../../../core/providers/home_dashboard_provider.dart';
 import '../../../../core/providers/home_owner_dashboard_providers.dart';
 import '../../../../core/theme/hexa_colors.dart';
-import '../../../../core/widgets/friendly_load_error.dart';
+import '../../../../shared/widgets/hexa_empty_state.dart';
 import '../../../../shared/widgets/operational_ui.dart';
 import 'home_formatters.dart';
 
@@ -63,20 +63,15 @@ class _HomeRecentChangesSectionState
         child: const HomeSectionSkeleton(rows: 3),
       ),
       error: (_, __) => wrapSection(
-        child: FriendlyLoadError(
-          message: 'Could not load recent changes',
+        child: HomeRecentChangesError(
           onRetry: () => ref.invalidate(homeRecentActivityFeedProvider),
         ),
       ),
       data: (items) {
         if (items.isEmpty) {
           return wrapSection(
-            child: const Padding(
-              padding: EdgeInsets.fromLTRB(12, 8, 12, 12),
-              child: Text(
-                'No recent warehouse activity',
-                style: TextStyle(fontSize: 12, color: HexaColors.neutral),
-              ),
+            child: HomeRecentChangesEmpty(
+              onNewPurchase: () => context.go('/purchase/new'),
             ),
           );
         }
@@ -216,6 +211,44 @@ class HomeSectionSkeleton extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Recent-changes section empty for the selected home period.
+@visibleForTesting
+class HomeRecentChangesEmpty extends StatelessWidget {
+  const HomeRecentChangesEmpty({super.key, this.onNewPurchase});
+
+  final VoidCallback? onNewPurchase;
+
+  @override
+  Widget build(BuildContext context) {
+    return HexaEmptyState(
+      icon: Icons.update_rounded,
+      title: 'No recent warehouse activity',
+      subtitle: 'Purchases and stock changes for this period will show here.',
+      primaryActionLabel: onNewPurchase == null ? null : 'New purchase',
+      onPrimaryAction: onNewPurchase,
+    );
+  }
+}
+
+/// Home recent-changes section load failure (UX-129).
+@visibleForTesting
+class HomeRecentChangesError extends StatelessWidget {
+  const HomeRecentChangesError({super.key, required this.onRetry});
+
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return HexaEmptyState(
+      icon: Icons.cloud_off_outlined,
+      title: 'Could not load recent changes',
+      subtitle: 'Check your connection, then retry.',
+      primaryActionLabel: 'Retry',
+      onPrimaryAction: onRetry,
     );
   }
 }

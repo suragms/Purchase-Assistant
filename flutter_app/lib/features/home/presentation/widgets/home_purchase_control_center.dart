@@ -24,7 +24,7 @@ class HomePurchaseControlCenter extends ConsumerWidget {
     final period = ref.watch(homePeriodProvider);
     final dashState = ref.watch(homeDashboardDataProvider);
     final session = ref.watch(sessionProvider);
-    final showProfit = session != null && sessionHasOwnerDashboard(session);
+    final showProfit = session != null && sessionCanSeeFinancialMoney(session);
 
     if (dashState.refreshing && dashState.snapshot.data == HomeDashboardData.empty) {
       return Card(

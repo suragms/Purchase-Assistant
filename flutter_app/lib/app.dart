@@ -4,9 +4,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'dart:async';
 
+import 'core/debug/hexa_debug_mq_banner.dart';
 import 'core/notifications/post_login_notification_prompt.dart';
 import 'core/platform/launcher_quick_actions.dart';
 import 'core/platform/app_foreground_listener.dart';
+import 'core/platform/hexa_web_viewport_binder.dart';
 import 'core/platform/remove_boot_overlay.dart';
 import 'core/providers/api_degraded_provider.dart';
 import 'core/providers/home_breakdown_tab_providers.dart';
@@ -336,14 +338,19 @@ class HexaApp extends ConsumerWidget {
                 ],
               )
             : body;
-        return SizedBox.expand(
-          child: DecoratedBox(
-            decoration: BoxDecoration(gradient: HexaColors.appShellGradient),
-            child: _HexaErrorBoundary(
-              onGoHome: () => ref.read(appRouterProvider).go('/home'),
-              child: AppForegroundListener(
-                child: _LauncherShortcutsBootstrap(
-                  child: PostLoginNotificationPrompt(child: shell),
+        return HexaWebViewportBinder(
+          child: HexaDebugMqBanner(
+            child: SizedBox.expand(
+              child: DecoratedBox(
+                decoration:
+                    BoxDecoration(gradient: HexaColors.appShellGradient),
+                child: _HexaErrorBoundary(
+                  onGoHome: () => ref.read(appRouterProvider).go('/home'),
+                  child: AppForegroundListener(
+                    child: _LauncherShortcutsBootstrap(
+                      child: PostLoginNotificationPrompt(child: shell),
+                    ),
+                  ),
                 ),
               ),
             ),

@@ -8,6 +8,7 @@ import 'package:intl/intl.dart';
 
 import '../../../core/auth/auth_error_messages.dart';
 import '../../../core/auth/session_notifier.dart';
+import '../../../core/errors/user_facing_errors.dart';
 import '../../../core/providers/business_aggregates_invalidation.dart';
 import '../../../core/providers/business_profile_provider.dart';
 import '../../../core/providers/trade_purchases_provider.dart';
@@ -15,6 +16,8 @@ import '../../../core/design_system/hexa_responsive.dart';
 import '../../../core/router/navigation_ext.dart';
 import '../../../core/services/broker_statement_pdf.dart';
 import '../../../core/utils/line_display.dart';
+import '../../../shared/widgets/hexa_cupertino_date_range_sheet.dart';
+import '../../../shared/widgets/ledger_history_list_empty.dart';
 import '../../purchase/state/purchase_providers.dart';
 
 final _brokerHistoryHeaderProvider =
@@ -294,11 +297,12 @@ class BrokerHistoryPage extends ConsumerWidget {
                 final now = DateTime.now();
                 final today = DateTime(now.year, now.month, now.day);
                 final seedFrom = today.subtract(const Duration(days: 29));
-                final picked = await showDateRangePicker(
-                  context: context,
+                final picked = await showHexaCupertinoDateRangeSheet(
+                  context,
                   firstDate: DateTime(now.year - 5),
                   lastDate: DateTime(now.year + 1, 12, 31),
-                  initialDateRange: DateTimeRange(start: seedFrom, end: today),
+                  initialStart: seedFrom,
+                  initialEnd: today,
                 );
                 if (picked == null) return;
                 if (!context.mounted) return;
@@ -333,7 +337,9 @@ class BrokerHistoryPage extends ConsumerWidget {
                 developer.log('Failed to share broker statement: $e', name: 'broker_history_page');
                 if (!context.mounted) return;
                 ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Failed to share statement: $e')),
+                  SnackBar(
+                      content: Text(
+                          'Failed to share statement: ${userFacingError(e)}')),
                 );
               }
             },
@@ -391,7 +397,12 @@ class BrokerHistoryPage extends ConsumerWidget {
               else ...[
                 Expanded(
                   child: state.visibleRows().isEmpty
-                      ? const Center(child: Text('No matching lines'))
+                      ? LedgerHistoryListEmpty(
+                          searchActive: state.searchEffective.trim().isNotEmpty,
+                          onClearSearch: state.searchEffective.trim().isEmpty
+                              ? null
+                              : () => notifier.setSearchTyping(''),
+                        )
                       : ListView.separated(
                           itemCount: state.visibleRows().length,
                           separatorBuilder: (_, __) => const SizedBox(height: 8),

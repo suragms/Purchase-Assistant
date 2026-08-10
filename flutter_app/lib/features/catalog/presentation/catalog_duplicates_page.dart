@@ -5,7 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/auth/session_notifier.dart';
 import '../../../core/providers/catalog_providers.dart';
 import '../../../core/errors/user_facing_errors.dart';
-import '../../../core/widgets/friendly_load_error.dart';
+import '../../../shared/widgets/hexa_empty_state.dart';
 
 final catalogDuplicatesProvider =
     FutureProvider.autoDispose<Map<String, dynamic>>((ref) async {
@@ -28,7 +28,7 @@ class CatalogDuplicatesPage extends ConsumerWidget {
       ),
       body: data.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => FriendlyLoadError(
+        error: (e, _) => CatalogDuplicatesLoadError(
           onRetry: () => ref.invalidate(catalogDuplicatesProvider),
         ),
         data: (m) {
@@ -37,11 +37,12 @@ class CatalogDuplicatesPage extends ConsumerWidget {
               if (p is Map) Map<String, dynamic>.from(p),
           ];
           if (pairs.isEmpty) {
-            return const Center(
-              child: Padding(
-                padding: EdgeInsets.all(24),
-                child: Text('No similar item names found. Good catalog hygiene.'),
-              ),
+            return HexaEmptyState(
+              icon: Icons.verified_outlined,
+              title: 'No similar names found',
+              subtitle: 'Catalog hygiene looks good — no near-duplicate pairs.',
+              primaryActionLabel: 'Open catalog',
+              onPrimaryAction: () => context.go('/catalog'),
             );
           }
           return ListView.separated(
@@ -99,6 +100,25 @@ class CatalogDuplicatesPage extends ConsumerWidget {
           );
         },
       ),
+    );
+  }
+}
+
+/// Catalog duplicates clusters load failure (UX-138).
+@visibleForTesting
+class CatalogDuplicatesLoadError extends StatelessWidget {
+  const CatalogDuplicatesLoadError({super.key, required this.onRetry});
+
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return HexaEmptyState(
+      icon: Icons.content_copy_outlined,
+      title: 'Could not load duplicate suggestions',
+      subtitle: 'Check your connection, then retry.',
+      primaryActionLabel: 'Retry',
+      onPrimaryAction: onRetry,
     );
   }
 }

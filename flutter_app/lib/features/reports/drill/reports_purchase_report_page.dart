@@ -7,7 +7,7 @@ import '../../../core/models/trade_purchase_models.dart';
 import '../../../core/router/navigation_ext.dart';
 import '../../../core/theme/hexa_colors.dart';
 import '../../../core/utils/unit_utils.dart';
-import '../../../core/widgets/friendly_load_error.dart';
+import '../../../shared/widgets/hexa_empty_state.dart';
 import '../../../core/widgets/list_skeleton.dart';
 import '../../purchase/providers/trade_purchase_detail_provider.dart';
 import 'reports_breadcrumb_bar.dart';
@@ -36,9 +36,7 @@ class ReportsPurchaseReportPage extends ConsumerWidget {
     if (id.isEmpty) {
       return Scaffold(
         appBar: AppBar(title: const Text('Purchase report')),
-        body: FriendlyLoadError(
-          message: 'Missing purchase id',
-          subtitle: 'Open Reports to pick a purchase.',
+        body: ReportsPurchaseReportMissingIdError(
           onRetry: () => context.go('/reports?tab=purchase'),
         ),
       );
@@ -76,14 +74,62 @@ class ReportsPurchaseReportPage extends ConsumerWidget {
             onPressed: () => context.popOrGo('/reports?tab=purchase'),
           ),
         ),
-        body: FriendlyLoadError(
-          message: e is TradePurchaseUnavailableError
+        body: ReportsPurchaseReportLoadError(
+          title: e is TradePurchaseUnavailableError
               ? 'Purchase not found'
               : 'Could not load purchase',
           onRetry: () => ref.invalidate(tradePurchaseDetailProvider(id)),
         ),
       ),
       data: (p) => _PurchaseReportBody(purchase: p),
+    );
+  }
+}
+
+/// Purchase report missing id (UX-151).
+@visibleForTesting
+class ReportsPurchaseReportMissingIdError extends StatelessWidget {
+  const ReportsPurchaseReportMissingIdError({
+    super.key,
+    required this.onRetry,
+  });
+
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return HexaEmptyState(
+      icon: Icons.receipt_long_outlined,
+      title: 'Missing purchase id',
+      subtitle: 'Open Reports to pick a purchase.',
+      primaryActionLabel: 'Retry',
+      onPrimaryAction: onRetry,
+    );
+  }
+}
+
+/// Purchase report detail load failure (UX-151).
+@visibleForTesting
+class ReportsPurchaseReportLoadError extends StatelessWidget {
+  const ReportsPurchaseReportLoadError({
+    super.key,
+    required this.title,
+    required this.onRetry,
+    this.subtitle = 'Check your connection, then retry.',
+  });
+
+  final String title;
+  final String subtitle;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return HexaEmptyState(
+      icon: Icons.receipt_long_outlined,
+      title: title,
+      subtitle: subtitle,
+      primaryActionLabel: 'Retry',
+      onPrimaryAction: onRetry,
     );
   }
 }

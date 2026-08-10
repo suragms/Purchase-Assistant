@@ -10,7 +10,7 @@ import '../../../core/router/navigation_ext.dart';
 import '../../../core/search/catalog_fuzzy.dart';
 import '../../../core/search/search_highlight.dart';
 import '../../../core/theme/hexa_colors.dart';
-import '../../../core/widgets/friendly_load_error.dart';
+import '../../../shared/widgets/hexa_empty_state.dart';
 import '../catalog_taxonomy_utils.dart';
 import '../../../shared/widgets/trade_intel_cards.dart';
 import 'widgets/quick_catalog_taxonomy_sheet.dart';
@@ -146,7 +146,11 @@ class _CatalogCategoryDetailPageState
             tradeSummaryAsync.when(
               skipLoadingOnReload: true,
               loading: () => const SizedBox.shrink(),
-              error: (_, __) => const SizedBox.shrink(),
+              error: (_, __) => CatalogCategoryTradeSummaryError(
+                onRetry: () => ref.invalidate(
+                  categoryTradeSummaryProvider(widget.categoryId),
+                ),
+              ),
               data: (sum) {
                 final itemCount = (sum['item_count'] as num?)?.toInt() ?? 0;
                 if (itemCount == 0) return const SizedBox.shrink();
@@ -213,15 +217,7 @@ class _CatalogCategoryDetailPageState
             tradeSummaryAsync.when(
               skipLoadingOnReload: true,
               loading: () => const SizedBox.shrink(),
-              error: (_, __) => Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: Text(
-                  'Could not load trade summary.',
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: Theme.of(context).colorScheme.error,
-                      ),
-                ),
-              ),
+              error: (_, __) => const SizedBox.shrink(),
               data: (sum) {
                 final raw = sum['items'];
                 if (raw is! List || raw.isEmpty) {
@@ -323,18 +319,19 @@ class _CatalogCategoryDetailPageState
                 padding: EdgeInsets.symmetric(vertical: 12),
                 child: Center(child: CircularProgressIndicator()),
               ),
-              error: (_, __) => FriendlyLoadError(
+              error: (_, __) => CatalogCategoryTypesLoadError(
                 onRetry: () => ref.invalidate(categoryTypesIndexProvider),
               ),
               data: (index) {
                 final types = typesForCategory(index, widget.categoryId);
                 if (types.isEmpty) {
-                  return Text(
-                    'No subcategories yet — tap Add subcategory.',
-                    style: Theme.of(context)
-                        .textTheme
-                        .bodySmall
-                        ?.copyWith(color: HexaColors.textSecondary),
+                  return HexaEmptyState(
+                    icon: Icons.category_outlined,
+                    title: 'No subcategories yet',
+                    subtitle:
+                        'Add a subcategory (type) to organize items under this category.',
+                    primaryActionLabel: 'Add subcategory',
+                    onPrimaryAction: () => _addSubcategory(context),
                   );
                 }
                 final filtered = _debouncedSearch.trim().isEmpty
@@ -347,11 +344,16 @@ class _CatalogCategoryDetailPageState
                         limit: 200,
                       );
                 if (filtered.isEmpty) {
-                  return Text(
-                    'No matches — try another spelling.',
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: HexaColors.textSecondary,
-                        ),
+                  return HexaEmptyState(
+                    icon: Icons.search_off_rounded,
+                    title: 'No matches',
+                    subtitle: 'Try another spelling or clear the filter.',
+                    primaryActionLabel: 'Clear filter',
+                    onPrimaryAction: () {
+                      _searchDebounce?.cancel();
+                      _searchCtrl.clear();
+                      setState(() => _debouncedSearch = '');
+                    },
                   );
                 }
                 return Column(
@@ -455,6 +457,50 @@ class _CatalogCategoryDetailPageState
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Category detail trade summary load failure (UX-119).
+@visibleForTesting
+class CatalogCategoryTradeSummaryError extends StatelessWidget {
+  const CatalogCategoryTradeSummaryError({
+    super.key,
+    required this.onRetry,
+  });
+
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return HexaEmptyState(
+      icon: Icons.receipt_long_outlined,
+      title: 'Could not load trade summary',
+      subtitle: 'Check your connection, then retry.',
+      primaryActionLabel: 'Retry',
+      onPrimaryAction: onRetry,
+    );
+  }
+}
+
+/// Category detail types index load failure (UX-137).
+@visibleForTesting
+class CatalogCategoryTypesLoadError extends StatelessWidget {
+  const CatalogCategoryTypesLoadError({
+    super.key,
+    required this.onRetry,
+  });
+
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return HexaEmptyState(
+      icon: Icons.category_outlined,
+      title: 'Could not load subcategories',
+      subtitle: 'Check your connection, then retry.',
+      primaryActionLabel: 'Retry',
+      onPrimaryAction: onRetry,
     );
   }
 }

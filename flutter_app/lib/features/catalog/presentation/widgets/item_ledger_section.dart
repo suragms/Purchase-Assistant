@@ -10,7 +10,7 @@ import '../../../../core/providers/stock_providers.dart';
 import '../../../../core/theme/hexa_colors.dart';
 import '../../../../core/utils/unit_utils.dart';
 import '../../../../core/errors/user_facing_errors.dart';
-import '../../../../core/widgets/friendly_load_error.dart';
+import '../../../../shared/widgets/hexa_empty_state.dart';
 import '../../../stock/presentation/update_stock_sheet.dart';
 
 enum ItemLedgerRange { d7, d30, d90, all }
@@ -79,8 +79,7 @@ class _ItemLedgerSectionState extends ConsumerState<ItemLedgerSection> {
               error: (e, st) {
                 logSilencedApiError(e, st);
                 _scheduleLedgerAutoRetryOnce();
-                return FriendlyLoadError(
-                  message: 'Could not load ledger',
+                return ItemLedgerLoadError(
                   onRetry: _invalidateLedger,
                 );
               },
@@ -268,12 +267,13 @@ class _LedgerEmptyState extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     if (range == ItemLedgerRange.all) {
-      return const Padding(
-        padding: EdgeInsets.fromLTRB(12, 14, 12, 14),
-        child: Text(
-          'No ledger entries in this range.',
-          style: TextStyle(fontSize: 12, color: HexaColors.neutral),
-        ),
+      return HexaEmptyState(
+        icon: Icons.menu_book_outlined,
+        title: 'No ledger entries',
+        subtitle: 'Purchases, adjustments, and stock moves will show here.',
+        primaryActionLabel: 'Full statement',
+        onPrimaryAction: () =>
+            context.push('/catalog/item/$itemId/ledger'),
       );
     }
 
@@ -282,51 +282,44 @@ class _LedgerEmptyState extends ConsumerWidget {
     final itemName = detail?['name']?.toString() ?? 'Item';
 
     if (systemStock <= 0.001) {
-      return const Padding(
-        padding: EdgeInsets.fromLTRB(12, 14, 12, 14),
-        child: Text(
-          'No ledger entries in this range.',
-          style: TextStyle(fontSize: 12, color: HexaColors.neutral),
-        ),
+      return HexaEmptyState(
+        icon: Icons.menu_book_outlined,
+        title: 'No ledger entries in this range',
+        subtitle: 'Try a wider date range to see older movements.',
+        primaryActionLabel: 'View all time',
+        onPrimaryAction: onViewAllTime,
       );
     }
 
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 14, 12, 14),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+    return HexaEmptyState(
+      icon: Icons.inventory_2_outlined,
+      title: 'No moves in this range',
+      subtitle:
+          'System stock is positive but nothing moved in this range. '
+          'Try a wider range or update the physical count.',
+      action: Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        alignment: WrapAlignment.center,
         children: [
-          const Text(
-            'System stock is positive but nothing moved in this range. '
-            'Try a wider range or update the physical count.',
-            style: TextStyle(fontSize: 12, color: HexaColors.neutral, height: 1.35),
+          OutlinedButton(
+            onPressed: onViewAllTime,
+            child: const Text('View all time'),
           ),
-          const SizedBox(height: 10),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              OutlinedButton(
-                onPressed: onViewAllTime,
-                child: const Text('View all time'),
-              ),
-              FilledButton.tonal(
-                onPressed: () async {
-                  final row =
-                      detail ??
-                          ref.read(itemDetailStockProvider(itemId));
-                  if (!context.mounted) return;
-                  await showUpdateStockSheet(
-                    context: context,
-                    ref: ref,
-                    itemId: itemId,
-                    itemName: itemName,
-                    stockRow: row == null || row.isEmpty ? null : row,
-                  );
-                },
-                child: const Text('Update physical count'),
-              ),
-            ],
+          FilledButton.tonal(
+            onPressed: () async {
+              final row =
+                  detail ?? ref.read(itemDetailStockProvider(itemId));
+              if (!context.mounted) return;
+              await showUpdateStockSheet(
+                context: context,
+                ref: ref,
+                itemId: itemId,
+                itemName: itemName,
+                stockRow: row == null || row.isEmpty ? null : row,
+              );
+            },
+            child: const Text('Update physical count'),
           ),
         ],
       ),
@@ -440,6 +433,25 @@ class _LedgerRow extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Item detail ledger section load failure (UX-146).
+@visibleForTesting
+class ItemLedgerLoadError extends StatelessWidget {
+  const ItemLedgerLoadError({super.key, required this.onRetry});
+
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return HexaEmptyState(
+      icon: Icons.list_alt_outlined,
+      title: 'Could not load ledger',
+      subtitle: 'Check your connection, then retry.',
+      primaryActionLabel: 'Retry',
+      onPrimaryAction: onRetry,
     );
   }
 }

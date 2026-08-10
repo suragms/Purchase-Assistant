@@ -23,7 +23,7 @@ import 'shell_realtime_listener.dart';
 import 'shell_tab_auto_refresh_listener.dart';
 import 'web_compact_side_nav.dart';
 
-/// Shell: Home | Stock | Reports | History | Search in one row, then [+] (no overlap).
+/// Shell: Home | Stock | Reports | Purchases | Search in one row, then [+] (no overlap).
 class ShellScreen extends ConsumerStatefulWidget {
   const ShellScreen({super.key, required this.navigationShell});
 
@@ -222,31 +222,31 @@ class _WebOwnerSideNav extends ConsumerWidget {
       selectedIndex: selectedIndex,
       onDestinationSelected: onDestinationSelected,
       showLabels: showLabels,
-      destinations: const [
+      destinations: [
         WebCompactSideNavItem(
           icon: Icons.grid_view_outlined,
           selectedIcon: Icons.grid_view_rounded,
-          label: 'Home',
+          label: ownerShellNavLabel(ShellBranch.home),
         ),
         WebCompactSideNavItem(
           icon: Icons.inventory_2_outlined,
           selectedIcon: Icons.inventory_2_rounded,
-          label: 'Stock',
+          label: ownerShellNavLabel(ShellBranch.stock),
         ),
         WebCompactSideNavItem(
           icon: Icons.bar_chart_outlined,
           selectedIcon: Icons.bar_chart_rounded,
-          label: 'Reports',
+          label: ownerShellNavLabel(ShellBranch.reports),
         ),
         WebCompactSideNavItem(
           icon: Icons.receipt_long_outlined,
           selectedIcon: Icons.receipt_long_rounded,
-          label: 'History',
+          label: ownerShellNavLabel(ShellBranch.history),
         ),
         WebCompactSideNavItem(
           icon: Icons.search_rounded,
           selectedIcon: Icons.manage_search_rounded,
-          label: 'Search',
+          label: ownerShellNavLabel(ShellBranch.search),
         ),
       ],
       footer: Column(
@@ -268,6 +268,13 @@ class _WebOwnerSideNav extends ConsumerWidget {
                       Icons.notifications_outlined,
                       color: cs.onSurfaceVariant,
                     ),
+            ),
+          ),
+          Tooltip(
+            message: 'Help & guide',
+            child: IconButton(
+              onPressed: () => context.push('/settings/help'),
+              icon: Icon(Icons.help_outline_rounded, color: cs.onSurfaceVariant),
             ),
           ),
           Tooltip(
@@ -350,31 +357,34 @@ class _ShellBottomBar extends StatelessWidget {
                     children: [
                       Expanded(
                         child: _ShellNavTile(
-                          selected: selectedIndex == 0,
+                          selected: selectedIndex == ShellBranch.home,
                           icon: Icons.grid_view_outlined,
                           selectedIcon: Icons.grid_view_rounded,
-                          label: 'Home',
+                          label: ownerShellNavLabel(ShellBranch.home),
                           badgeCount: stockBadgeCount,
                           dotOnly: true,
-                          onTap: () => onDestinationSelected(0),
+                          onTap: () =>
+                              onDestinationSelected(ShellBranch.home),
                         ),
                       ),
                       Expanded(
                         child: _ShellNavTile(
-                          selected: selectedIndex == 1,
+                          selected: selectedIndex == ShellBranch.stock,
                           icon: Icons.inventory_2_outlined,
                           selectedIcon: Icons.inventory_2_rounded,
-                          label: 'Stock',
-                          onTap: () => onDestinationSelected(1),
+                          label: ownerShellNavLabel(ShellBranch.stock),
+                          onTap: () =>
+                              onDestinationSelected(ShellBranch.stock),
                         ),
                       ),
                       Expanded(
                         child: _ShellNavTile(
-                          selected: selectedIndex == 2,
+                          selected: selectedIndex == ShellBranch.reports,
                           icon: Icons.bar_chart_outlined,
                           selectedIcon: Icons.bar_chart_rounded,
-                          label: 'Reports',
-                          onTap: () => onDestinationSelected(2),
+                          label: ownerShellNavLabel(ShellBranch.reports),
+                          onTap: () =>
+                              onDestinationSelected(ShellBranch.reports),
                         ),
                       ),
                       if (showFab) ...[
@@ -389,20 +399,22 @@ class _ShellBottomBar extends StatelessWidget {
                       ],
                       Expanded(
                         child: _ShellNavTile(
-                          selected: selectedIndex == 3,
+                          selected: selectedIndex == ShellBranch.history,
                           icon: Icons.receipt_long_outlined,
                           selectedIcon: Icons.receipt_long_rounded,
-                          label: 'History',
-                          onTap: () => onDestinationSelected(3),
+                          label: ownerShellNavLabel(ShellBranch.history),
+                          onTap: () =>
+                              onDestinationSelected(ShellBranch.history),
                         ),
                       ),
                       Expanded(
                         child: _ShellNavTile(
-                          selected: selectedIndex == 4,
+                          selected: selectedIndex == ShellBranch.search,
                           icon: Icons.search_rounded,
                           selectedIcon: Icons.manage_search_rounded,
-                          label: 'Search',
-                          onTap: () => onDestinationSelected(4),
+                          label: ownerShellNavLabel(ShellBranch.search),
+                          onTap: () =>
+                              onDestinationSelected(ShellBranch.search),
                         ),
                       ),
                     ],

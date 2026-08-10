@@ -9,6 +9,7 @@ import '../../../core/auth/session_notifier.dart';
 import '../../../core/providers/business_aggregates_invalidation.dart';
 import '../../../core/design_system/hexa_responsive.dart';
 import '../../../core/router/navigation_ext.dart';
+import '../../../shared/widgets/ledger_history_list_empty.dart';
 import '../../../shared/widgets/trade_intel_cards.dart';
 import '../../purchase/state/purchase_providers.dart';
 
@@ -212,7 +213,12 @@ class SupplierLedgerPage extends ConsumerWidget {
               else ...[
                 Expanded(
                   child: state.visibleRows().isEmpty
-                      ? const Center(child: Text('No matching lines'))
+                      ? LedgerHistoryListEmpty(
+                          searchActive: state.searchEffective.trim().isNotEmpty,
+                          onClearSearch: state.searchEffective.trim().isEmpty
+                              ? null
+                              : () => notifier.setSearchTyping(''),
+                        )
                       : ListView.separated(
                           padding: const EdgeInsets.only(top: 4),
                           itemCount: state.visibleRows().length,

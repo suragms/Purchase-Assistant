@@ -351,11 +351,9 @@ Future<List<Uint8List>> generateBulkPdfParts({
   } catch (e, st) {
     logBarcodeOperationError(e, st);
     if (e is BarcodeOperationException) rethrow;
-    final detail = e.toString();
-    final short = detail.length > 100 ? '${detail.substring(0, 100)}…' : detail;
     throw BarcodeOperationException(
       'PDF failed for ${uniqueLabels.length} labels. '
-      'Use A4 + Code128, or try 50 items. ($short)',
+      'Use A4 + Code128, or try fewer items.',
       kind: BarcodeOperationKind.pdfGeneration,
       cause: e,
     );

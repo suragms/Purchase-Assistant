@@ -6,6 +6,7 @@ import '../../../core/models/trade_purchase_models.dart';
 import '../../../core/providers/reports_bi_providers.dart';
 import '../../../core/reporting/trade_report_aggregate.dart';
 import '../../../core/theme/hexa_colors.dart';
+import '../../../shared/widgets/hexa_empty_state.dart';
 import '../widgets/bi/breakdown_legend_list.dart';
 import '../widgets/bi/reports_bi_slice.dart';
 import '../widgets/reports_item_row_card.dart';
@@ -22,6 +23,7 @@ class ReportsPurchasesTab extends ConsumerWidget {
     required this.onLoadMore,
     required this.hasMore,
     this.isLoading = false,
+    this.onChangePeriod,
   });
 
   final TradeReportAgg agg;
@@ -30,6 +32,7 @@ class ReportsPurchasesTab extends ConsumerWidget {
   final VoidCallback? onLoadMore;
   final bool hasMore;
   final bool isLoading;
+  final VoidCallback? onChangePeriod;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -37,9 +40,12 @@ class ReportsPurchasesTab extends ConsumerWidget {
       return const Center(child: CircularProgressIndicator());
     }
     if (purchases.isEmpty) {
-      return const Padding(
-        padding: EdgeInsets.all(24),
-        child: Center(child: Text('No purchases in this period.')),
+      return HexaEmptyState(
+        icon: Icons.receipt_long_outlined,
+        title: 'No purchases in this period',
+        subtitle: 'Adjust filters or the date range to see bills.',
+        primaryActionLabel: onChangePeriod != null ? 'Change period' : null,
+        onPrimaryAction: onChangePeriod,
       );
     }
 
@@ -56,7 +62,7 @@ class ReportsPurchasesTab extends ConsumerWidget {
       children: [
         ReportsSectionTitle('Supplier ranking'),
         if (topSuppliers.isEmpty)
-          const _EmptyLine('No supplier data')
+          const ReportsPurchasesSupplierRankingEmpty()
         else
           BreakdownLegendList(
             slices: [
@@ -122,15 +128,17 @@ class ReportsSectionTitle extends StatelessWidget {
   }
 }
 
-class _EmptyLine extends StatelessWidget {
-  const _EmptyLine(this.text);
-  final String text;
+/// Supplier ranking section when purchases exist but no supplier slices.
+@visibleForTesting
+class ReportsPurchasesSupplierRankingEmpty extends StatelessWidget {
+  const ReportsPurchasesSupplierRankingEmpty({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      child: Text(text, style: const TextStyle(color: HexaColors.neutral)),
+    return const HexaEmptyState(
+      icon: Icons.storefront_outlined,
+      title: 'No supplier data',
+      subtitle: 'Supplier ranking will appear when bills have suppliers.',
     );
   }
 }

@@ -15,7 +15,7 @@ import '../../../../core/providers/staff_home_providers.dart';
 import '../../../../core/providers/stock_providers.dart';
 import '../../../../core/theme/hexa_colors.dart';
 import '../../../../core/widgets/hexa_count_badge.dart';
-import '../../../../core/widgets/section_inline_error.dart';
+import '../../../../shared/widgets/hexa_empty_state.dart';
 
 /// Section label for staff home blocks.
 class StaffHomeSectionHeader extends StatelessWidget {
@@ -72,8 +72,7 @@ class StaffHomeFloorKpiRow extends ConsumerWidget {
       return const _StaffKpiRowSkeleton();
     }
     if (pipeline.hasError && kpis == null) {
-      return SectionInlineError(
-        message: 'Could not load floor counts',
+      return StaffHomeFloorKpiError(
         onRetry: () {
           ref.invalidate(deliveryPipelineProvider);
           ref.invalidate(stockStatusCountsProvider);
@@ -229,8 +228,7 @@ class StaffHomeWarehousePurchaseStats extends ConsumerWidget {
                 minWidth: constraints.maxWidth,
                 child: onHandAsync.when(
                   loading: () => const LinearProgressIndicator(minHeight: 2),
-                  error: (_, __) => SectionInlineError(
-                    message: 'Warehouse stats unavailable',
+                  error: (_, __) => StaffHomeWarehouseStatsError(
                     onRetry: () => ref.invalidate(stockOnHandTotalsProvider),
                   ),
                   data: (onHand) {
@@ -258,8 +256,7 @@ class StaffHomeWarehousePurchaseStats extends ConsumerWidget {
                 minWidth: constraints.maxWidth,
                 child: periodAsync.when(
                   loading: () => const LinearProgressIndicator(minHeight: 2),
-                  error: (_, __) => SectionInlineError(
-                    message: 'Purchase stats unavailable',
+                  error: (_, __) => StaffHomePurchaseStatsError(
                     onRetry: () =>
                         ref.invalidate(stockTotalsProvider(AppPeriod.month)),
                   ),
@@ -428,20 +425,14 @@ class StaffHomeShiftSnapshotStrip extends ConsumerWidget {
     }
     final s = summary ?? const StaffTodayActivitySummary();
     if (s.total == 0 && pendingDel == 0) {
-          return Material(
-            color: Colors.white,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-              side: const BorderSide(color: HexaColors.brandBorder),
-            ),
-            child: ListTile(
-              leading: const Icon(Icons.today_outlined),
-              title: const Text('No activity today'),
-              subtitle: const Text('Tap Stock or Scan to log work'),
-              onTap: () => context.push('/barcode/scan'),
-            ),
-          );
-        }
+      return HexaEmptyState(
+        icon: Icons.today_outlined,
+        title: 'No activity today',
+        subtitle: 'Scan a barcode or update stock to log your shift work.',
+        primaryActionLabel: 'Scan barcode',
+        onPrimaryAction: () => context.push('/barcode/scan'),
+      );
+    }
     return StaffHomeShiftSnapshotRow(
       scans: '${s.scanned}',
       stock: '${s.stockUpdates}',
@@ -1106,8 +1097,7 @@ class StaffHomeRecentScansStrip extends ConsumerWidget {
     final scansAsync = ref.watch(staffRecentScansProvider);
     return scansAsync.when(
       loading: () => const LinearProgressIndicator(minHeight: 2),
-      error: (_, __) => SectionInlineError(
-        message: 'Could not load recent scans.',
+      error: (_, __) => StaffHomeRecentScansError(
         onRetry: () => ref.invalidate(staffRecentScansProvider),
       ),
       data: (scans) {
@@ -1120,33 +1110,29 @@ class StaffHomeRecentScansStrip extends ConsumerWidget {
               title: 'Recent scans',
               subtitle: 'Quick jump to recently scanned items',
             ),
-            SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                children: [
-                  for (final s in recent)
-                    Padding(
-                      padding: const EdgeInsets.only(right: 8),
-                      child: ActionChip(
-                        avatar: const Icon(Icons.qr_code_scanner_rounded, size: 16),
-                        label: Text(
-                          (s.name.isNotEmpty ? s.name : s.code),
-                          style: const TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                        onPressed: () {
-                          if (s.id.isNotEmpty) {
-                            context.push('/catalog/item/${s.id}?source=scan');
-                          } else {
-                            context.push('/barcode/scan-history');
-                          }
-                        },
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final s in recent)
+                  ActionChip(
+                    avatar: const Icon(Icons.qr_code_scanner_rounded, size: 16),
+                    label: Text(
+                      (s.name.isNotEmpty ? s.name : s.code),
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
-                ],
-              ),
+                    onPressed: () {
+                      if (s.id.isNotEmpty) {
+                        context.push('/catalog/item/${s.id}?source=scan');
+                      } else {
+                        context.push('/barcode/scan-history');
+                      }
+                    },
+                  ),
+              ],
             ),
           ],
         );
@@ -1183,15 +1169,17 @@ class StaffHomeRecentActivitySection extends ConsumerWidget {
             height: 120,
             child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
           ),
-          error: (_, __) => Text(
-            'Could not load recent activity.',
-            style: HexaDsType.body(13, color: HexaDsColors.textMuted),
+          error: (_, __) => StaffHomeRecentActivityError(
+            onRetry: () => ref.invalidate(staffRecentActivityProvider),
           ),
           data: (items) {
             if (items.isEmpty) {
-              return Text(
-                'No activity yet today — tap Scan above.',
-                style: HexaDsType.body(14, color: HexaDsColors.textMuted),
+              return HexaEmptyState(
+                icon: Icons.history_outlined,
+                title: 'No activity yet today',
+                subtitle: 'Scans, stock updates, and purchases will show here.',
+                primaryActionLabel: 'Scan barcode',
+                onPrimaryAction: () => context.push('/barcode/scan'),
               );
             }
             return Column(
@@ -1249,6 +1237,101 @@ class StaffHomeRecentActivitySection extends ConsumerWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// Staff home recent-activity load failure.
+@visibleForTesting
+class StaffHomeRecentActivityError extends StatelessWidget {
+  const StaffHomeRecentActivityError({super.key, required this.onRetry});
+
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return HexaEmptyState(
+      icon: Icons.cloud_off_rounded,
+      title: 'Could not load recent activity',
+      subtitle: 'Check your connection, then retry.',
+      primaryActionLabel: 'Retry',
+      onPrimaryAction: onRetry,
+    );
+  }
+}
+
+/// Staff home recent-scans strip load failure.
+@visibleForTesting
+class StaffHomeRecentScansError extends StatelessWidget {
+  const StaffHomeRecentScansError({super.key, required this.onRetry});
+
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return HexaEmptyState(
+      icon: Icons.qr_code_scanner_rounded,
+      title: 'Could not load recent scans',
+      subtitle: 'Check your connection, then retry.',
+      primaryActionLabel: 'Retry',
+      onPrimaryAction: onRetry,
+    );
+  }
+}
+
+/// Staff home floor KPI row load failure.
+@visibleForTesting
+class StaffHomeFloorKpiError extends StatelessWidget {
+  const StaffHomeFloorKpiError({super.key, required this.onRetry});
+
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return HexaEmptyState(
+      icon: Icons.cloud_off_rounded,
+      title: 'Could not load floor counts',
+      subtitle: 'Pending, delivered, and low-stock counts need a connection.',
+      primaryActionLabel: 'Retry',
+      onPrimaryAction: onRetry,
+    );
+  }
+}
+
+/// Staff home warehouse on-hand stats load failure (UX-113).
+@visibleForTesting
+class StaffHomeWarehouseStatsError extends StatelessWidget {
+  const StaffHomeWarehouseStatsError({super.key, required this.onRetry});
+
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return HexaEmptyState(
+      icon: Icons.warehouse_outlined,
+      title: 'Warehouse stats unavailable',
+      subtitle: 'Check your connection, then retry.',
+      primaryActionLabel: 'Retry',
+      onPrimaryAction: onRetry,
+    );
+  }
+}
+
+/// Staff home month purchase stats load failure (UX-113).
+@visibleForTesting
+class StaffHomePurchaseStatsError extends StatelessWidget {
+  const StaffHomePurchaseStatsError({super.key, required this.onRetry});
+
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return HexaEmptyState(
+      icon: Icons.shopping_bag_outlined,
+      title: 'Purchase stats unavailable',
+      subtitle: 'Check your connection, then retry.',
+      primaryActionLabel: 'Retry',
+      onPrimaryAction: onRetry,
     );
   }
 }

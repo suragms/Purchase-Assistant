@@ -8,9 +8,9 @@ import '../../../../core/models/trade_purchase_models.dart';
 import '../../../../core/providers/trade_purchases_provider.dart';
 import '../../../../core/router/post_auth_route.dart';
 import '../../../../core/auth/session_notifier.dart';
-import '../../../../core/widgets/friendly_load_error.dart';
 import '../../../../core/design_system/hexa_operational_tokens.dart';
 import '../../../../core/utils/unit_utils.dart';
+import '../../../../shared/widgets/hexa_empty_state.dart';
 
 import '../../../../core/theme/hexa_colors.dart';
 enum ItemPurchaseRange { d7, d30, d90, d365, all }
@@ -72,8 +72,7 @@ class _ItemPurchaseHistorySectionState
                 padding: EdgeInsets.symmetric(vertical: 14),
                 child: Center(child: CircularProgressIndicator()),
               ),
-              error: (_, __) => FriendlyLoadError(
-                message: 'Could not load purchase history',
+              error: (_, __) => ItemPurchaseHistoryLoadError(
                 onRetry: () =>
                     ref.invalidate(tradePurchasesForItemProvider(widget.itemId)),
               ),
@@ -85,12 +84,18 @@ class _ItemPurchaseHistorySectionState
                 );
                 final filtered = _applyRange(rows);
                 if (filtered.isEmpty) {
-                  return const Padding(
-                    padding: EdgeInsets.fromLTRB(12, 14, 12, 14),
-                    child: Text(
-                      'No purchases found in this range.',
-                      style: TextStyle(fontSize: 12, color: HexaColors.neutral),
-                    ),
+                  final canWiden = _range != ItemPurchaseRange.all;
+                  return HexaEmptyState(
+                    icon: Icons.receipt_long_outlined,
+                    title: 'No purchases in this range',
+                    subtitle: canWiden
+                        ? 'Try a wider date range or open full history.'
+                        : 'This item has no purchase lines yet.',
+                    primaryActionLabel:
+                        canWiden ? 'Show all time' : 'New purchase',
+                    onPrimaryAction: canWiden
+                        ? () => setState(() => _range = ItemPurchaseRange.all)
+                        : () => context.push('/purchase/new'),
                   );
                 }
                 final totalsLine = itemTradeHistoryTotalsLine(filtered);
@@ -323,6 +328,25 @@ class _PurchaseCard extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Item detail purchase history section load failure (UX-145).
+@visibleForTesting
+class ItemPurchaseHistoryLoadError extends StatelessWidget {
+  const ItemPurchaseHistoryLoadError({super.key, required this.onRetry});
+
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return HexaEmptyState(
+      icon: Icons.receipt_long_outlined,
+      title: 'Could not load purchase history',
+      subtitle: 'Check your connection, then retry.',
+      primaryActionLabel: 'Retry',
+      onPrimaryAction: onRetry,
     );
   }
 }

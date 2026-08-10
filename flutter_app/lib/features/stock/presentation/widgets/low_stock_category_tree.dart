@@ -15,6 +15,48 @@ enum LowStockTreeTab {
   pendingDelivery,
 }
 
+/// Hub IA for low-stock filters (UX-011): status vs purchase pipeline.
+enum LowStockHubSection { attention, pipeline }
+
+/// Canonical visual / TabController order for the low-stock dashboard.
+const List<LowStockTreeTab> lowStockTabOrder = <LowStockTreeTab>[
+  LowStockTreeTab.allLow,
+  LowStockTreeTab.outOfStock,
+  LowStockTreeTab.purchasedInPeriod,
+  LowStockTreeTab.pendingOrder,
+  LowStockTreeTab.pendingDelivery,
+];
+
+LowStockHubSection lowStockHubForTab(LowStockTreeTab tab) => switch (tab) {
+      LowStockTreeTab.allLow || LowStockTreeTab.outOfStock =>
+        LowStockHubSection.attention,
+      LowStockTreeTab.purchasedInPeriod ||
+      LowStockTreeTab.pendingOrder ||
+      LowStockTreeTab.pendingDelivery =>
+        LowStockHubSection.pipeline,
+    };
+
+List<LowStockTreeTab> lowStockTabsForHub(LowStockHubSection hub) =>
+    switch (hub) {
+      LowStockHubSection.attention => const [
+          LowStockTreeTab.allLow,
+          LowStockTreeTab.outOfStock,
+        ],
+      LowStockHubSection.pipeline => const [
+          LowStockTreeTab.purchasedInPeriod,
+          LowStockTreeTab.pendingOrder,
+          LowStockTreeTab.pendingDelivery,
+        ],
+    };
+
+String lowStockHubChipLabel(LowStockTreeTab tab) => switch (tab) {
+      LowStockTreeTab.allLow => 'All',
+      LowStockTreeTab.outOfStock => 'Out',
+      LowStockTreeTab.purchasedInPeriod => 'Bought',
+      LowStockTreeTab.pendingOrder => 'Pending',
+      LowStockTreeTab.pendingDelivery => 'Delivery',
+    };
+
 enum LowStockSearchScope { all, category, subcategory, item, supplier }
 
 bool lowStockItemNeedsAttention(Map<String, dynamic> item) {
@@ -381,7 +423,7 @@ class _LowStockCategoryTreeState extends State<LowStockCategoryTree> {
                     final countsBySub = {
                       for (final k in namedSubs) k: subMap[k]!.length,
                     };
-                    return _SubcategoryTabBar(
+                    return LowStockSubcategoryFilterChips(
                       subs: namedSubs,
                       countsBySub: countsBySub,
                       selected: _subTabByCat[cat],
@@ -455,16 +497,7 @@ class _LowStockCategoryTreeState extends State<LowStockCategoryTree> {
                     }
 
                     if (rows.isEmpty) {
-                      return const Padding(
-                        padding: EdgeInsets.fromLTRB(12, 4, 12, 12),
-                        child: Text(
-                          'No items in this subcategory.',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: HexaColors.neutral,
-                          ),
-                        ),
-                      );
+                      return const LowStockSubcategoryEmpty();
                     }
 
                     if (serial > 0) {
@@ -500,8 +533,9 @@ class _LowStockCategoryTreeState extends State<LowStockCategoryTree> {
   }
 }
 
-class _SubcategoryTabBar extends StatelessWidget {
-  const _SubcategoryTabBar({
+class LowStockSubcategoryFilterChips extends StatelessWidget {
+  const LowStockSubcategoryFilterChips({
+    super.key,
     required this.subs,
     required this.countsBySub,
     required this.selected,
@@ -519,43 +553,36 @@ class _SubcategoryTabBar extends StatelessWidget {
     final total = countsBySub.values.fold<int>(0, (a, b) => a + b);
     return Padding(
       padding: const EdgeInsets.fromLTRB(8, 0, 8, 6),
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Row(
-          children: [
-            Padding(
-              padding: const EdgeInsets.only(right: 6),
-              child: FilterChip(
-                label: Text(
-                  'All ($total)',
-                  style: const TextStyle(fontSize: 11),
-                ),
-                selected: selected == null,
-                onSelected: (_) => onSelected(null),
-                visualDensity: VisualDensity.compact,
-                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                showCheckmark: true,
-              ),
+      child: Wrap(
+        spacing: 6,
+        runSpacing: 6,
+        children: [
+          FilterChip(
+            label: Text(
+              'All ($total)',
+              style: const TextStyle(fontSize: 11),
             ),
-            for (final sub in subs)
-              Padding(
-                padding: const EdgeInsets.only(right: 6),
-                child: FilterChip(
-                  label: Text(
-                    '${sub.length > 14 ? '${sub.substring(0, 14)}…' : sub} (${countsBySub[sub] ?? 0})',
-                    style: const TextStyle(fontSize: 11),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  selected: selected == sub,
-                  onSelected: (_) => onSelected(sub),
-                  visualDensity: VisualDensity.compact,
-                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  showCheckmark: true,
-                ),
+            selected: selected == null,
+            onSelected: (_) => onSelected(null),
+            visualDensity: VisualDensity.compact,
+            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            showCheckmark: true,
+          ),
+          for (final sub in subs)
+            FilterChip(
+              label: Text(
+                '${sub.length > 14 ? '${sub.substring(0, 14)}…' : sub} (${countsBySub[sub] ?? 0})',
+                style: const TextStyle(fontSize: 11),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
-          ],
-        ),
+              selected: selected == sub,
+              onSelected: (_) => onSelected(sub),
+              visualDensity: VisualDensity.compact,
+              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              showCheckmark: true,
+            ),
+        ],
       ),
     );
   }
@@ -584,6 +611,21 @@ class _OutCountBadge extends StatelessWidget {
           fontSize: 12,
         ),
       ),
+    );
+  }
+}
+
+/// Expanded category body when the selected subcategory has no low-stock rows.
+@visibleForTesting
+class LowStockSubcategoryEmpty extends StatelessWidget {
+  const LowStockSubcategoryEmpty({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return const HexaEmptyState(
+      icon: Icons.inventory_2_outlined,
+      title: 'No items in this subcategory',
+      subtitle: 'Try All or another subcategory chip.',
     );
   }
 }

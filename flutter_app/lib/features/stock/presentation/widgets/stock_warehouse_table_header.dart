@@ -17,6 +17,7 @@ class StockWarehouseTableHeader extends StatelessWidget {
       letterSpacing: 0.2,
       height: 1.15,
     );
+    final wide = StockTableLayout.useWideMetricColumns(context);
 
     return Padding(
       padding: EdgeInsets.symmetric(
@@ -43,25 +44,29 @@ class StockWarehouseTableHeader extends StatelessWidget {
                   child: Text('ITEM', style: hdr),
                 ),
               ),
-              _metricHeader(
-                context,
-                'SYS',
-                hdr,
-                tooltip:
-                    'System — ledger on-hand. Orange →N = target after sync (opening + verified purchases)',
-              ),
+              if (wide)
+                _metricHeader(
+                  context,
+                  'SYS',
+                  hdr,
+                  tooltip:
+                      'System — ledger on-hand. Orange →N = target after sync (opening + verified purchases)',
+                ),
               _metricHeader(
                 context,
                 'PHYS',
                 hdr,
-                tooltip: 'Physical — last warehouse count',
+                tooltip: wide
+                    ? 'Physical — last warehouse count'
+                    : 'Physical — last warehouse count (Sys/Diff under item name)',
               ),
-              _metricHeader(
-                context,
-                'DIFF',
-                hdr,
-                tooltip: 'Physical minus system',
-              ),
+              if (wide)
+                _metricHeader(
+                  context,
+                  'DIFF',
+                  hdr,
+                  tooltip: 'Physical minus system',
+                ),
             ],
           ),
         ),

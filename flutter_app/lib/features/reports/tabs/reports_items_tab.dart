@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/navigation/resolve_catalog_item_id.dart';
 import '../../../core/models/trade_purchase_models.dart';
 import '../../../core/reporting/trade_report_aggregate.dart';
+import '../../../shared/widgets/hexa_empty_state.dart';
 import '../reporting/reports_item_metrics.dart';
 import '../shell/reports_layout.dart';
 import '../widgets/reports_item_row_card.dart';
@@ -18,6 +19,7 @@ class ReportsItemsTab extends ConsumerWidget {
     required this.onLoadMore,
     required this.hasMore,
     this.isLoading = false,
+    this.onChangePeriod,
   });
 
   final List<TradeReportItemRow> rows;
@@ -25,6 +27,7 @@ class ReportsItemsTab extends ConsumerWidget {
   final VoidCallback? onLoadMore;
   final bool hasMore;
   final bool isLoading;
+  final VoidCallback? onChangePeriod;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -36,9 +39,12 @@ class ReportsItemsTab extends ConsumerWidget {
       );
     }
     if (rows.isEmpty) {
-      return const Padding(
-        padding: EdgeInsets.all(24),
-        child: Center(child: Text('No items in this period.')),
+      return HexaEmptyState(
+        icon: Icons.inventory_2_outlined,
+        title: 'No items in this period',
+        subtitle: 'Adjust filters or the date range to see purchased items.',
+        primaryActionLabel: onChangePeriod != null ? 'Change period' : null,
+        onPrimaryAction: onChangePeriod,
       );
     }
     return ListView.builder(

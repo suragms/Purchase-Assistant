@@ -158,6 +158,7 @@ async def _list_stock_page(
     missing_item_code: bool = Query(False),
     reorder_only: bool = Query(False),
     unit: str = Query(""),
+    include_ledger: bool = True,
 ):
     ps_raw, pe_raw = sh._resolve_period_query(
         period_start, period_end, date_from, date_to
@@ -239,7 +240,9 @@ async def _list_stock_page(
         perishable_by_cat = {row[0]: bool(row[1]) for row in cr.all()}
     catalog_items = [item for item, _, _ in rows]
     trade_meta = await sh._last_trade_meta_map(db, catalog_items)
-    ledger_map = await sh._ledger_variance_map(db, business_id, catalog_items)
+    ledger_map: dict[uuid.UUID, Decimal | None] = {}
+    if include_ledger:
+        ledger_map = await sh._ledger_variance_map(db, business_id, catalog_items)
     pending_meta = await sh._pending_order_meta_map(db, business_id, item_ids)
     physical_meta = await sh._latest_physical_count_map(db, business_id, item_ids)
     movement_delivered = await movement_delivered_qty_map(db, business_id, item_ids)
@@ -335,6 +338,10 @@ async def list_stock(
     missing_item_code: bool = Query(False),
     reorder_only: bool = Query(False),
     unit: str = Query(""),
+    include_ledger: bool = Query(
+        True,
+        description="All-time ledger variance (expensive). Disable for list browsing.",
+    ),
 ):
     gen = trade_read_cache_generation(business_id)
     cache_query = {
@@ -357,6 +364,7 @@ async def list_stock(
         "missing_item_code": missing_item_code,
         "reorder_only": reorder_only,
         "unit": unit,
+        "include_ledger": include_ledger,
     }
     cache_key = stock_list_cache_key(business_id, cache_query)
     cached_payload = get_cached(cache_key, stock_list_ttl_s())
@@ -391,6 +399,7 @@ async def list_stock(
         missing_item_code=missing_item_code,
         reorder_only=reorder_only,
         unit=unit,
+        include_ledger=include_ledger,
     )
     payload = out.model_dump(mode="json")
     set_cached(cache_key, payload, stock_list_ttl_s())
@@ -428,6 +437,10 @@ async def stock_shell_bundle(
     reorder_only: bool = Query(False),
     unit: str = Query(""),
     audit_limit: int = Query(12, ge=1, le=50),
+    include_ledger: bool = Query(
+        False,
+        description="Ledger variance is off by default on shell-bundle (list browse).",
+    ),
 ):
     """Bundled Stock tab payload — list, KPI chips, delivery counts, recent activity."""
     t0 = monotonic()
@@ -453,6 +466,7 @@ async def stock_shell_bundle(
         "reorder_only": reorder_only,
         "unit": unit,
         "audit_limit": audit_limit,
+        "include_ledger": include_ledger,
     }
     cache_key = stock_shell_bundle_cache_key(business_id, cache_query)
     cached = get_cached(cache_key, stock_shell_bundle_ttl_s())
@@ -486,6 +500,7 @@ async def stock_shell_bundle(
         missing_item_code=missing_item_code,
         reorder_only=reorder_only,
         unit=unit,
+        include_ledger=include_ledger,
     )
     status_counts = await compute_stock_alerts_summary(db, business_id)
     delivery_counts = await _compute_delivery_indicator_counts(

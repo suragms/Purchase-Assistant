@@ -5,6 +5,7 @@ import '../../../core/design_system/hexa_ds_tokens.dart';
 import '../barcode_scan_controller.dart';
 import '../services/barcode_camera_controller.dart';
 import 'barcode_mobile_scanner_view.dart';
+import 'widgets/barcode_recent_scans_chips.dart';
 
 /// Desktop left pane: camera + recent + manual search.
 class BarcodeDesktopScannerPane extends StatelessWidget {
@@ -119,33 +120,13 @@ class _RecentRow extends StatelessWidget {
                 ?.copyWith(fontWeight: FontWeight.w800),
           ),
         ),
-        SizedBox(
-          height: 44,
-          child: ListView.separated(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            scrollDirection: Axis.horizontal,
-            itemCount: scan.recent.length.clamp(0, 8),
-            separatorBuilder: (_, __) => const SizedBox(width: 8),
-            itemBuilder: (ctx, i) {
-              final r = scan.recent[i];
-              final label = r.name.length > 15
-                  ? '${r.name.substring(0, 15)}…'
-                  : r.name;
-              return ActionChip(
-                label: Text(label, maxLines: 1),
-                onPressed: scan.lookingUp
-                    ? null
-                    : () {
-                        if (r.id.isNotEmpty) {
-                          context.push('/catalog/item/${r.id}?source=scan');
-                        } else {
-                          scan.manualCtrl.text = r.code;
-                          onLookup(r.code);
-                        }
-                      },
-              );
-            },
-          ),
+        BarcodeRecentScansChips(
+          scans: scan.recent,
+          enabled: !scan.lookingUp,
+          onCodeSelected: (r) {
+            scan.manualCtrl.text = r.code;
+            onLookup(r.code);
+          },
         ),
       ],
     );

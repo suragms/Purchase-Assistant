@@ -5,6 +5,7 @@ import '../../../../core/design_system/hexa_ds_tokens.dart';
 import '../../../../core/providers/home_breakdown_tab_providers.dart';
 import '../../../../core/providers/home_dashboard_provider.dart';
 import '../../../../core/theme/hexa_colors.dart';
+import '../../../../shared/widgets/hexa_empty_state.dart';
 import '../../../../shared/widgets/warehouse_units_breakdown_line.dart';
 import 'home_analytics_helpers.dart';
 import 'home_formatters.dart';
@@ -28,12 +29,8 @@ class HomeAnalyticsRankedList extends StatelessWidget {
   Widget build(BuildContext context) {
     final visible = slices.take(maxRows).toList();
     if (visible.isEmpty) {
-      return Padding(
-        padding: const EdgeInsets.symmetric(vertical: 8),
-        child: Text(
-          homeAnalyticsEmptyHint(tab, dash),
-          style: HexaDsType.bodySm(context),
-        ),
+      return HomeAnalyticsRankedListEmpty(
+        message: homeAnalyticsEmptyHint(tab, dash),
       );
     }
 
@@ -125,6 +122,23 @@ class _RankedRow extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Ranked analytics list empty for the active home breakdown tab.
+@visibleForTesting
+class HomeAnalyticsRankedListEmpty extends StatelessWidget {
+  const HomeAnalyticsRankedListEmpty({super.key, required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return HexaEmptyState(
+      icon: Icons.pie_chart_outline_rounded,
+      title: message,
+      subtitle: 'Try another breakdown tab or period with purchases.',
     );
   }
 }

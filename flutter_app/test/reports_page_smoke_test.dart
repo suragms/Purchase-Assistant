@@ -77,6 +77,65 @@ void main() {
     expect(find.byType(TextField), findsOneWidget);
     expect(find.text('Could not load the app'), findsNothing);
   });
+
+  testWidgets('ReportsPage desktop body lays out without blank overflow',
+      (WidgetTester tester) async {
+    await tester.binding.setSurfaceSize(const Size(1440, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    SharedPreferences.setMockInitialValues({});
+    final prefs = await SharedPreferences.getInstance();
+
+    final router = GoRouter(
+      routes: [
+        GoRoute(
+          path: '/',
+          builder: (context, state) => const ReportsPage(),
+        ),
+      ],
+    );
+
+    await tester.pumpWidget(
+      MediaQuery(
+        data: const MediaQueryData(size: Size(1440, 900)),
+        child: ProviderScope(
+          overrides: [
+            sharedPreferencesProvider.overrideWithValue(prefs),
+            sessionProvider.overrideWith(() => _FakeSessionNotifier()),
+            shellCurrentBranchProvider.overrideWith((ref) => ShellBranch.reports),
+            reportsPurchasesPayloadProvider.overrideWith(
+              (ref) async => ReportsPurchasePayload.empty(),
+            ),
+            analyticsCategoriesTableProvider.overrideWith(
+              (ref) async => const [],
+            ),
+            analyticsTypesTableProvider.overrideWith((ref) async => const []),
+            analyticsSuppliersTableProvider.overrideWith((ref) async => const []),
+            reportsPeriodComparisonProvider.overrideWith((ref) async => {}),
+            operationalReportsProvider.overrideWith((ref) async => {}),
+            stockVariancesTodayProvider.overrideWith((ref) async => const []),
+            homeDashboardDataProvider.overrideWith(
+              () => _EmptyHomeDashboardNotifier(),
+            ),
+          ],
+          child: MaterialApp.router(routerConfig: router),
+        ),
+      ),
+    );
+
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(find.text('Reports'), findsOneWidget);
+    expect(find.text('Overview'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+
+    // Switch to Items — must fill Expanded pane (no MediaQuery-fraction SizedBox).
+    await tester.tap(find.text('Items'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+    expect(tester.takeException(), isNull);
+  });
 }
 
 class _FakeSessionNotifier extends SessionNotifier {

@@ -7,6 +7,7 @@ import '../../../core/json_coerce.dart';
 import '../../../core/providers/business_aggregates_invalidation.dart';
 import '../../../core/providers/stock_audit_providers.dart';
 import '../../../core/widgets/hexa_error_card.dart';
+import '../../../shared/widgets/hexa_empty_state.dart';
 
 import '../../../core/theme/hexa_colors.dart';
 /// Active warehouse audit session — scanned lines and complete.
@@ -37,11 +38,12 @@ class StockAuditSessionPage extends ConsumerWidget {
         ),
         data: (audit) {
           if (audit == null) {
-            return Center(
-              child: FilledButton(
-                onPressed: () => _startSession(ref, context),
-                child: const Text('Start audit session'),
-              ),
+            return HexaEmptyState(
+              icon: Icons.fact_check_outlined,
+              title: 'No active audit',
+              subtitle: 'Start a session to scan and match warehouse stock.',
+              primaryActionLabel: 'Start audit session',
+              onPrimaryAction: () => _startSession(ref, context),
             );
           }
           final items = audit['items'];

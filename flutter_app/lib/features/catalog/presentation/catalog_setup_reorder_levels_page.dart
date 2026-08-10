@@ -7,8 +7,8 @@ import '../../../core/design_system/hexa_ds_tokens.dart';
 import '../../../core/errors/user_facing_errors.dart';
 import '../../../core/providers/stock_providers.dart';
 import '../../../core/theme/hexa_colors.dart';
-import '../../../core/widgets/friendly_load_error.dart';
 import '../../../core/widgets/list_skeleton.dart';
+import '../../../shared/widgets/hexa_empty_state.dart';
 
 /// Bulk set reorder thresholds for items that have none.
 class CatalogSetupReorderLevelsPage extends ConsumerStatefulWidget {
@@ -116,8 +116,7 @@ class _CatalogSetupReorderLevelsPageState
       ),
       body: listAsync.when(
         loading: () => const ListSkeleton(rowCount: 12, rowHeight: 64),
-        error: (_, __) => FriendlyLoadError(
-          message: 'Could not load catalog items',
+        error: (_, __) => CatalogSetupReorderLevelsLoadError(
           onRetry: () => ref.invalidate(bulkStockListProvider),
         ),
         data: (data) {
@@ -169,14 +168,24 @@ class _CatalogSetupReorderLevelsPageState
               ),
               Expanded(
                 child: visibleRows.isEmpty
-                    ? const Center(
-                        child: Padding(
-                          padding: EdgeInsets.all(20),
-                          child: Text(
-                            'No items match your search',
-                            style: TextStyle(fontWeight: FontWeight.w700),
-                          ),
-                        ),
+                    ? HexaEmptyState(
+                        icon: rows.isEmpty
+                            ? Icons.check_circle_outline
+                            : Icons.search_off_rounded,
+                        title: rows.isEmpty
+                            ? 'All reorder levels set'
+                            : 'No items match search',
+                        subtitle: rows.isEmpty
+                            ? 'Every catalog item already has a reorder threshold.'
+                            : 'Try another name, or clear search.',
+                        primaryActionLabel:
+                            rows.isEmpty ? 'Done' : 'Clear search',
+                        onPrimaryAction: rows.isEmpty
+                            ? () => Navigator.pop(context)
+                            : () {
+                                _searchCtrl.clear();
+                                setState(() => _search = '');
+                              },
                       )
                     : NotificationListener<ScrollNotification>(
                         onNotification: (n) =>
@@ -246,6 +255,28 @@ class _CatalogSetupReorderLevelsPageState
           );
         },
       ),
+    );
+  }
+}
+
+/// Catalog reorder-levels setup list load failure (UX-140).
+@visibleForTesting
+class CatalogSetupReorderLevelsLoadError extends StatelessWidget {
+  const CatalogSetupReorderLevelsLoadError({
+    super.key,
+    required this.onRetry,
+  });
+
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return HexaEmptyState(
+      icon: Icons.tune_outlined,
+      title: 'Could not load catalog items',
+      subtitle: 'Check your connection, then retry.',
+      primaryActionLabel: 'Retry',
+      onPrimaryAction: onRetry,
     );
   }
 }

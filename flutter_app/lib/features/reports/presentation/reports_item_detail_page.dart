@@ -6,6 +6,7 @@ import '../../../core/providers/reports_provider.dart';
 import '../../../core/reporting/trade_report_aggregate.dart';
 import '../../../core/router/navigation_ext.dart';
 import '../../../core/theme/hexa_colors.dart';
+import '../../../shared/widgets/hexa_empty_state.dart';
 import '../reporting/reports_item_metrics.dart';
 
 String _inr0(num n) =>
@@ -124,9 +125,13 @@ class ReportsItemDetailPage extends ConsumerWidget {
           ),
           const SizedBox(height: 8),
           if (txns.isEmpty)
-            Text(
-              'No classified lines for this item in the selected period.',
-              style: TextStyle(color: HexaColors.textBody),
+            HexaEmptyState(
+              icon: Icons.receipt_long_outlined,
+              title: 'No lines in this period',
+              subtitle:
+                  'No classified purchase lines for this item in the selected period.',
+              primaryActionLabel: 'Back to Reports',
+              onPrimaryAction: () => context.popOrGo('/reports'),
             )
           else
             ...List.generate(txns.length, (i) {

@@ -1,0 +1,30 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:harisree_warehouse/features/home/presentation/widgets/home_delivery_pipeline_card.dart';
+import 'package:harisree_warehouse/shared/widgets/hexa_empty_state.dart';
+
+void main() {
+  testWidgets('home delivery pipeline error uses HexaEmptyState + Retry',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    var retried = false;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: HomeDeliveryPipelineError(
+            onRetry: () => retried = true,
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byType(HexaEmptyState), findsOneWidget);
+    expect(find.text('Could not load delivery pipeline'), findsOneWidget);
+    await tester.tap(find.text('Retry'));
+    await tester.pumpAndSettle();
+    expect(retried, isTrue);
+  });
+}

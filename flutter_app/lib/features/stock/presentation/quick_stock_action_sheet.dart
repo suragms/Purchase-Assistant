@@ -44,6 +44,7 @@ import 'stock_undo_snackbar.dart';
 
 import '../../../core/design_system/hexa_ds_tokens.dart';
 import '../../../core/theme/hexa_colors.dart';
+import '../../../shared/widgets/hexa_empty_state.dart';
 const _kReasonChips = <(String label, String type)>[
   ('Physical count', 'verification'),
   ('Sale', 'sale'),
@@ -854,28 +855,8 @@ class _QuickStockActionBodyState extends ConsumerState<_QuickStockActionBody> {
       if (kDebugMode) {
         debugPrint('[STOCK_UPDATE_SHEET] build failed: $e\n$st');
       }
-      return Padding(
-        padding: const EdgeInsets.fromLTRB(8, 16, 8, 16),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const Text(
-              'Could not open stock update',
-              style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15),
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              'Close and try again from the stock list.',
-              style: TextStyle(fontSize: 13, color: HexaColors.neutral),
-            ),
-            const SizedBox(height: 16),
-            OutlinedButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('Close'),
-            ),
-          ],
-        ),
+      return QuickStockActionSheetOpenError(
+        onClose: () => Navigator.of(context).pop(false),
       );
     }
   }
@@ -1333,6 +1314,25 @@ class _DifferenceBanner extends StatelessWidget {
           color: color,
         ),
       ),
+    );
+  }
+}
+
+/// Fallback when the stock-update sheet fails to build its form.
+@visibleForTesting
+class QuickStockActionSheetOpenError extends StatelessWidget {
+  const QuickStockActionSheetOpenError({super.key, required this.onClose});
+
+  final VoidCallback onClose;
+
+  @override
+  Widget build(BuildContext context) {
+    return HexaEmptyState(
+      icon: Icons.error_outline_rounded,
+      title: 'Could not open stock update',
+      subtitle: 'Close and try again from the stock list.',
+      primaryActionLabel: 'Close',
+      onPrimaryAction: onClose,
     );
   }
 }

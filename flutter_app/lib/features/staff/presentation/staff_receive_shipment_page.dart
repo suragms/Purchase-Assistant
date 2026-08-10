@@ -16,8 +16,8 @@ import '../../../core/theme/hexa_colors.dart';
 import '../../../core/utils/delivery_offline_actions.dart';
 import '../../../core/utils/delivery_write_resilience.dart';
 import '../../../core/utils/snack.dart';
-import '../../../core/widgets/friendly_load_error.dart';
 import '../../../core/widgets/list_skeleton.dart';
+import '../../../shared/widgets/hexa_empty_state.dart';
 import '../../purchase/providers/trade_purchase_detail_provider.dart';
 
 class StaffReceiveShipmentPage extends ConsumerStatefulWidget {
@@ -226,8 +226,7 @@ class _StaffReceiveShipmentPageState
       ),
       body: detailAsync.when(
         loading: () => const ListSkeleton(rowCount: 5),
-        error: (_, __) => FriendlyLoadError(
-          message: 'Could not load purchase',
+        error: (_, __) => StaffReceiveShipmentLoadError(
           onRetry: () =>
               ref.invalidate(tradePurchaseDetailProvider(widget.purchaseId)),
         ),
@@ -235,56 +234,13 @@ class _StaffReceiveShipmentPageState
           _ensureLineControllers(p);
           final ds = p.deliveryStatusEnum;
           if (ds == DeliveryStatus.stockCommitted || p.isDeliveryCommitted) {
-            return Center(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.check_circle, color: HexaColors.profit, size: 48),
-                    const SizedBox(height: 12),
-                    Text(
-                      'Stock already committed',
-                      style: HexaDsType.heading(18),
-                    ),
-                    const SizedBox(height: 16),
-                    OutlinedButton(
-                      onPressed: () => context.popOrGo('/staff/deliveries'),
-                      child: const Text('Back'),
-                    ),
-                  ],
-                ),
-              ),
+            return StaffReceiveAlreadyCommittedEmpty(
+              onBack: () => context.popOrGo('/staff/deliveries'),
             );
           }
           if (ds.readyForOwnerCommit) {
-            return Center(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.hourglass_top_rounded,
-                        color: HexaDsColors.violet, size: 48),
-                    const SizedBox(height: 12),
-                    Text(
-                      'Waiting for owner approval',
-                      style: HexaDsType.heading(18),
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 8),
-                    const Text(
-                      'You verified this shipment. Owner must commit to stock.',
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 16),
-                    OutlinedButton(
-                      onPressed: () => context.popOrGo('/staff/deliveries'),
-                      child: const Text('Back'),
-                    ),
-                  ],
-                ),
-              ),
+            return StaffReceiveAwaitingOwnerEmpty(
+              onBack: () => context.popOrGo('/staff/deliveries'),
             );
           }
           return Column(
@@ -519,6 +475,63 @@ class _LineReceiveTile extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Status empty when staff opens a receive flow that is already stock-committed.
+@visibleForTesting
+class StaffReceiveAlreadyCommittedEmpty extends StatelessWidget {
+  const StaffReceiveAlreadyCommittedEmpty({super.key, required this.onBack});
+
+  final VoidCallback onBack;
+
+  @override
+  Widget build(BuildContext context) {
+    return HexaEmptyState(
+      icon: Icons.check_circle_outline_rounded,
+      title: 'Stock already committed',
+      primaryActionLabel: 'Back',
+      onPrimaryAction: onBack,
+    );
+  }
+}
+
+/// Status empty when verify is done and owner must commit stock.
+@visibleForTesting
+class StaffReceiveAwaitingOwnerEmpty extends StatelessWidget {
+  const StaffReceiveAwaitingOwnerEmpty({super.key, required this.onBack});
+
+  final VoidCallback onBack;
+
+  @override
+  Widget build(BuildContext context) {
+    return HexaEmptyState(
+      icon: Icons.hourglass_top_rounded,
+      title: 'Waiting for owner approval',
+      subtitle:
+          'You verified this shipment. Owner must commit to stock.',
+      primaryActionLabel: 'Back',
+      onPrimaryAction: onBack,
+    );
+  }
+}
+
+/// Staff receive shipment purchase detail load failure (UX-133).
+@visibleForTesting
+class StaffReceiveShipmentLoadError extends StatelessWidget {
+  const StaffReceiveShipmentLoadError({super.key, required this.onRetry});
+
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return HexaEmptyState(
+      icon: Icons.local_shipping_outlined,
+      title: 'Could not load purchase',
+      subtitle: 'Check your connection, then retry.',
+      primaryActionLabel: 'Retry',
+      onPrimaryAction: onRetry,
     );
   }
 }

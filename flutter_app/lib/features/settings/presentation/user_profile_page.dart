@@ -10,8 +10,8 @@ import '../../../core/providers/business_users_provider.dart';
 import '../../../core/router/navigation_ext.dart';
 import '../../../core/router/post_auth_route.dart';
 import '../../../core/theme/hexa_colors.dart';
-import '../../../core/widgets/friendly_load_error.dart';
 import '../../../core/widgets/hexa_error_card.dart';
+import '../../../shared/widgets/hexa_empty_state.dart';
 import '../users/user_activity_tab.dart';
 import '../users/user_overview_kpi_grid.dart';
 import '../users/user_permission_groups.dart';
@@ -309,7 +309,14 @@ class _UserProfilePageState extends ConsumerState<UserProfilePage>
         ),
         data: (user) {
           if (user.isEmpty) {
-            return const Center(child: Text('User not found.'));
+            return HexaEmptyState(
+              icon: Icons.person_off_outlined,
+              title: 'User not found',
+              subtitle:
+                  'This account may have been removed, or the link is out of date.',
+              primaryActionLabel: 'Back to users',
+              onPrimaryAction: () => context.popOrGo('/settings/users'),
+            );
           }
 
           return Column(
@@ -415,10 +422,9 @@ class _PermissionsTabState extends ConsumerState<_PermissionsTab> {
     final async = ref.watch(userPermissionsProvider(widget.userId));
     return async.when(
       loading: () => const Center(child: CircularProgressIndicator()),
-      error: (e, _) => FriendlyLoadError(
+      error: (e, _) => UserProfilePermissionsLoadError(
+        title: userFacingError(e),
         onRetry: () => ref.invalidate(userPermissionsProvider(widget.userId)),
-        message: userFacingError(e),
-        subtitle: null,
       ),
       data: (body) {
         final perms = body['permissions'] is Map
@@ -474,6 +480,30 @@ class _PermissionsTabState extends ConsumerState<_PermissionsTab> {
           ],
         );
       },
+    );
+  }
+}
+
+/// User profile permissions tab load failure.
+@visibleForTesting
+class UserProfilePermissionsLoadError extends StatelessWidget {
+  const UserProfilePermissionsLoadError({
+    super.key,
+    required this.title,
+    required this.onRetry,
+  });
+
+  final String title;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return HexaEmptyState(
+      icon: Icons.admin_panel_settings_outlined,
+      title: title,
+      subtitle: 'Check your connection, then retry.',
+      primaryActionLabel: 'Retry',
+      onPrimaryAction: onRetry,
     );
   }
 }

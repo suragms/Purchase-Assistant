@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../core/auth/session_notifier.dart';
 import '../../../core/providers/operations_providers.dart';
 import '../../../core/utils/unit_utils.dart';
 import '../../../core/errors/user_facing_errors.dart';
-import '../../../core/widgets/friendly_load_error.dart';
 import '../../../core/widgets/list_skeleton.dart';
+import '../../../shared/widgets/hexa_empty_state.dart';
 
 class DailyUsagePage extends ConsumerStatefulWidget {
   const DailyUsagePage({super.key});
@@ -34,7 +35,7 @@ class _DailyUsagePageState extends ConsumerState<DailyUsagePage> {
       appBar: AppBar(title: const Text('Log today\'s usage')),
       body: usage.when(
         loading: () => const ListSkeleton(rowCount: 6),
-        error: (e, _) => FriendlyLoadError(
+        error: (e, _) => DailyUsageLoadError(
           onRetry: () => ref.invalidate(usageTodayProvider),
         ),
         data: (data) {
@@ -48,30 +49,12 @@ class _DailyUsagePageState extends ConsumerState<DailyUsagePage> {
               if (e is Map) Map<String, dynamic>.from(e),
           ];
           if (lines.isEmpty) {
-            return const Center(
-              child: Padding(
-                padding: EdgeInsets.all(24),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.check_circle_outline,
-                        size: 48, color: Colors.green),
-                    SizedBox(height: 12),
-                    Text(
-                      'Nothing to log today',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    SizedBox(height: 4),
-                    Text(
-                      'All items are up to date',
-                      style: TextStyle(color: Colors.black54, fontSize: 13),
-                    ),
-                  ],
-                ),
-              ),
+            return HexaEmptyState(
+              icon: Icons.check_circle_outline,
+              title: 'Nothing to log today',
+              subtitle: 'All items are up to date — no usage lines pending.',
+              primaryActionLabel: 'Open stock',
+              onPrimaryAction: () => context.go('/stock'),
             );
           }
           for (final line in lines) {
@@ -194,5 +177,24 @@ class _DailyUsagePageState extends ConsumerState<DailyUsagePage> {
     } finally {
       if (mounted) setState(() => _saving = false);
     }
+  }
+}
+
+/// Daily usage lines load failure.
+@visibleForTesting
+class DailyUsageLoadError extends StatelessWidget {
+  const DailyUsageLoadError({super.key, required this.onRetry});
+
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return HexaEmptyState(
+      icon: Icons.today_outlined,
+      title: 'Unable to load data',
+      subtitle: 'Check your connection, then retry.',
+      primaryActionLabel: 'Retry',
+      onPrimaryAction: onRetry,
+    );
   }
 }

@@ -17,12 +17,15 @@ import '../../../core/providers/stock_providers.dart'
 import '../../../core/providers/trade_purchases_provider.dart'
     show tradePurchasesForItemProvider;
 import '../../../core/theme/hexa_colors.dart';
-import '../../../core/widgets/friendly_load_error.dart';
+import '../../../core/widgets/friendly_load_error.dart'
+    show GroupedSectionErrorCard;
 import '../../../core/auth/session_notifier.dart' show sessionProvider;
 import '../../../core/router/post_auth_route.dart' show sessionIsStaff;
+import '../../../shared/widgets/hexa_empty_state.dart';
 import '../../stock/presentation/stock_quick_purchase_sheet.dart';
 import '../../stock/presentation/update_stock_sheet.dart';
 import '../../stock/presentation/widgets/stock_update_mode_toggle.dart';
+import 'item_detail_tab_matrix.dart';
 import 'widgets/item_detail_header.dart';
 import 'widgets/item_quick_actions_bar.dart';
 import 'widgets/item_analytics_section.dart';
@@ -150,8 +153,7 @@ class ItemDetailPage extends ConsumerWidget {
       return Scaffold(
         backgroundColor: HexaColors.brandBackground,
         body: SafeArea(
-          child: FriendlyLoadError(
-            message: 'Could not load item. Tap to retry.',
+          child: ItemDetailLoadError(
             onRetry: () {
               ref.invalidate(itemDetailBundleProvider(itemId));
             },
@@ -338,66 +340,73 @@ class _DesktopItemLayout extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final session = ref.watch(sessionProvider);
     final isStaff = session != null && sessionIsStaff(session);
-    final tab = _ItemDetailMobileScrollState._tabQuery(context);
-    final initialIndex = switch (tab) {
-      'purchases' || 'purchase' => 1,
-      'analytics' || 'price' => 2,
-      'history' || 'activity' || 'stock-history' => 3,
-      _ => 0,
-    };
-    if (isStaff) {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          ItemDetailHeader(
-            itemName: name,
-            categoryLabel: categoryLabel,
-            snapshot: null,
-            onEdit: () => context.push('/catalog/item/$itemId/edit'),
-            onMore: onMore,
-          ),
-          Align(
-            alignment: Alignment.centerRight,
-            child: TextButton.icon(
-              onPressed: () => onRefresh(),
-              icon: const Icon(Icons.refresh_rounded, size: 18),
-              label: const Text('Refresh'),
-            ),
-          ),
-          const SizedBox(height: 4),
-          _ItemDetailGroupedLoadBanner(itemId: itemId),
-          Expanded(
-            child: ListView(
-              padding: const EdgeInsets.only(bottom: 24),
-              children: [
-                ItemStockSnapshotCard(itemId: itemId, suppressInlineError: true),
+    final tabs = itemDetailTabsForRole(isStaff: isStaff);
+    final tabQuery = _ItemDetailMobileScrollState._tabQuery(context);
+    final initialIndex = itemDetailInitialTabIndex(
+      tabQuery,
+      isStaff: isStaff,
+    ).clamp(0, tabs.length - 1);
+
+    Widget overviewBody() {
+      return RefreshIndicator(
+        onRefresh: onRefresh,
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.only(bottom: 24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              ItemPhysicalVerificationCard(itemId: itemId),
+              if (!isStaff) ...[
                 const SizedBox(height: 8),
-                ItemPhysicalVerificationCard(itemId: itemId),
-                const SizedBox(height: 12),
-                Text(
-                  'Stock change history',
-                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.w800,
-                      ),
-                ),
-                const SizedBox(height: 8),
-                SizedBox(
-                  height: 360,
-                  child: StockItemHistoryPanel(
-                    itemId: itemId,
-                    compact: true,
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: ItemAnalyticsSection(
+                      itemId: itemId,
+                      loadIntelligence: true,
+                      suppressInlineError: true,
+                    ),
                   ),
                 ),
               ],
-            ),
+            ],
           ),
-        ],
+        ),
       );
     }
+
+    Widget purchasesBody() {
+      return RefreshIndicator(
+        onRefresh: onRefresh,
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.only(bottom: 24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              ItemLedgerSection(itemId: itemId),
+              const SizedBox(height: 8),
+              ItemPurchaseHistorySection(
+                itemId: itemId,
+                itemName: name,
+              ),
+              const SizedBox(height: 8),
+              ItemSupplierIntelligenceSection(
+                itemId: itemId,
+                itemName: name,
+                suppressInlineError: true,
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     return DefaultTabController(
-      key: ValueKey('desktop-item-tabs-$itemId-$initialIndex'),
-      length: 4,
-      initialIndex: initialIndex.clamp(0, 3),
+      key: ValueKey('desktop-item-tabs-$itemId-${tabs.length}-$initialIndex'),
+      length: tabs.length,
+      initialIndex: initialIndex,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -419,92 +428,40 @@ class _DesktopItemLayout extends ConsumerWidget {
           const SizedBox(height: 4),
           _ItemDetailGroupedLoadBanner(
             itemId: itemId,
-            includePurchases: true,
-            includeIntelligence: true,
+            includePurchases: !isStaff,
+            includeIntelligence: !isStaff,
           ),
           ItemStockSnapshotCard(itemId: itemId, suppressInlineError: true),
+          if (!isStaff) ...[
+            const SizedBox(height: 8),
+            ItemQuickActionsBar(
+              itemId: itemId,
+              itemName: name,
+              itemCode: code,
+            ),
+          ],
           const SizedBox(height: 8),
-          ItemQuickActionsBar(
-            itemId: itemId,
-            itemName: name,
-            itemCode: code,
-          ),
-          const SizedBox(height: 8),
-          const TabBar(
-            isScrollable: true,
-            tabs: [
-              Tab(text: 'Ledger'),
-              Tab(text: 'Purchases'),
-              Tab(text: 'Analytics'),
-              Tab(text: 'Activity'),
-            ],
+          TabBar(
+            isScrollable: tabs.length >= 3,
+            tabs: [for (final t in tabs) Tab(text: t.label)],
           ),
           const SizedBox(height: 8),
           Expanded(
             child: ConstrainedBox(
               constraints: const BoxConstraints(minHeight: 280),
               child: TabBarView(
-              children: [
-                RefreshIndicator(
-                  onRefresh: onRefresh,
-                  child: SingleChildScrollView(
-                    physics: const AlwaysScrollableScrollPhysics(),
-                    padding: const EdgeInsets.only(bottom: 24),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        ItemPhysicalVerificationCard(itemId: itemId),
-                        const SizedBox(height: 8),
-                        ItemLedgerSection(itemId: itemId),
-                      ],
-                    ),
-                  ),
-                ),
-                RefreshIndicator(
-                  onRefresh: onRefresh,
-                  child: SingleChildScrollView(
-                    physics: const AlwaysScrollableScrollPhysics(),
-                    padding: const EdgeInsets.only(bottom: 24),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        ItemSupplierIntelligenceSection(
+                children: [
+                  for (final t in tabs)
+                    switch (t.id) {
+                      ItemDetailTabId.overview => overviewBody(),
+                      ItemDetailTabId.purchases => purchasesBody(),
+                      ItemDetailTabId.activity => _DesktopActivityTab(
                           itemId: itemId,
-                          itemName: name,
-                          suppressInlineError: true,
+                          onRefresh: onRefresh,
                         ),
-                        const SizedBox(height: 8),
-                        ItemPurchaseHistorySection(
-                          itemId: itemId,
-                          itemName: name,
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                RefreshIndicator(
-                  onRefresh: onRefresh,
-                  child: SingleChildScrollView(
-                    physics: const AlwaysScrollableScrollPhysics(),
-                    padding: const EdgeInsets.only(bottom: 24),
-                    child: Card(
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: ItemAnalyticsSection(
-                          itemId: itemId,
-                          loadIntelligence: true,
-                          suppressInlineError: true,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-                _DesktopActivityTab(
-                  itemId: itemId,
-                  onRefresh: onRefresh,
-                ),
-              ],
-            ),
+                    },
+                ],
+              ),
             ),
           ),
         ],
@@ -678,27 +635,7 @@ class _ItemDetailMobileScrollState extends ConsumerState<_ItemDetailMobileScroll
   bool _tabReady(int index) => _loadedTabIndexes.contains(index);
 
   int _initialTabIndex(bool isStaff) {
-    final tab = _tabQuery(context);
-    if (isStaff) {
-      if (tab == 'history' ||
-          tab == 'stock-history' ||
-          tab == 'activity' ||
-          tab == 'ledger') {
-        return 1;
-      }
-      return 0;
-    }
-    if (tab == 'purchases' ||
-        tab == 'purchase' ||
-        tab == 'ledger' ||
-        tab == 'analytics' ||
-        tab == 'price') {
-      return 1;
-    }
-    if (tab == 'history' || tab == 'stock-history' || tab == 'activity') {
-      return 2;
-    }
-    return 0;
+    return itemDetailInitialTabIndex(_tabQuery(context), isStaff: isStaff);
   }
 
   static String? _tabQuery(BuildContext context) {
@@ -851,6 +788,9 @@ class _ItemDetailMobileScrollState extends ConsumerState<_ItemDetailMobileScroll
   Widget build(BuildContext context) {
     final session = ref.watch(sessionProvider);
     final isStaff = session != null && sessionIsStaff(session);
+    final tabs = itemDetailTabsForRole(isStaff: isStaff);
+    final activityIndex =
+        tabs.indexWhere((t) => t.id == ItemDetailTabId.activity);
 
     return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -901,37 +841,27 @@ class _ItemDetailMobileScrollState extends ConsumerState<_ItemDetailMobileScroll
             color: HexaColors.brandBackground,
             child: TabBar(
               controller: _tabController,
-              isScrollable: true,
+              isScrollable: tabs.length >= 3,
               onTap: (index) {
                 if (_loadedTabIndexes.add(index) && mounted) {
                   setState(() {});
                 }
               },
-              tabs: isStaff
-                  ? const [
-                      Tab(text: 'Overview'),
-                      Tab(text: 'Activity'),
-                    ]
-                  : const [
-                      Tab(text: 'Overview'),
-                      Tab(text: 'Purchases'),
-                      Tab(text: 'Activity'),
-                    ],
+              tabs: [for (final t in tabs) Tab(text: t.label)],
             ),
           ),
           Expanded(
             child: TabBarView(
               controller: _tabController,
-              children: isStaff
-                  ? [
-                      _overviewTab(isStaff),
-                      _activityTab(1),
-                    ]
-                  : [
-                      _overviewTab(isStaff),
-                      _purchasesTab(),
-                      _activityTab(2),
-                    ],
+              children: [
+                for (final t in tabs)
+                  switch (t.id) {
+                    ItemDetailTabId.overview => _overviewTab(isStaff),
+                    ItemDetailTabId.purchases => _purchasesTab(),
+                    ItemDetailTabId.activity =>
+                      _activityTab(activityIndex < 0 ? 0 : activityIndex),
+                  },
+              ],
             ),
           ),
         ],
@@ -990,6 +920,25 @@ class _ItemDetailGroupedLoadBanner extends ConsumerWidget {
           }
         },
       ),
+    );
+  }
+}
+
+/// Full item detail bundle load failure (UX-142).
+@visibleForTesting
+class ItemDetailLoadError extends StatelessWidget {
+  const ItemDetailLoadError({super.key, required this.onRetry});
+
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return HexaEmptyState(
+      icon: Icons.inventory_2_outlined,
+      title: 'Could not load item',
+      subtitle: 'Check your connection, then retry.',
+      primaryActionLabel: 'Retry',
+      onPrimaryAction: onRetry,
     );
   }
 }

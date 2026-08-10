@@ -20,7 +20,7 @@ import '../../../core/services/stock_list_pdf.dart' deferred as stockPdf;
 import '../../../core/services/pdf_actions.dart' deferred as pdfActions;
 import '../../../core/theme/hexa_colors.dart';
 import '../../../core/widgets/hexa_elevated_autocomplete.dart';
-import '../../../core/widgets/friendly_load_error.dart';
+import '../../../shared/widgets/hexa_empty_state.dart';
 import '../../../core/errors/load_state_error.dart';
 import 'quick_stock_action_sheet.dart';
 import 'widgets/stock_update_mode_toggle.dart';
@@ -43,14 +43,8 @@ class _LowStockDashboardPageState extends ConsumerState<LowStockDashboardPage>
     with SingleTickerProviderStateMixin {
   static const _tabCount = 5;
 
-  /// Visual tab order (segmented control); maps to [TabController] index.
-  static const _tabOrder = <LowStockTreeTab>[
-    LowStockTreeTab.allLow,
-    LowStockTreeTab.outOfStock,
-    LowStockTreeTab.purchasedInPeriod,
-    LowStockTreeTab.pendingOrder,
-    LowStockTreeTab.pendingDelivery,
-  ];
+  /// Visual tab order; maps to [TabController] index.
+  static const _tabOrder = lowStockTabOrder;
 
   late final TabController _tabs;
   Timer? _debounce;
@@ -373,8 +367,8 @@ class _LowStockDashboardPageState extends ConsumerState<LowStockDashboardPage>
             return PreferredSize(
               preferredSize: Size.fromHeight(
                 _subcategoryFilter != null && _subcategoryFilter!.trim().isNotEmpty
-                    ? 108
-                    : 88,
+                    ? 148
+                    : 128,
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -484,14 +478,15 @@ class _LowStockDashboardPageState extends ConsumerState<LowStockDashboardPage>
                       style: HexaDsType.label(10, color: HexaDsColors.textMuted),
                     ),
                   ),
-                  _LowStockSegmentedTabs(
-                    selectedIndex: _tabs.index,
+                  LowStockHubFilterBar(
+                    selectedTab: _activeTab,
                     counts: {
                       for (final t in _tabOrder)
                         t: countLowStockForTab(grouped, t),
                     },
-                    onSelected: (i) {
-                      if (i != _tabs.index) _tabs.animateTo(i);
+                    onSelected: (tab) {
+                      final i = _tabOrder.indexOf(tab);
+                      if (i >= 0 && i != _tabs.index) _tabs.animateTo(i);
                     },
                   ),
                 ],
@@ -538,8 +533,7 @@ class _LowStockDashboardPageState extends ConsumerState<LowStockDashboardPage>
             ),
             error: (e, _) => SizedBox(
               height: h,
-              child: FriendlyLoadError(
-                message: 'Could not load low stock',
+              child: LowStockDashboardLoadError(
                 subtitle: loadStateErrorSubtitle(e),
                 onRetry: _refreshLowStock,
               ),
@@ -753,53 +747,74 @@ class _LowStockDashboardPageState extends ConsumerState<LowStockDashboardPage>
       };
 }
 
-class _LowStockSegmentedTabs extends StatelessWidget {
-  const _LowStockSegmentedTabs({
-    required this.selectedIndex,
+/// Attention | Pipeline hub + ≤3 Wrap chips (no horizontal 5-chip scroll).
+class LowStockHubFilterBar extends StatelessWidget {
+  const LowStockHubFilterBar({
+    super.key,
+    required this.selectedTab,
     required this.counts,
     required this.onSelected,
   });
 
-  final int selectedIndex;
+  final LowStockTreeTab selectedTab;
   final Map<LowStockTreeTab, int> counts;
-  final ValueChanged<int> onSelected;
-
-  static const _tabs = _LowStockDashboardPageState._tabOrder;
-
-  static String _label(LowStockTreeTab t) => switch (t) {
-        LowStockTreeTab.allLow => 'All',
-        LowStockTreeTab.outOfStock => 'Out',
-        LowStockTreeTab.purchasedInPeriod => 'Bought',
-        LowStockTreeTab.pendingOrder => 'Pending',
-        LowStockTreeTab.pendingDelivery => 'Delivery',
-      };
+  final ValueChanged<LowStockTreeTab> onSelected;
 
   @override
   Widget build(BuildContext context) {
+    final hub = lowStockHubForTab(selectedTab);
+    final hubTabs = lowStockTabsForHub(hub);
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 0, 12, 6),
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Row(
-          children: [
-            for (var i = 0; i < _tabs.length; i++) ...[
-              if (i > 0) const SizedBox(width: 6),
-              _Segment(
-                label: _label(_tabs[i]),
-                count: counts[_tabs[i]] ?? 0,
-                selected: i == selectedIndex,
-                onTap: () => onSelected(i),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SegmentedButton<LowStockHubSection>(
+            segments: const [
+              ButtonSegment(
+                value: LowStockHubSection.attention,
+                label: Text('Attention'),
+                icon: Icon(Icons.warning_amber_rounded, size: 16),
+              ),
+              ButtonSegment(
+                value: LowStockHubSection.pipeline,
+                label: Text('Pipeline'),
+                icon: Icon(Icons.local_shipping_outlined, size: 16),
               ),
             ],
-          ],
-        ),
+            selected: {hub},
+            onSelectionChanged: (next) {
+              final section = next.first;
+              if (section == hub) return;
+              onSelected(lowStockTabsForHub(section).first);
+            },
+            style: const ButtonStyle(
+              visualDensity: VisualDensity.compact,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              for (final tab in hubTabs)
+                _HubChip(
+                  label: lowStockHubChipLabel(tab),
+                  count: counts[tab] ?? 0,
+                  selected: tab == selectedTab,
+                  onTap: () => onSelected(tab),
+                ),
+            ],
+          ),
+        ],
       ),
     );
   }
 }
 
-class _Segment extends StatelessWidget {
-  const _Segment({
+class _HubChip extends StatelessWidget {
+  const _HubChip({
     required this.label,
     required this.count,
     required this.selected,
@@ -832,6 +847,30 @@ class _Segment extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Low stock dashboard grouped list load failure (UX-156).
+@visibleForTesting
+class LowStockDashboardLoadError extends StatelessWidget {
+  const LowStockDashboardLoadError({
+    super.key,
+    required this.onRetry,
+    this.subtitle,
+  });
+
+  final VoidCallback onRetry;
+  final String? subtitle;
+
+  @override
+  Widget build(BuildContext context) {
+    return HexaEmptyState(
+      icon: Icons.warning_amber_rounded,
+      title: 'Could not load low stock',
+      subtitle: subtitle ?? 'Check your connection, then retry.',
+      primaryActionLabel: 'Retry',
+      onPrimaryAction: onRetry,
     );
   }
 }

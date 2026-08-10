@@ -7,6 +7,7 @@ import '../../../../core/design_system/hexa_responsive.dart';
 import '../../../../core/providers/catalog_providers.dart';
 import '../../../../core/providers/stock_providers.dart';
 import '../../../../core/providers/suppliers_list_provider.dart';
+import '../../../../shared/widgets/hexa_empty_state.dart';
 import '../../../../shared/widgets/search_picker_sheet.dart';
 import 'stock_bulk_actions_sheet.dart';
 
@@ -345,7 +346,9 @@ class _OperationalFilterBodyState
         const SizedBox(height: 8),
         typesAsync.when(
           loading: () => const LinearProgressIndicator(),
-          error: (_, __) => const SizedBox.shrink(),
+          error: (_, __) => OperationalStockFilterTypesError(
+            onRetry: () => ref.invalidate(categoryTypesIndexProvider),
+          ),
           data: (types) {
             final options = _subcategoryOptions(types);
             return _FilterPickerRow(
@@ -363,7 +366,9 @@ class _OperationalFilterBodyState
           const SizedBox(height: 8),
           suppliersAsync.when(
             loading: () => const LinearProgressIndicator(),
-            error: (_, __) => const SizedBox.shrink(),
+            error: (_, __) => OperationalStockFilterSuppliersError(
+              onRetry: () => ref.invalidate(suppliersListProvider),
+            ),
             data: (rows) {
               return _FilterPickerRow(
                 label: _supplier.isEmpty ? 'All suppliers' : _supplier,
@@ -490,4 +495,45 @@ String stockActiveFilterSummary(StockListQuery q, StockOperationalFilters op) {
   if (op.unit.isNotEmpty) parts.add(op.unit.toUpperCase());
   if (q.sort == 'recent') parts.add('Recent');
   return parts.join(' · ');
+}
+
+/// Operational stock filter subcategory options load failure (UX-122).
+@visibleForTesting
+class OperationalStockFilterTypesError extends StatelessWidget {
+  const OperationalStockFilterTypesError({super.key, required this.onRetry});
+
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return HexaEmptyState(
+      icon: Icons.category_outlined,
+      title: 'Could not load subcategories',
+      subtitle: 'Check your connection, then retry.',
+      primaryActionLabel: 'Retry',
+      onPrimaryAction: onRetry,
+    );
+  }
+}
+
+/// Operational stock filter suppliers load failure (UX-122).
+@visibleForTesting
+class OperationalStockFilterSuppliersError extends StatelessWidget {
+  const OperationalStockFilterSuppliersError({
+    super.key,
+    required this.onRetry,
+  });
+
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return HexaEmptyState(
+      icon: Icons.store_outlined,
+      title: 'Could not load suppliers',
+      subtitle: 'Check your connection, then retry.',
+      primaryActionLabel: 'Retry',
+      onPrimaryAction: onRetry,
+    );
+  }
 }

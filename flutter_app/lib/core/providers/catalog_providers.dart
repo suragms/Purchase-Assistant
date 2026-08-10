@@ -21,11 +21,12 @@ final itemCategoriesListProvider =
   final link = ref.keepAlive();
   final timer = Timer(const Duration(minutes: 3), link.close);
   ref.onDispose(timer.cancel);
-  final session = ref.watch(sessionProvider);
-  if (session == null) return [];
+  // Watch business id only — Session identity rewrite must not refetch.
+  final bid = ref.watch(sessionProvider.select((s) => s?.primaryBusiness.id));
+  if (bid == null || bid.isEmpty) return [];
   return ref
       .read(hexaApiProvider)
-      .listItemCategories(businessId: session.primaryBusiness.id)
+      .listItemCategories(businessId: bid)
       .timeout(const Duration(seconds: 15));
 });
 
@@ -35,11 +36,12 @@ final catalogItemsListProvider =
   final link = ref.keepAlive();
   final timer = Timer(const Duration(minutes: 3), link.close);
   ref.onDispose(timer.cancel);
-  final session = ref.watch(sessionProvider);
-  if (session == null) return [];
+  // Watch business id only — Session identity rewrite must not refetch.
+  final bid = ref.watch(sessionProvider.select((s) => s?.primaryBusiness.id));
+  if (bid == null || bid.isEmpty) return [];
   return ref
       .read(hexaApiProvider)
-      .listCatalogItems(businessId: session.primaryBusiness.id)
+      .listCatalogItems(businessId: bid)
       .timeout(const Duration(seconds: 15));
 });
 

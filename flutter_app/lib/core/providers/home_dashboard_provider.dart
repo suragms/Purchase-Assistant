@@ -186,6 +186,7 @@ class HomeOperationalBundle {
     required this.deliveryPipeline,
     required this.notificationsUnread,
     this.lowStockTop = const [],
+    this.recentTradePurchases = const [],
   });
 
   final Map<String, int> stockStatusCounts;
@@ -193,6 +194,8 @@ class HomeOperationalBundle {
   final Map<String, dynamic> deliveryPipeline;
   final int notificationsUnread;
   final List<Map<String, dynamic>> lowStockTop;
+  /// Compact purchase rows from home-overview `shell_bundle` (no lines).
+  final List<Map<String, dynamic>> recentTradePurchases;
 
   bool get hasStockCounts => stockStatusCounts.isNotEmpty;
 
@@ -237,12 +240,20 @@ class HomeOperationalBundle {
         if (e is Map) lowTop.add(Map<String, dynamic>.from(e));
       }
     }
+    final recentRaw = m['recent_trade_purchases'];
+    final recent = <Map<String, dynamic>>[];
+    if (recentRaw is List) {
+      for (final e in recentRaw) {
+        if (e is Map) recent.add(Map<String, dynamic>.from(e));
+      }
+    }
     return HomeOperationalBundle(
       stockStatusCounts: counts,
       warehouseAlerts: wh,
       deliveryPipeline: pipe,
       notificationsUnread: coerceToInt(m['notifications_unread']),
       lowStockTop: lowTop,
+      recentTradePurchases: recent,
     );
   }
 }
@@ -701,12 +712,17 @@ final Map<String, Map<String, dynamic>> _homeOverviewSnapMemory = {};
 final Map<String, DateTime> _homeOverviewFetchedAt = {};
 final Map<String, String> _homeOverviewEtagMemory = {};
 
-/// Clears in-flight fetches and RAM snapshots for [reportsHomeOverview] home aggregates.
+/// Busts RAM snapshots for [reportsHomeOverview] home aggregates.
+///
+/// Does **not** clear [_dashInflight] mid-flight — that forced a second GET while
+/// the first was still running (Home overview ×2–4). Generation bump makes the
+/// in-flight pull throw [StaleHomeDashboardFetch]; the notifier coalesces into
+/// one follow-up pull.
+///
 /// Call before invalidating [homeDashboardDataProvider] after purchase mutations so a
-/// concurrent request cannot resurrect pre-delete totals via [putIfAbsent] dedupe.
+/// concurrent request cannot resurrect pre-delete totals via stale snapshots.
 void bustHomeDashboardVolatileCaches() {
   _homeDashBustGeneration++;
-  _dashInflight.clear();
   _homeOverviewSnapMemory.clear();
   _homeOverviewFetchedAt.clear();
   // Preserve ETags so post-mutation refresh can 304 instead of full 200 bodies.
@@ -1153,30 +1169,42 @@ class HomeDashboardDataNotifier extends AutoDisposeNotifier<HomeDashboardDashSta
 
     Future<void>.microtask(() async {
       if (_dead) return;
+      Future<HomeDashboardPayload> pullOnce(int bustAtStart) =>
+          _dashInflight.putIfAbsent(
+            dedupeKey,
+            () => _homeDashboardPullFresh(
+                  ref: ref,
+                  dedupeKey: dedupeKey,
+                  bustGenerationAtStart: bustAtStart,
+                  api: ref.read(hexaApiProvider),
+                  period: period,
+                  custom: custom,
+                  bid: bid,
+                  from: from,
+                  to: to,
+                  rangeStart: range.start,
+                  lastInclusive: lastInclusive,
+                ).whenComplete(() => _dashInflight.remove(dedupeKey)),
+          );
+
       try {
-        final bustAtStart = _homeDashBustGeneration;
-        final payload = await _dashInflight.putIfAbsent(
-          dedupeKey,
-          () => _homeDashboardPullFresh(
-                ref: ref,
-                dedupeKey: dedupeKey,
-                bustGenerationAtStart: bustAtStart,
-                api: ref.read(hexaApiProvider),
-                period: period,
-                custom: custom,
-                bid: bid,
-                from: from,
-                to: to,
-                rangeStart: range.start,
-                lastInclusive: lastInclusive,
-              ).whenComplete(() => _dashInflight.remove(dedupeKey)),
-        );
+        var bustAtStart = _homeDashBustGeneration;
+        HomeDashboardPayload payload;
+        try {
+          payload = await pullOnce(bustAtStart);
+        } on StaleHomeDashboardFetch {
+          // Mid-flight bust: coalesce into exactly one follow-up (no storm).
+          if (_dead) return;
+          bustAtStart = _homeDashBustGeneration;
+          payload = await pullOnce(bustAtStart);
+        }
         if (_dead) return;
         _homeOverviewFetchedAt[dedupeKey] = DateTime.now();
         state = HomeDashboardDashState(snapshot: payload, refreshing: false);
       } on StaleHomeDashboardFetch {
-        // Superseded by a newer refresh — do not re-invalidate (tab storms).
-        return;
+        // Second stale (rapid double-bust) — leave seed; next invalidate owns refresh.
+        if (_dead) return;
+        state = HomeDashboardDashState(snapshot: seed, refreshing: false);
       } on DioException catch (e) {
         if (_dead) return;
         final sc = e.response?.statusCode;

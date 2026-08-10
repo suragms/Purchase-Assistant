@@ -6,7 +6,7 @@ import '../../../core/json_coerce.dart';
 import '../../../core/router/navigation_ext.dart';
 import '../../../core/providers/catalog_providers.dart';
 import '../../../core/providers/stock_providers.dart';
-import '../../../core/widgets/friendly_load_error.dart';
+import '../../../shared/widgets/hexa_empty_state.dart';
 import '../../purchase/state/purchase_providers.dart';
 
 import '../../../core/theme/hexa_colors.dart';
@@ -51,8 +51,7 @@ class CatalogItemTimelinePage extends ConsumerWidget {
           ),
           title: const Text('Timeline'),
         ),
-        body: FriendlyLoadError(
-          message: historyState.errorMessage ?? 'Could not load timeline',
+        body: CatalogItemTimelineLoadError(
           onRetry: () {
             ref.invalidate(catalogItemDetailProvider(itemId));
             ref.invalidate(stockItemAuditProvider(itemId));
@@ -105,7 +104,10 @@ class CatalogItemTimelinePage extends ConsumerWidget {
         ),
       ),
       body: events.isEmpty
-          ? const Center(child: Text('No events recorded yet'))
+          ? CatalogItemTimelineEmpty(
+              onBackToItem: () =>
+                  context.popOrGo('/catalog/item/$itemId'),
+            )
           : ListView.separated(
               padding: const EdgeInsets.all(16),
               itemCount: events.length,
@@ -165,6 +167,44 @@ class CatalogItemTimelinePage extends ConsumerWidget {
                 );
               },
             ),
+    );
+  }
+}
+
+/// Empty chrome for [CatalogItemTimelinePage] — extracted for widget tests.
+class CatalogItemTimelineEmpty extends StatelessWidget {
+  const CatalogItemTimelineEmpty({super.key, required this.onBackToItem});
+
+  final VoidCallback onBackToItem;
+
+  @override
+  Widget build(BuildContext context) {
+    return HexaEmptyState(
+      icon: Icons.timeline_outlined,
+      title: 'No events recorded yet',
+      subtitle:
+          'Purchases and stock updates for this item will appear here.',
+      primaryActionLabel: 'Back to item',
+      onPrimaryAction: onBackToItem,
+    );
+  }
+}
+
+/// Catalog item timeline load failure (UX-143).
+@visibleForTesting
+class CatalogItemTimelineLoadError extends StatelessWidget {
+  const CatalogItemTimelineLoadError({super.key, required this.onRetry});
+
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return HexaEmptyState(
+      icon: Icons.timeline_outlined,
+      title: 'Could not load timeline',
+      subtitle: 'Check your connection, then retry.',
+      primaryActionLabel: 'Retry',
+      onPrimaryAction: onRetry,
     );
   }
 }

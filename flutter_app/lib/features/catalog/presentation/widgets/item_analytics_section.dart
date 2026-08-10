@@ -10,7 +10,7 @@ import '../../../../core/providers/stock_list_exceptions.dart';
 import '../../../../core/providers/stock_providers.dart'
     show stockItemDetailProvider;
 import '../../../../core/utils/unit_utils.dart';
-import '../../../../core/widgets/friendly_load_error.dart';
+import '../../../../shared/widgets/hexa_empty_state.dart';
 
 import '../../../../core/theme/hexa_colors.dart';
 class ItemAnalyticsSection extends ConsumerStatefulWidget {
@@ -72,8 +72,8 @@ class _ItemAnalyticsSectionState extends ConsumerState<ItemAnalyticsSection> {
       return Card(
         child: Padding(
           padding: const EdgeInsets.all(HexaOp.cardPadding),
-          child: FriendlyLoadError(
-            message: 'Could not load analytics',
+          child: ItemAnalyticsLoadError(
+            title: 'Could not load analytics',
             onRetry: _invalidateSection,
           ),
         ),
@@ -97,8 +97,8 @@ class _ItemAnalyticsSectionState extends ConsumerState<ItemAnalyticsSection> {
       return Card(
         child: Padding(
           padding: const EdgeInsets.all(HexaOp.cardPadding),
-          child: FriendlyLoadError(
-            message: 'Could not load movement intelligence',
+          child: ItemAnalyticsLoadError(
+            title: 'Could not load movement intelligence',
             onRetry: _invalidateSection,
           ),
         ),
@@ -235,4 +235,28 @@ class _ItemAnalyticsSectionState extends ConsumerState<ItemAnalyticsSection> {
         visualDensity: VisualDensity.compact,
         materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
       );
+}
+
+/// Item analytics / movement intelligence load failure (UX-149).
+@visibleForTesting
+class ItemAnalyticsLoadError extends StatelessWidget {
+  const ItemAnalyticsLoadError({
+    super.key,
+    required this.title,
+    required this.onRetry,
+  });
+
+  final String title;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return HexaEmptyState(
+      icon: Icons.analytics_outlined,
+      title: title,
+      subtitle: 'Check your connection, then retry.',
+      primaryActionLabel: 'Retry',
+      onPrimaryAction: onRetry,
+    );
+  }
 }

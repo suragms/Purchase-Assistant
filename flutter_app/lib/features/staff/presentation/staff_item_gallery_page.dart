@@ -10,10 +10,11 @@ import '../../../core/json_coerce.dart';
 import '../../../core/providers/staff_home_providers.dart';
 import '../../../core/theme/hexa_colors.dart';
 import '../../../core/utils/unit_utils.dart';
-import '../../../core/widgets/friendly_load_error.dart';
 import '../../../core/widgets/hexa_elevated_autocomplete.dart';
+import '../../../shared/widgets/hexa_empty_state.dart';
 import '../../stock/presentation/quick_stock_action_sheet.dart';
 import '../../stock/presentation/widgets/stock_update_mode_toggle.dart';
+import 'widgets/staff_gallery_subcategory_filter_chips.dart';
 
 enum _StaffGalleryFilter {
   all,
@@ -170,8 +171,7 @@ class _StaffItemGalleryPageState extends ConsumerState<StaffItemGalleryPage> {
       ),
       body: itemsAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (_, __) => FriendlyLoadError(
-          message: 'Could not load items',
+        error: (_, __) => StaffItemGalleryLoadError(
           onRetry: () => ref.invalidate(staffGalleryStockProvider),
         ),
         data: (allItems) {
@@ -238,26 +238,23 @@ class _StaffItemGalleryPageState extends ConsumerState<StaffItemGalleryPage> {
                   },
                 ),
               ),
-              SizedBox(
-                height: 44,
-                child: ListView(
-                  scrollDirection: Axis.horizontal,
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 4, 12, 4),
+                child: Wrap(
+                  spacing: 6,
+                  runSpacing: 4,
                   children: [
                     for (final f in _StaffGalleryFilter.values)
-                      Padding(
-                        padding: const EdgeInsets.only(right: 6),
-                        child: ChoiceChip(
-                          label: Text(
-                            _staffGalleryFilterLabel(f),
-                            style: const TextStyle(fontSize: 11),
-                          ),
-                          selected: _filter == f,
-                          onSelected: (_) => setState(() => _filter = f),
-                          visualDensity: VisualDensity.compact,
-                          materialTapTargetSize:
-                              MaterialTapTargetSize.shrinkWrap,
+                      ChoiceChip(
+                        label: Text(
+                          _staffGalleryFilterLabel(f),
+                          style: const TextStyle(fontSize: 11),
                         ),
+                        selected: _filter == f,
+                        onSelected: (_) => setState(() => _filter = f),
+                        visualDensity: VisualDensity.compact,
+                        materialTapTargetSize:
+                            MaterialTapTargetSize.shrinkWrap,
                       ),
                   ],
                 ),
@@ -271,12 +268,32 @@ class _StaffItemGalleryPageState extends ConsumerState<StaffItemGalleryPage> {
               ),
               Expanded(
                 child: filtered.isEmpty
-                    ? Center(
-                        child: Text(
-                          'No items match',
-                          style: HexaDsType.body(14,
-                              color: HexaDsColors.textMuted),
-                        ),
+                    ? HexaEmptyState(
+                        icon: Icons.inventory_2_outlined,
+                        title: _filter != _StaffGalleryFilter.all ||
+                                q.isNotEmpty
+                            ? 'No items match'
+                            : 'No items yet',
+                        subtitle: _filter != _StaffGalleryFilter.all ||
+                                q.isNotEmpty
+                            ? 'Clear the search or filter chips to see more items.'
+                            : 'Scan a barcode or open stock to start working items.',
+                        primaryActionLabel: _filter !=
+                                    _StaffGalleryFilter.all ||
+                                q.isNotEmpty
+                            ? 'Clear filters'
+                            : 'Scan barcode',
+                        onPrimaryAction: () {
+                          if (_filter != _StaffGalleryFilter.all ||
+                              q.isNotEmpty) {
+                            setState(() {
+                              _filter = _StaffGalleryFilter.all;
+                              _search = '';
+                            });
+                          } else {
+                            context.go('/staff/scan');
+                          }
+                        },
                       )
                     : ListView.builder(
                         padding: const EdgeInsets.fromLTRB(12, 0, 12, 88),
@@ -324,49 +341,16 @@ class _StaffItemGalleryPageState extends ConsumerState<StaffItemGalleryPage> {
                                 ),
                                 if (expanded) ...[
                                   if (subs.length > 1)
-                                    Padding(
-                                      padding: const EdgeInsets.fromLTRB(
-                                          8, 0, 8, 6),
-                                      child: SingleChildScrollView(
-                                        scrollDirection: Axis.horizontal,
-                                        child: Row(
-                                          children: [
-                                            ChoiceChip(
-                                              label: const Text('All',
-                                                  style: TextStyle(
-                                                      fontSize: 11)),
-                                              selected:
-                                                  _subTabByCat[cat] == null,
-                                              onSelected: (_) => setState(
-                                                  () => _subTabByCat
-                                                      .remove(cat)),
-                                              visualDensity:
-                                                  VisualDensity.compact,
-                                            ),
-                                            for (final sub in subs)
-                                              if (sub != '—')
-                                                Padding(
-                                                  padding:
-                                                      const EdgeInsets.only(
-                                                          left: 6),
-                                                  child: ChoiceChip(
-                                                    label: Text(sub,
-                                                        style: const TextStyle(
-                                                            fontSize: 11)),
-                                                    selected: _subTabByCat[
-                                                            cat] ==
-                                                        sub,
-                                                    onSelected: (_) =>
-                                                        setState(() =>
-                                                            _subTabByCat[
-                                                                cat] = sub),
-                                                    visualDensity:
-                                                        VisualDensity.compact,
-                                                  ),
-                                                ),
-                                          ],
-                                        ),
-                                      ),
+                                    StaffGallerySubcategoryFilterChips(
+                                      subs: subs,
+                                      selected: _subTabByCat[cat],
+                                      onSelected: (sub) => setState(() {
+                                        if (sub == null) {
+                                          _subTabByCat.remove(cat);
+                                        } else {
+                                          _subTabByCat[cat] = sub;
+                                        }
+                                      }),
                                     ),
                                   for (final subEntry in subMap.entries)
                                     if (_subTabByCat[cat] == null ||
@@ -470,6 +454,25 @@ class _StaffGalleryItemRow extends ConsumerWidget {
         ],
       ),
       onTap: id.isEmpty ? null : () => context.push('/catalog/item/$id'),
+    );
+  }
+}
+
+/// Staff item gallery stock list load failure (UX-132).
+@visibleForTesting
+class StaffItemGalleryLoadError extends StatelessWidget {
+  const StaffItemGalleryLoadError({super.key, required this.onRetry});
+
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return HexaEmptyState(
+      icon: Icons.photo_library_outlined,
+      title: 'Could not load items',
+      subtitle: 'Check your connection, then retry.',
+      primaryActionLabel: 'Retry',
+      onPrimaryAction: onRetry,
     );
   }
 }

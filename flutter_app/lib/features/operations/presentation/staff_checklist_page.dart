@@ -7,6 +7,7 @@ import '../../../core/auth/session_notifier.dart';
 import '../../../core/router/navigation_ext.dart';
 import '../../../core/design_system/hexa_ds_tokens.dart';
 import '../../../core/providers/operations_providers.dart';
+import '../../../shared/widgets/hexa_empty_state.dart';
 
 class StaffChecklistPage extends ConsumerStatefulWidget {
   const StaffChecklistPage({super.key, this.embeddedInShell = false});
@@ -122,44 +123,40 @@ class _StaffChecklistPageState extends ConsumerState<StaffChecklistPage>
       ),
       body: data.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) {
-          final msg = e is DioException
+        error: (e, _) => StaffChecklistLoadError(
+          title: e is DioException
               ? friendlyApiError(e)
-              : 'Could not load tasks. Pull to refresh or sign in again.';
-          return Center(
-            child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(msg, textAlign: TextAlign.center),
-                  const SizedBox(height: 16),
-                  FilledButton(
-                    onPressed: () => ref.invalidate(checklistTodayProvider),
-                    child: const Text('Retry'),
-                  ),
-                ],
-              ),
-            ),
-          );
-        },
+              : 'Could not load tasks',
+          onRetry: () => ref.invalidate(checklistTodayProvider),
+        ),
         data: (m) {
           final tasks = [
             for (final t in (m['tasks'] as List? ?? []))
               if (t is Map) Map<String, dynamic>.from(t),
           ];
           final total = tasks.length;
+          if (total == 0) {
+            return HexaEmptyState(
+              icon: Icons.assignment_outlined,
+              title: 'No tasks configured',
+              subtitle:
+                  'Ask the owner to set Morning / Midday / Evening tasks.',
+              primaryActionLabel: 'Refresh',
+              onPrimaryAction: () =>
+                  ref.invalidate(checklistTodayProvider),
+            );
+          }
           final doneCount = tasks.where((t) {
             final key = t['task_key']?.toString() ?? '';
             final slot = t['slot']?.toString() ?? '';
             final busyId = '$slot:$key';
             return t['completed'] == true || _optimisticDone.contains(busyId);
           }).length;
-          final pct = total > 0 ? doneCount / total * 100 : 0.0;
+          final pct = doneCount / total * 100;
           return Column(
             children: [
               LinearProgressIndicator(
-                value: total > 0 ? (pct / 100).clamp(0.0, 1.0) : 0,
+                value: (pct / 100).clamp(0.0, 1.0),
                 color: const Color(0xFF0E4F46),
                 backgroundColor: const Color(0xFFE2E8F0),
               ),
@@ -169,17 +166,14 @@ class _StaffChecklistPageState extends ConsumerState<StaffChecklistPage>
                   children: [
                     Expanded(
                       child: Text(
-                        total > 0
-                            ? '$doneCount / $total complete · ${pct.toStringAsFixed(0)}%'
-                            : 'No tasks configured',
+                        '$doneCount / $total complete · ${pct.toStringAsFixed(0)}%',
                         style: HexaDsType.label(13),
                       ),
                     ),
-                    if (total > 0)
-                      Text(
-                        'Midday & Evening tabs →',
-                        style: HexaDsType.label(11, color: HexaDsColors.textMuted),
-                      ),
+                    Text(
+                      'Midday & Evening tabs →',
+                      style: HexaDsType.label(11, color: HexaDsColors.textMuted),
+                    ),
                   ],
                 ),
               ),
@@ -207,12 +201,11 @@ class _StaffChecklistPageState extends ConsumerState<StaffChecklistPage>
   ) {
     final slotTasks = tasks.where((t) => t['slot'] == slot).toList();
     if (slotTasks.isEmpty) {
-      return Center(
-        child: Text(
-          'No $slot tasks — ask owner to add tasks in Settings → Owner tasks',
-          textAlign: TextAlign.center,
-          style: HexaDsType.body(14, color: HexaDsColors.textMuted),
-        ),
+      final label = slot[0].toUpperCase() + slot.substring(1);
+      return HexaEmptyState(
+        icon: Icons.event_available_outlined,
+        title: 'No $label tasks',
+        subtitle: 'Ask the owner to add tasks for this slot.',
       );
     }
     return RefreshIndicator(
@@ -266,6 +259,30 @@ class _StaffChecklistPageState extends ConsumerState<StaffChecklistPage>
           );
         },
       ),
+    );
+  }
+}
+
+/// Staff checklist load failure.
+@visibleForTesting
+class StaffChecklistLoadError extends StatelessWidget {
+  const StaffChecklistLoadError({
+    super.key,
+    required this.title,
+    required this.onRetry,
+  });
+
+  final String title;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return HexaEmptyState(
+      icon: Icons.checklist_outlined,
+      title: title,
+      subtitle: 'Check your connection, then retry.',
+      primaryActionLabel: 'Retry',
+      onPrimaryAction: onRetry,
     );
   }
 }
