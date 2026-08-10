@@ -339,24 +339,31 @@ class _LowStockDashboardPageState extends ConsumerState<LowStockDashboardPage>
         backgroundColor: Colors.transparent,
         foregroundColor: HexaColors.brandPrimary,
         actions: groupedAsync.maybeWhen(
-          data: (grouped) => [
-            IconButton(
-              tooltip: 'Download PDF',
-              onPressed: _exportingPdf ? null : () => _exportPdf(grouped),
-              icon: _exportingPdf
-                  ? const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.picture_as_pdf_outlined),
-            ),
-            IconButton(
-              tooltip: 'Copy CSV',
-              onPressed: () => _exportCsv(grouped),
-              icon: const Icon(Icons.table_chart_outlined),
-            ),
-          ],
+          data: (grouped) {
+            final exportButtons = [
+              IconButton(
+                tooltip: 'Download PDF',
+                onPressed: _exportingPdf ? null : () => _exportPdf(grouped),
+                icon: _exportingPdf
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.picture_as_pdf_outlined),
+              ),
+              IconButton(
+                tooltip: 'Copy CSV',
+                onPressed: () => _exportCsv(grouped),
+                icon: const Icon(Icons.table_chart_outlined),
+              ),
+            ];
+            // Overlap-class hardening (desktop): keep the export actions in a
+            // Wrap so the toolbar row can never overflow horizontally. Mobile
+            // keeps the identical inline list.
+            if (!context.isDesktopLayout) return exportButtons;
+            return [Wrap(spacing: 4, children: exportButtons)];
+          },
           orElse: () => null,
         ),
         bottom: groupedAsync.maybeWhen(
@@ -493,7 +500,14 @@ class _LowStockDashboardPageState extends ConsumerState<LowStockDashboardPage>
               ),
             );
           },
-          orElse: () => null,
+          orElse: () {
+            // OBS-1: keep filter chrome stable during load/error on desktop so
+            // the body doesn't jump when the bar unmounts. Mobile unchanged (null).
+            if (!context.isDesktopLayout) return null;
+            return _buildLoadingFilterBar(
+              hasError: groupedAsync.hasError,
+            );
+          },
         ),
       ),
       body: LayoutBuilder(
@@ -735,6 +749,97 @@ class _LowStockDashboardPageState extends ConsumerState<LowStockDashboardPage>
             },
           ),
         ),
+    );
+  }
+
+  /// OBS-1: desktop-only stand-in for the data-branch filter chrome while the
+  /// grouped feed is loading or errored. Mirrors the data branch's exact height
+  /// (128/148) and control rows so the body never jumps when the bar mounts.
+  /// Controls are disabled; the hub tabs stay switchable while loading.
+  PreferredSize _buildLoadingFilterBar({required bool hasError}) {
+    final subcategoryActive =
+        _subcategoryFilter != null && _subcategoryFilter!.trim().isNotEmpty;
+    return PreferredSize(
+      preferredSize: Size.fromHeight(subcategoryActive ? 148 : 128),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 0, 12, 4),
+            child: Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    enabled: false,
+                    decoration: InputDecoration(
+                      hintText: 'Search item, subcategory, supplier…',
+                      isDense: true,
+                      contentPadding: const EdgeInsets.symmetric(
+                        vertical: 8,
+                      ),
+                      prefixIcon: const Icon(Icons.search, size: 20),
+                      filled: true,
+                      fillColor: Colors.white,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 6),
+                IconButton(
+                  tooltip: 'Search & filter',
+                  onPressed: null,
+                  icon: Icon(
+                    Icons.tune_rounded,
+                    color: _filtersActive
+                        ? HexaColors.brandPrimary
+                        : HexaColors.neutral,
+                  ),
+                  style: IconButton.styleFrom(
+                    backgroundColor: _filtersActive
+                        ? HexaColors.brandPrimary.withValues(alpha: 0.12)
+                        : Colors.white,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (subcategoryActive)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 0, 12, 4),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: InputChip(
+                  label: Text(
+                    _subcategoryFilter!,
+                    style: const TextStyle(fontSize: 11),
+                  ),
+                  deleteIcon: const Icon(Icons.close, size: 16),
+                  onDeleted: null,
+                  visualDensity: VisualDensity.compact,
+                ),
+              ),
+            ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 0, 12, 2),
+            child: Text(
+              hasError
+                  ? "Couldn't load stock — retry below"
+                  : 'Loading stock…',
+              style: HexaDsType.label(10, color: HexaDsColors.textMuted),
+            ),
+          ),
+          LowStockHubFilterBar(
+            selectedTab: _activeTab,
+            counts: const {},
+            onSelected: (tab) {
+              final i = _tabOrder.indexOf(tab);
+              if (i >= 0 && i != _tabs.index) _tabs.animateTo(i);
+            },
+          ),
+        ],
+      ),
     );
   }
 

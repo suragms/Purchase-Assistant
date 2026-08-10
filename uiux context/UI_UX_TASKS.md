@@ -7616,6 +7616,68 @@ DONE / BLOCKED / DEFERRED
 
 ---
 
+## UX-185 — Stock MQ + blank panes audit (Phase E)
+
+### Status
+VERIFYING — OBS-1/OBS-2 desktop-only P3 fixes implemented 2026-08-10
+
+### Priority
+P2
+
+### Scope
+Desktop (≥1024) audit only — no mobile layout code touched. Six surfaces:
+1. Low stock dashboard — `features/stock/presentation/low_stock_dashboard_page.dart`
+2. Stock desktop detail pane — `features/stock/presentation/widgets/stock_desktop_detail_pane.dart`
+3. Update physical / system stock — `features/stock/presentation/quick_stock_action_sheet.dart` (via `showHexaBottomSheet` desktop dialog path)
+4. Add purchase quantity — `features/stock/presentation/stock_quick_purchase_sheet.dart`
+5. View item activity — `features/catalog/presentation/item_detail_page.dart` (tab=activity)
+6. Notifications / Updates tab — `features/notifications/presentation/notifications_page.dart`
+
+### Audit criteria
+For each surface: (a) unbounded Column/Row + Expanded; (b) LayoutBuilder returning NaN/infinite constraints; (c) ConstrainedBox with maxHeight from an unset MediaQuery; (d) provider/FutureBuilder returning `SizedBox.shrink()` on error/loading with no `HexaEmptyState` fallback.
+
+### Findings
+
+All six surfaces: **CLEAN on all four criteria** (`VERIFIED_CODE`, desktop only).
+
+| # | Surface | (a) unbounded Col/Row+Expanded | (b) NaN/infinite LayoutBuilder | (c) MQ-unset ConstrainedBox maxH | (d) shrink-on-load/error w/o HexaEmptyState | Evidence |
+|---|---|---|---|---|---|---|
+| 1 | Low stock dashboard | none — body `LayoutBuilder` → `SizedBox(height: h)` (L499-589); desktop data wrapped in `Align`+`SizedBox(width≤1280,height:h)` (L570-584) | fallback `h = maxHeight.isFinite ? maxHeight : MediaQuery.sizeOf().height` (L503-505) | none — filter sheet `SizedBox(height: adaptiveSheetMaxHeight*0.55)` bounded (L604-605) | none — loading spinner + 10s slow-retry (L507-533); error `LowStockDashboardLoadError`=HexaEmptyState+Retry (L534-540); empty tab tree `HexaEmptyState` (low_stock_category_tree.dart L355-361) | `low_stock_dashboard_page.dart` |
+| 2 | Stock desktop detail pane | none — `_metricRow` Expanded is horizontal in bounded-width pane (L244); no vertical Expanded | no LayoutBuilder | none | none — activity loading `LinearProgressIndicator` (L191-194); error `StockDesktopDetailActivityError`=HexaEmptyState+Retry (L195-197); empty `StockDesktopDetailActivityEmpty`=HexaEmptyState (L200-202); `SizedBox.shrink()` only guards malformed event rows (L208) | `stock_desktop_detail_pane.dart` |
+| 3 | Quick stock sheet | none — form `Column(mainAxisSize: min)` (L878), no vertical Expanded; header/action Expanded are horizontal (L884, L1191-1199) | no LayoutBuilder | none — host bounds compact sheet `ConstrainedBox(maxHeight: mq.height*0.88)` with `mq` always present (hexa_responsive.dart L481-483) | none — `build()` try/catch → `QuickStockActionSheetOpenError`=HexaEmptyState (L850-861, UX-103); refresh states are inline progress/amber text (L920-934) | `quick_stock_action_sheet.dart` |
+| 4 | Quick purchase sheet | none — form `Column(mainAxisSize: min)` (L498), no vertical Expanded | no LayoutBuilder | none — same host bounds as #3 | none — build-catch `StockQuickPurchaseSheetOpenError`=HexaEmptyState (L468-477, UX-104); suppliers/brokers error → `StockQuickPurchaseSuppliersError`/`BrokersError`=HexaEmptyState+Retry (L648-697, UX-115); loading hints + `LinearProgressIndicator` (L623-626) | `stock_quick_purchase_sheet.dart` |
+| 5 | Item detail, tab=activity | none — desktop `_DesktopItemLayout` Column + `Expanded` is bounded by `SizedBox(height: h)` (L96-122, L449-466); `_DesktopActivityTab` is a ListView (no Expanded inside) | both fallbacks — L96-99 → MediaQuery height; L495-499 → `420.0` | none — only `ConstrainedBox(minHeight: 280)` constant minimum (L450), not MQ-derived | none — bundle loading spinner (L144-149); bundle error `ItemDetailLoadError`=HexaEmptyState (L152-163, UX-142); two `SizedBox.shrink()` sites are guarded: session-null mobile bar (L246) and grouped banner <2 failed sections (L906) where each section keeps its own HexaEmptyState/FriendlyLoadError | `item_detail_page.dart`; deep link `?tab=activity` → activity index confirmed (item_detail_tab_matrix.dart L53-60) |
+| 6 | Notifications | none — body `Column` bounded; `Expanded(RefreshIndicator(...))` in bounded body (L131, L204) | no LayoutBuilder | none — desktop 2-col tile width derives from always-set `MediaQuery.sizeOf(context).width` (L361-362); not a maxHeight ConstrainedBox | none — loading `LinearProgressIndicator` (L134); error inline Material banner + Retry (L136-160); empty `HexaEmptyState` in 280 box (L211-254); no shrink sites | `notifications_page.dart` |
+
+Shared hosts verified (`VERIFIED_CODE`):
+- Desktop sheet host `showHexaBottomSheet` (hexa_responsive.dart L427-519): compact → shrinkWrap `ListView` under `ConstrainedBox(maxHeight: mq.height * 0.88)` (L481-483); `!compact` → fixed `height: mq.height * 0.88` (L480). Both bound children; `mq` always present (Phase 1 `HexaWebViewportBinder`).
+- `HexaEmptyState` uses `Column(mainAxisSize: min)` → ListView-safe (hexa_empty_state.dart L37-39).
+- `LowStockCategoryTree` empty tab → `HexaEmptyState` (L355-361); per-subcategory empty → `HexaEmptyState` (L620-631); `SizedBox.shrink()` only for zero-count chips/badges (L552, L599).
+
+### Observations → implemented as desktop-only P3 fixes
+- **OBS-1 (FIXED, desktop-only)** `low_stock_dashboard_page.dart` — AppBar `bottom` filter chrome (search + hub tabs) used `maybeWhen(data:..., orElse: () => null)`, so search/tabs vanished during load/error. Now `orElse` keeps the desktop path stable via `_buildLoadingFilterBar({hasError})`: mirrors the data-branch height exactly (128 / 148 with subcategory chip), renders a disabled search field + tune button, subcategory chip (if set), a status caption (`Loading stock…` / `Couldn't load stock — retry below`), and a live `LowStockHubFilterBar` so tabs stay switchable while loading. Mobile orElse still returns `null` (byte-unchanged).
+- **OBS-2 (FIXED, desktop-only)** `notifications_page.dart` — desktop 2-col tile width used `MediaQuery.sizeOf(context).width - 32`, assuming the route body spans the window. Desktop branch now reads width from a `LayoutBuilder` wrapping the `Wrap` inside the padded `ListView` (`constraints.maxWidth` = exact post-padding content width), so tiles stay exactly 2-up when rendered in any narrower host. Mobile branch (ListView of tiles) untouched.
+
+### Overlap-class sweep (2026-08-10) — class 2 hardened desktop-only
+Re-check of the repo-history overlap classes (UX-006/UX-086 Wrap precedent; UX-183 MQ+overflow) across all six UX-185 surfaces. No observable defect in any class (all clean), but per user directive the desktop AppBar action rows were hardened anyway. Classes 1 & 3 were already structurally immune — no code change applicable.
+
+| Class | Surfaces checked | Result | Evidence |
+|---|---|---|---|
+| (1) Wrap vs Row overflow on filter chips | low-stock hub chips, low-stock subcategory chips, low-stock filter-sheet `ChoiceChip`s, notification category chips, quick-stock system reason chips, item quick-actions | all parents already `Wrap` — structurally immune, no change | `low_stock_dashboard_page.dart` L797-809, L636-653; `low_stock_category_tree.dart` L556-586; `notifications_category_filter_chips.dart` L31-42; `quick_stock_action_sheet.dart` L1141-1159; `item_quick_actions_bar.dart` L127-133 |
+| (2) AppBar action row overflow | low-stock AppBar (PDF + CSV buttons), notifications AppBar (`Mark all read` + clear), item detail (no AppBar — header `Row`+`Expanded` title), both sheets (no AppBar; flexible header/footer rows) | **HARDENED desktop-only**: AppBar actions now wrapped in `Wrap(spacing: 4)` on desktop so the toolbar row can never overflow horizontally; mobile keeps the identical inline widget list | `low_stock_dashboard_page.dart` L339-365 (desktop Wrap); `notifications_page.dart` L99-141 (desktop Wrap); `item_detail_header.dart` L37-112; `quick_stock_action_sheet.dart` L882-901, L1188-1214 |
+| (3) Stack children without explicit constraints in desktop detail pane | stock desktop detail pane + its chrome (`DesktopDetailPaneScaffold`, `DesktopMasterDetailScaffold`) | zero `Stack(` across all 8 UX-185 files; pane chrome is Column+Expanded / LayoutBuilder→Row | grep `Stack(` → 0 hits in the 8 UX-185 files; `desktop_detail_chrome.dart` L117-160; `hexa_desktop_layout.dart` L91-103 |
+
+### Regression
+- OBS-1: `flutter analyze` clean on `low_stock_dashboard_page.dart` (only 2 pre-existing `library_prefixes` info lints on the deferred imports, untouched). Tests pass: `low_stock_dashboard_load_error_test.dart` + `low_stock_hub_ia_test.dart` (4/4). Mobile orElse byte-unchanged.
+- OBS-2: no test pumps the full `NotificationsPage`; all notifications widgets tests green (14/14: chips, alert card, badge parity, kind toggle, stock-counts defer).
+- Class-2 AppBar hardening (2026-08-10): `flutter analyze` clean on both touched files (same 2 pre-existing `library_prefixes` info lints, untouched); 18 affected tests pass (low-stock 4/4 + notifications 14/14). Mobile action lists byte-identical; only the desktop path gained `Wrap`.
+- Existing UX-103/104/115 (sheet open-error), UX-142 (item load error), UX-091/095/097 (desktop pane states) remain in force.
+
+### Final status
+VERIFYING — desktop-only OBS-1 + OBS-2 fixes implemented; code + tests pass; needs a live ≥1024px visual pass (loading/error low-stock bar stability; notifications 2-up within a narrow pane).
+
+---
+
 # STOP GATE
 
 ```text
@@ -7624,7 +7686,7 @@ Ordered UX board UX-001 · UX-003…UX-178: DONE
 Phase C FriendlyLoadError clearance UX-152…UX-178: DONE
 Phase D viewport + purchase repair UX-179…UX-182: DONE
 Phase D host: HexaWebViewportBinder + index.html CSS viewport (do not lower kDesktopMin)
-Phase E page×role audit UX-183…UX-191: READY (one surface at a time)
+Phase E page×role audit UX-183…UX-191: READY (UX-185 Stock VERIFYING 2026-08-10 — audit CLEAN, no P0/P1; OBS-1/OBS-2 desktop-only P3 fixes in, analyze + tests pass)
 UX-002: BLOCKED (needs [STOCK_STORM] / [STOCK_STORM_SUMMARY] console paste)
 IN_PROGRESS: none
 Next: UX-184 Owner Home audit — or paste storm logs for UX-002
@@ -7657,7 +7719,7 @@ Walk one row at a time. Record into notes:
 |---|---|---|---|---|
 | UX-183 | Login / boot overlay | DONE | all | `VERIFIED_CODE`: `/login` uses `isMobileLayout` + `Stack(fit: expand)` scroll (no Expanded-under-Align). Boot overlay release unchanged (AGENTS UID-001). Inherits Phase 1 MQ binder. No blank-pane defect found — no code change. |
 | UX-184 | Owner Home | READY | OWNER money / MANAGER | — |
-| UX-185 | Stock | READY | all qty; OWNER prices | — |
+| UX-185 | Stock | VERIFYING | all qty; OWNER prices | `VERIFIED_CODE`: all 4 audit criteria CLEAN (no P0/P1) — low-stock dashboard, desktop detail pane, quick-stock sheet, quick-purchase sheet, item-detail Activity tab, notifications. P3 OBS-1/OBS-2 desktop-only fixes implemented 2026-08-10 (low-stock filter chrome stable on load/error; notifications 2-col via LayoutBuilder) — analyze clean, tests pass. Needs live ≥1024px pass. |
 | UX-186 | Purchase history | READY | OWNER+MANAGER | — |
 | UX-187 | Purchase wizard | READY | OWNER+MANAGER | — |
 | UX-188 | Contacts | READY | OWNER+MANAGER | — |

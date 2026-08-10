@@ -99,6 +99,21 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
         !(serverAsync.isLoading && items.isNotEmpty);
 
     final onSurf = Theme.of(context).colorScheme.onSurface;
+    final appBarActions = <Widget>[
+      if (hasUnread)
+        TextButton(
+          onPressed: () => _markAllRead(),
+          child: const Text('Mark all read'),
+        ),
+      IconButton(
+        tooltip: 'Clear server notifications',
+        icon: Icon(Icons.delete_sweep_outlined,
+            color: Theme.of(context).colorScheme.onSurfaceVariant),
+        onPressed: serverAsync.valueOrNull?.isEmpty == true
+            ? null
+            : () => _clearServerNotifications(),
+      ),
+    ];
     return Scaffold(
       backgroundColor: context.adaptiveScaffold,
       appBar: AppBar(
@@ -113,19 +128,12 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
           onPressed: () => context.popOrGo('/home'),
         ),
         actions: [
-          if (hasUnread)
-            TextButton(
-              onPressed: () => _markAllRead(),
-              child: const Text('Mark all read'),
-            ),
-          IconButton(
-            tooltip: 'Clear server notifications',
-            icon: Icon(Icons.delete_sweep_outlined,
-                color: Theme.of(context).colorScheme.onSurfaceVariant),
-            onPressed: serverAsync.valueOrNull?.isEmpty == true
-                ? null
-                : () => _clearServerNotifications(),
-          ),
+          // Overlap-class hardening (desktop): wrap so the action row cannot
+          // overflow horizontally; mobile keeps the identical inline list.
+          if (context.isDesktopLayout)
+            Wrap(spacing: 4, children: appBarActions)
+          else
+            ...appBarActions,
         ],
       ),
       body: Column(
@@ -358,24 +366,31 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
         children: tiles,
       );
     }
-    final contentWidth = MediaQuery.sizeOf(context).width - 32;
-    final tileWidth = (contentWidth - 12) / 2;
+    // OBS-2: read the width from the ListView's own constraints (post-padding)
+    // instead of MediaQuery so tiles stay 2-up even when the page renders
+    // inside a narrower host (detail split, dialog, embedded pane).
     return ListView(
       physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
       children: [
-        Wrap(
-          spacing: 12,
-          runSpacing: 12,
-          children: [
-            for (final w in tiles)
-              w is _NotificationDateHeader
-                  ? SizedBox(
-                      width: contentWidth,
-                      child: w,
-                    )
-                  : SizedBox(width: tileWidth, child: w),
-          ],
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final contentWidth = constraints.maxWidth;
+            final tileWidth = (contentWidth - 12) / 2;
+            return Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              children: [
+                for (final w in tiles)
+                  w is _NotificationDateHeader
+                      ? SizedBox(
+                          width: contentWidth,
+                          child: w,
+                        )
+                      : SizedBox(width: tileWidth, child: w),
+              ],
+            );
+          },
         ),
       ],
     );

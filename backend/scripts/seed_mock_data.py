@@ -64,6 +64,21 @@ async def seed():
         session.add(admin)
         print(f"Created admin user: admin@purchase.local / admin123")
 
+        # ── Anandu User ──
+        anandu_id = uuid.uuid4()
+        anandu = User(
+            id=anandu_id,
+            email="anandu@gmail.com",
+            username="anandu",
+            password_hash=hash_password("123456789"),
+            name="Anandu",
+            is_super_admin=True,
+            is_active=True,
+            created_at=utcnow(),
+        )
+        session.add(anandu)
+        print(f"Created user: anandu@gmail.com / 123456789")
+
         # ── Business ──
         biz_id = uuid.uuid4()
         biz = Business(
@@ -87,6 +102,15 @@ async def seed():
             created_at=utcnow(),
         )
         session.add(membership)
+
+        membership_anandu = Membership(
+            id=uuid.uuid4(),
+            user_id=anandu_id,
+            business_id=biz_id,
+            role="owner",
+            created_at=utcnow(),
+        )
+        session.add(membership_anandu)
 
         # ── Owner User (separate from admin) ──
         owner_id = uuid.uuid4()
