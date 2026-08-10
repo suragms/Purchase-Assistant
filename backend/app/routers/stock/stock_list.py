@@ -47,7 +47,6 @@ from app.models.reorder_list import ReorderListEntry
 from app.models.stock_adjustment import StockAdjustmentLog
 from app.models.stock_physical_count import StockPhysicalCount
 from app.models.staff_purchase_log import StaffPurchaseLog
-from app.schemas.stock_audit import StockVerifyCountIn
 from app.schemas.stock import (
     BarcodeBatchIn,
     BarcodeBatchOut,
@@ -735,38 +734,8 @@ async def search_stock(
         status=status,
         sort=sort,
     )
-@router.get("/low", response_model=StockListOut, deprecated=True)
-async def low_stock(
-    business_id: uuid.UUID,
-    db: Annotated[AsyncSession, Depends(get_db)],
-    _m: Annotated[Membership, Depends(require_membership)],
-    page: int = Query(1, ge=1),
-    per_page: int = Query(50, ge=1, le=2000),
-):
-    """Items below reorder level — SQL-filtered (no in-memory 10k sweep)."""
-    return await _list_stock_page(
-        business_id=business_id,
-        db=db,
-        page=page,
-        per_page=per_page,
-        status="low",
-        sort="stock_asc",
-    )
-@router.get("/critical", response_model=StockListOut, deprecated=True)
-async def critical_stock(
-    business_id: uuid.UUID,
-    db: Annotated[AsyncSession, Depends(get_db)],
-    _m: Annotated[Membership, Depends(require_membership)],
-    page: int = Query(1, ge=1),
-    per_page: int = Query(50, ge=1, le=2000),
-):
-    return await _list_stock_page(
-        business_id=business_id,
-        db=db,
-        page=page,
-        per_page=per_page,
-        status="critical",
-    )
+
+
 @router.get("/alerts/summary", response_model=StockAlertsSummaryOut)
 async def stock_alerts_summary(
     business_id: uuid.UUID,

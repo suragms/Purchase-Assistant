@@ -243,15 +243,19 @@ class _AppTextFieldState extends State<AppTextField> {
               suffixIcon: widget.suffix,
               filled: true,
               fillColor: widget.enabled ? hx.inputFill : hx.surfaceCanvas,
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 14,
-                vertical: 15,
+              contentPadding: const EdgeInsets.fromLTRB(
+                14,
+                // Extra top so floating label clears filled value on Flutter web (UX-195).
+                20,
+                14,
+                14,
               ),
               labelStyle: HexaDsType.label(14, color: hx.textMuted)
-                  .copyWith(fontWeight: FontWeight.w500),
+                  .copyWith(fontWeight: FontWeight.w500, height: 1.2),
               floatingLabelStyle:
                   HexaDsType.label(13, color: hx.textPrimary).copyWith(
                 fontWeight: FontWeight.w700,
+                height: 1.0,
                 color: hasError
                     ? HexaDsColors.error
                     : success

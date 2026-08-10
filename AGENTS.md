@@ -10,6 +10,7 @@ This file is the single agent contract. Roadmap: `PLAN.md`. Board: `TASKS.md`. D
 | File | Owns |
 |------|------|
 | `AGENTS.md` | Rules, non-negotiables, lessons learned |
+| `CODE_HYGIENE.md` | Search-first / no-duplication / dead-code & API audit protocols |
 | `PLAN.md` | Master feature roadmap |
 | `TASKS.md` | Current execution board only |
 | `README.md` | Intro + setup |
@@ -97,6 +98,7 @@ Never invent endpoints, fields, screens, permissions, or financial numbers.
 
 ## ALWAYS
 
+- Pre-write search gate: before any new file/provider/widget/API, follow `CODE_HYGIENE.md` (grep existing owners first; no `_v2`/`_new` forks)
 - HapticFeedback: selection on main nav; medium on save where appropriate
 - `ref.invalidate(...)` after mutations that affect lists, KPIs, or reports
 - Loading: skeletons / section `LinearProgressIndicator` — not blocking full-screen spinners on shell tabs

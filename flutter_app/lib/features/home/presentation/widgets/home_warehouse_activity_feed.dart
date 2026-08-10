@@ -27,6 +27,18 @@ class _HomeWarehouseActivityFeedState
     extends ConsumerState<HomeWarehouseActivityFeed> {
   bool _expanded = false;
 
+  @override
+  void initState() {
+    super.initState();
+    // API-DUP-H-004: compact Home feed is the mounted owner of this section.
+    // Without enabling the gate, [homeRecentActivityFeedProvider] short-circuits
+    // to [] (only the unused [HomeRecentChangesSection] previously flipped it).
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      ref.read(homeActivityFeedFetchEnabledProvider.notifier).state = true;
+    });
+  }
+
   void _openFullPage() => context.push('/home/activity');
 
   @override

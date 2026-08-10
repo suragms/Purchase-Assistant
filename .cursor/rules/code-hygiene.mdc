@@ -1,0 +1,15 @@
+---
+description: Code hygiene — search-first before new files; no duplication forks. Full rules in CODE_HYGIENE.md.
+alwaysApply: true
+---
+
+# Code hygiene (pointer only)
+
+Read and follow root **`CODE_HYGIENE.md`** every session.
+
+- **Search-first:** Do not create a new file, provider, service, widget, or API method until a real grep across `flutter_app/lib` and `backend/app` proves nothing already owns the job. Summarize search results before writing.
+- **Extend in place** — no `_v2`, `_new`, `_fixed`, `_updated`, `_final`, `_alt`, `_refactored` forks.
+- **Audit board:** `uiux context/CODE_HYGIENE_AUDIT.md` (Section 5 inventory). Do not consolidate duplicates without approval.
+- **Sections 6–7** (dead code / API duplicate calls): inventory-first; separate passes.
+
+Do not paste the full `CODE_HYGIENE.md` body into this rule.

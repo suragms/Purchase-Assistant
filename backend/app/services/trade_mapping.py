@@ -186,13 +186,3 @@ def consistency_score_from_zscores(zs: list[float | None]) -> float | None:
         return None
     mean_abs = sum(abs(v) for v in vals) / len(vals)
     return max(0.0, min(1.0, 1.0 - min(mean_abs / 3.0, 1.0)))
-
-
-async def item_price_consistency(
-    db: AsyncSession, business_id: uuid.UUID, date_from: date, date_to: date, catalog_item_id: uuid.UUID
-) -> float | None:
-    """Aggregate consistency for one catalog item (brokers/suppliers in window)."""
-    detail, _ = await item_supplier_broker_rows(db, business_id, date_from, date_to)
-    rows = [r for r in detail if r.get("catalog_item_id") == str(catalog_item_id)]
-    zs: list[float | None] = [r.get("vwap_zscore") for r in rows]  # type: ignore[assignment]
-    return consistency_score_from_zscores(zs)

@@ -14,6 +14,7 @@ import 'app_period_provider.dart';
 import 'prefs_provider.dart';
 import 'stock_providers.dart';
 import 'trade_purchases_provider.dart';
+import 'trade_purchases_list_inflight.dart';
 
 /// Clears staff home caches after login/logout so a prior `session == null`
 /// fetch never sticks as an empty list for the next user.
@@ -209,16 +210,15 @@ final staffLowStockAlertsProvider =
   }
 });
 
-/// Low + out count for staff home attention (from staff-scoped low list only).
+/// Low + out attention for staff home — from alerts/summary SSOT (not a capped list).
 final staffLowStockAttentionCountProvider = Provider.autoDispose<int>((ref) {
   if (!_staffSessionActive(ref)) return 0;
   _assertStaffProviderRole(ref);
-  final alerts = ref.watch(staffLowStockAlertsProvider);
-  return alerts.when(
-    data: (rows) => rows.length,
-    loading: () => 0,
-    error: (_, __) => 0,
-  );
+  final counts = ref.watch(stockStatusCountsProvider).valueOrNull;
+  if (counts == null) return 0;
+  return (counts['low'] ?? 0) +
+      (counts['critical'] ?? 0) +
+      (counts['out'] ?? 0);
 });
 
 /// Floor KPI counts from delivery pipeline API + stock status.
@@ -453,7 +453,8 @@ final staffTodayPurchasesProvider = FutureProvider.autoDispose<List<TradePurchas
   if (session == null) return [];
   try {
     final today = _todayApiDate();
-    final rows = await ref.read(hexaApiProvider).listTradePurchases(
+    final rows = await fetchTradePurchasesPageDeduped(
+          api: ref.read(hexaApiProvider),
           businessId: session.primaryBusiness.id,
           limit: 20,
           offset: 0,
@@ -510,7 +511,8 @@ final staffTradePurchasesHistoryProvider = FutureProvider.autoDispose
     const maxRows = 500;
     final raw = <Map<String, dynamic>>[];
     while (raw.length < maxRows) {
-      final page = await ref.read(hexaApiProvider).listTradePurchases(
+      final page = await fetchTradePurchasesPageDeduped(
+            api: ref.read(hexaApiProvider),
             businessId: session.primaryBusiness.id,
             limit: pageSize,
             offset: offset,
@@ -536,7 +538,7 @@ final staffTradePurchasesHistoryProvider = FutureProvider.autoDispose
   }
 });
 
-/// All catalog stock rows with empty item_code (paged load).
+/// Catalog stock rows with empty item_code (server-filtered; for missing-codes page).
 final missingCodeItemsProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
   registerProviderKeepAliveTimer(ref, const Duration(minutes: 2));
@@ -547,21 +549,20 @@ final missingCodeItemsProvider =
   var page = 1;
   final missing = <Map<String, dynamic>>[];
   while (page <= 40) {
+    // API-DUP-SF-003: server `missing_item_code` — do not page the full catalog.
     final res = await api.listStock(
       businessId: session.primaryBusiness.id,
       page: page,
       perPage: pageSize,
       status: 'all',
       sort: 'name',
+      missingItemCode: true,
     );
     final total = (res['total'] as num?)?.toInt() ?? 0;
     final raw = (res['items'] as List?) ?? const [];
     if (raw.isEmpty) break;
     for (final e in raw) {
-      if (e is! Map) continue;
-      final m = Map<String, dynamic>.from(e);
-      final code = m['item_code']?.toString().trim() ?? '';
-      if (code.isEmpty) missing.add(m);
+      if (e is Map) missing.add(Map<String, dynamic>.from(e));
     }
     if (page * pageSize >= total) break;
     page++;
@@ -599,8 +600,10 @@ final staffGalleryStockProvider =
   return rows;
 });
 
+/// Missing item-code count for staff home — alerts/summary (not full list crawl).
 final staffMissingCodeCountProvider = Provider.autoDispose<int>((ref) {
-  return ref.watch(missingCodeItemsProvider).valueOrNull?.length ?? 0;
+  if (!_staffSessionActive(ref)) return 0;
+  return ref.watch(stockStatusCountsProvider).valueOrNull?['missing_code'] ?? 0;
 });
 
 final staffOpeningStockCountProvider = Provider.autoDispose<int>((ref) {

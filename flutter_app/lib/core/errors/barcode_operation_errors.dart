@@ -182,10 +182,42 @@ String barcodeMessageForUser(
   }
 }
 
-void logBarcodeOperationError(Object error, [StackTrace? stack]) {
-  if (!kDebugMode) return;
-  debugPrint('[BarcodeOp] $error');
-  if (stack != null) debugPrint('$stack');
+void logBarcodeOperationError(
+  Object error, {
+  StackTrace? stack,
+  String? site,
+}) {
+  final typeName = error.runtimeType.toString();
+  final sanitized = sanitizeBarcodeErrorForLog(error);
+  final where = (site == null || site.isEmpty) ? 'unknown' : site;
+  // Always emit type + sanitized message (no item/business ids) so production
+  // bulk-print failures are diagnosable (UX-192).
+  debugPrint('[BarcodeOp] site=$where type=$typeName msg=$sanitized');
+  if (kDebugMode && stack != null) {
+    debugPrint('$stack');
+  }
+}
+
+/// Strip likely PII / identifiers from exception text before prod logging.
+@visibleForTesting
+String sanitizeBarcodeErrorForLog(Object error) {
+  var s = error is BarcodeOperationException
+      ? '${error.kind.name}: ${error.message}'
+      : error.toString();
+  // UUIDs
+  s = s.replaceAll(
+    RegExp(
+      r'[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}',
+    ),
+    '<id>',
+  );
+  // Quoted item names from barcode-render messages
+  s = s.replaceAll(RegExp(r'"[^"]{1,120}"'), '"<redacted>"');
+  // Long digit runs (codes / phones)
+  s = s.replaceAll(RegExp(r'\b\d{6,}\b'), '<num>');
+  // Truncate
+  if (s.length > 240) s = '${s.substring(0, 240)}…';
+  return s;
 }
 
 Future<void> guardWebPrint(Future<void> Function() printAction) async {

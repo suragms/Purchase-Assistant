@@ -399,7 +399,7 @@ class BarcodePdfService {
       }
       return await compute(_barcodeA4DenseFromPayload, payload);
     } catch (e, st) {
-      logBarcodeOperationError(e, st);
+      logBarcodeOperationError(e, stack: st, site: 'generateBatchA4Dense');
       if (symbol == BarcodeSymbolMode.qrCode) {
         return await generateBatchA4Dense(
           items: items,

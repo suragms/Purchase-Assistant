@@ -360,13 +360,6 @@ class ReportsFilterDrawer extends ConsumerWidget {
   }
 }
 
-/// Legacy alias — redirects to new panel.
-Future<void> showReportsFilterSheet({
-  required BuildContext context,
-  required WidgetRef ref,
-}) =>
-    showReportsFilterPanel(context: context, ref: ref);
-
 /// Filter chip group when the period has no options to pick.
 @visibleForTesting
 class ReportsFilterSimpleChipsEmpty extends StatelessWidget {

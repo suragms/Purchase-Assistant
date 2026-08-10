@@ -143,9 +143,10 @@ class _SupplierCreateWizardPageState
     });
   }
 
+  /// Fixed reserve only — Scaffold `resizeToAvoidBottomInset` already shrinks
+  /// the body for the IME; adding viewInsets here over-scrolls on focus.
   EdgeInsets _fieldScrollPad(BuildContext context) {
-    final kb = MediaQuery.viewInsetsOf(context).bottom;
-    return EdgeInsets.only(bottom: 24 + kb);
+    return const EdgeInsets.only(bottom: 120);
   }
 
   void _unfocusForm() {

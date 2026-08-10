@@ -168,7 +168,7 @@ void _invalidateStaffHomeRefresh(WidgetRef ref) {
   ref.invalidate(staffRecentScansProvider);
   ref.invalidate(staffRecentActivityProvider);
   ref.invalidate(staffStockMismatchCountProvider);
-  ref.invalidate(missingCodeItemsProvider);
+  ref.invalidate(stockStatusCountsProvider);
   ref.invalidate(openingStockMissingProvider);
   ref.invalidate(staffTradePurchasesHistoryProvider);
 }

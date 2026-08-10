@@ -22,6 +22,7 @@ import '../catalog_create_prefs.dart';
 import '../../../shared/widgets/inline_search_field.dart';
 import '../../../shared/widgets/packaging_type_selector.dart';
 import '../../../shared/widgets/hexa_empty_state.dart';
+import 'widgets/catalog_item_core_fields.dart';
 
 /// Simple catalog item create — supplier, broker, name, unit, optional more fields.
 class CatalogItemCreatePage extends ConsumerStatefulWidget {
@@ -44,9 +45,6 @@ class CatalogItemCreatePage extends ConsumerStatefulWidget {
   ConsumerState<CatalogItemCreatePage> createState() =>
       _CatalogItemCreatePageState();
 }
-
-/// @deprecated Use [CatalogItemCreatePage].
-typedef QuickAddCatalogItemPage = CatalogItemCreatePage;
 
 class _CatalogItemCreatePageState extends ConsumerState<CatalogItemCreatePage> {
   final _nameCtrl = TextEditingController();
@@ -762,16 +760,11 @@ class _CatalogItemCreatePageState extends ConsumerState<CatalogItemCreatePage> {
                             const SizedBox(height: 8),
                           ],
                           const SizedBox(height: 14),
-                          TextField(
+                          CatalogItemNameField(
                             controller: _nameCtrl,
                             focusNode: _nameFocus,
-                            decoration: InputDecoration(
-                              labelText: 'Item name *',
-                              hintText: 'e.g. SUGAR 50KG',
-                              border: const OutlineInputBorder(),
-                              errorText: _nameFieldError,
-                            ),
-                            textCapitalization: TextCapitalization.characters,
+                            errorText: _nameFieldError,
+                            hint: 'e.g. SUGAR 50KG',
                             textInputAction: TextInputAction.done,
                             onChanged: (_) {
                               if (_nameFieldError != null) {
@@ -959,50 +952,17 @@ class _CatalogItemCreatePageState extends ConsumerState<CatalogItemCreatePage> {
           );
         },
       ),
-      TextField(
+      CatalogItemCodeField(
         controller: _itemCodeCtrl,
-        decoration: const InputDecoration(
-          labelText: 'Item code (optional)',
-          hintText: 'Auto-generated if empty',
-          border: OutlineInputBorder(),
-        ),
-        textCapitalization: TextCapitalization.characters,
       ),
       const SizedBox(height: 12),
-      TextField(
+      CatalogItemHsnField(
         controller: _hsnCtrl,
-        decoration: const InputDecoration(
-          labelText: 'HSN (optional)',
-          border: OutlineInputBorder(),
-        ),
       ),
       const SizedBox(height: 12),
-      Row(
-        children: [
-          Expanded(
-            child: TextField(
-              controller: _purchaseRateCtrl,
-              keyboardType:
-                  const TextInputType.numberWithOptions(decimal: true),
-              decoration: const InputDecoration(
-                labelText: 'Purchase rate (optional)',
-                border: OutlineInputBorder(),
-              ),
-            ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: TextField(
-              controller: _sellingRateCtrl,
-              keyboardType:
-                  const TextInputType.numberWithOptions(decimal: true),
-              decoration: const InputDecoration(
-                labelText: 'Selling rate (optional)',
-                border: OutlineInputBorder(),
-              ),
-            ),
-          ),
-        ],
+      CatalogItemDefaultRatesRow(
+        landCtrl: _purchaseRateCtrl,
+        sellCtrl: _sellingRateCtrl,
       ),
       const SizedBox(height: 8),
     ];

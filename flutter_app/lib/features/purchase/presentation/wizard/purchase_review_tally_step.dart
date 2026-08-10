@@ -32,15 +32,6 @@ TradeCalcLine _lineToCalc(PurchaseLineDraft l) {
   );
 }
 
-double _lineBuyApprox(PurchaseLineDraft l) {
-  final kpu = l.kgPerUnit;
-  final pk = l.landingCostPerKg;
-  if (kpu != null && pk != null && kpu > 0 && pk > 0) {
-    return l.qty * kpu * pk;
-  }
-  return l.qty * l.landingCost;
-}
-
 String _pRateLine(PurchaseLineDraft l, Map<String, dynamic>? rateContext) {
   final tl = tradeLineForDisplay(l, rateContext: rateContext);
   final r = tradePurchaseLineDisplayPurchaseRate(tl);
@@ -99,7 +90,7 @@ class PurchaseReviewTallyStep extends ConsumerWidget {
     for (final l in draft.lines) {
       final sp = l.sellingPrice;
       if (sp == null || sp <= 0) continue;
-      estRetail += sp * l.qty - _lineBuyApprox(l);
+      estRetail += sp * l.qty - l.landingApprox;
       hasRetail = true;
     }
 
@@ -316,7 +307,7 @@ class _ReviewLineTile extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final tt = Theme.of(context).textTheme;
-    final buy = _lineBuyApprox(line);
+    final buy = line.landingApprox;
     final li = _lineToCalc(line);
     final g = lineGrossBase(li);
     final taxable = lineTaxableAfterLineDisc(li);

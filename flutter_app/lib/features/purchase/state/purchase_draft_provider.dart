@@ -28,7 +28,7 @@ double? _decimalFromObject(Object? value) {
   }
 }
 
-// --- Parity with legacy `purchase_entry_wizard_v2.dart` (same math as _strictFooter / computeTradeTotals) ---
+// --- Parity with `purchase_entry_wizard.dart` (same math as _strictFooter / computeTradeTotals) ---
 
 double _wizLineGross(TradeCalcLine li) => lineGrossBase(li);
 

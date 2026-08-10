@@ -137,7 +137,7 @@ class _BarcodePrintPageState extends ConsumerState<BarcodePrintPage> {
       if (!mounted) return;
       _showSnack(e.message);
     } catch (e, st) {
-      logBarcodeOperationError(e, st);
+      logBarcodeOperationError(e, stack: st);
       if (!mounted) return;
       _showSnack(
           barcodeMessageForUser(e, ctx: BarcodeOperationContext.singlePrint));
@@ -221,7 +221,7 @@ class _BarcodePrintPageState extends ConsumerState<BarcodePrintPage> {
       if (!mounted) return;
       _showSnack(e.message);
     } catch (e, st) {
-      logBarcodeOperationError(e, st);
+      logBarcodeOperationError(e, stack: st);
       if (!mounted) return;
       _showSnack(
           barcodeMessageForUser(e, ctx: BarcodeOperationContext.singlePrint));

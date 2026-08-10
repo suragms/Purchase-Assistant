@@ -1277,16 +1277,6 @@ HomeDashboardData aggregateHomeDashboard({
   );
 }
 
-/// Matches backend `_trade_line_amount_expr`: weight lines use qty × kg_per_unit × landing_cost_per_kg.
-double _lineTradeAmount(TradePurchaseLine ln) {
-  final kpu = ln.kgPerUnit;
-  final lcpk = ln.landingCostPerKg;
-  if (kpu != null && lcpk != null && kpu > 0 && lcpk > 0) {
-    return ln.qty * kpu * lcpk;
-  }
-  return ln.qty * ln.landingCost;
-}
-
 double _lineKg(TradePurchaseLine ln) {
   final kgPerUnit = ln.kgPerUnit;
   final landingCostPerKg = ln.landingCostPerKg;
@@ -1351,7 +1341,8 @@ HomeDashboardData _aggregate({
     totalPurchase += p.totalAmount;
 
     for (final ln in p.lines) {
-      final amt = _lineTradeAmount(ln);
+      // Pre-tax landing gross SSOT (DUP-F-001) — same as TradePurchaseLine.landingGross.
+      final amt = ln.landingGross;
       final sc = ln.sellingCost;
       if (sc != null) {
         totalSelling += ln.qty * sc;

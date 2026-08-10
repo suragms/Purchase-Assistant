@@ -10,6 +10,7 @@ import '../../../core/services/duplicate_detection_service.dart';
 import '../../../core/utils/item_code_format.dart';
 import '../../../core/widgets/async_value_form.dart';
 import '../../../shared/widgets/inline_search_field.dart';
+import 'widgets/catalog_item_core_fields.dart';
 
 import '../../../core/theme/hexa_colors.dart';
 /// Minimal item create after unknown barcode scan (no supplier/broker/HSN).
@@ -180,20 +181,14 @@ class _BarcodeQuickCreatePageState extends ConsumerState<BarcodeQuickCreatePage>
               ),
             ),
             const SizedBox(height: 8),
-            TextField(
+            CatalogItemCodeField(
               controller: _itemCodeCtrl,
-              decoration: const InputDecoration(
-                labelText: 'Item code *',
-                hintText: 'RICE-PONNI-50KG',
-              ),
-              inputFormatters: [ItemCodeInputFormatter()],
-              textCapitalization: TextCapitalization.characters,
+              codeRequired: true,
+              helper: 'RICE-PONNI-50KG',
             ),
             const SizedBox(height: 12),
-            TextField(
+            CatalogItemNameField(
               controller: _nameCtrl,
-              decoration: const InputDecoration(labelText: 'Item name *'),
-              textCapitalization: TextCapitalization.characters,
               onChanged: _onNameChanged,
             ),
             if (_dupHits.isNotEmpty) ...[
@@ -233,10 +228,9 @@ class _BarcodeQuickCreatePageState extends ConsumerState<BarcodeQuickCreatePage>
             ),
             if (_unit == 'bag') ...[
               const SizedBox(height: 12),
-              TextField(
+              CatalogItemKgPerBagField(
                 controller: _kgCtrl,
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                decoration: const InputDecoration(labelText: 'Kg per bag *'),
+                unitIsBag: true,
               ),
             ],
             if (_error != null) ...[

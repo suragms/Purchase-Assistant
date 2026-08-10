@@ -13,9 +13,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models import CatalogItem
 from app.models.owner_ops import AiUsageLog, BackupLog, WhatsAppDeliveryLog
 from app.models.purchase_damage_report import PurchaseDamageReport
+from app.models.trade_purchase import TradePurchase, TradePurchaseLine
 from app.services import staff_tasks as st
 from app.services import trade_query as tq
-from app.models.trade_purchase import TradePurchase
 
 _CACHE: dict[str, tuple[float, dict[str, Any]]] = {}
 _CACHE_TTL_SEC = 45.0
@@ -64,9 +64,15 @@ async def build_owner_dashboard(
         )
     ).scalar() or 0
 
+    # DUP-B-002: line spend SSOT (same as reports) — not header total_landing_subtotal.
     spend_week = (
         await db.execute(
-            select(func.coalesce(func.sum(TradePurchase.total_landing_subtotal), 0))
+            select(func.coalesce(func.sum(tq.trade_line_amount_expr()), 0))
+            .select_from(TradePurchaseLine)
+            .join(
+                TradePurchase,
+                TradePurchase.id == TradePurchaseLine.trade_purchase_id,
+            )
             .where(
                 TradePurchase.business_id == business_id,
                 tq.trade_purchase_status_in_reports(),

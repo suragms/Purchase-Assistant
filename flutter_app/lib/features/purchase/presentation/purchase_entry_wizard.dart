@@ -63,8 +63,8 @@ import 'widgets/purchase_saved_sheet.dart';
 
 enum _WizardExitDraftChoice { keepEditing, saveDraft, discard }
 
-class PurchaseEntryWizardV2 extends ConsumerStatefulWidget {
-  const PurchaseEntryWizardV2({
+class PurchaseEntryWizard extends ConsumerStatefulWidget {
+  const PurchaseEntryWizard({
     super.key,
     this.editingId,
     this.seedPurchase,
@@ -86,11 +86,11 @@ class PurchaseEntryWizardV2 extends ConsumerStatefulWidget {
   final bool resumeDraft;
 
   @override
-  ConsumerState<PurchaseEntryWizardV2> createState() =>
-      _PurchaseEntryWizardV2State();
+  ConsumerState<PurchaseEntryWizard> createState() =>
+      _PurchaseEntryWizardState();
 }
 
-class _PurchaseEntryWizardV2State extends ConsumerState<PurchaseEntryWizardV2>
+class _PurchaseEntryWizardState extends ConsumerState<PurchaseEntryWizard>
     with WidgetsBindingObserver {
   bool _isBootstrapping = false;
   bool _bootstrapSlowConnection = false;
@@ -856,7 +856,7 @@ class _PurchaseEntryWizardV2State extends ConsumerState<PurchaseEntryWizardV2>
       FlutterErrorDetails(
         exception: error,
         stack: stack,
-        library: 'purchase_entry_wizard_v2',
+        library: 'purchase_entry_wizard',
         context: ErrorDescription(context),
       ),
     );

@@ -16,6 +16,7 @@ import '../../../core/router/navigation_ext.dart';
 import '../../../core/unit_engine/stock_tracking_profile.dart';
 import '../../../shared/widgets/packaging_type_selector.dart';
 import '../../../shared/widgets/hexa_empty_state.dart';
+import 'widgets/catalog_item_core_fields.dart';
 
 class _BatchLine {
   _BatchLine() : name = TextEditingController();
@@ -348,13 +349,8 @@ class _BatchItemCreatePageState extends ConsumerState<BatchItemCreatePage> {
                       },
                     ),
                     const SizedBox(height: 8),
-                    TextField(
+                    CatalogItemNameField(
                       controller: line.name,
-                      textCapitalization: TextCapitalization.characters,
-                      decoration: const InputDecoration(
-                        labelText: 'Item name *',
-                        border: OutlineInputBorder(),
-                      ),
                       onChanged: (_) {
                         final suggested =
                             StockTrackingMode.suggestFromName(line.name.text);

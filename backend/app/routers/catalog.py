@@ -1214,7 +1214,7 @@ async def category_trade_summary(
     _m: Annotated[Membership, Depends(require_membership)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
-    """Per-item and category totals from confirmed trade lines (mobile dashboard)."""
+    """Per-item and category totals from trade lines in report statuses (DUP-B-003)."""
     del _m
     cr = await db.execute(
         select(ItemCategory.id).where(
@@ -1225,30 +1225,27 @@ async def category_trade_summary(
     if cr.scalar_one_or_none() is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Category not found")
 
-    in_confirmed = and_(
+    in_reports = and_(
         TradePurchase.id.isnot(None),
-        func.coalesce(func.lower(TradePurchase.status), "") == "confirmed",
+        tq.trade_purchase_status_in_reports(),
     )
-    bag_unit = func.lower(TradePurchaseLine.unit).in_(("bag", "sack", "box"))
+    line_amt = tq.trade_line_amount_expr()
+    qty_bags = tq.trade_line_qty_bags_expr()
+    weight_kg = tq.trade_line_weight_expr()
     stmt = (
         select(
             CatalogItem.id,
             CatalogItem.name,
             func.coalesce(
-                func.sum(case((in_confirmed, TradePurchaseLine.line_total), else_=0)),
+                func.sum(case((in_reports, line_amt), else_=0)),
                 0,
             ).label("period_line_total"),
             func.coalesce(
-                func.sum(
-                    case(
-                        (and_(in_confirmed, bag_unit), TradePurchaseLine.qty),
-                        else_=0,
-                    )
-                ),
+                func.sum(case((in_reports, qty_bags), else_=0)),
                 0,
             ).label("period_qty_bags"),
             func.coalesce(
-                func.sum(case((in_confirmed, TradePurchaseLine.total_weight), else_=0)),
+                func.sum(case((in_reports, weight_kg), else_=0)),
                 0,
             ).label("period_weight_kg"),
             CatalogItem.last_purchase_price,

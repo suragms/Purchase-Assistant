@@ -5,9 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../api/hexa_api.dart';
 import '../auth/session_notifier.dart' show activeSessionProvider, hexaApiProvider;
 import '../auth/provider_api_guard.dart';
+import 'trade_purchases_list_inflight.dart';
 
-final Map<String, Future<List<Map<String, dynamic>>>> _tradePurchasesRecentInflight =
-    {};
 final Map<String, Future<List<Map<String, dynamic>>>> _auditRecentInflight = {};
 final Map<String, Future<List<Map<String, dynamic>>>> _physicalCountsRecentInflight =
     {};
@@ -69,12 +68,11 @@ final tradePurchasesRecentSnapshotProvider =
   final session = ref.watch(activeSessionProvider);
   if (session == null) return [];
   final bid = session.primaryBusiness.id;
-  final page = await _tradePurchasesRecentInflight.putIfAbsent(
-    bid,
-    () => ref
-        .read(hexaApiProvider)
-        .listTradePurchases(businessId: bid, limit: 50)
-        .whenComplete(() => _tradePurchasesRecentInflight.remove(bid)),
+  final page = await fetchTradePurchasesPageDeduped(
+    api: ref.read(hexaApiProvider),
+    businessId: bid,
+    limit: 50,
+    offset: 0,
   );
   if (providerWasDisposed(disposed)) return [];
   return page;

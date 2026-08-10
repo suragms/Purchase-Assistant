@@ -15,7 +15,7 @@ Do **not** delete anything not listed here. New suspects → append a row and st
 | `backend/scripts/archive/**` | Already quarantined; WAVE2: keep under archive |
 | `backend/alembic/versions/README.md` | Folder-specific revision-gap notes |
 | `data/files/README.md` | Seed JSON field map (folder-specific) |
-| `purchase_entry_wizard_v2.dart` | Canonical wizard; **no v1 file exists** |
+| `purchase_entry_wizard.dart` | Canonical wizard (DUP-F-002; was `purchase_entry_wizard_v2`) |
 
 ## Already done (Phase 1 — do not re-delete)
 
@@ -42,9 +42,9 @@ Do **not** delete anything not listed here. New suspects → append a row and st
 
 ## Wizard v1 resolution
 
-**Verified:** Only `PurchaseEntryWizardV2` exists under `flutter_app/lib/features/purchase/presentation/`.  
-`app_router.dart` mounts `PurchaseEntryWizardV2` only. No `purchase_entry_wizard.dart` / v1 class.  
-**Action:** No delete (nothing leftover to remove). Optional rename of `*_v2*` is out of scope.
+**Verified:** Only `PurchaseEntryWizard` exists under `flutter_app/lib/features/purchase/presentation/` (DUP-F-002 renamed from `*_v2*`).  
+`app_router.dart` mounts `PurchaseEntryWizard` only.  
+**Action:** Rename complete — no leftover v1/v2 twin.
 
 ## Explicit non-goals
 

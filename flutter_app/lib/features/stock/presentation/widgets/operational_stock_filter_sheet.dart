@@ -11,10 +11,6 @@ import '../../../../shared/widgets/hexa_empty_state.dart';
 import '../../../../shared/widgets/search_picker_sheet.dart';
 import 'stock_bulk_actions_sheet.dart';
 
-/// Re-export spec desktop breakpoint for operational stock surfaces.
-@Deprecated('Use kDesktopMin from hexa_responsive.dart')
-const double kOperationalDesktopBreakpoint = kDesktopMin;
-
 /// Opens advanced filter UI (category, supplier, etc.) — not unit/status chips.
 Future<void> showOperationalStockFilter({
   required BuildContext context,

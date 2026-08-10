@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:fl_chart/fl_chart.dart';
@@ -11,6 +12,7 @@ import '../../../core/design_system/hexa_ds_tokens.dart';
 import '../../../core/errors/user_facing_errors.dart';
 import '../../../core/json_coerce.dart';
 import '../../../core/providers/analytics_breakdown_providers.dart';
+import '../../../core/providers/trade_report_snapshot_provider.dart';
 import '../../../core/reporting/trade_report_aggregate.dart';
 import '../../../core/theme/hexa_colors.dart';
 import '../../../shared/widgets/hexa_empty_state.dart';
@@ -172,7 +174,13 @@ class ReportsOverviewChartSection extends ConsumerWidget {
           const SizedBox(height: 8),
         ],
         catsAsync.when(
-          loading: () => _chartPlaceholder(chartSize),
+          loading: () => ReportsOverviewChartBoundedLoad(
+            height: chartSize,
+            onRetry: () {
+              ref.invalidate(tradeReportSnapshotProvider);
+              ref.invalidate(analyticsCategoriesTableProvider);
+            },
+          ),
           error: (e, _) => ReportsOverviewChartLoadError(
             title: 'Could not load category chart.',
             onRetry: () => ref.invalidate(analyticsCategoriesTableProvider),
@@ -211,7 +219,13 @@ class ReportsOverviewChartSection extends ConsumerWidget {
         ),
         const SizedBox(height: 8),
         supsAsync.when(
-          loading: () => _chartPlaceholder(chartSize),
+          loading: () => ReportsOverviewChartBoundedLoad(
+            height: chartSize,
+            onRetry: () {
+              ref.invalidate(tradeReportSnapshotProvider);
+              ref.invalidate(analyticsSuppliersTableProvider);
+            },
+          ),
           error: (e, _) => ReportsOverviewChartLoadError(
             title: 'Could not load supplier chart.',
             onRetry: () => ref.invalidate(analyticsSuppliersTableProvider),
@@ -233,14 +247,62 @@ class ReportsOverviewChartSection extends ConsumerWidget {
           borderRadius: BorderRadius.circular(12),
         ),
       );
+}
 
-  static Widget _chartPlaceholder(double h) => Padding(
-        padding: const EdgeInsets.only(bottom: 8),
-        child: SizedBox(
-          height: h,
-          child: const Center(child: CircularProgressIndicator(strokeWidth: 2)),
-        ),
+/// Spinner that becomes a retry UI after [timeout] (UX-193 Rule 27).
+@visibleForTesting
+class ReportsOverviewChartBoundedLoad extends StatefulWidget {
+  const ReportsOverviewChartBoundedLoad({
+    super.key,
+    required this.height,
+    required this.onRetry,
+    this.timeout = const Duration(seconds: 12),
+  });
+
+  final double height;
+  final VoidCallback onRetry;
+  final Duration timeout;
+
+  @override
+  State<ReportsOverviewChartBoundedLoad> createState() =>
+      _ReportsOverviewChartBoundedLoadState();
+}
+
+class _ReportsOverviewChartBoundedLoadState
+    extends State<ReportsOverviewChartBoundedLoad> {
+  Timer? _timer;
+  bool _timedOut = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer(widget.timeout, () {
+      if (mounted) setState(() => _timedOut = true);
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_timedOut) {
+      return ReportsOverviewChartLoadError(
+        title: 'Chart is taking too long.',
+        onRetry: widget.onRetry,
       );
+    }
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: SizedBox(
+        height: widget.height,
+        child: const Center(child: CircularProgressIndicator(strokeWidth: 2)),
+      ),
+    );
+  }
 }
 
 /// Overview chart / breakdown load failure (UX-148).

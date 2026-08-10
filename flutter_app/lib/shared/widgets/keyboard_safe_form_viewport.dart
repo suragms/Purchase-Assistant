@@ -5,8 +5,8 @@ import 'package:flutter/material.dart';
 /// **Bottom padding:** with [useViewInsetBottom] false (default), uses
 /// [bottomExtraInset] + [MediaQuery.paddingOf] bottom only — the scaffold already
 /// shrinks the body for the IME, so adding [viewInsets] here would double-count.
-/// Set [useViewInsetBottom] true for parents that keep [resizeToAvoidBottomInset]: false
-/// (e.g. [AuthPageShell]).
+/// Set [useViewInsetBottom] true only for parents that keep
+/// [resizeToAvoidBottomInset]: false.
 class KeyboardSafeFormViewport extends StatelessWidget {
   const KeyboardSafeFormViewport({
     super.key,

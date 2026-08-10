@@ -514,11 +514,12 @@ class PurchaseTermsOnlyStep extends ConsumerWidget {
       return fields;
     }
 
+    // Scaffold (when used) owns IME resize — do not pass viewInsets into
+    // bottomExtraInset (KeyboardSafeFormViewport default already excludes it).
     return KeyboardSafeFormViewport(
       dismissKeyboardOnTap: true,
       horizontalPadding: 0,
       topPadding: 0,
-      bottomExtraInset: MediaQuery.viewInsetsOf(context).bottom,
       minFieldsHeight: 0,
       fields: fields,
       footer: const SizedBox.shrink(),

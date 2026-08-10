@@ -16,11 +16,17 @@ import '../reporting/trade_report_aggregate.dart';
 import '../services/offline_store.dart';
 import '../utils/report_date_params.dart';
 import '../../features/shell/shell_branch_provider.dart';
+import '../../features/reports/reports_bi_tab.dart';
 import '../router/purchase_overlay_active_provider.dart';
 import 'trade_purchases_list_inflight.dart';
 import 'api_degraded_provider.dart';
 import 'analytics_kpi_provider.dart';
 import 'connectivity_provider.dart' show isOfflineResult;
+import 'reports_shell_providers.dart' show reportsShellTabProvider;
+
+/// API-DUP-R-001: Overview/Stock tabs use trade-* + ops; purchase rows only when needed.
+bool reportsTabNeedsPurchaseRows(ReportsBiTab tab) =>
+    tab == ReportsBiTab.purchases || tab == ReportsBiTab.items;
 
 final Map<String, Future<List<TradePurchase>>> _reportsPurchasesInflight = {};
 DateTime? _reportsInflightLastBustAt;
@@ -384,6 +390,18 @@ final reportsPurchasesPayloadProvider =
 
   // IndexedStack mounts Reports off-screen; use Hive only until the user opens Reports.
   if (branch != ShellBranch.reports && !needsLive) {
+    final hive = ref.watch(reportsPurchasesHiveCacheProvider);
+    return ReportsPurchasePayload(
+      items: hive ?? const [],
+      fromLiveFetch: false,
+    );
+  }
+
+  // API-DUP-R-001: Overview/Stock do not need full trade-purchases pages —
+  // charts/KPIs use trade-* + operational. Live-fetch on Items/Purchases (or
+  // when [needsLive] after a write).
+  final tab = ref.watch(reportsShellTabProvider);
+  if (!reportsTabNeedsPurchaseRows(tab) && !needsLive) {
     final hive = ref.watch(reportsPurchasesHiveCacheProvider);
     return ReportsPurchasePayload(
       items: hive ?? const [],

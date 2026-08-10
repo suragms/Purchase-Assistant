@@ -927,22 +927,3 @@ final homeWarehouseActivityFullProvider =
     feedTimeout: const Duration(seconds: 30),
   );
 });
-
-/// @deprecated Use [homeRecentActivityFeedProvider] only — kept for invalidation parity.
-final homeRecentPurchasesCompactProvider =
-    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
-  final disposed = registerProviderDisposeGuard(ref);
-  final session = ref.watch(activeSessionProvider);
-  if (session == null) return [];
-  final q = homeDateRangeForRef(ref);
-  final rows = await ref.read(hexaApiProvider).listTradePurchases(
-        businessId: session.primaryBusiness.id,
-        limit: 6,
-        offset: 0,
-        status: 'all',
-        purchaseFrom: q.from,
-        purchaseTo: q.to,
-      );
-  if (providerWasDisposed(disposed)) return [];
-  return rows;
-});

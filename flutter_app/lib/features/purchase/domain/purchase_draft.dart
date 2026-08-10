@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart';
 
+import '../../../core/calc_engine.dart' show ledgerLineLandingGross;
 import '../../../core/strict_decimal.dart';
 import '../../../core/utils/unit_utils.dart';
 
@@ -491,6 +492,15 @@ class PurchaseLineDraft {
       description: rawDesc.isEmpty ? null : rawDesc,
     );
   }
+
+  /// Pre-tax landing gross for draft UI estimates (DUP-F-001).
+  /// Delegates to [ledgerLineLandingGross] — not tax-inclusive [lineMoney].
+  double get landingApprox => ledgerLineLandingGross(
+        qty: qty,
+        landingCost: landingCost,
+        kgPerUnit: kgPerUnit,
+        landingCostPerKg: landingCostPerKg,
+      );
 }
 
 bool _isBagUnit(String unit) {

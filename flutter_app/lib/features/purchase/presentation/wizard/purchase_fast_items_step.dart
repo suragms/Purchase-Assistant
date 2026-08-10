@@ -83,15 +83,6 @@ class _PurchaseFastItemsStepState extends ConsumerState<PurchaseFastItemsStep> {
     setState(() {});
   }
 
-  double _approxLinePurchase(PurchaseLineDraft l) {
-    final kpu = l.kgPerUnit;
-    final pk = l.landingCostPerKg;
-    if (kpu != null && pk != null && kpu > 0 && pk > 0) {
-      return l.qty * kpu * pk;
-    }
-    return l.qty * l.landingCost;
-  }
-
   String _qtyHuman(PurchaseLineDraft l) {
     final u = l.unit.trim();
     final q = formatStockQtyForUnit(u, l.qty);
@@ -153,7 +144,7 @@ class _PurchaseFastItemsStepState extends ConsumerState<PurchaseFastItemsStep> {
           _PurchaseLineAddedPreviewCard(
             line: widget.lineJustAdded!,
             qtyLabel: _qtyHuman(widget.lineJustAdded!),
-            amountLabel: _inr0(_approxLinePurchase(widget.lineJustAdded!)),
+            amountLabel: _inr0(widget.lineJustAdded!.landingApprox),
             onDismiss: widget.onDismissLineJustAdded,
           ),
           const SizedBox(height: 10),
@@ -255,7 +246,7 @@ class _PurchaseFastItemsStepState extends ConsumerState<PurchaseFastItemsStep> {
                   itemBuilder: (ctx, i) {
                     final ln = lines[i];
                     final rc = tradePreviewLineRateContext(preview, i);
-                    final buy = _approxLinePurchase(ln);
+                    final buy = ln.landingApprox;
                     return Material(
                       color: Colors.white,
                       elevation: 0,

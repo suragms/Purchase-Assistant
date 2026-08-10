@@ -24,7 +24,7 @@ class PurchaseLocalWipDraftVm {
   final String titleLine;
 }
 
-/// Same eligibility rules as [PurchaseEntryWizardV2._maybeShowResumeDraftMaterialBanner].
+/// Same eligibility rules as [PurchaseEntryWizard._maybeShowResumeDraftMaterialBanner].
 final purchaseLocalWipDraftForHistoryProvider =
     Provider<PurchaseLocalWipDraftVm?>((ref) {
   ref.watch(businessDataWriteRevisionProvider);

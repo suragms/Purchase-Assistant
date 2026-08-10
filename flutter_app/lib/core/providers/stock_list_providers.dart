@@ -21,6 +21,7 @@ import 'home_dashboard_provider.dart'
         homePeriodRange,
         homePeriodProvider,
         homeBundledStockStatusCounts,
+        homeDashboardDataProvider,
         homeLowStockDetailFetchEnabledProvider,
         lowStockDashboardMountedProvider;
 import '../providers/analytics_kpi_provider.dart' show analyticsDateRangeProvider;
@@ -308,15 +309,18 @@ void _writeStockListRamCache(
   });
 }
 
-int _warehouseChipFilterCount(StockListQuery q, StockOperationalFilters op) {
-  var n = 0;
-  if (q.subcategory.isNotEmpty) n++;
-  if (q.status != 'all') n++;
-  if (op.missingBarcodeOnly) n++;
-  if (op.missingItemCodeOnly) n++;
-  if (op.reorderOnly) n++;
-  if (op.unit.isNotEmpty) n++;
-  return n;
+/// True when chip totals must respect search/category/ops scope (not status alone).
+///
+/// API-DUP-K-003: selecting Low/Out used to count `status != all` as a warehouse
+/// filter and fire four `listStock` GETs even with no real list scope.
+bool stockNeedsScopedStatusTotals(StockListQuery q, StockOperationalFilters op) {
+  if (stockListHasScopedFilters(q, op)) return true;
+  if (q.subcategory.isNotEmpty) return true;
+  if (op.missingBarcodeOnly) return true;
+  if (op.missingItemCodeOnly) return true;
+  if (op.reorderOnly) return true;
+  if (op.unit.isNotEmpty) return true;
+  return false;
 }
 
 /// Client-side filters shared by stock + bulk print.
@@ -1021,6 +1025,20 @@ final stockStatusCountsProvider =
   final disposed = registerProviderDisposeGuard(ref);
   final bundled = homeBundledStockStatusCounts(ref);
   if (bundled != null) return bundled;
+
+  // API-DUP-H-002: on Home cold paint, skip alerts/summary while home-overview is
+  // still refreshing — operational.stock_status_counts is SSOT when the shell lands.
+  // Do not key off [homeOverviewReadyForSatellites] (empty purchaseCount would
+  // block alerts forever on empty-DB warehouses).
+  if (shellBranchIsVisible(ref, ShellBranch.home)) {
+    final dash = ref.watch(homeDashboardDataProvider);
+    if (dash.refreshing) {
+      return const {};
+    }
+    final afterReady = homeBundledStockStatusCounts(ref);
+    if (afterReady != null) return afterReady;
+  }
+
   registerProviderKeepAliveTimer(ref, const Duration(minutes: 2));
   final session = ref.watch(sessionProvider);
   if (session == null) return {};
@@ -1110,10 +1128,12 @@ final stockFilteredStatusCountsProvider =
   registerProviderKeepAliveTimer(ref, const Duration(seconds: 25));
   final q = ref.watch(stockListQueryProvider);
   final op = ref.watch(stockOperationalFiltersProvider);
-  if (_warehouseChipFilterCount(q, op) == 0 &&
-      !stockListHasScopedFilters(q, op)) {
+
+  // Unscoped path: alerts/summary or Home/shell bundle (never 4× listStock).
+  if (!stockNeedsScopedStatusTotals(q, op)) {
     return ref.watch(stockStatusCountsProvider.future);
   }
+
   final session = ref.watch(sessionProvider);
   if (session == null || providerSkipApi(ref)) return {};
   final api = ref.read(hexaApiProvider);
@@ -1141,18 +1161,21 @@ final stockFilteredStatusCountsProvider =
     return (res['total'] as num?)?.toInt() ?? 0;
   }
 
-  final results = await Future.wait([
-    totalFor('all'),
-    totalFor('low'),
-    totalFor('critical'),
-    totalFor('out'),
-  ]);
+  // Quick chips hide non-selected counts while filters are active — one GET.
+  final status = q.status.trim().isEmpty ? 'all' : q.status.trim();
+  final fetchStatus = switch (status) {
+    'low' || 'shortage' => 'shortage',
+    'critical' => 'critical',
+    'out' => 'out',
+    _ => 'all',
+  };
+  final n = await totalFor(fetchStatus);
   if (providerWasDisposed(disposed)) return {};
-  return {
-    'all': results[0],
-    'low': results[1],
-    'critical': results[2],
-    'out': results[3],
+  return switch (fetchStatus) {
+    'shortage' => {'all': 0, 'low': n, 'critical': 0, 'out': 0},
+    'critical' => {'all': 0, 'low': 0, 'critical': n, 'out': 0},
+    'out' => {'all': 0, 'low': 0, 'critical': 0, 'out': n},
+    _ => {'all': n, 'low': 0, 'critical': 0, 'out': 0},
   };
 });
 

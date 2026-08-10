@@ -33,7 +33,6 @@ import '../../features/catalog/presentation/catalog_page.dart';
 import '../../features/catalog/presentation/catalog_type_items_page.dart';
 import '../../features/catalog/presentation/item_detail_page.dart';
 import '../../features/catalog/presentation/item_edit_page.dart';
-import '../../features/catalog/presentation/quick_add_catalog_item_page.dart';
 import '../../features/catalog/presentation/batch_item_create_page.dart';
 import '../../features/catalog/presentation/catalog_missing_codes_page.dart';
 import '../../features/catalog/presentation/catalog_setup_reorder_levels_page.dart';
@@ -58,7 +57,7 @@ import '../providers/home_breakdown_tab_providers.dart'
 import '../../features/purchase/domain/purchase_draft.dart';
 import '../../features/purchase/presentation/purchase_detail_page.dart';
 import '../../features/purchase/presentation/purchase_home_page.dart';
-import '../../features/purchase/presentation/purchase_entry_wizard_v2.dart';
+import '../../features/purchase/presentation/purchase_entry_wizard.dart';
 import '../../features/notifications/presentation/notifications_page.dart';
 import '../../features/settings/presentation/business_profile_page.dart';
 import '../../features/settings/presentation/settings_page.dart';
@@ -1003,7 +1002,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             key: ValueKey(
               'purchase_new_${seed != null ? 'seed' : resumeDraft ? 'resume' : 'fresh'}_${(cid != null && cid.isNotEmpty) ? cid : 'none'}',
             ),
-            child: PurchaseEntryWizardV2(
+            child: PurchaseEntryWizard(
               initialCatalogItemId:
                   (cid != null && cid.isNotEmpty) ? cid : null,
               initialDraft: seed,
@@ -1039,7 +1038,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           final seedOk = seed != null && seed.id == trimmedId;
           return iosPushPage(
             key: state.pageKey,
-            child: PurchaseEntryWizardV2(
+            child: PurchaseEntryWizard(
               editingId: trimmedId,
               seedPurchase: seedOk ? seed : null,
             ),

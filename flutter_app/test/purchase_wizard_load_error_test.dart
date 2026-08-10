@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:harisree_warehouse/features/purchase/presentation/purchase_entry_wizard_v2.dart';
+import 'package:harisree_warehouse/features/purchase/presentation/purchase_entry_wizard.dart';
 import 'package:harisree_warehouse/shared/widgets/hexa_empty_state.dart';
 
 void main() {

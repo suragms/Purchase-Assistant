@@ -14,6 +14,7 @@ import '../../../../core/utils/item_code_format.dart';
 import '../../../../core/widgets/form_field_scroll.dart';
 import '../../../../shared/widgets/bag_default_unit_hint.dart';
 import '../../../../shared/widgets/search_picker_sheet.dart';
+import 'catalog_item_core_fields.dart';
 
 import '../../../../core/theme/hexa_colors.dart';
 /// Full-screen / sheet body for editing catalog item defaults (name, unit, costs).
@@ -142,10 +143,9 @@ class CatalogItemDefaultsEditFormState
           const SizedBox(height: HexaDsSpace.s2),
         ],
         _sectionTitle(context, 'Item identity'),
-        AppTextField(
+        CatalogItemNameField(
           controller: widget.nameCtrl,
           focusNode: _nameFocus,
-          label: 'Name *',
           errorText: widget.nameError,
           textCapitalization: TextCapitalization.words,
           autofocus: true,
@@ -153,17 +153,14 @@ class CatalogItemDefaultsEditFormState
         const SizedBox(height: HexaDsSpace.s1),
         AppFormRow(
           children: [
-            AppTextField(
+            CatalogItemCodeField(
               controller: widget.codeCtrl,
               focusNode: _codeFocus,
-              label: 'Item code',
               helper: 'A-Z, 0-9, hyphen',
-              inputFormatters: [ItemCodeInputFormatter()],
             ),
-            AppTextField(
+            CatalogItemHsnField(
               controller: widget.hsnCtrl,
               focusNode: _hsnFocus,
-              label: 'HSN code',
             ),
           ],
         ),
@@ -221,16 +218,11 @@ class CatalogItemDefaultsEditFormState
         ),
         if (_showKgPerBag) ...[
           const SizedBox(height: HexaDsSpace.s2),
-          AppTextField(
+          CatalogItemKgPerBagField(
             controller: widget.kgCtrl,
             focusNode: _kgFocus,
-            label: _unit == 'bag' ? 'Kg per bag *' : 'Kg per bag (optional)',
-            helper: _unit == 'bag'
-                ? 'Required when stock unit is bag'
-                : 'Set unit to bag if this item is stocked in bags',
+            unitIsBag: _unit == 'bag',
             errorText: widget.kgError,
-            keyboardType:
-                const TextInputType.numberWithOptions(decimal: true),
             onChanged: (_) => setState(() {}),
           ),
           if (_unit == 'bag') ...[
@@ -255,23 +247,11 @@ class CatalogItemDefaultsEditFormState
         ],
         const SizedBox(height: HexaDsSpace.s2),
         _sectionTitle(context, 'Default pricing'),
-        AppFormRow(
-          children: [
-            AppTextField(
-              controller: widget.landCtrl,
-              focusNode: _landFocus,
-              label: 'Default landing (₹)',
-              keyboardType:
-                  const TextInputType.numberWithOptions(decimal: true),
-            ),
-            AppTextField(
-              controller: widget.sellCtrl,
-              focusNode: _sellFocus,
-              label: 'Default selling (₹)',
-              keyboardType:
-                  const TextInputType.numberWithOptions(decimal: true),
-            ),
-          ],
+        CatalogItemDefaultRatesRow(
+          landCtrl: widget.landCtrl,
+          sellCtrl: widget.sellCtrl,
+          landFocus: _landFocus,
+          sellFocus: _sellFocus,
         ),
         if (widget.openingStockLabel != null) ...[
           const SizedBox(height: HexaDsSpace.s2),

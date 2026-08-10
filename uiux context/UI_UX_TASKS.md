@@ -7669,6 +7669,34 @@ Reuse Phase D patterns (height-bind, no Align+Expanded, MQ host). Do not rewrite
 
 ---
 
+# FOLLOW-UP AUDIT — UX-192…UX-195 (2026-08-10 screenshots)
+
+| ID | Surface | Status | Notes |
+|---|---|---|---|
+| UX-192 | Bulk print swallowed PDF error | DONE | Prod non-PII `[BarcodeOp]` logging + site tags. VM reproduce: single Code128 A4 dense PDF succeeds. **DISCOVERED FOLLOW-UP UX-192a:** live web/API failure still needs prod log capture after deploy — do not blind-patch layout. |
+| UX-193 | Reports Overview chart hang | DONE | Snapshot gate uses `shellBranchIsVisible` SSOT. Chart loading bounded 12s → Retry. |
+| UX-194 | Bulk print code-less late warn | DONE | Toolbar amber banner for missing-code count; Print uses printable subset; empty-batch guard kept. |
+| UX-195 | AppTextField label overlap | DONE | `contentPadding` top 20 + floating label `height: 1.0` in `AppTextField`. |
+
+---
+
+# CODE HYGIENE BOARD (CODE_HYGIENE.md)
+
+| Phase | Status | Notes |
+|---|---|---|
+| Section 8 standing rules | ACTIVE | Search-first gate on every session via `code-hygiene.mdc` |
+| HYG-S5 duplicate inventory | DONE | Audit complete; **DUP-F-001 consolidated** — next ID needs approval |
+| HYG-S5 DUP-F-001 consolidation | DONE | `landingApprox` / `landingGross` / `ledgerLineLandingGross` SSOT |
+| HYG-S5 DUP-B-003 consolidation | DONE | Category trade-summary → `trade_line_amount_expr` + report statuses |
+| HYG-S5 DUP-F-002 consolidation | DONE | `PurchaseEntryWizard` (dropped `_v2` filename/class) |
+| HYG-S5 DUP-F-005 consolidation | DONE | Dead compact provider removed; staff/snapshot use shared dedupe |
+| HYG-S5 DUP-B-002 consolidation | DONE | Owner dashboard spend → `trade_line_amount_expr` |
+| HYG-S5 DUP-F-003 consolidation | DONE | Shared `catalog_item_core_fields` across create/edit/barcode/batch |
+| HYG-S6 dead code audit | Flutter A + Backend A/B DONE | Orphans + unused imports + `/stock/low|critical` + `item_price_consistency` removed; Settings stubs STOP |
+| HYG-S7 API/duplicate-call audit | … + R-001 DONE | Next: **SF-002** or **K-002** |
+
+---
+
 # PHASE C — FriendlyLoadError clearance (UX-152…UX-178)
 
 **Status:** DONE (`VERIFIED_CODE` + `VERIFIED_TEST`)

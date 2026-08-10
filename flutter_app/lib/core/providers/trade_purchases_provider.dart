@@ -16,6 +16,16 @@ import 'analytics_kpi_provider.dart' show analyticsDateRangeProvider;
 import 'trade_purchases_list_inflight.dart';
 import '../utils/line_display.dart';
 
+// ---------------------------------------------------------------------------
+// Trade-purchase list ownership (DUP-F-005)
+// - History shell list/paging: [tradePurchasesListProvider]
+// - Recent unfiltered snapshot (alerts/intel): [tradePurchasesRecentSnapshotProvider]
+// - Reports date-range live fetch: [fetchReportsPurchasesLiveForAnalytics]
+// - Staff history (redacted): [staffTradePurchasesHistoryProvider]
+// Concurrent pages share [fetchTradePurchasesPageDeduped] — do not add a parallel
+// listTradePurchases wrapper for overlapping keys.
+// ---------------------------------------------------------------------------
+
 /// Alert strip: small cap — full due counts use server-side reports when needed.
 const kTradePurchasesAlertFetchLimit = 50;
 

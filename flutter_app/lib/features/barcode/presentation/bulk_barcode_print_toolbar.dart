@@ -30,6 +30,7 @@ class BulkBarcodePrintToolbar extends StatelessWidget {
     required this.onPdf,
     required this.onPrint,
     this.pdfButtonLabel = 'PDF',
+    this.missingCodeCount = 0,
   });
 
   final int selectedCount;
@@ -54,6 +55,8 @@ class BulkBarcodePrintToolbar extends StatelessWidget {
   final Future<void> Function() onPdf;
   final Future<void> Function() onPrint;
   final String pdfButtonLabel;
+  /// Selected rows with neither barcode nor item_code (UX-194).
+  final int missingCodeCount;
 
   Future<void> _openSettings(BuildContext context) async {
     await showHexaBottomSheet<void>(
@@ -158,7 +161,9 @@ class BulkBarcodePrintToolbar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final enabled = selectedCount > 0 && !busy;
+    final printableCount =
+        (selectedCount - missingCodeCount).clamp(0, selectedCount);
+    final enabled = printableCount > 0 && !busy;
     return Material(
       elevation: 8,
       child: SafeArea(
@@ -173,6 +178,41 @@ class BulkBarcodePrintToolbar extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
+              if (missingCodeCount > 0 && selectedCount > 0)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 6),
+                  child: Material(
+                    color: const Color(0xFFFFF8E1),
+                    borderRadius: BorderRadius.circular(8),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 8,
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(
+                            Icons.info_outline,
+                            size: 18,
+                            color: Color(0xFFF57F17),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              missingCodeCount >= selectedCount
+                                  ? 'None of $selectedCount selected have a barcode or item code. Add codes in catalog before print.'
+                                  : '$missingCodeCount of $selectedCount selected have no barcode/item code — print will use $printableCount with codes.',
+                              style: const TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
               if (progress != null || statusText != null) ...[
                 LinearProgressIndicator(minHeight: 2, value: progress),
                 if (statusText != null)
@@ -191,7 +231,9 @@ class BulkBarcodePrintToolbar extends StatelessWidget {
                   Expanded(
                     child: OperationalAsyncButton(
                       label: selectedCount > 0
-                          ? 'Print selected ($selectedCount)'
+                          ? (printableCount > 0
+                              ? 'Print selected ($printableCount)'
+                              : 'Print selected ($selectedCount)')
                           : 'Print selected',
                       icon: Icons.print_outlined,
                       filled: true,

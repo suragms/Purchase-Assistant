@@ -6,6 +6,9 @@ import '../../../../core/theme/hexa_colors.dart';
 import '../auth_brand_assets.dart';
 
 /// Blurred hero image + light scrim, keyboard-safe scroll. Max width 420.
+///
+/// Keyboard lift is owned by the parent [Scaffold]'s `resizeToAvoidBottomInset`
+/// — do **not** add [MediaQuery.viewInsets] to scroll padding (double-lift bounce).
 class AuthPageShell extends StatelessWidget {
   const AuthPageShell({super.key, required this.children});
 
@@ -13,7 +16,7 @@ class AuthPageShell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bottom = MediaQuery.viewInsetsOf(context).bottom;
+    final keyboardOpen = MediaQuery.viewInsetsOf(context).bottom > 0;
     return Stack(
       fit: StackFit.expand,
       children: [
@@ -47,20 +50,37 @@ class AuthPageShell extends StatelessWidget {
           ),
         ),
         SafeArea(
-          child: Align(
-            alignment: Alignment.topCenter,
-            child: SingleChildScrollView(
-              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-              physics: const ClampingScrollPhysics(),
-              padding: EdgeInsets.fromLTRB(16, 8, 16, 24 + bottom),
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 420),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: children,
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              return Align(
+                alignment: keyboardOpen
+                    ? Alignment.topCenter
+                    : Alignment.center,
+                child: SingleChildScrollView(
+                  keyboardDismissBehavior:
+                      ScrollViewKeyboardDismissBehavior.onDrag,
+                  physics: const ClampingScrollPhysics(),
+                  // Fixed padding only — Scaffold owns IME inset.
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(
+                      maxWidth: 420,
+                      // When centered, fill min height so Align can center the card.
+                      minHeight: keyboardOpen
+                          ? 0
+                          : (constraints.maxHeight - 40).clamp(0.0, double.infinity),
+                    ),
+                    child: Column(
+                      mainAxisAlignment: keyboardOpen
+                          ? MainAxisAlignment.start
+                          : MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: children,
+                    ),
+                  ),
                 ),
-              ),
-            ),
+              );
+            },
           ),
         ),
       ],

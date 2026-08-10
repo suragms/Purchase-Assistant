@@ -28,9 +28,6 @@ extension HomeBreakdownTabX on HomeBreakdownTab {
 }
 
 /// Selected breakdown tab (Category | Subcategory | Supplier | Items).
-final homeBreakdownTabProvider =
-    StateProvider<HomeBreakdownTab>((ref) => HomeBreakdownTab.category);
-
 /// Same date window as [homeDashboardDataProvider], from already-watched state.
 ({String from, String to}) homeDateRangeForWatch(
   HomePeriod period,

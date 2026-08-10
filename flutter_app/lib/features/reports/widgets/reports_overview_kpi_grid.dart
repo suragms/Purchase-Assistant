@@ -3,10 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/design_system/hexa_responsive.dart';
+import '../../../core/json_coerce.dart';
 import '../../../core/providers/analytics_breakdown_providers.dart';
-import '../../../core/providers/home_owner_dashboard_providers.dart'
-    show homeLowStockAttentionCountProvider;
 import '../../../core/providers/operations_providers.dart';
+import '../../../core/providers/stock_list_providers.dart'
+    show stockStatusCountsProvider;
 import '../../../core/reporting/trade_report_aggregate.dart';
 import '../../../core/theme/hexa_colors.dart';
 import 'reports_qty_unit_strip.dart';
@@ -44,8 +45,27 @@ class ReportsOverviewKpiGrid extends ConsumerWidget {
     final ops = ref.watch(operationalReportsProvider).valueOrNull;
     final dead = (ops?['dead_stock'] as List?)?.length ?? 0;
     final fast = (ops?['fast_moving'] as List?)?.length ?? 0;
-    final lowCount = ref.watch(homeLowStockAttentionCountProvider);
+    // API-DUP-R-001: do not pull Home satellites for Reports Overview.
+    final statusCounts = ref.watch(stockStatusCountsProvider).valueOrNull;
+    final lowCount = (statusCounts?['low'] ?? 0) +
+        (statusCounts?['critical'] ?? 0) +
+        (statusCounts?['out'] ?? 0);
     final cats = ref.watch(analyticsCategoriesTableProvider).valueOrNull ?? [];
+    final snapItems =
+        ref.watch(analyticsItemsTableProvider).valueOrNull ?? const [];
+    final snapSups =
+        ref.watch(analyticsSuppliersTableProvider).valueOrNull ?? const [];
+
+    final catSpend = cats.fold<double>(
+      0,
+      (s, r) => s + coerceToDouble(r['total_purchase']),
+    );
+    final spendInr = agg.totals.inr > 1e-9 ? agg.totals.inr : catSpend;
+    final itemCount =
+        agg.itemsAll.isNotEmpty ? agg.itemsAll.length : snapItems.length;
+    final supplierCount =
+        agg.suppliers.isNotEmpty ? agg.suppliers.length : snapSups.length;
+
     String topCat = '—';
     if (cats.isNotEmpty) {
       topCat = (cats.first['category_name'] ?? cats.first['category'] ?? '—')
@@ -54,14 +74,19 @@ class ReportsOverviewKpiGrid extends ConsumerWidget {
     String topSup = '—';
     if (agg.suppliers.isNotEmpty) {
       topSup = agg.suppliers.first.name;
+    } else if (snapSups.isNotEmpty) {
+      topSup = (snapSups.first['supplier_name'] ??
+              snapSups.first['name'] ??
+              '—')
+          .toString();
     }
 
     final t = agg.totals;
     final secondary = <_KpiCardData>[
-      _KpiCardData('Items', '${agg.itemsAll.length}', _countColor, onTap: onTapItems),
+      _KpiCardData('Items', '$itemCount', _countColor, onTap: onTapItems),
       _KpiCardData(
         'Suppliers',
-        '${agg.suppliers.length}',
+        '$supplierCount',
         _accentColor,
         onTap: onTapPurchases,
       ),
@@ -103,7 +128,7 @@ class ReportsOverviewKpiGrid extends ConsumerWidget {
                             fit: BoxFit.scaleDown,
                             alignment: Alignment.centerLeft,
                             child: Text(
-                              _inr(t.inr),
+                              _inr(spendInr),
                               style: const TextStyle(
                                 fontSize: 22,
                                 fontWeight: FontWeight.w900,

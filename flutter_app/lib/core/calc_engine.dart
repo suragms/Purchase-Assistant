@@ -490,7 +490,9 @@ double ledgerTradeLineWeightKg({
   return kg;
 }
 
-/// Mirrors [TradePurchaseLine.landingGross] without importing app models here.
+/// Pre-tax landing gross for one line (DUP-F-001 SSOT for draft/ledger estimates).
+/// Mirrors [TradePurchaseLine.landingGross] weight path without importing app models.
+/// Prefer [TradePurchaseLine.landingGross] for persisted API lines (uses `line_landing_gross`).
 double ledgerLineLandingGross({
   required double qty,
   required double landingCost,

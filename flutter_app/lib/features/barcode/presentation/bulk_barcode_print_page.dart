@@ -307,7 +307,7 @@ class _BulkBarcodePrintPageState extends ConsumerState<BulkBarcodePrintPage> {
       if (!mounted) return;
       _showError(e.message);
     } catch (e, st) {
-      logBarcodeOperationError(e, st);
+      logBarcodeOperationError(e, stack: st, site: 'bulkPrintPage.runBatches');
       if (!mounted) return;
       _showError(barcodeMessageForUser(e));
     } finally {
@@ -455,7 +455,7 @@ class _BulkBarcodePrintPageState extends ConsumerState<BulkBarcodePrintPage> {
       _showError(e.message);
       return false;
     } catch (e, st) {
-      logBarcodeOperationError(e, st);
+      logBarcodeOperationError(e, stack: st, site: 'bulkPrintPage.buildPdfs');
       if (!mounted) return false;
       _showError(barcodeMessageForUser(e));
       return false;
@@ -911,6 +911,18 @@ class _BulkBarcodePrintPageState extends ConsumerState<BulkBarcodePrintPage> {
 
     final sessionHint = ref.watch(apiDegradedProvider);
 
+    final listItems = (listAsync.valueOrNull?['items'] as List?)
+            ?.whereType<Map>()
+            .map((e) => Map<String, dynamic>.from(e))
+            .toList() ??
+        const <Map<String, dynamic>>[];
+    final rowsById = stockRowsByIdFromList(listItems);
+    var missingCodeCount = 0;
+    for (final id in selected) {
+      final row = rowsById[normalizeItemId(id)];
+      if (row != null && !isStockRowPrintable(row)) missingCodeCount++;
+    }
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Bulk print'),
@@ -950,6 +962,7 @@ class _BulkBarcodePrintPageState extends ConsumerState<BulkBarcodePrintPage> {
       ),
       bottomNavigationBar: BulkBarcodePrintToolbar(
         selectedCount: selected.length,
+        missingCodeCount: missingCodeCount,
         busy: _busy,
         denseA4: _denseA4,
         useQr: _useQr,

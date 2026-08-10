@@ -11,6 +11,7 @@ Also: `PLAN.md` (roadmap), `TASKS.md` (board), `DESIGN.md`, `DEPLOYMENT.md`, `AR
 
 Specialist rules (unique ownership only):
 
+- `code-hygiene.mdc` / root `CODE_HYGIENE.md` — search-first; no duplication forks
 - `code-review.mdc` — `/codereview` workflow
 - `design-quality.mdc` — Flutter token hygiene
 - `figma-design-system.mdc` — Figma MCP → Flutter

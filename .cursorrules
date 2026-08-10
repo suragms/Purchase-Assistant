@@ -4,6 +4,7 @@ Authoritative engineering contract: **AGENTS.md**
 Roadmap: **PLAN.md**  
 Execution board: **TASKS.md**  
 Design system: **DESIGN.md**  
-Deployment: **DEPLOYMENT.md**
+Deployment: **DEPLOYMENT.md**  
+Code hygiene: **CODE_HYGIENE.md**
 
 Do not duplicate rules here.

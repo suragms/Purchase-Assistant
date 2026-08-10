@@ -52,6 +52,8 @@ class _LoginPageState extends ConsumerState<LoginPage>
   late final AnimationController _animController;
   late final Animation<double> _fadeAnim;
   late final Animation<Offset> _slideAnim;
+  final _mobileScrollCtrl = ScrollController();
+  final _headerKey = GlobalKey(debugLabel: 'loginHeader');
 
   @override
   void initState() {
@@ -148,6 +150,7 @@ class _LoginPageState extends ConsumerState<LoginPage>
 
   @override
   void dispose() {
+    _mobileScrollCtrl.dispose();
     _animController.dispose();
     _loginEmail.removeListener(_clearInlineErrors);
     _loginPass.removeListener(_clearInlineErrors);
@@ -620,26 +623,54 @@ class _LoginPageState extends ConsumerState<LoginPage>
   // ─────────────────────────────────────────────────────────────────────────────
 
   Widget _buildMobileLayout(String? eErr, String? pErr) {
-    final bottom = MediaQuery.viewInsetsOf(context).bottom;
+    final keyboardOpen = MediaQuery.viewInsetsOf(context).bottom > 0;
     return Stack(
       fit: StackFit.expand,
       children: [
         _buildMobileBackground(),
         SafeArea(
-          child: Align(
-            alignment: Alignment.topCenter,
-            child: SingleChildScrollView(
-              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-              physics: const ClampingScrollPhysics(),
-              padding: EdgeInsets.fromLTRB(20, 32, 20, 24 + bottom),
-              child: FadeTransition(
-                opacity: _fadeAnim,
-                child: SlideTransition(
-                  position: _slideAnim,
-                  child: _buildGlassContainer(eErr, pErr),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              if (keyboardOpen) {
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (!mounted || !_mobileScrollCtrl.hasClients) return;
+                  if (_mobileScrollCtrl.offset > 0) {
+                    _mobileScrollCtrl.jumpTo(0);
+                  }
+                });
+              }
+              return Align(
+                alignment:
+                    keyboardOpen ? Alignment.topCenter : Alignment.center,
+                child: SingleChildScrollView(
+                  controller: _mobileScrollCtrl,
+                  keyboardDismissBehavior:
+                      ScrollViewKeyboardDismissBehavior.onDrag,
+                  physics: const ClampingScrollPhysics(),
+                  // Scaffold owns IME inset — do not add viewInsets to padding.
+                  padding: const EdgeInsets.fromLTRB(20, 24, 20, 24),
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(
+                      minHeight: keyboardOpen
+                          ? 0
+                          : (constraints.maxHeight - 48)
+                              .clamp(0.0, double.infinity),
+                    ),
+                    child: FadeTransition(
+                      opacity: _fadeAnim,
+                      child: SlideTransition(
+                        position: _slideAnim,
+                        child: _buildGlassContainer(
+                          eErr,
+                          pErr,
+                          compact: keyboardOpen,
+                        ),
+                      ),
+                    ),
+                  ),
                 ),
-              ),
-            ),
+              );
+            },
           ),
         ),
       ],
@@ -682,17 +713,21 @@ class _LoginPageState extends ConsumerState<LoginPage>
     );
   }
 
-  Widget _buildGlassContainer(String? eErr, String? pErr) {
+  Widget _buildGlassContainer(
+    String? eErr,
+    String? pErr, {
+    bool compact = false,
+  }) {
     return ClipRRect(
-      borderRadius: BorderRadius.circular(28),
+      borderRadius: BorderRadius.circular(compact ? 20 : 28),
       child: BackdropFilter(
         filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
         child: Container(
           width: double.infinity,
-          padding: const EdgeInsets.all(24),
+          padding: EdgeInsets.all(compact ? 16 : 24),
           decoration: BoxDecoration(
             color: Colors.white.withValues(alpha: 0.86),
-            borderRadius: BorderRadius.circular(28),
+            borderRadius: BorderRadius.circular(compact ? 20 : 28),
             border: Border.all(color: Colors.white.withValues(alpha: 0.65)),
             boxShadow: [
               BoxShadow(
@@ -706,15 +741,27 @@ class _LoginPageState extends ConsumerState<LoginPage>
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                _buildLogoSection(),
-                const SizedBox(height: 32),
-                Text(
-                  'Sign In',
-                  textAlign: TextAlign.center,
-                  style: HexaDsType.heading(28,
-                      color: HexaDsColors.textPrimary),
-                ),
-                const SizedBox(height: 32),
+                if (!compact) ...[
+                  _buildLogoSection(),
+                  const SizedBox(height: 32),
+                  Text(
+                    'Sign In',
+                    textAlign: TextAlign.center,
+                    style: HexaDsType.heading(28,
+                        color: HexaDsColors.textPrimary),
+                  ),
+                  const SizedBox(height: 32),
+                ] else ...[
+                  // Short chrome so password focus need not scroll header off-screen.
+                  Text(
+                    key: _headerKey,
+                    'Harisree Agency',
+                    textAlign: TextAlign.center,
+                    style: HexaDsType.heading(18,
+                        color: HexaDsColors.textPrimary),
+                  ),
+                  const SizedBox(height: 12),
+                ],
                 if (_showNetworkBanner)
                   AuthNetworkErrorBanner(
                     onRetry: _retryAfterNetwork,
@@ -730,9 +777,10 @@ class _LoginPageState extends ConsumerState<LoginPage>
                   textInputAction: TextInputAction.next,
                   autofillHints: const [AutofillHints.email],
                   error: eErr,
+                  scrollPadding: EdgeInsets.only(bottom: compact ? 16 : 48),
                   onSubmitted: (_) => _passFocus.requestFocus(),
                 ),
-                const SizedBox(height: 16),
+                SizedBox(height: compact ? 12 : 16),
                 _buildMobileTextField(
                   controller: _loginPass,
                   focusNode: _passFocus,
@@ -743,6 +791,7 @@ class _LoginPageState extends ConsumerState<LoginPage>
                   autofillHints: const [AutofillHints.password],
                   error: pErr,
                   suffix: _buildPasswordToggle(),
+                  scrollPadding: EdgeInsets.only(bottom: compact ? 16 : 48),
                   onSubmitted: (_) {
                     if (_isFormValid) _signIn();
                   },
@@ -758,7 +807,7 @@ class _LoginPageState extends ConsumerState<LoginPage>
                     ),
                   ),
                 ],
-                if (_bioReady) ...[
+                if (!compact && _bioReady) ...[
                   const SizedBox(height: 16),
                   _buildBiometricButton(),
                   if (_bioEmail != null) ...[
@@ -773,53 +822,56 @@ class _LoginPageState extends ConsumerState<LoginPage>
                     ),
                   ],
                 ],
-                const SizedBox(height: 24),
+                SizedBox(height: compact ? 16 : 24),
                 _buildSignInButton(),
-                const SizedBox(height: 16),
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: TextButton(
-                    style: TextButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 4),
-                      minimumSize: Size.zero,
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                if (!compact) ...[
+                  const SizedBox(height: 16),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: TextButton(
+                      style: TextButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 4),
+                        minimumSize: Size.zero,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                      onPressed: _loading
+                          ? null
+                          : () => context.go('/forgot-password'),
+                      child: Text(
+                        'Forgot password?',
+                        style: HexaDsType.body(14,
+                            color: HexaDsColors.textMuted,
+                            weight: FontWeight.w500),
+                      ),
                     ),
-                    onPressed: _loading
-                        ? null
-                        : () => context.go('/forgot-password'),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
                     child: Text(
-                      'Forgot password?',
-                      style: HexaDsType.body(14,
-                          color: HexaDsColors.textMuted,
-                          weight: FontWeight.w500),
+                      'Contact your manager to reset password',
+                      style:
+                          HexaDsType.body(12, color: HexaDsColors.textMuted),
                     ),
                   ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: Text(
-                    'Contact your manager to reset password',
-                    style: HexaDsType.body(12, color: HexaDsColors.textMuted),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                if (AppConfig.buildSha.isNotEmpty)
+                  const SizedBox(height: 8),
+                  if (AppConfig.buildSha.isNotEmpty)
+                    Text(
+                      'Build ${AppConfig.buildSha}',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: Colors.grey.shade500,
+                      ),
+                    ),
                   Text(
-                    'Build ${AppConfig.buildSha}',
+                    '© 2026',
                     textAlign: TextAlign.center,
                     style: TextStyle(
-                      fontSize: 10,
-                      color: Colors.grey.shade500,
+                      fontSize: 12,
+                      color: Colors.grey.shade600,
                     ),
                   ),
-                Text(
-                  '© 2026',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.grey.shade600,
-                  ),
-                ),
+                ],
               ],
             ),
           ),
@@ -830,6 +882,7 @@ class _LoginPageState extends ConsumerState<LoginPage>
 
   Widget _buildLogoSection() {
     return Column(
+      key: _headerKey,
       children: [
         Container(
           width: 72,
@@ -893,6 +946,7 @@ class _LoginPageState extends ConsumerState<LoginPage>
     bool obscure = false,
     Widget? suffix,
     ValueChanged<String>? onSubmitted,
+    EdgeInsets scrollPadding = const EdgeInsets.only(bottom: 48),
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -907,6 +961,7 @@ class _LoginPageState extends ConsumerState<LoginPage>
             textInputAction: textInputAction,
             autofillHints: autofillHints,
             obscureText: obscure,
+            scrollPadding: scrollPadding,
             style: const TextStyle(
               fontSize: 15,
               fontWeight: FontWeight.w500,

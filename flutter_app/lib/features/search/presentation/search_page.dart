@@ -478,13 +478,13 @@ class _SearchPageState extends ConsumerState<SearchPage> {
     final hideFinancials =
         session != null && !sessionCanSeeFinancials(session);
 
+    // Scaffold owns IME via resizeToAvoidBottomInset — do not add viewInsets here.
     final listPadding = EdgeInsets.fromLTRB(
       16,
       (widget.embeddedInShell || widget.staffShellEmbedded) ? 4 : 12,
       16,
       ((widget.embeddedInShell || widget.staffShellEmbedded) ? 96 : 32) +
-          MediaQuery.viewPaddingOf(context).bottom +
-          MediaQuery.viewInsetsOf(context).bottom,
+          MediaQuery.viewPaddingOf(context).bottom,
     );
 
     final Widget scrollBody;

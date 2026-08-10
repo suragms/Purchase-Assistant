@@ -48,7 +48,6 @@ from app.models.reorder_list import ReorderListEntry
 from app.models.stock_adjustment import StockAdjustmentLog
 from app.models.stock_physical_count import StockPhysicalCount
 from app.models.staff_purchase_log import StaffPurchaseLog
-from app.schemas.stock_audit import StockVerifyCountIn
 from app.schemas.stock import (
     BarcodeBatchIn,
     BarcodeBatchOut,

@@ -61,15 +61,6 @@ class _PurchaseSummarySidebarState extends ConsumerState<PurchaseSummarySidebar>
       NumberFormat.currency(locale: 'en_IN', symbol: '₹', decimalDigits: decimals)
           .format(n);
 
-  double _lineBuyApprox(PurchaseLineDraft l) {
-    final kpu = l.kgPerUnit;
-    final pk = l.landingCostPerKg;
-    if (kpu != null && pk != null && kpu > 0 && pk > 0) {
-      return l.qty * kpu * pk;
-    }
-    return l.qty * l.landingCost;
-  }
-
   TradeCalcLine _toCalc(PurchaseLineDraft l) => TradeCalcLine(
         qty: l.qty,
         landingCost: l.landingCost,
@@ -133,7 +124,7 @@ class _PurchaseSummarySidebarState extends ConsumerState<PurchaseSummarySidebar>
     for (final l in draft.lines) {
       final sp = l.sellingPrice;
       if (sp == null || sp <= 0) continue;
-      estRetail += sp * l.qty - _lineBuyApprox(l);
+      estRetail += sp * l.qty - l.landingApprox;
       hasRetail = true;
     }
     final split = _taxSplit(draft.lines);

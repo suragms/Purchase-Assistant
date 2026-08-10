@@ -1,10 +1,17 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../features/shell/shell_branch_provider.dart';
 import '../auth/provider_api_guard.dart';
 import '../auth/session_notifier.dart';
 import 'home_dashboard_provider.dart' show homeOverviewReadyForSatellites;
 
 final Map<String, Future<Map<String, dynamic>>> _openingMissingInflight = {};
+
+/// API-DUP-SF-004: defer opening-missing only while owner Home overview is mid-pull.
+bool openingStockMissingShouldDefer(dynamic ref) {
+  return shellBranchIsVisible(ref, ShellBranch.home) &&
+      !homeOverviewReadyForSatellites(ref);
+}
 
 /// Query for `GET /v1/businesses/{id}/stock/opening/setup`.
 class OpeningStockSetupQuery {
@@ -133,7 +140,9 @@ final openingStockMissingProvider =
     FutureProvider.autoDispose<Map<String, dynamic>>((ref) async {
   final disposed = registerProviderDisposeGuard(ref);
   registerProviderKeepAliveTimer(ref, const Duration(minutes: 2));
-  if (!homeOverviewReadyForSatellites(ref)) {
+  // API-DUP-SF-004: only defer on owner Home (bundle race). Staff shell must
+  // not wait on [homeOverviewReadyForSatellites] (requires ShellBranch.home).
+  if (openingStockMissingShouldDefer(ref)) {
     return {'items': <Map<String, dynamic>>[], 'missing_count': 0};
   }
   final session = ref.watch(sessionProvider);

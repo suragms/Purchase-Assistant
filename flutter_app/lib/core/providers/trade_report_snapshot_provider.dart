@@ -112,8 +112,9 @@ Future<TradeReportSnapshot> fetchTradeReportSnapshot(
 final tradeReportSnapshotProvider =
     FutureProvider.autoDispose<TradeReportSnapshot>((ref) async {
   if (providerSkipApi(ref)) return TradeReportSnapshot.empty;
-  final branch = ref.watch(shellCurrentBranchProvider);
-  if (branch != ShellBranch.reports) {
+  // Same gate as analytics_breakdown_providers — avoid dual-source race where
+  // shellCurrentBranchProvider and shellBranchIsVisible disagree (UX-193).
+  if (!shellBranchIsVisible(ref, ShellBranch.reports)) {
     return TradeReportSnapshot.empty;
   }
   final range = tradeReportRangeKeyForAnalytics(ref);

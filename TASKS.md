@@ -10,7 +10,7 @@ Roadmap: [PLAN.md](PLAN.md). Rules: [AGENTS.md](AGENTS.md). Cleanup contract: [d
 |------|--------|-------|
 | Author `16_cleanup_findings.md` | done | Approved list on disk |
 | Move `docs/ai/09–15` → `docs/ai/archive/` | done | SPECs + diagnostic report |
-| Wizard v1 check | done | Only `PurchaseEntryWizardV2`; no delete |
+| Wizard v1 check | done | Only `PurchaseEntryWizard` (DUP-F-002 renamed from V2) |
 | Trim folder READMEs | done | flutter_app + backend/scripts |
 | Delete `scripts/split_hexa_api.py` | done | One-shot splitter |
 | Validate + commit Step A only | done | `6e1a455`; analyze 0 errors |
