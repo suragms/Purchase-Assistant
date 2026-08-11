@@ -21,6 +21,7 @@ import 'shell_branch_provider.dart';
 import 'business_write_stock_listener.dart';
 import 'shell_realtime_listener.dart';
 import 'shell_tab_auto_refresh_listener.dart';
+import 'owner_shell_nav.dart';
 import 'web_compact_side_nav.dart';
 
 /// Shell: Home | Stock | Reports | Purchases | Search in one row, then [+] (no overlap).
@@ -249,6 +250,22 @@ class _WebOwnerSideNav extends ConsumerWidget {
           label: ownerShellNavLabel(ShellBranch.search),
         ),
       ],
+      // UX-196: owner-only features that used to have no desktop nav entry.
+      // They push overlays — they are not ShellBranch tabs, so they live in
+      // the secondary group, never in `destinations`.
+      secondaryLabel: ownerShellSecondaryCaption,
+      secondaryDestinations: [
+        for (final d in ownerShellSecondaryDestinations)
+          WebCompactSideNavItem(
+            icon: d.icon,
+            selectedIcon: d.selectedIcon,
+            label: d.label,
+          ),
+      ],
+      onSecondaryDestinationSelected: (i) {
+        HapticFeedback.selectionClick();
+        pushOverlayRoute(context, ownerShellSecondaryRouteForIndex(i));
+      },
       footer: Column(
         mainAxisSize: MainAxisSize.min,
         children: [

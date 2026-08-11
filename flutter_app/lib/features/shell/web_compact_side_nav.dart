@@ -19,6 +19,9 @@ class WebCompactSideNav extends StatelessWidget {
     required this.onDestinationSelected,
     this.footer,
     this.showLabels = false,
+    this.secondaryLabel,
+    this.secondaryDestinations = const [],
+    this.onSecondaryDestinationSelected,
   });
 
   final int selectedIndex;
@@ -28,6 +31,17 @@ class WebCompactSideNav extends StatelessWidget {
 
   /// When true, render icon + label at [kShellLabeledRailWidth].
   final bool showLabels;
+
+  /// Caption above the optional secondary group (only shown when [showLabels]).
+  final String? secondaryLabel;
+
+  /// Optional secondary items rendered below the primary destinations.
+  /// These are overlay PUSHES, not shell branches — never given a selection
+  /// index, and never counted toward the primary [selectedIndex] clamp.
+  final List<WebCompactSideNavItem> secondaryDestinations;
+
+  /// Fires with the 0-based index into [secondaryDestinations].
+  final ValueChanged<int>? onSecondaryDestinationSelected;
 
   double get _width =>
       showLabels ? kShellLabeledRailWidth : kShellCompactRailWidth;
@@ -44,15 +58,64 @@ class WebCompactSideNav extends StatelessWidget {
           child: Column(
             children: [
               const SizedBox(height: 8),
-              for (var i = 0; i < destinations.length; i++)
-                _NavIconButton(
-                  item: destinations[i],
-                  selected: selectedIndex == i,
-                  showLabel: showLabels,
-                  width: _width,
-                  onTap: () => onDestinationSelected(i),
+              // Flexible so the footer stays bottom-pinned on short windows
+              // while the nav items scroll instead of overflowing.
+              Expanded(
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      for (var i = 0; i < destinations.length; i++)
+                        _NavIconButton(
+                          item: destinations[i],
+                          selected: selectedIndex == i,
+                          showLabel: showLabels,
+                          width: _width,
+                          onTap: () => onDestinationSelected(i),
+                        ),
+                      if (secondaryDestinations.isNotEmpty) ...[
+                        if (showLabels) ...[
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+                            child: Align(
+                              alignment: Alignment.centerLeft,
+                              child: Text(
+                                secondaryLabel ?? '',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                  letterSpacing: 0.4,
+                                  color: cs.onSurfaceVariant,
+                                ),
+                              ),
+                            ),
+                          ),
+                          Divider(
+                            height: 1,
+                            thickness: 1,
+                            indent: 16,
+                            endIndent: 16,
+                            color: cs.outlineVariant,
+                          ),
+                          const SizedBox(height: 4),
+                        ] else
+                          const SizedBox(height: 12),
+                        for (var i = 0; i < secondaryDestinations.length; i++)
+                          _NavIconButton(
+                            item: secondaryDestinations[i],
+                            selected: false,
+                            showLabel: showLabels,
+                            width: _width,
+                            onTap: () =>
+                                onSecondaryDestinationSelected?.call(i),
+                          ),
+                      ],
+                    ],
+                  ),
                 ),
-              const Spacer(),
+              ),
               if (footer != null) footer!,
               const SizedBox(height: 8),
             ],

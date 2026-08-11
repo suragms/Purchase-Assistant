@@ -2,7 +2,7 @@
 
 **Binding:** `PURCHASE_UI_UX_STRICT_AGENT_PROMPT.md` · `UNIVERSAL_UI_UX_DESIGN_RULES(1).md` · root `AGENTS.md` / `DESIGN.md`
 
-**Last audit:** Phase D viewport + purchase repair (2026-08-10). Phase E seeded UX-183…UX-191.
+**Last audit:** Phase D viewport + purchase repair (2026-08-10). Phase E seeded UX-183…UX-191. UX-196 (desktop nav structure) DONE 2026-08-11. UX-197 (nav structure refinement) PROPOSAL READY 2026-08-11.
 
 **Gate:** Only one UX task `IN_PROGRESS` at a time. Current implementation slot: **none**.
 
@@ -359,6 +359,8 @@ Desktop layout ≥ **1024** (`hexa_responsive.dart` / `DESIGN.md`). Phone &lt; 6
 | 189 | UX-189 | P2 | READY | Audit: Reports shell height-bind | Phase E |
 | 190 | UX-190 | P2 | READY | Audit: Settings | Phase E |
 | 191 | UX-191 | P2 | READY | Audit: Staff shell twin pages | Phase E |
+| 196 | UX-196 | P2 | DONE | Desktop primary nav + secondary/side menu structure | Phase E |
+| 197 | UX-197 | P2 | READY | Desktop nav: labeled secondary group + role visibility + footer context | Phase E |
 
 ---
 
@@ -7678,6 +7680,120 @@ VERIFYING — desktop-only OBS-1 + OBS-2 fixes implemented; code + tests pass; n
 
 ---
 
+## UX-196 — Desktop primary nav + secondary/side menu structure (Phase E)
+
+### Status
+DONE — implemented 2026-08-11; analyze clean; new tests + regressions pass (20/20).
+
+### Priority
+P2 — significant navigation friction: core feature routes are unreachable from the desktop primary nav.
+
+### Scope
+Desktop shell navigation (web, ≥1024). Primary rail (`WebCompactSideNav`) today has only 5 destinations. The task is to add entry points for the routes that exist but have no rail/menu destination: Catalog, Contacts, Barcode — and to decide where Settings + Notifications belong (currently footer-icon-only). Secondary/side-menu structure to be designed in the plan. **Do NOT code yet.**
+
+### Evidence (all `VERIFIED_CODE`, 2026-08-10)
+
+**E1 — `features/shell/web_compact_side_nav.dart` — the desktop rail is a fixed-width icon rail:**
+- `showLabels = false` default (L21) → icon-only by default. Nuance: `shell_screen.dart` L220 overrides `showLabels = MediaQuery.sizeOf(context).width >= kDesktopMin`, so at desktop ≥1024 the rail is actually icon+label at `kShellLabeledRailWidth` (200); below 1024 it is icon-only at `kShellCompactRailWidth` (72). Constants: `hexa_responsive.dart` L35/L39 (`kShellCompactRailWidth = 72`, `kShellLabeledRailWidth = 200`).
+- Hard-capped width `_width => showLabels ? kShellLabeledRailWidth : kShellCompactRailWidth` (L32-33); never grows into the `Expanded` body (doc comment L8-11).
+- Renders exactly the `destinations` passed (L47-54) + optional `footer` (L56). No secondary section / sub-menu concept exists in the widget.
+
+**E2 — `features/shell/shell_screen.dart` L225-251 — the `WebCompactSideNavItem` list has only 5 entries:**
+- Home (`ShellBranch.home`), Stock (`ShellBranch.stock`), Reports (`ShellBranch.reports`), Purchases (`ShellBranch.history` — internal enum name; user-facing label via `ownerShellNavLabel`, `shell_branch_provider.dart` L20), Search (`ShellBranch.search`).
+- **NO entries for Catalog, Contacts, Barcode, Settings, Notifications.**
+- Rail footer (L252-288): Notifications → `push('/notifications')` (L154, L255-272), Help & guide → `push('/settings/help')` (L276), Settings → `push('/settings')` (L155, L280-286) — all small tooltip icon buttons, not labeled destinations.
+
+**E3 — routes that exist in `app_router.dart` but have no rail/menu entry point on desktop today:**
+
+| Route | Page | `app_router.dart` |
+|---|---|---|
+| `/catalog` (+ `/catalog/*` family: taxonomy, quick-add, missing-codes, categories, items, duplicates…) | CatalogPage + catalog pages | L358-361, L438-710, L1122-1125 |
+| `/contacts` (+ `/contacts/category`, `/contacts/supplier/new`) | ContactsPage | L346-350, L774, L1069 |
+| `/barcode/scan` (+ `/barcode/*` family: scan-history, audit-session, audit-summary, print, bulk-print) | BarcodeScanPage + barcode pages | L382-434 |
+| `/settings` (+ `/settings/*` family: business, backup, credentials, owner-dashboard, help, users) | SettingsPage | L798-863 |
+| `/notifications` | NotificationsPage | L1093-1097 |
+
+**E4 — current desktop entry points:**
+- Primary rail destinations: exactly 5 (E2). Settings & Notifications reachable only via rail-footer icons (E2).
+- **Catalog, Contacts, Barcode have NO rail/menu entry point on desktop today** — reachable only by route push from other surfaces (home tiles, search, notifications `actionRoute`, catalog deep-links). Shell comment confirms `/catalog/*` etc. are pushed overlays, not shell tabs (`shell_screen.dart` L86).
+
+### Finding
+Desktop users could not navigate to **Catalog, Contacts, or Barcode** from the primary nav at all; Settings and Notifications were buried in unlabeled rail-footer icons. P2 per the priority legend (confusing navigation / significant friction).
+
+### Implementation (2026-08-11)
+- `web_compact_side_nav.dart` — `WebCompactSideNav` gained an **optional** secondary section (`secondaryLabel`, `secondaryDestinations`, `onSecondaryDestinationSelected`; all default non-breaking, so the staff shell compiles unchanged). Items render below the 5 primaries reusing `_NavIconButton` (`selected:false`). Caption + 1px divider render only on the labeled rail (`showLabels`, ≥1024); compact 72px rail gets a 12px gap + tooltips. `Spacer()` → `Expanded(SingleChildScrollView(...))` so the footer stays bottom-pinned on short windows and the mid-rail scrolls instead of overflowing.
+- `owner_shell_nav.dart` (new) — hoisted, unit-testable model mirroring `staff_shell_nav.dart`: `ownerShellSecondaryCaption = 'Library'`; `ownerShellSecondaryDestinations` = Catalog `/catalog` (`category_*`), Contacts `/contacts` (`groups_*`), Barcode `/barcode/scan` (`qr_code_scanner_*`); `ownerShellSecondaryRouteForIndex`.
+- `shell_screen.dart` `_WebOwnerSideNav` — passes the secondary group from the hoisted model; tap → `HapticFeedback.selectionClick()` + `pushOverlayRoute(context, route)`. Footer (Notifications badge / Help / Settings) byte-identical. Mobile bottom bar, `go()`, `navSelectedIndex` clamp, `goBranch` untouched.
+- `test/owner_shell_nav_ia_test.dart` (new) — 6 tests: exact destination set/labels, index→route map, caption, overlay-not-branch guard (`shellIsPushedModalPath` true + `shellBranchIndexForPath` null), labeled-render + callback widget test, compact-render (caption hidden) widget test.
+
+### Verification
+- `flutter analyze` on the 4 touched files: clean (no new issues).
+- `flutter test test/owner_shell_nav_ia_test.dart test/shell_navigation_test.dart test/staff_shell_nav_ia_test.dart`: **20/20 pass** (6 new + regressions).
+- `reports_page_smoke_test.dart` fails on HEAD **and** with this change (`find.text('Items')` ×2 in the ReportsPage tree: `reports_overview_tab.dart:124` insight tile + `reports_overview_kpi_grid.dart:86` KPI card) — verified pre-existing, unrelated (this change touches no reports code).
+- Diff scope: only `shell_screen.dart` (+17), `web_compact_side_nav.dart` (+79), new `owner_shell_nav.dart`, new test. `staff_shell_screen.dart`, `shell_navigation.dart`, `shell_branch_provider.dart` untouched → staff shell and mobile surfaces byte-identical.
+- Live desktop pass (≥1024px) recommended: rail shows Library caption + divider + Catalog/Contacts/Barcode; each pushes its overlay; back returns to the prior highlighted branch; 700-1023px → icon-only rail, caption hidden; short window → footer pinned, mid-rail scrolls.
+
+### Final status
+DONE
+
+---
+
+## UX-197 — Desktop nav: labeled secondary group + role visibility + footer context (Phase E)
+
+### Status
+READY — PROPOSAL (awaiting approval; **no code written**). Decisions D1-D3 open below.
+
+### Priority
+P2 — refinement of the UX-196 structure that shipped 2026-08-11.
+
+### Scope
+Desktop-only. UX-196 added a "Library" secondary group (Catalog / Contacts / Barcode). UX-197 refines that structure: (1) move the secondary group to the **BOTTOM of the rail** (above the footer), (2) grow it to five labeled entries — Catalog, Contacts, Barcode tools, Notifications, Settings — (+ Help, decision D2), (3) define role-based visibility, and (4) wire the **orphaned** `DesktopSideNavFooter` as the rail footer (business + role context). Primary 5 branches and the mobile bottom bar stay untouched.
+
+### Verified facts (2026-08-11)
+- `DesktopSideNavFooter` — `core/design_system/hexa_desktop_layout.dart:169-230` — renders divider + businessName + roleLabel + optional Notifications (badge) / Settings icons. **Orphaned: zero consumers in `lib/`.**
+- **No role-based nav visibility exists inside `shell_screen.dart`** (no `sessionIsStaff` / role check anywhere in the shell). The premise "role-based visibility rules already in shell_screen.dart" is **not** present — role gating is **router-level**: staff → `/staff/*` (`app_router.dart:275-288`); `/settings/users` requires `sessionCanManageUsers(session)` (`app_router.dart:268-271`). Role helpers in `core/router/post_auth_route.dart`: `sessionIsStaff`, `sessionIsOwnerOrAdmin`, `sessionCanManageUsers`, `sessionCanSeeFinancials`.
+- `_NavIconButton` (web_compact_side_nav.dart:166-173) already renders a `Badge` when `WebCompactSideNavItem.badgeCount > 0` — the group's Notifications entry can carry the live unread badge today, no new widget work.
+- The owner shell is reached **only by non-staff** (the router redirects staff to `/staff/*`), so "staff" is not a case this shell must handle — manager and owner both land here.
+
+### Proposed structure
+1. **Primary rail — unchanged.** Home / Stock / Reports / Purchases / Search; ShellBranch indices 0-4 clamped `[home, search]` (shell_screen.dart:85). Do not touch.
+2. **Secondary group — bottom-anchored, above the footer.** Labeled icon+label entries ≥1024 (`kShellLabeledRailWidth` 200); icon-only + tooltip on the 72px compact rail. Caption renamed `Library` → `Manage` (it now spans settings/notifications, not just library items).
+
+   | # | Entry | Route | Icon | Badge |
+   |---|-------|-------|------|-------|
+   | 0 | Catalog | `/catalog` | `category_*` | — |
+   | 1 | Contacts | `/contacts` | `groups_*` | — |
+   | 2 | Barcode tools | `/barcode/scan` | `qr_code_scanner_*` | — |
+   | 3 | Notifications | `/notifications` | `notifications_*` | `notificationsUnreadCountProvider` (live) |
+   | 4 | Settings | `/settings` | `settings_*` | — |
+   | 5? | Help & guide | `/settings/help` | `help_*` | — (D2) |
+
+   All are overlay pushes (`pushOverlayRoute`), **never** ShellBranch (guard test pins `shellIsPushedModalPath` true + `shellBranchIndexForPath` null).
+3. **Footer = `DesktopSideNavFooter`.** Business name + role label only (its icons — Notifications, Settings — move into the group). Renders on the labeled rail ≥1024; compact rail keeps the group scrollable and hides the text footer.
+4. **Role visibility (honest premise correction):** there are **no** in-shell visibility rules today. Proposed default: all entries visible to any non-staff (owner + manager) who reach this shell; the router already deep-gates sensitive subroutes (`/settings/users` → `sessionCanManageUsers`, app_router.dart:268-271). **Optional (D1):** hide Settings from manager via `sessionIsOwnerOrAdmin` — matches the existing router precedent but adds a new shell-side role dependency.
+
+### Decisions needed before implementation
+- **D1 — Settings visibility:** keep Settings visible to all non-staff (recommended; router already gates `/settings/users`) vs hide it for manager via `sessionIsOwnerOrAdmin`.
+- **D2 — Help & guide placement:** 6th group entry (recommended; keeps the rail self-contained) vs lone footer icon below the context footer vs reachable only inside Settings.
+- **D3 — "Barcode tools":** single `/barcode/scan` entry (recommended; matches UX-196, one tap) vs nested submenu (Scan / Bulk print / Audit / History) — a submenu is heavier and conflicts with the bottom-group simplicity.
+
+### Files to change (only after approval)
+- `features/shell/owner_shell_nav.dart` — extend the model: caption `'Manage'`, 5 (+1) entries with routes, `ownerShellSecondaryRouteForIndex`, optional `ownerShellSecondaryVisibleFor(session)` (D1).
+- `features/shell/web_compact_side_nav.dart` — bottom-anchor the secondary group (primaries top → flexible spacer → secondary group → footer); badge support already present.
+- `features/shell/shell_screen.dart` — pass the extended model (badge for Notifications), replace the ad-hoc footer icon `Column` with `DesktopSideNavFooter(businessName, roleLabel)` on the labeled rail; keep `go()`/clamp/mobile untouched.
+- `test/owner_shell_nav_ia_test.dart` — extend to the new entries, role gate (D1), footer rendering; keep the overlay-not-branch guard.
+
+### Verification (after approval)
+- `flutter analyze` clean; `flutter test test/owner_shell_nav_ia_test.dart test/shell_navigation_test.dart test/staff_shell_nav_ia_test.dart`.
+- Desktop ≥1024: 5 primaries unchanged; `Manage` group bottom-anchored with 5-6 labeled entries; live Notifications badge; footer shows business + role. Compact 600-1023: icon-only + tooltips, caption/footer text hidden. Mobile (<600): byte-identical.
+- Role: owner vs manager Settings visibility per D1.
+- `git diff --stat`: staff shell + shell_navigation + shell_branch_provider empty.
+
+### Final status
+READY — proposal pending approval (D1-D3). No code written.
+
+---
+
 # STOP GATE
 
 ```text
@@ -7687,9 +7803,11 @@ Phase C FriendlyLoadError clearance UX-152…UX-178: DONE
 Phase D viewport + purchase repair UX-179…UX-182: DONE
 Phase D host: HexaWebViewportBinder + index.html CSS viewport (do not lower kDesktopMin)
 Phase E page×role audit UX-183…UX-191: READY (UX-185 Stock VERIFYING 2026-08-10 — audit CLEAN, no P0/P1; OBS-1/OBS-2 desktop-only P3 fixes in, analyze + tests pass)
+UX-196 desktop-nav structure: DONE 2026-08-11 (secondary Library group — Catalog/Contacts/Barcode on desktop rail; analyze clean, 20/20 tests; reports_page_smoke pre-existing failure unrelated)
+UX-197 desktop-nav structure (labeled secondary group + role visibility + footer context): PROPOSAL READY 2026-08-11 — awaiting D1-D3 approval, no code
 UX-002: BLOCKED (needs [STOCK_STORM] / [STOCK_STORM_SUMMARY] console paste)
 IN_PROGRESS: none
-Next: UX-184 Owner Home audit — or paste storm logs for UX-002
+Next: UX-197 proposal approval (D1-D3) — or UX-184 Owner Home audit — or paste storm logs for UX-002
 STOP
 ```
 
