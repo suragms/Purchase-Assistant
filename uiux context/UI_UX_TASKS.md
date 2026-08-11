@@ -2,7 +2,7 @@
 
 **Binding:** `PURCHASE_UI_UX_STRICT_AGENT_PROMPT.md` · `UNIVERSAL_UI_UX_DESIGN_RULES(1).md` · root `AGENTS.md` / `DESIGN.md`
 
-**Last audit:** Phase D viewport + purchase repair (2026-08-10). Phase E seeded UX-183…UX-191. UX-196 + UX-197 (desktop nav structure — the user's "UX-192") VERIFYING 2026-08-11, pending live ≥1024px pass.
+**Last audit:** Phase D viewport + purchase repair (2026-08-10). Phase E seeded UX-183…UX-191. UX-196 + UX-197 (desktop nav structure — the user's "UX-192") VERIFYING 2026-08-11, pending live ≥1024px pass. UX-198 (the user's "UX-193" — StateController&lt;int&gt; blank-section fix) READY 2026-08-11, diagnostic build in progress.
 
 **Gate:** Only one UX task `IN_PROGRESS` at a time. Current implementation slot: **none**.
 
@@ -361,6 +361,7 @@ Desktop layout ≥ **1024** (`hexa_responsive.dart` / `DESIGN.md`). Phone &lt; 6
 | 191 | UX-191 | P2 | READY | Audit: Staff shell twin pages | Phase E |
 | 196 | UX-196 | P2 | VERIFYING | Desktop primary nav + secondary/side menu structure | Phase E |
 | 197 | UX-197 | P2 | VERIFYING | Desktop nav: labeled secondary group + role visibility + footer context | Phase E |
+| 198 | UX-198 | P1 | READY | Fix: StateNotifier listener exception surfaces as blank section (mobile+desktop) | Phase F |
 
 ---
 
@@ -7796,6 +7797,41 @@ DONE
 
 ---
 
+## UX-198 — Fix: StateNotifier listener exception surfaces as blank section (mobile+desktop) (Phase F)
+
+> **ID mapping (2026-08-11):** requested by the user as **"UX-193"**, but UX-193 is already the DONE Phase D task "Reports Overview chart hang" (follow-up audit table, 2026-08-10 screenshots). Registered under the next free ID **UX-198** — same collision handling as the user's "UX-192" → UX-196/UX-197.
+
+### Status
+READY (2026-08-11) — runtime bug, evidence gathered, temporary diagnostic build in progress. Production behavior untouched.
+
+### Priority
+P1 — "This section could not load." blank section on BOTH mobile and desktop nav.
+
+### Evidence gathered (2026-08-11)
+- Friendly widget shows only the first exception line — "At least one listener of the StateNotifier instance of 'StateController<int>' threw an exception" — because `buildHexaLayoutErrorWidget` truncates to `.split('\n').first`.
+- `StateController<int>` = any Riverpod `StateProvider<int>`. Exactly 6 in the app: `shellCurrentBranchProvider`, `staffShellCurrentBranchProvider`, `businessDataWriteRevisionProvider`, `remoteBusinessDataRevisionProvider`, `lowStockDashboardMountedProvider`, `bulkStockListMaxPageProvider`.
+- **Ruled out by type** (would print differently): notifications unread badge is `Provider<int>` (not a StateController); `homeLowStockDetailFetchEnabledProvider` is `StateProvider<bool>` (`StateController<bool>`); `shellReturnBranchProvider` is `int?` (`StateController<int?>`).
+- **Verified clean:** no int `StateProvider` is written synchronously inside a `build`; every `ref.listen<int>` callback is postFrame-deferred or only invalidates caches (`shell_tab_auto_refresh_listener.dart`, `home_page.dart:457-508`, `search_page.dart:426-463`, `purchase_detail_page.dart:293-302`, `home_warehouse_activity_page.dart:50-59`, `purchase_providers.dart:319-326`); `lowStockTabOrder` length == `_tabCount` (5); commits `65339fe` + `7f4343f` add zero int-`StateProvider` writes/listeners.
+- **`.addListener(` audit (2026-08-11):** every `addListener(` call in `lib/` attaches to a `TextEditingController` / `FocusNode` / `TabController` / `ScrollController` — **none** on a Riverpod `StateNotifier`/`StateController<int>`. So there is **no manual notifier listener** — the throwing listener is a Riverpod subscription (`ref.listen`/`ref.watch`). All `ref.listen<int>` on the 6 providers enumerated and guard-safe (see above).
+- **No stack trace in record (2026-08-11):** grep of this board finds no captured frame — only "Missing evidence" notes. The 2026-08-11 request to "fix from the stack trace in UX-193" was read against a non-existent trace; no provider fix made (evidence-before-claims).
+- **Missing evidence:** the inner exception + stack — the widget hides it; the console (and the new on-screen readout) has it.
+- **Web capture hazard (2026-08-11):** on web `reloadHexaApp()` = hard `window.location.reload()` (`hexa_app_reload_web.dart`) — taps Reload wipe console logs and reset Riverpod. The **on-screen scrollable readout** is the reliable capture path: copy it *before* tapping Reload.
+
+### Diagnostic build (2026-08-11, temporary — revert after evidence)
+- `core/platform/hexa_layout_error_widget.dart`: `debugPrint` the full `details.exceptionAsString()` + `details.stack` **unconditionally** (not gated by `kDebugMode`); render the full readout **on-screen in a scrollable, copyable `SelectableText`** even in release mode — debugging pass only.
+- Production behavior NOT changed.
+
+### Next (user + agent)
+1. User: deploy the diagnostic build to a **preview branch**.
+2. User: reproduce the "This section could not load" error on mobile + desktop.
+3. User: paste the full real class name + stack trace (console and/or the on-screen readout) into this row as evidence.
+4. Agent: name the exact provider + throw site from the evidence, fix it, re-verify both navs, revert the diagnostic widget.
+
+### Final status
+READY (diagnostic build in progress) — blocked on reproduce + full stack evidence.
+
+---
+
 # STOP GATE
 
 ```text
@@ -7805,11 +7841,12 @@ Phase C FriendlyLoadError clearance UX-152…UX-178: DONE
 Phase D viewport + purchase repair UX-179…UX-182: DONE
 Phase D host: HexaWebViewportBinder + index.html CSS viewport (do not lower kDesktopMin)
 Phase E page×role audit UX-183…UX-191: READY (UX-185 Stock VERIFYING 2026-08-10 — audit CLEAN, no P0/P1; OBS-1/OBS-2 desktop-only P3 fixes in, analyze + tests pass)
-UX-196 desktop-nav structure: DONE 2026-08-11 (secondary Library group — Catalog/Contacts/Barcode on desktop rail; analyze clean, 20/20 tests; reports_page_smoke pre-existing failure unrelated)
-UX-197 desktop-nav structure (labeled secondary group + role visibility + footer context): PROPOSAL READY 2026-08-11 — awaiting D1-D3 approval, no code
+UX-196 desktop-nav structure: VERIFYING 2026-08-11 (secondary Library→Manage group on desktop rail; analyze clean; tests pass; pending live ≥1024px pass)
+UX-197 desktop-nav structure (labeled secondary group + role visibility + footer context): VERIFYING 2026-08-11 (implemented per D1-D3; analyze clean; 23/23 tests; pending live ≥1024px pass)
+UX-198 (the user's "UX-193") StateController<int> blank-section fix: READY 2026-08-11 — temporary diagnostic build in progress; needs reproduce + full stack evidence, then fix
 UX-002: BLOCKED (needs [STOCK_STORM] / [STOCK_STORM_SUMMARY] console paste)
 IN_PROGRESS: none
-Next: UX-197 proposal approval (D1-D3) — or UX-184 Owner Home audit — or paste storm logs for UX-002
+Next: UX-198 — user deploys diagnostic build to preview, reproduces "This section could not load" (mobile + desktop), pastes full stack → agent names provider + fix; then UX-184 Owner Home audit / UX-197 live desktop pass
 STOP
 ```
 
