@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart' show kDebugMode, debugPrint;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../features/shell/shell_branch_provider.dart';
@@ -496,6 +497,14 @@ void invalidateStockRowSaveSurfaces(
   bool immediateListReconcile = false,
   bool refreshItemDetail = false,
 }) {
+  if (!kDebugMode) {
+    // Light path: skip verbose logging in release.
+  } else {
+    debugPrint(
+      '[STOCK_STORM] INVALIDATE_STOCK_ROW itemId=$itemId detail=$refreshItemDetail '
+      'reorder=$reorderAlert deferList=$deferFullList immediateReconcile=$immediateListReconcile',
+    );
+  }
   if (refreshItemDetail && itemId.isNotEmpty) {
     deferInvalidateDelayed(ref, stockItemDetailProvider(itemId));
     deferInvalidateDelayed(ref, stockItemActivityProvider(itemId));

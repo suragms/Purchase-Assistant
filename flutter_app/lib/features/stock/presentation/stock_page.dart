@@ -1,4 +1,4 @@
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show kDebugMode, kIsWeb, debugPrint;
 import 'dart:async';
 import 'dart:convert';
 
@@ -888,8 +888,14 @@ class _StockPageState extends ConsumerState<StockPage>
     );
   }
 
+  int _buildCount = 0;
+
   @override
   Widget build(BuildContext context) {
+    if (kDebugMode) {
+      _buildCount++;
+      debugPrint('[STOCK_STORM] BUILD #$_buildCount');
+    }
     // Register the patch dependency on every build path (not only inside
     // _prepareItems) so optimistic row overlays always repaint — even when the
     // shell branch lags and this page renders as a hidden IndexedStack child.
@@ -905,6 +911,9 @@ class _StockPageState extends ConsumerState<StockPage>
 
     ref.listen(businessWriteEventProvider, (prev, next) {
       if (prev == null || prev.revision == next.revision) return;
+      if (kDebugMode) {
+        debugPrint('[STOCK_STORM] WRITE_EVENT rev=${next.revision} affected=${next.affectedItemIds} → invalidate changesFeed${next.affectedItemIds.isEmpty ? ' + stockList' : ''}');
+      }
       ref.invalidate(stockChangesFeedProvider);
       if (next.affectedItemIds.isEmpty) {
         ref.invalidate(stockListProvider);
@@ -948,6 +957,11 @@ class _StockPageState extends ConsumerState<StockPage>
     });
 
     ref.listen(stockListProvider, (prev, next) {
+      if (kDebugMode) {
+        final prevStatus = prev?.hasValue == true ? 'data' : prev?.isLoading == true ? 'loading' : 'error/none';
+        final nextStatus = next.hasValue ? 'data' : next.isLoading ? 'loading' : 'error';
+        debugPrint('[STOCK_STORM] LIST_PROVIDER prev=$prevStatus next=$nextStatus');
+      }
       if (next.isLoading &&
           prev?.hasValue == true &&
           ref.read(stockListQueryProvider).page == 1 &&

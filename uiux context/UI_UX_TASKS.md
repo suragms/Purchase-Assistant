@@ -486,7 +486,7 @@ DONE
 ## UX-002 — Stock edit storm
 
 ### Status
-BLOCKED
+BLOCKED (awaiting user paste of [STOCK_STORM] / [STOCK_STORM_SUMMARY] logs — logging added 2026-08-11)
 
 ### Priority
 P1
@@ -499,7 +499,14 @@ Reported slow edit / refresh loop — root cause unknown without storm logs.
 
 ### Evidence
 
-- Needs user paste: `[STOCK_STORM]` / `[STOCK_STORM_SUMMARY]`
+- **Logging added (2026-08-11):** `[STOCK_STORM]` tags at every invalidation site:
+  - `quick_stock_action_sheet.dart` — SAVE_SUCCESS + RESYNC_AFTER_SAVE
+  - `stock_page.dart` — BUILD counter + WRITE_EVENT listener + LIST_PROVIDER listener
+  - `business_aggregates_invalidation.dart` — invalidateStockRowSaveSurfaces entry
+  - `shell_tab_auto_refresh_listener.dart` — tab refresh + remote revision throttle/trigger
+  - `shell_realtime_listener.dart` — realtime warehouse signal + throttle
+  - Existing `StockApiStormMonitor` already logs `[STOCK_STORM]` per-GET + `[STOCK_STORM_SUMMARY]` per window
+- Needs user paste: full console output after a stock edit that feels slow
 - Then map endpoints → `ref.invalidate` / `ref.listen` in stock page / patch providers
 
 ### Scope

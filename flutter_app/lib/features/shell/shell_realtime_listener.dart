@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart' show kDebugMode, debugPrint;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -103,9 +104,17 @@ class _ShellRealtimeListenerState extends ConsumerState<ShellRealtimeListener> {
   }
 
   void _applyWarehouseSignal(RealtimeInvalidationSignal signal) {
-    if (warehouseGlobalInvalidateRecently(ref)) return;
+    if (warehouseGlobalInvalidateRecently(ref)) {
+      if (kDebugMode) {
+        debugPrint('[STOCK_STORM] REALTIME_WAREHOUSE throttled (global recently invalidated)');
+      }
+      return;
+    }
     markWarehouseGlobalInvalidated(ref);
     final ids = signal.affectedItemIds.where((id) => id.isNotEmpty).toSet();
+    if (kDebugMode) {
+      debugPrint('[STOCK_STORM] REALTIME_WAREHOUSE ids=$ids → ${ids.length == 1 ? 'patchStockItemInCache' : 'invalidateWarehouseSurfacesLight'}');
+    }
     if (ids.length == 1) {
       unawaited(patchStockItemInCache(ref, itemId: ids.first));
     } else {

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kDebugMode, debugPrint;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -73,6 +74,9 @@ class _ShellTabAutoRefreshListenerState
       case ShellBranch.stock:
         // Page-1 list watches shell-bundle — invalidate bundle only to avoid
         // a parallel list+bundle storm on every Stock tab return.
+        if (kDebugMode) {
+          debugPrint('[STOCK_STORM] TAB_REFRESH stock → invalidate stockShellBundle');
+        }
         ref.invalidate(stockShellBundleProvider);
       case ShellBranch.reports:
         markReportsPurchasesNeedsLiveFetch(ref);
@@ -93,9 +97,15 @@ class _ShellTabAutoRefreshListenerState
     final now = DateTime.now();
     if (_lastRemoteRefresh != null &&
         now.difference(_lastRemoteRefresh!) < const Duration(seconds: 8)) {
+      if (kDebugMode) {
+        debugPrint('[STOCK_STORM] REMOTE_REV throttle rev=$revision (last refresh ${now.difference(_lastRemoteRefresh!).inSeconds}s ago)');
+      }
       return;
     }
     _lastRemoteRefresh = now;
+    if (kDebugMode) {
+      debugPrint('[STOCK_STORM] REMOTE_REV rev=$revision → refreshBranch ${ref.read(shellCurrentBranchProvider)}');
+    }
     _refreshBranch(ref.read(shellCurrentBranchProvider), reason: 'remote');
   }
 
