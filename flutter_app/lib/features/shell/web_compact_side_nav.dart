@@ -18,7 +18,7 @@ class WebCompactSideNav extends StatelessWidget {
     required this.destinations,
     required this.onDestinationSelected,
     this.footer,
-    this.showLabels = false,
+    this.showLabels,
     this.secondaryLabel,
     this.secondaryDestinations = const [],
     this.onSecondaryDestinationSelected,
@@ -29,8 +29,10 @@ class WebCompactSideNav extends StatelessWidget {
   final ValueChanged<int> onDestinationSelected;
   final Widget? footer;
 
-  /// When true, render icon + label at [kShellLabeledRailWidth].
-  final bool showLabels;
+  /// When null, auto-resolve from [MediaQuery]: labels render at ≥ [kDesktopMin]
+  /// so the rail reads as a real menu, not icon-only. Callers may pass an
+  /// explicit value to override (both the owner and staff shells do).
+  final bool? showLabels;
 
   /// Caption above the optional secondary group (only shown when [showLabels]).
   final String? secondaryLabel;
@@ -43,18 +45,20 @@ class WebCompactSideNav extends StatelessWidget {
   /// Fires with the 0-based index into [secondaryDestinations].
   final ValueChanged<int>? onSecondaryDestinationSelected;
 
-  double get _width =>
-      showLabels ? kShellLabeledRailWidth : kShellCompactRailWidth;
-
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    // UX-196/UX-197 (the user's "UX-192"): labels auto-on at ≥ [kDesktopMin] so
+    // the rail reads as a menu; callers may still pass an explicit override.
+    final showLabels =
+        this.showLabels ?? MediaQuery.sizeOf(context).width >= kDesktopMin;
+    final width = showLabels ? kShellLabeledRailWidth : kShellCompactRailWidth;
     return Material(
       color: cs.surface,
       child: SafeArea(
         right: false,
         child: SizedBox(
-          width: _width,
+          width: width,
           child: Column(
             children: [
               const SizedBox(height: 8),
@@ -72,7 +76,7 @@ class WebCompactSideNav extends StatelessWidget {
                           item: destinations[i],
                           selected: selectedIndex == i,
                           showLabel: showLabels,
-                          width: _width,
+                          width: width,
                           onTap: () => onDestinationSelected(i),
                         ),
                     ],
@@ -113,7 +117,7 @@ class WebCompactSideNav extends StatelessWidget {
                     item: secondaryDestinations[i],
                     selected: false,
                     showLabel: showLabels,
-                    width: _width,
+                    width: width,
                     onTap: () => onSecondaryDestinationSelected?.call(i),
                   ),
               ],

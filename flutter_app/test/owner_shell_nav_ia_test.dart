@@ -94,8 +94,10 @@ void main() {
     expect(find.text('Catalog'), findsOneWidget);
     expect(find.text('Barcode tools'), findsOneWidget);
     expect(find.text('Settings'), findsOneWidget);
-    // Live badge from the notifications index.
+    // Live badge from the notifications index — exactly one badge renders
+    // (only index == ownerShellSecondaryNotificationsIndex carries a count).
     expect(find.text('5'), findsOneWidget);
+    expect(find.byType(Badge), findsOneWidget);
 
     await tester.tap(find.text('Contacts'));
     await tester.pump();
@@ -139,6 +141,43 @@ void main() {
     // Secondary items are never selected, so they show their outlined icon.
     expect(find.byIcon(Icons.category_outlined), findsOneWidget);
     // Primary destination 0 is selected here, so it renders its selected icon.
+    expect(find.byIcon(Icons.grid_view_rounded), findsOneWidget);
+  });
+
+  testWidgets('showLabels auto-resolves from width when not provided',
+      (tester) async {
+    // Pin the test view to DPR 1.0 so the logical width equals the asserted
+    // breakpoint (the default test DPR of 3.0 would turn 1440px into 480px).
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    Widget build() => MaterialApp(
+          home: Scaffold(
+            body: WebCompactSideNav(
+              selectedIndex: 0,
+              onDestinationSelected: (_) {},
+              destinations: const [
+                WebCompactSideNavItem(
+                  icon: Icons.grid_view_outlined,
+                  selectedIcon: Icons.grid_view_rounded,
+                  label: 'Home',
+                ),
+              ],
+            ),
+          ),
+        );
+
+    // No showLabels passed → labeled rail at desktop width (reads as a menu).
+    tester.view.physicalSize = const Size(1440, 900);
+    await tester.pumpWidget(build());
+    expect(find.text('Home'), findsOneWidget);
+    expect(find.byIcon(Icons.grid_view_rounded), findsOneWidget);
+
+    // Same widget at compact width → icon-only, no label text. Primary is
+    // still selected (index 0), so it renders its rounded selected icon.
+    tester.view.physicalSize = const Size(800, 900);
+    await tester.pumpWidget(build());
+    expect(find.text('Home'), findsNothing);
     expect(find.byIcon(Icons.grid_view_rounded), findsOneWidget);
   });
 
