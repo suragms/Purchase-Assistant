@@ -30,6 +30,7 @@ from app.sqlite_bootstrap import apply_sqlite_bootstrap
 from app.routers import (
     auth,
     catalog,
+    client_errors,
     contacts,
     exports,
     health,
@@ -492,6 +493,7 @@ async def app_requested_with_guard(request: Request, call_next):
             or path.startswith("/health")
             or path.startswith("/static/")
             or path.startswith("/v1/auth/")
+            or path.startswith("/v1/client-errors")
             or path.startswith("/public/")
         )
         origin = request.headers.get("origin", "").strip()
@@ -699,6 +701,7 @@ app.add_middleware(
 )
 
 app.include_router(health.router)
+app.include_router(client_errors.router)
 app.include_router(auth.router)
 app.include_router(me.router)
 app.include_router(exports.router)

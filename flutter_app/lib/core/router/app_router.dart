@@ -17,6 +17,7 @@ import '../models/trade_purchase_models.dart';
 import 'purchase_overlay_active_provider.dart';
 import 'page_transitions.dart';
 import '../widgets/hexa_page_error_boundary.dart';
+import '../platform/current_route.dart';
 import '../../features/shell/shell_branch_provider.dart';
 import '../../features/reports/shell/reports_shell_page.dart';
 import '../../features/catalog/presentation/item_analytics_redirect_page.dart';
@@ -198,6 +199,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       final loc = state.uri.path.isNotEmpty
           ? state.uri.path
           : state.matchedLocation;
+      CurrentRoute.update(loc);
       try {
         syncPurchaseOverlayActive(ProviderScope.containerOf(context), loc);
       } catch (_) {}

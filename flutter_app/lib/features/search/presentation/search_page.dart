@@ -7,6 +7,7 @@ import 'package:intl/intl.dart';
 
 import '../../../core/auth/provider_api_guard.dart';
 import '../../../core/providers/business_write_revision.dart';
+import '../../../core/providers/deferred_invalidation.dart';
 import '../../../core/auth/session_notifier.dart';
 import '../../../core/providers/recent_unified_search_provider.dart';
 import '../../../core/providers/search_focus_provider.dart';
@@ -435,7 +436,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
         if (ref.read(shellCurrentBranchProvider) != ShellBranch.search) return;
         bustUnifiedSearchCache();
         if (_debounced.trim().isNotEmpty) {
-          ref.invalidate(unifiedSearchProvider(_debounced));
+          deferInvalidate(ref, unifiedSearchProvider(_debounced));
         }
       });
     }
@@ -458,7 +459,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
         }
         bustUnifiedSearchCache();
         if (_debounced.trim().isNotEmpty) {
-          ref.invalidate(unifiedSearchProvider(_debounced));
+          deferInvalidate(ref, unifiedSearchProvider(_debounced));
         }
       });
     }
