@@ -1,15 +1,23 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:harisree_warehouse/core/design_system/hexa_desktop_layout.dart'
+    show DesktopSideNavFooter;
 import 'package:harisree_warehouse/core/router/shell_navigation.dart';
 import 'package:harisree_warehouse/features/shell/owner_shell_nav.dart';
 import 'package:harisree_warehouse/features/shell/web_compact_side_nav.dart';
 
 void main() {
-  test('secondary destinations are exactly Catalog, Contacts, Barcode', () {
-    expect(ownerShellSecondaryDestinations.length, 3);
+  test('secondary destinations are the 6 owner features in order', () {
     expect(
       ownerShellSecondaryDestinations.map((d) => d.label).toList(),
-      ['Catalog', 'Contacts', 'Barcode'],
+      [
+        'Catalog',
+        'Contacts',
+        'Barcode tools',
+        'Notifications',
+        'Settings',
+        'Help & guide',
+      ],
     );
   });
 
@@ -17,10 +25,21 @@ void main() {
     expect(ownerShellSecondaryRouteForIndex(0), '/catalog');
     expect(ownerShellSecondaryRouteForIndex(1), '/contacts');
     expect(ownerShellSecondaryRouteForIndex(2), '/barcode/scan');
+    expect(ownerShellSecondaryRouteForIndex(3), '/notifications');
+    expect(ownerShellSecondaryRouteForIndex(4), '/settings');
+    expect(ownerShellSecondaryRouteForIndex(5), '/settings/help');
   });
 
-  test('caption is Library', () {
-    expect(ownerShellSecondaryCaption, 'Library');
+  test('caption is Manage', () {
+    expect(ownerShellSecondaryCaption, 'Manage');
+  });
+
+  test('Notifications entry is at the badge index', () {
+    expect(
+      ownerShellSecondaryDestinations[ownerShellSecondaryNotificationsIndex]
+          .label,
+      'Notifications',
+    );
   });
 
   test('secondary destinations are overlays, never shell branches', () {
@@ -32,7 +51,7 @@ void main() {
     }
   });
 
-  testWidgets('labeled rail renders secondary group and fires callback',
+  testWidgets('labeled rail renders secondary group, badge, and fires callback',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(1440, 900));
     addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -53,22 +72,17 @@ void main() {
               ),
             ],
             secondaryLabel: ownerShellSecondaryCaption,
-            secondaryDestinations: const [
-              WebCompactSideNavItem(
-                icon: Icons.category_outlined,
-                selectedIcon: Icons.category_rounded,
-                label: 'Catalog',
-              ),
-              WebCompactSideNavItem(
-                icon: Icons.groups_outlined,
-                selectedIcon: Icons.groups_rounded,
-                label: 'Contacts',
-              ),
-              WebCompactSideNavItem(
-                icon: Icons.qr_code_scanner_outlined,
-                selectedIcon: Icons.qr_code_scanner_rounded,
-                label: 'Barcode',
-              ),
+            secondaryDestinations: [
+              for (var i = 0;
+                  i < ownerShellSecondaryDestinations.length;
+                  i++)
+                WebCompactSideNavItem(
+                  icon: ownerShellSecondaryDestinations[i].icon,
+                  selectedIcon: ownerShellSecondaryDestinations[i].selectedIcon,
+                  label: ownerShellSecondaryDestinations[i].label,
+                  badgeCount:
+                      i == ownerShellSecondaryNotificationsIndex ? 5 : 0,
+                ),
             ],
             onSecondaryDestinationSelected: (i) => tapped = i,
           ),
@@ -76,9 +90,12 @@ void main() {
       ),
     );
 
-    expect(find.text('Library'), findsOneWidget);
+    expect(find.text('Manage'), findsOneWidget);
     expect(find.text('Catalog'), findsOneWidget);
-    expect(find.text('Barcode'), findsOneWidget);
+    expect(find.text('Barcode tools'), findsOneWidget);
+    expect(find.text('Settings'), findsOneWidget);
+    // Live badge from the notifications index.
+    expect(find.text('5'), findsOneWidget);
 
     await tester.tap(find.text('Contacts'));
     await tester.pump();
@@ -118,10 +135,54 @@ void main() {
       ),
     );
 
-    expect(find.text('Library'), findsNothing);
+    expect(find.text('Manage'), findsNothing);
     // Secondary items are never selected, so they show their outlined icon.
     expect(find.byIcon(Icons.category_outlined), findsOneWidget);
     // Primary destination 0 is selected here, so it renders its selected icon.
     expect(find.byIcon(Icons.grid_view_rounded), findsOneWidget);
+  });
+
+  testWidgets('footer renders business and role context', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1440, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: WebCompactSideNav(
+            selectedIndex: 0,
+            onDestinationSelected: (_) {},
+            showLabels: true,
+            destinations: const [
+              WebCompactSideNavItem(
+                icon: Icons.grid_view_outlined,
+                selectedIcon: Icons.grid_view_rounded,
+                label: 'Home',
+              ),
+            ],
+            secondaryLabel: ownerShellSecondaryCaption,
+            secondaryDestinations: const [
+              WebCompactSideNavItem(
+                icon: Icons.settings_outlined,
+                selectedIcon: Icons.settings_rounded,
+                label: 'Settings',
+              ),
+            ],
+            onSecondaryDestinationSelected: (_) {},
+            footer: const DesktopSideNavFooter(
+              businessName: 'Hexa Warehouse',
+              roleLabel: 'Owner',
+            ),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('Hexa Warehouse'), findsOneWidget);
+    expect(find.text('Owner'), findsOneWidget);
+    // The footer owns no icons here (they moved into the group) — only the
+    // secondary Settings item renders its outlined icon.
+    expect(find.byIcon(Icons.settings_outlined), findsOneWidget);
+    expect(find.byIcon(Icons.notifications_outlined), findsNothing);
   });
 }

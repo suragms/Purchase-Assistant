@@ -10,7 +10,11 @@ import '../../core/providers/notification_center_provider.dart'
 import '../../core/providers/notifications_provider.dart'
     show notificationsUnreadCountProvider;
 import '../../core/design_system/hexa_ds_tokens.dart';
+import '../../core/auth/dashboard_role.dart' show dashboardRoleLabel;
 import '../../core/auth/provider_api_guard.dart';
+import '../../core/auth/session_notifier.dart' show sessionProvider;
+import '../../core/design_system/hexa_desktop_layout.dart'
+    show DesktopSideNavFooter;
 import '../../core/router/navigation_ext.dart';
 import '../../core/router/shell_navigation.dart';
 import '../../core/design_system/hexa_responsive.dart';
@@ -152,8 +156,6 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
     final railWidget = _WebOwnerSideNav(
       selectedIndex: navSelectedIndex,
       onDestinationSelected: go,
-      onNotificationsTap: () => context.push('/notifications'),
-      onSettingsTap: () => context.push('/settings'),
     );
 
     // Hard-capped width — never let side nav expand into [Expanded] body.
@@ -203,22 +205,21 @@ class _WebOwnerSideNav extends ConsumerWidget {
   const _WebOwnerSideNav({
     required this.selectedIndex,
     required this.onDestinationSelected,
-    required this.onNotificationsTap,
-    required this.onSettingsTap,
   });
 
   final int selectedIndex;
   final ValueChanged<int> onDestinationSelected;
-  final VoidCallback onNotificationsTap;
-  final VoidCallback onSettingsTap;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final stockAlertN = providerSkipApi(ref)
         ? 0
         : ref.watch(notificationsUnreadCountProvider);
-    final cs = Theme.of(context).colorScheme;
     final showLabels = MediaQuery.sizeOf(context).width >= kDesktopMin;
+    final session = ref.watch(sessionProvider);
+    final businessName =
+        session?.primaryBusiness.effectiveDisplayTitle ?? 'Warehouse';
+    final roleLabel = session != null ? dashboardRoleLabel(session) : 'Owner';
     return WebCompactSideNav(
       selectedIndex: selectedIndex,
       onDestinationSelected: onDestinationSelected,
@@ -250,59 +251,35 @@ class _WebOwnerSideNav extends ConsumerWidget {
           label: ownerShellNavLabel(ShellBranch.search),
         ),
       ],
-      // UX-196: owner-only features that used to have no desktop nav entry.
-      // They push overlays — they are not ShellBranch tabs, so they live in
-      // the secondary group, never in `destinations`.
+      // UX-196/UX-197: owner features that used to have no labeled desktop nav
+      // entry. They push overlays — they are not ShellBranch tabs, so they live
+      // in the secondary group, never in `destinations`.
       secondaryLabel: ownerShellSecondaryCaption,
       secondaryDestinations: [
-        for (final d in ownerShellSecondaryDestinations)
+        for (var i = 0; i < ownerShellSecondaryDestinations.length; i++)
           WebCompactSideNavItem(
-            icon: d.icon,
-            selectedIcon: d.selectedIcon,
-            label: d.label,
+            icon: ownerShellSecondaryDestinations[i].icon,
+            selectedIcon: ownerShellSecondaryDestinations[i].selectedIcon,
+            label: ownerShellSecondaryDestinations[i].label,
+            badgeCount: i == ownerShellSecondaryNotificationsIndex
+                ? stockAlertN
+                : 0,
           ),
       ],
       onSecondaryDestinationSelected: (i) {
         HapticFeedback.selectionClick();
         pushOverlayRoute(context, ownerShellSecondaryRouteForIndex(i));
       },
-      footer: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Tooltip(
-            message: 'Notifications',
-            child: IconButton(
-              onPressed: onNotificationsTap,
-              icon: stockAlertN > 0
-                  ? Badge(
-                      label: Text(stockAlertN > 99 ? '99+' : '$stockAlertN'),
-                      child: Icon(
-                        Icons.notifications_outlined,
-                        color: cs.onSurfaceVariant,
-                      ),
-                    )
-                  : Icon(
-                      Icons.notifications_outlined,
-                      color: cs.onSurfaceVariant,
-                    ),
-            ),
-          ),
-          Tooltip(
-            message: 'Help & guide',
-            child: IconButton(
-              onPressed: () => context.push('/settings/help'),
-              icon: Icon(Icons.help_outline_rounded, color: cs.onSurfaceVariant),
-            ),
-          ),
-          Tooltip(
-            message: 'Settings',
-            child: IconButton(
-              onPressed: onSettingsTap,
-              icon: Icon(Icons.settings_outlined, color: cs.onSurfaceVariant),
-            ),
-          ),
-        ],
-      ),
+      // UX-197: labeled rail shows business + role context via the previously
+      // orphaned DesktopSideNavFooter. Its Notifications/Settings icons moved
+      // into the secondary group above, so the footer is text-only here. The
+      // compact rail gets no footer — those entries are already in the group.
+      footer: showLabels
+          ? DesktopSideNavFooter(
+              businessName: businessName,
+              roleLabel: roleLabel,
+            )
+          : null,
     );
   }
 }

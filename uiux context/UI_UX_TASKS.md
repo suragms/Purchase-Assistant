@@ -360,7 +360,7 @@ Desktop layout ≥ **1024** (`hexa_responsive.dart` / `DESIGN.md`). Phone &lt; 6
 | 190 | UX-190 | P2 | READY | Audit: Settings | Phase E |
 | 191 | UX-191 | P2 | READY | Audit: Staff shell twin pages | Phase E |
 | 196 | UX-196 | P2 | DONE | Desktop primary nav + secondary/side menu structure | Phase E |
-| 197 | UX-197 | P2 | READY | Desktop nav: labeled secondary group + role visibility + footer context | Phase E |
+| 197 | UX-197 | P2 | DONE | Desktop nav: labeled secondary group + role visibility + footer context | Phase E |
 
 ---
 
@@ -7741,7 +7741,7 @@ DONE
 ## UX-197 — Desktop nav: labeled secondary group + role visibility + footer context (Phase E)
 
 ### Status
-READY — PROPOSAL (awaiting approval; **no code written**). Decisions D1-D3 open below.
+DONE — implemented 2026-08-11 (approved proposal; D1-D3 defaults chosen). Analyze clean; 22/22 nav + regression tests pass.
 
 ### Priority
 P2 — refinement of the UX-196 structure that shipped 2026-08-11.
@@ -7775,22 +7775,24 @@ Desktop-only. UX-196 added a "Library" secondary group (Catalog / Contacts / Bar
 ### Decisions needed before implementation
 - **D1 — Settings visibility:** keep Settings visible to all non-staff (recommended; router already gates `/settings/users`) vs hide it for manager via `sessionIsOwnerOrAdmin`.
 - **D2 — Help & guide placement:** 6th group entry (recommended; keeps the rail self-contained) vs lone footer icon below the context footer vs reachable only inside Settings.
-- **D3 — "Barcode tools":** single `/barcode/scan` entry (recommended; matches UX-196, one tap) vs nested submenu (Scan / Bulk print / Audit / History) — a submenu is heavier and conflicts with the bottom-group simplicity.
+- **D3 — "Barcode tools":** single `/barcode/scan` entry (chosen) vs nested submenu (Scan / Bulk print / Audit / History) — a single entry keeps the bottom group simple.
 
-### Files to change (only after approval)
-- `features/shell/owner_shell_nav.dart` — extend the model: caption `'Manage'`, 5 (+1) entries with routes, `ownerShellSecondaryRouteForIndex`, optional `ownerShellSecondaryVisibleFor(session)` (D1).
-- `features/shell/web_compact_side_nav.dart` — bottom-anchor the secondary group (primaries top → flexible spacer → secondary group → footer); badge support already present.
-- `features/shell/shell_screen.dart` — pass the extended model (badge for Notifications), replace the ad-hoc footer icon `Column` with `DesktopSideNavFooter(businessName, roleLabel)` on the labeled rail; keep `go()`/clamp/mobile untouched.
-- `test/owner_shell_nav_ia_test.dart` — extend to the new entries, role gate (D1), footer rendering; keep the overlay-not-branch guard.
+**D1-D3 resolution (2026-08-11):** D1 = Settings stays visible to all non-staff (the router already gates `/settings/users`); D2 = Help & guide is the 6th group entry; D3 = single `/barcode/scan` entry labeled "Barcode tools".
 
-### Verification (after approval)
-- `flutter analyze` clean; `flutter test test/owner_shell_nav_ia_test.dart test/shell_navigation_test.dart test/staff_shell_nav_ia_test.dart`.
-- Desktop ≥1024: 5 primaries unchanged; `Manage` group bottom-anchored with 5-6 labeled entries; live Notifications badge; footer shows business + role. Compact 600-1023: icon-only + tooltips, caption/footer text hidden. Mobile (<600): byte-identical.
-- Role: owner vs manager Settings visibility per D1.
-- `git diff --stat`: staff shell + shell_navigation + shell_branch_provider empty.
+### Implementation (2026-08-11)
+- `owner_shell_nav.dart` — caption `'Manage'`; group grown to 6 entries: Catalog `/catalog`, Contacts `/contacts`, Barcode tools `/barcode/scan`, Notifications `/notifications`, Settings `/settings`, Help & guide `/settings/help`; added `ownerShellSecondaryNotificationsIndex = 3` so the shell attaches the live unread badge to exactly that item. No role gate in the model (D1 default).
+- `web_compact_side_nav.dart` — the secondary group + footer are now **bottom-anchored**: the primaries sit in a `Flexible` (loose) `SingleChildScrollView` so leftover rail height becomes a gap ABOVE the group; short windows shrink + scroll the primaries instead of overflowing. Staff shell (no secondary) is visually unchanged.
+- `shell_screen.dart` — `_WebOwnerSideNav` passes the live `notificationsUnreadCountProvider` badge to the Notifications item; replaced the ad-hoc footer icon `Column` with the previously **orphaned** `DesktopSideNavFooter(businessName, roleLabel)` on the labeled rail (≥1024), `null` on compact. Business/role from `sessionProvider` + `dashboardRoleLabel`. Dropped the now-unused `onNotificationsTap`/`onSettingsTap` callbacks. Mobile bottom bar, `go()`, `navSelectedIndex` clamp, `goBranch` untouched.
+- `test/owner_shell_nav_ia_test.dart` — 8 tests: 6-entry labels/order, index→route map, caption `'Manage'`, Notifications badge index, overlay-not-branch guard over all 6 routes, labeled render + live badge + callback, compact caption-hide, footer business+role render.
+
+### Verification (2026-08-11)
+- `flutter analyze` on the 4 touched files: clean (no issues).
+- `flutter test test/owner_shell_nav_ia_test.dart test/shell_navigation_test.dart test/staff_shell_nav_ia_test.dart`: **22/22 pass** (8 new + regressions).
+- Diff scope: only `owner_shell_nav.dart`, `web_compact_side_nav.dart`, `shell_screen.dart`, `test/owner_shell_nav_ia_test.dart`. `staff_shell_screen.dart`, `shell_navigation.dart`, `shell_branch_provider.dart` untouched.
+- Live desktop pass recommended: ≥1024 shows 5 primaries unchanged, `Manage` group bottom-anchored with 6 labeled entries, live Notifications badge, footer business + role; 600-1023 icon-only + tooltips, no caption/footer text; <600 byte-identical.
 
 ### Final status
-READY — proposal pending approval (D1-D3). No code written.
+DONE
 
 ---
 
