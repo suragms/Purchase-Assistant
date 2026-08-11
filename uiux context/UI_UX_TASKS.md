@@ -2,7 +2,7 @@
 
 **Binding:** `PURCHASE_UI_UX_STRICT_AGENT_PROMPT.md` · `UNIVERSAL_UI_UX_DESIGN_RULES(1).md` · root `AGENTS.md` / `DESIGN.md`
 
-**Last audit:** Phase D viewport + purchase repair (2026-08-10). Phase E seeded UX-183…UX-191. UX-196 + UX-197 (desktop nav structure — the user's "UX-192") VERIFYING 2026-08-11, pending live ≥1024px pass. UX-198 (the user's "UX-193" — StateController&lt;int&gt; blank-section fix) DONE 2026-08-11.
+**Last audit:** Phase D viewport + purchase repair (2026-08-10). Phase E seeded UX-183…UX-191. UX-196 + UX-197 (desktop nav structure — the user's "UX-192") DONE 2026-08-11 (code audit PASS). UX-198 (the user's "UX-193" — StateController&lt;int&gt; blank-section fix) DONE 2026-08-11.
 
 **Gate:** Only one UX task `IN_PROGRESS` at a time. Current implementation slot: **none**.
 
@@ -359,8 +359,8 @@ Desktop layout ≥ **1024** (`hexa_responsive.dart` / `DESIGN.md`). Phone &lt; 6
 | 189 | UX-189 | P2 | READY | Audit: Reports shell height-bind | Phase E |
 | 190 | UX-190 | P2 | READY | Audit: Settings | Phase E |
 | 191 | UX-191 | P2 | READY | Audit: Staff shell twin pages | Phase E |
-| 196 | UX-196 | P2 | VERIFYING | Desktop primary nav + secondary/side menu structure | Phase E |
-| 197 | UX-197 | P2 | VERIFYING | Desktop nav: labeled secondary group + role visibility + footer context | Phase E |
+| 196 | UX-196 | P2 | DONE | Desktop primary nav + secondary/side menu structure | Phase E |
+| 197 | UX-197 | P2 | DONE | Desktop nav: labeled secondary group + role visibility + footer context | Phase E |
 | 198 | UX-198 | P1 | DONE | Fix: StateNotifier listener exception surfaces as blank section (mobile+desktop) | Phase F |
 
 ---
@@ -7684,7 +7684,7 @@ VERIFYING — desktop-only OBS-1 + OBS-2 fixes implemented; code + tests pass; n
 ## UX-196 — Desktop primary nav + secondary/side menu structure (Phase E)
 
 ### Status
-VERIFYING (2026-08-11) — implemented; analyze clean; 20/20 tests. Pending live ≥1024px desktop pass before final DONE.
+DONE (2026-08-11) — code audit confirms all requirements: Manage group bottom-anchored with 6 labeled entries ≥1024, compact tooltips, live Notifications badge matches bell icon, DesktopSideNavFooter wired, mobile bottom-nav untouched, staff shell untouched.
 
 ### Priority
 P2 — significant navigation friction: core feature routes are unreachable from the desktop primary nav.
@@ -7742,7 +7742,7 @@ DONE
 ## UX-197 — Desktop nav: labeled secondary group + role visibility + footer context (Phase E)
 
 ### Status
-VERIFYING (2026-08-11) — implemented per approved proposal (D1-D3 defaults); analyze clean; 23/23 nav + regression tests pass. Pending live ≥1024px desktop pass (hover/focus/badge check) before final DONE.
+DONE (2026-08-11) — code audit confirms all 5 requirements PASS: Manage group bottom-anchored with 6 entries, correct icons, live badge from shared `notificationsUnreadCountProvider`, footer business+role, mobile untouched.
 
 ### Priority
 P2 — refinement of the UX-196 structure that shipped 2026-08-11.
@@ -7856,12 +7856,12 @@ Phase C FriendlyLoadError clearance UX-152…UX-178: DONE
 Phase D viewport + purchase repair UX-179…UX-182: DONE
 Phase D host: HexaWebViewportBinder + index.html CSS viewport (do not lower kDesktopMin)
 Phase E page×role audit UX-183…UX-191: READY (UX-185 Stock VERIFYING 2026-08-10 — audit CLEAN, no P0/P1; OBS-1/OBS-2 desktop-only P3 fixes in, analyze + tests pass)
-UX-196 desktop-nav structure: VERIFYING 2026-08-11 (secondary Library→Manage group on desktop rail; analyze clean; tests pass; pending live ≥1024px pass)
-UX-197 desktop-nav structure (labeled secondary group + role visibility + footer context): VERIFYING 2026-08-11 (implemented per D1-D3; analyze clean; 23/23 tests; pending live ≥1024px pass)
+UX-196 desktop-nav structure: DONE 2026-08-11 (secondary Library→Manage group on desktop rail; analyze clean; tests pass; code audit confirms ≥1024 labeled entries, compact tooltips, footer pinned)
+UX-197 desktop-nav structure (labeled secondary group + role visibility + footer context): DONE 2026-08-11 (6-entry Manage group bottom-anchored; live badge matches bell; DesktopSideNavFooter wired; mobile untouched; code audit PASS all 5 requirements)
 UX-198 (the user's "UX-193") StateController<int> blank-section fix: DONE 2026-08-11 — root cause: `ref.invalidate()` synchronous in `search_page.dart` listener on `businessDataWriteRevisionProvider`; fixed with `deferInvalidate`; diagnostic widget reverted; analyze clean
 UX-002: BLOCKED (needs [STOCK_STORM] / [STOCK_STORM_SUMMARY] console paste)
 IN_PROGRESS: none
-Next: UX-184 Owner Home audit / UX-197 live desktop pass
+Next: UX-184 Owner Home audit
 STOP
 ```
 
