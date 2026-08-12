@@ -557,6 +557,9 @@ class _QuickStockActionBodyState extends ConsumerState<_QuickStockActionBody> {
     required String itemId,
     bool reorderAlert = false,
   }) {
+    if (kDebugMode) {
+      debugPrint('[STOCK_STORM] RESYNC_AFTER_SAVE itemId=$itemId reorder=$reorderAlert → invalidateStockRowSaveSurfaces + changesFeed + activity');
+    }
     WidgetsBinding.instance.addPostFrameCallback((_) {
       // Always refresh detail + activity history after a system/physical save.
       invalidateStockRowSaveSurfaces(
@@ -629,6 +632,9 @@ class _QuickStockActionBodyState extends ConsumerState<_QuickStockActionBody> {
         saved: saved,
         parsed: parsed,
       );
+      if (kDebugMode) {
+        debugPrint('[STOCK_STORM] SAVE_SUCCESS itemId=$itemId mode=$mode → invalidating stockStatusCounts + emitWriteEvent');
+      }
       parentRef.invalidate(stockStatusCountsProvider);
       emitBusinessWriteEvent(parentRef, kind: 'stock', affectedItemIds: {itemId});
       if (mode == StockUpdateMode.physical) {

@@ -21,6 +21,7 @@ import 'core/theme/app_theme.dart';
 import 'core/theme/hexa_colors.dart';
 import 'core/notifications/local_notifications_service.dart';
 import 'core/platform/hexa_layout_error_widget.dart';
+import 'core/platform/hexa_error_sink.dart';
 import 'core/widgets/hexa_page_error_boundary.dart'
     show hexaAsyncErrorLikelyBenign, hexaErrorLikelyNonFatal;
 import 'core/platform/remove_boot_overlay.dart';
@@ -67,6 +68,8 @@ void _installHexaPlatformAsyncErrorHook() {
     if (hexaAsyncErrorLikelyBenign(error)) {
       return true;
     }
+    // Non-benign: report to production error sink.
+    HexaErrorSink.report(error, stack);
     return false;
   };
 }
@@ -188,6 +191,8 @@ Future<void> main() async {
       }
       return;
     }
+    // Non-benign: report to production error sink.
+    HexaErrorSink.report(details.exception, details.stack ?? StackTrace.empty);
     FlutterError.presentError(details);
   };
   // Clean URLs on web (e.g. /home instead of #/home). Requires SPA rewrites (see repo vercel.json).

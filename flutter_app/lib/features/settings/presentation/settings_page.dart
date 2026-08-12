@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -8,6 +9,7 @@ import '../../../core/auth/session_notifier.dart';
 import '../../../core/config/app_config.dart';
 import '../../../core/models/session.dart';
 import '../../../core/notifications/local_notifications_service.dart';
+import '../../../core/platform/hexa_error_sink.dart';
 import '../../../core/providers/business_aggregates_invalidation.dart';
 import '../../../core/providers/prefs_provider.dart'
     show localNotificationsOptInProvider, notificationKindTogglesProvider;
@@ -339,6 +341,26 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                   );
                 },
               ),
+              if (kDebugMode)
+                ListTile(
+                  leading: Icon(Icons.bug_report_outlined, color: cs.error),
+                  title: const Text('Test error sink'),
+                  subtitle: const Text(
+                    'Triggers a test exception to verify the production error sink fires.',
+                  ),
+                  onTap: () {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Throwing test exception…'),
+                        duration: Duration(seconds: 2),
+                      ),
+                    );
+                    // Delay so the snackbar renders before the exception.
+                    Future<void>.delayed(const Duration(milliseconds: 500), () {
+                      HexaErrorSink.triggerTestException();
+                    });
+                  },
+                ),
             ],
           ),
           const SizedBox(height: 28),

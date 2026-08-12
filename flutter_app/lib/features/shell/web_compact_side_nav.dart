@@ -18,7 +18,10 @@ class WebCompactSideNav extends StatelessWidget {
     required this.destinations,
     required this.onDestinationSelected,
     this.footer,
-    this.showLabels = false,
+    this.showLabels,
+    this.secondaryLabel,
+    this.secondaryDestinations = const [],
+    this.onSecondaryDestinationSelected,
   });
 
   final int selectedIndex;
@@ -26,33 +29,98 @@ class WebCompactSideNav extends StatelessWidget {
   final ValueChanged<int> onDestinationSelected;
   final Widget? footer;
 
-  /// When true, render icon + label at [kShellLabeledRailWidth].
-  final bool showLabels;
+  /// When null, auto-resolve from [MediaQuery]: labels render at ≥ [kDesktopMin]
+  /// so the rail reads as a real menu, not icon-only. Callers may pass an
+  /// explicit value to override (both the owner and staff shells do).
+  final bool? showLabels;
 
-  double get _width =>
-      showLabels ? kShellLabeledRailWidth : kShellCompactRailWidth;
+  /// Caption above the optional secondary group (only shown when [showLabels]).
+  final String? secondaryLabel;
+
+  /// Optional secondary items rendered below the primary destinations.
+  /// These are overlay PUSHES, not shell branches — never given a selection
+  /// index, and never counted toward the primary [selectedIndex] clamp.
+  final List<WebCompactSideNavItem> secondaryDestinations;
+
+  /// Fires with the 0-based index into [secondaryDestinations].
+  final ValueChanged<int>? onSecondaryDestinationSelected;
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    // UX-196/UX-197 (the user's "UX-192"): labels auto-on at ≥ [kDesktopMin] so
+    // the rail reads as a menu; callers may still pass an explicit override.
+    final showLabels =
+        this.showLabels ?? MediaQuery.sizeOf(context).width >= kDesktopMin;
+    final width = showLabels ? kShellLabeledRailWidth : kShellCompactRailWidth;
     return Material(
       color: cs.surface,
       child: SafeArea(
         right: false,
         child: SizedBox(
-          width: _width,
+          width: width,
           child: Column(
             children: [
               const SizedBox(height: 8),
-              for (var i = 0; i < destinations.length; i++)
-                _NavIconButton(
-                  item: destinations[i],
-                  selected: selectedIndex == i,
-                  showLabel: showLabels,
-                  width: _width,
-                  onTap: () => onDestinationSelected(i),
+              // [Flexible] (loose): the primaries take their natural height and
+              // any leftover space becomes a gap ABOVE the secondary group —
+              // bottom-anchoring the group + footer on tall windows. On short
+              // windows the primaries shrink and scroll instead of overflowing.
+              Flexible(
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      for (var i = 0; i < destinations.length; i++)
+                        _NavIconButton(
+                          item: destinations[i],
+                          selected: selectedIndex == i,
+                          showLabel: showLabels,
+                          width: width,
+                          onTap: () => onDestinationSelected(i),
+                        ),
+                    ],
+                  ),
                 ),
-              const Spacer(),
+              ),
+              if (secondaryDestinations.isNotEmpty) ...[
+                if (showLabels) ...[
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        secondaryLabel ?? '',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.4,
+                          color: cs.onSurfaceVariant,
+                        ),
+                      ),
+                    ),
+                  ),
+                  Divider(
+                    height: 1,
+                    thickness: 1,
+                    indent: 16,
+                    endIndent: 16,
+                    color: cs.outlineVariant,
+                  ),
+                  const SizedBox(height: 4),
+                ] else
+                  const SizedBox(height: 12),
+                for (var i = 0; i < secondaryDestinations.length; i++)
+                  _NavIconButton(
+                    item: secondaryDestinations[i],
+                    selected: false,
+                    showLabel: showLabels,
+                    width: width,
+                    onTap: () => onSecondaryDestinationSelected?.call(i),
+                  ),
+              ],
               if (footer != null) footer!,
               const SizedBox(height: 8),
             ],

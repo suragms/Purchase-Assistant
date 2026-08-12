@@ -1,12 +1,31 @@
-import 'package:flutter/foundation.dart';
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 
+import '../widgets/hexa_page_error_boundary.dart'
+    show hexaAsyncErrorLikelyBenign, hexaErrorLikelyNonFatal;
 import 'hexa_app_reload.dart';
 
 /// Shown for widget build/layout failures ([ErrorWidget.builder]).
 /// Compact so one bad section does not fill the whole screen.
 Widget buildHexaLayoutErrorWidget(FlutterErrorDetails details) {
-  final message = details.exceptionAsString().split('\n').first;
+  if (kDebugMode) {
+    debugPrint(
+      'Hexa layout error:\n${details.exceptionAsString()}\n\n${details.stack ?? '(no stack)'}',
+    );
+  }
+
+  // Reuse the same classification already used by FlutterError.onError and
+  // PlatformDispatcher.onError. Benign / non-fatal errors (network blips,
+  // render-flex overflows, disposed-provider races, etc.) should not show
+  // the "section could not load" box — fail silently so the section simply
+  // re-renders on the next frame or a pull-to-refresh.
+  if (hexaErrorLikelyNonFatal(details) ||
+      hexaAsyncErrorLikelyBenign(details.exception)) {
+    return const SizedBox.shrink();
+  }
+
+  // Non-benign: show the warning box, but only include the raw diagnostic
+  // dump in debug / profile builds so production users never see internals.
   return Material(
     color: const Color(0xFFF8FAFC),
     child: Padding(
@@ -45,13 +64,21 @@ Widget buildHexaLayoutErrorWidget(FlutterErrorDetails details) {
                         height: 1.3,
                       ),
                     ),
-                    if (kDebugMode && message.isNotEmpty) ...[
+                    if (kDebugMode) ...[
                       const SizedBox(height: 6),
-                      Text(
-                        message,
-                        style: const TextStyle(
-                          fontSize: 10,
-                          color: Colors.black54,
+                      ConstrainedBox(
+                        constraints: const BoxConstraints(maxHeight: 200),
+                        child: SingleChildScrollView(
+                          child: SelectableText(
+                            '${details.exceptionAsString()}\n\n'
+                            '${details.stack?.toString() ?? '(no stack)'}',
+                            style: const TextStyle(
+                              fontSize: 10,
+                              color: Colors.black54,
+                              height: 1.35,
+                              fontFamily: 'monospace',
+                            ),
+                          ),
                         ),
                       ),
                     ],
