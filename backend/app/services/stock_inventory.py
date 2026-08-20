@@ -443,18 +443,24 @@ async def _apply_catalog_stock_deltas(
     ur = await db.execute(select(User).where(User.id == user_id))
     user = ur.scalar_one_or_none()
     display = (user.name or user.username or user.email) if user else "System"
-    updates: list[dict] = []
-    for cid, delta in deltas.items():
-        if delta == 0:
-            continue
+    # Batch-fetch all catalog items in one round trip instead of one query per delta.
+    ids = [cid for cid, d in deltas.items() if d != 0]
+    items: dict[uuid.UUID, CatalogItem] = {}
+    if ids:
         r = await db.execute(
             select(CatalogItem).where(
-                CatalogItem.id == cid,
+                CatalogItem.id.in_(ids),
                 CatalogItem.business_id == business_id,
                 CatalogItem.deleted_at.is_(None),
             )
         )
-        item = r.scalar_one_or_none()
+        for it in r.scalars().all():
+            items[it.id] = it
+    updates: list[dict] = []
+    for cid, delta in deltas.items():
+        if delta == 0:
+            continue
+        item = items.get(cid)
         if not item:
             continue
         old_qty = catalog_stock_qty(item)

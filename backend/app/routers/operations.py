@@ -307,18 +307,24 @@ async def usage_submit(
     display = user.name or user.username or user.email
     total_used = Decimal("0")
     logged = 0
-    for line in body.lines:
-        r = await db.execute(
+    # Batch-fetch all line items and purchased-today quantities up front (1+1 queries
+    # instead of 2 per line) for the usage-submit loop below.
+    line_item_ids = [li.item_id for li in body.lines]
+    items_by_id: dict[uuid.UUID, CatalogItem] = {}
+    if line_item_ids:
+        ir = await db.execute(
             select(CatalogItem).where(
-                CatalogItem.id == line.item_id,
+                CatalogItem.id.in_(line_item_ids),
                 CatalogItem.business_id == business_id,
                 CatalogItem.deleted_at.is_(None),
             )
         )
-        item = r.scalar_one_or_none()
+        items_by_id = {it.id: it for it in ir.scalars().all()}
+    purchased_map = await _purchased_today_map(db, business_id, line_item_ids, today)
+    for line in body.lines:
+        item = items_by_id.get(line.item_id)
         if not item:
             raise HTTPException(status_code=404, detail="Item not found")
-        purchased_map = await _purchased_today_map(db, business_id, [item.id], today)
         p = purchased_map.get(item.id, Decimal("0"))
         cur = catalog_stock_qty(item)
         opening = cur - p
@@ -530,45 +536,50 @@ async def materialize_daily_snapshots(
         )
     )
     items = list(ir.scalars().all())
+    item_ids = [it.id for it in items]
     created = 0
-    for item in items:
-        ex = await db.execute(
-            select(DailyUsageLog).where(
+    if item_ids:
+        # Batch the 3 per-item queries into 3 queries for the whole catalog.
+        ex_r = await db.execute(
+            select(DailyUsageLog.item_id).where(
                 DailyUsageLog.business_id == business_id,
-                DailyUsageLog.item_id == item.id,
                 DailyUsageLog.usage_date == ud,
+                DailyUsageLog.item_id.in_(item_ids),
             )
         )
-        if ex.scalar_one_or_none():
-            continue
+        existing_ids = {row for (row,) in ex_r.all()}
         prior_r = await db.execute(
             select(DailyUsageLog).where(
                 DailyUsageLog.business_id == business_id,
-                DailyUsageLog.item_id == item.id,
                 DailyUsageLog.usage_date == prior,
+                DailyUsageLog.item_id.in_(item_ids),
             )
         )
-        prior_log = prior_r.scalar_one_or_none()
-        cur = catalog_stock_qty(item)
-        purchased_map = await _purchased_today_map(db, business_id, [item.id], ud)
-        p = purchased_map.get(item.id, Decimal("0"))
-        opening = prior_log.closing_qty if prior_log else (cur - p)
-        if opening < 0:
-            opening = Decimal("0")
-        closing = opening + p
-        db.add(
-            DailyUsageLog(
-                business_id=business_id,
-                item_id=item.id,
-                usage_date=ud,
-                opening_qty=opening,
-                purchased_qty=p,
-                used_qty=Decimal("0"),
-                closing_qty=closing,
-                logged_by_user_id=user.id,
+        prior_by_id = {log.item_id: log for log in prior_r.scalars().all()}
+        purchased_map = await _purchased_today_map(db, business_id, item_ids, ud)
+        for item in items:
+            if item.id in existing_ids:
+                continue
+            prior_log = prior_by_id.get(item.id)
+            cur = catalog_stock_qty(item)
+            p = purchased_map.get(item.id, Decimal("0"))
+            opening = prior_log.closing_qty if prior_log else (cur - p)
+            if opening < 0:
+                opening = Decimal("0")
+            closing = opening + p
+            db.add(
+                DailyUsageLog(
+                    business_id=business_id,
+                    item_id=item.id,
+                    usage_date=ud,
+                    opening_qty=opening,
+                    purchased_qty=p,
+                    used_qty=Decimal("0"),
+                    closing_qty=closing,
+                    logged_by_user_id=user.id,
+                )
             )
-        )
-        created += 1
+            created += 1
     await db.commit()
     return {"usage_date": ud.isoformat(), "rows_created": created}
 

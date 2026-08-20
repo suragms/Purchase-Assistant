@@ -10,6 +10,7 @@ import 'package:intl/intl.dart';
 import '../../../core/auth/auth_error_messages.dart';
 import '../../../core/auth/session_notifier.dart';
 import '../../../core/design_system/widgets/app_button.dart';
+import '../../../core/design_system/widgets/app_text_field.dart';
 import '../../../core/router/navigation_ext.dart';
 import '../../../core/services/backup_auto_service.dart';
 import '../../../core/services/backup_deliver.dart';
@@ -366,13 +367,10 @@ class _BackupPageState extends ConsumerState<BackupPage> {
         title: const Text('Restore dry-run'),
         content: SizedBox(
           width: 480,
-          child: TextField(
+          child: AppTextField(
             controller: ctrl,
             maxLines: 12,
-            decoration: const InputDecoration(
-              hintText: 'Paste backup JSON here (never commits)',
-              border: OutlineInputBorder(),
-            ),
+            label: 'Paste backup JSON here (never commits)',
           ),
         ),
         actions: [

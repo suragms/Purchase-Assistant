@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/auth/session_notifier.dart';
 import '../../../../core/design_system/hexa_responsive.dart';
+import '../../../../core/design_system/widgets/app_text_field.dart';
 import '../../../../core/providers/business_aggregates_invalidation.dart';
 import '../../../../core/providers/catalog_providers.dart';
 import '../../../../core/purchase/purchase_stock_commit_preflight.dart';
@@ -205,18 +206,15 @@ class _QuickCatalogUnitSetupSheetState
           ),
           if (_unit == 'bag') ...[
             const SizedBox(height: 12),
-            TextField(
+            AppTextField(
               controller: _kgCtrl,
+              label: 'Kg per bag *',
+              errorText: _kgError,
               keyboardType:
                   const TextInputType.numberWithOptions(decimal: true),
               inputFormatters: [
                 FilteringTextInputFormatter.allow(RegExp(r'[\d.]')),
               ],
-              decoration: InputDecoration(
-                labelText: 'Kg per bag *',
-                hintText: 'e.g. 50',
-                errorText: _kgError,
-              ),
               onChanged: (_) {
                 if (_kgError != null) setState(() => _kgError = null);
               },

@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../core/auth/session_notifier.dart';
 import '../../../../core/design_system/hexa_responsive.dart';
+import '../../../../core/design_system/widgets/app_text_field.dart';
 import '../../../../core/providers/catalog_providers.dart';
 import '../../../../core/search/catalog_fuzzy.dart';
 import '../../../../core/widgets/form_feedback.dart';
@@ -302,34 +303,22 @@ class _QuickCatalogTaxonomySheetState
               },
             )
           else
-            TextField(
+            AppTextField(
               controller: _categoryCtrl,
               autofocus: true,
+              label: 'Category name',
+              errorText: errCat ? 'Enter a name' : null,
               textCapitalization: TextCapitalization.words,
               enabled: !_saving,
-              decoration: InputDecoration(
-                labelText: 'Category name',
-                hintText: 'e.g. Rice, Oil',
-                errorText: errCat ? 'Enter a name' : null,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
             ),
           const SizedBox(height: 12),
-          TextField(
+          AppTextField(
             controller: _subcategoryCtrl,
             autofocus: _subOnly,
+            label: _subOnly ? 'Subcategory name' : 'Subcategory (optional)',
+            errorText: errSub ? 'Enter a name' : null,
             textCapitalization: TextCapitalization.words,
             enabled: !_saving,
-            decoration: InputDecoration(
-              labelText: _subOnly ? 'Subcategory name' : 'Subcategory (optional)',
-              hintText: 'e.g. Biriyani rice',
-              errorText: errSub ? 'Enter a name' : null,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
           ),
           const SizedBox(height: 20),
           FilledButton(

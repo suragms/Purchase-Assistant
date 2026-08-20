@@ -195,23 +195,30 @@ async def barcode_lookup(
         item = code_matches[0] if code_matches else None
     if not item:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Item not found")
-    # Sequential on shared AsyncSession — gather would raise isce under concurrency.
-    label = await _barcode_label(db, business_id, item)
+
+    # Batched enrichment: 1 query for latest purchase per item (reuse batch helper),
+    # 1 query for supplier names (reuse bulk helper), 1 query for physical counts (already batched).
+    # category_name intentionally omitted — not in BarcodeLookupOut.
+    item_dict = {item.id: item}
+    lp_map = await _latest_purchase_by_item(db, item_dict)
+    sup_map = await sh._supplier_names_bulk(db, item_dict)
     phys_map = await sh._latest_physical_count_map(db, business_id, [item.id])
     phys = phys_map.get(item.id)
+    lp = lp_map.get(item.id)
+
     out = BarcodeLookupOut(
         id=item.id,
         name=item.name,
         item_code=item.item_code,
         barcode=getattr(item, "barcode", None),
-        current_stock=label.current_stock or catalog_stock_qty(item),
+        current_stock=catalog_stock_qty(item),
         reorder_level=catalog_reorder(item),
-        unit=label.unit,
-        last_purchase_date=label.last_purchase_date,
-        last_purchase_qty=label.last_purchase_qty,
-        last_purchase_unit=label.last_purchase_unit,
-        last_purchase_rate=label.last_purchase_rate,
-        supplier_name=label.supplier_name,
+        unit=item.stock_unit or item.default_unit,
+        last_purchase_date=lp.purchase_date if lp else None,
+        last_purchase_qty=lp.qty if lp else None,
+        last_purchase_unit=lp.unit if lp else None,
+        last_purchase_rate=lp.rate if lp else None,
+        supplier_name=sup_map.get(item.id),
         physical_stock_qty=phys.counted_qty if phys else None,
         physical_stock_counted_at=phys.counted_at if phys else None,
         physical_stock_counted_by=phys.counted_by_name if phys else None,

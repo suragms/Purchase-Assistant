@@ -998,23 +998,28 @@ async def _seed_supplier_item_defaults(
     catalog_item_id: uuid.UUID,
     supplier_ids: list[uuid.UUID],
 ) -> None:
-    for sid in supplier_ids:
-        ex = await db.execute(
-            select(SupplierItemDefault.id).where(
+    # Batch-check existing SupplierItemDefaults (avoid per-supplier N+1).
+    existing_sids: set[uuid.UUID] = set()
+    if supplier_ids:
+        er = await db.execute(
+            select(SupplierItemDefault.supplier_id).where(
                 SupplierItemDefault.business_id == business_id,
                 SupplierItemDefault.catalog_item_id == catalog_item_id,
-                SupplierItemDefault.supplier_id == sid,
+                SupplierItemDefault.supplier_id.in_(supplier_ids),
             )
         )
-        if ex.first() is None:
-            db.add(
-                SupplierItemDefault(
-                    business_id=business_id,
-                    catalog_item_id=catalog_item_id,
-                    supplier_id=sid,
-                    purchase_count=0,
-                )
+        existing_sids = {row[0] for row in er.all()}
+    for sid in supplier_ids:
+        if sid in existing_sids:
+            continue
+        db.add(
+            SupplierItemDefault(
+                business_id=business_id,
+                catalog_item_id=catalog_item_id,
+                supplier_id=sid,
+                purchase_count=0,
             )
+        )
 
 
 def _sync_item_unit_extras(i: CatalogItem) -> None:

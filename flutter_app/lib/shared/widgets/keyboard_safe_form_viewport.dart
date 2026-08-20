@@ -26,6 +26,8 @@ class KeyboardSafeFormViewport extends StatelessWidget {
     /// When false (default): bottom pad = safe area inset + [bottomExtraInset].
     /// When true: also add view insets (for parents that keep [resizeToAvoidBottomInset]: false).
     this.useViewInsetBottom = false,
+    /// Wraps fields in a [FocusTraversalGroup] for proper focus traversal (Tab/Enter).
+    this.useFocusTraversalGroup = true,
   });
 
   final Widget? prepend;
@@ -44,6 +46,7 @@ class KeyboardSafeFormViewport extends StatelessWidget {
   final ScrollViewKeyboardDismissBehavior keyboardDismissBehavior;
   final bool primaryScroll;
   final bool useViewInsetBottom;
+  final bool useFocusTraversalGroup;
 
   @override
   Widget build(BuildContext context) {
@@ -75,10 +78,14 @@ class KeyboardSafeFormViewport extends StatelessWidget {
                   // inside [fields] cannot crash on unbounded scroll height.
                   maxHeight: hasBoundedH ? maxH : double.infinity,
                 ),
-                child: fields,
+                child: useFocusTraversalGroup
+                    ? FocusTraversalGroup(child: fields)
+                    : fields,
               )
             else
-              fields,
+              useFocusTraversalGroup
+                  ? FocusTraversalGroup(child: fields)
+                  : fields,
             if (append != null) ...[
               const SizedBox(height: 12),
               append!,

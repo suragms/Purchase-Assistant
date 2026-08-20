@@ -4,12 +4,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'dart:developer' as developer;
 import 'package:go_router/go_router.dart';
 
-import '../../../core/auth/auth_error_messages.dart';
-import '../../../core/auth/session_notifier.dart';
-import '../../../core/theme/hexa_colors.dart';
-import 'widgets/auth_input_styles.dart';
+import '../../../../core/design_system/widgets/app_text_field.dart';
+import '../../../../core/auth/auth_error_messages.dart';
+import '../../../../core/auth/session_notifier.dart';
+import '../../../../core/theme/hexa_colors.dart';
 import 'widgets/auth_network_error_banner.dart';
 import 'widgets/auth_page_shell.dart';
+import '../../../../shared/widgets/keyboard_safe_form_viewport.dart';
 
 /// Enter email → submit reset request (server responds uniformly for privacy).
 class ForgotPasswordPage extends ConsumerStatefulWidget {
@@ -135,156 +136,159 @@ class _ForgotPasswordPageState extends ConsumerState<ForgotPasswordPage> {
         child: AuthPageShell(
           children: [
             AuthFormCard(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  const Text(
-                    'Forgot password?',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.w800,
-                      color: HexaColors.brandPrimary,
+              child: KeyboardSafeFormViewport(
+                fields: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const Text(
+                      'Forgot password?',
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w800,
+                        color: HexaColors.brandPrimary,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Enter your email. Password reset email is not enabled yet — '
-                    'ask your business owner to reset your password in Settings → Users. '
-                    'If an account exists, we still record the request.',
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: Colors.grey.shade700,
-                      height: 1.35,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  if (_showNetworkBanner)
-                    AuthNetworkErrorBanner(
-                      onRetry: _retry,
-                      title: authUnreachableBannerTitle(_lastNetworkError),
-                      detail: authServerUnreachableDetail(_lastNetworkError),
-                    ),
-                  TextField(
-                    controller: _email,
-                    focusNode: _focus,
-                    keyboardType: TextInputType.emailAddress,
-                    textInputAction: TextInputAction.done,
-                    autofillHints: const [AutofillHints.email],
-                    onSubmitted: (_) => _submit(),
-                    decoration: authFilledDecoration(
-                      'Email',
-                      icon: Icons.mail_outline_rounded,
-                      err: eErr != null,
-                      errorText: eErr,
-                    ),
-                  ),
-                  if (_inlineError != null) ...[
                     const SizedBox(height: 8),
                     Text(
-                      _inlineError!,
+                      'Enter your email. Password reset email is not enabled yet — '
+                      'ask your business owner to reset your password in Settings → Users. '
+                      'If an account exists, we still record the request.',
                       style: TextStyle(
-                        color: Colors.red.shade700,
                         fontSize: 13,
+                        color: Colors.grey.shade700,
+                        height: 1.35,
                       ),
                     ),
-                  ],
-                  if (_submittedOk) ...[
                     const SizedBox(height: 12),
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Icon(Icons.check_circle_outline,
-                            color: Colors.green.shade700, size: 20),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            'Request recorded. Ask your business owner to reset the password '
-                            'in Settings → Users (email reset is not enabled yet).',
-                            style: TextStyle(
-                              color: Colors.green.shade900,
-                              fontSize: 13,
-                              height: 1.35,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    if (_devResetToken != null && _devResetToken!.isNotEmpty) ...[
-                      const SizedBox(height: 12),
-                      Text(
-                        'Development: use the button below to set a new password (email is not sent yet).',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.grey.shade800,
-                          height: 1.3,
-                        ),
+                    if (_showNetworkBanner)
+                      AuthNetworkErrorBanner(
+                        onRetry: _retry,
+                        title: authUnreachableBannerTitle(_lastNetworkError),
+                        detail: authServerUnreachableDetail(_lastNetworkError),
                       ),
+                    AppTextField(
+                      controller: _email,
+                      focusNode: _focus,
+                      label: 'Email',
+                      keyboardType: TextInputType.emailAddress,
+                      textInputAction: TextInputAction.done,
+                      autofillHints: const [AutofillHints.email],
+                      errorText: eErr,
+                      onActionSubmit: _submit,
+                    ),
+                    if (_inlineError != null) ...[
                       const SizedBox(height: 8),
-                      FilledButton.tonal(
-                        onPressed: () {
-                          context.go(
-                            '/reset-password?token=${Uri.encodeQueryComponent(_devResetToken!)}',
-                          );
-                        },
-                        child: const Text('Set new password (dev)'),
+                      Text(
+                        _inlineError!,
+                        style: TextStyle(
+                          color: Colors.red.shade700,
+                          fontSize: 13,
+                        ),
                       ),
                     ],
+                    if (_submittedOk) ...[
+                      const SizedBox(height: 12),
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Icon(Icons.check_circle_outline,
+                              color: Colors.green.shade700, size: 20),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Request recorded. Ask your business owner to reset the password '
+                              'in Settings → Users (email reset is not enabled yet).',
+                              style: TextStyle(
+                                color: Colors.green.shade900,
+                                fontSize: 13,
+                                height: 1.35,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      if (_devResetToken != null && _devResetToken!.isNotEmpty) ...[
+                        const SizedBox(height: 12),
+                        Text(
+                          'Development: use the button below to set a new password (email is not sent yet).',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey.shade800,
+                            height: 1.3,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        FilledButton.tonal(
+                          onPressed: () {
+                            context.go(
+                              '/reset-password?token=${Uri.encodeQueryComponent(_devResetToken!)}',
+                            );
+                          },
+                          child: const Text('Set new password (dev)'),
+                        ),
+                      ],
+                    ],
                   ],
-                  const SizedBox(height: 12),
-                  SizedBox(
-                    width: double.infinity,
-                    height: 50,
-                    child: FilledButton(
+                ),
+                footer: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 50,
+                      child: FilledButton(
+                        onPressed: _loading
+                            ? null
+                            : () {
+                                if (_email.text.trim().isEmpty) {
+                                  setState(() => _showValidation = true);
+                                  return;
+                                }
+                                _submit();
+                              },
+                        style: FilledButton.styleFrom(
+                          backgroundColor: HexaColors.brandPrimary,
+                          foregroundColor: Colors.white,
+                          disabledBackgroundColor: HexaColors.inputBorderGrey,
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                        ),
+                        child: _loading
+                            ? const SizedBox(
+                                width: 22,
+                                height: 22,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : const Text(
+                                'Send reset link',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 16,
+                                ),
+                              ),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    TextButton(
                       onPressed: _loading
                           ? null
                           : () {
-                              if (_email.text.trim().isEmpty) {
-                                setState(() => _showValidation = true);
-                                return;
+                              if (context.canPop()) {
+                                context.pop();
+                              } else {
+                                context.go('/login');
                               }
-                              _submit();
                             },
-                      style: FilledButton.styleFrom(
-                        backgroundColor: HexaColors.brandPrimary,
-                        foregroundColor: Colors.white,
-                        disabledBackgroundColor: HexaColors.inputBorderGrey,
-                        elevation: 0,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                      ),
-                      child: _loading
-                          ? const SizedBox(
-                              width: 22,
-                              height: 22,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Colors.white,
-                              ),
-                            )
-                          : const Text(
-                              'Send reset link',
-                              style: TextStyle(
-                                fontWeight: FontWeight.w600,
-                                fontSize: 16,
-                              ),
-                            ),
+                      child: const Text('Back to sign in'),
                     ),
-                  ),
-                  const SizedBox(height: 4),
-                  TextButton(
-                    onPressed: _loading
-                        ? null
-                        : () {
-                            if (context.canPop()) {
-                              context.pop();
-                            } else {
-                              context.go('/login');
-                            }
-                          },
-                    child: const Text('Back to sign in'),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ],

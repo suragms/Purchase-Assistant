@@ -38,6 +38,7 @@ import '../../../../core/utils/currency_utils.dart';
 import '../../../../core/providers/stock_providers.dart';
 import '../../state/purchase_smart_defaults.dart';
 import '../../../../core/services/prefs_helper.dart';
+import '../../../../core/design_system/widgets/app_text_field.dart';
 
 import '../../../../core/design_system/hexa_ds_tokens.dart';
 String _stripKgSuffixForCatalogDisplay(String name) => name
@@ -2452,18 +2453,12 @@ class _PurchaseItemEntrySheetState extends ConsumerState<PurchaseItemEntrySheet>
                         style: TextStyle(color: Colors.grey[700], fontSize: 13),
                       ),
                       const SizedBox(height: 16),
-                      TextField(
+                      AppTextField(
                         controller: kgCtrl,
+                        label: 'KG per bag',
                         autofocus: true,
                         keyboardType: const TextInputType.numberWithOptions(
                             decimal: true),
-                        decoration: InputDecoration(
-                          labelText: 'KG per bag',
-                          suffixText: 'kg/bag',
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
                         onChanged: (_) => setModal(() {}),
                       ),
                       const SizedBox(height: 8),
@@ -3504,15 +3499,15 @@ class _PurchaseItemEntrySheetState extends ConsumerState<PurchaseItemEntrySheet>
                     children: [
                       if (_qtyEntryModeSegmented() != null)
                         _qtyEntryModeSegmented()!,
-                      TextField(
+                      AppTextField(
                         controller: _qtyCtrl,
                         focusNode: _qtyFocus,
+                        label: _qtyFieldLabel(),
+                        errorText: _errQty,
                         keyboardType: const TextInputType.numberWithOptions(
                             decimal: true),
                         inputFormatters: [_decimalFormatter(3)],
                         textInputAction: TextInputAction.next,
-                        scrollPadding: _textFieldScrollPadding(),
-                        decoration: _deco(_qtyFieldLabel(), errorText: _errQty),
                         onChanged: (_) {
                           _clearFieldErrors();
                           _schedulePreviewRebuild();
@@ -3583,15 +3578,15 @@ class _PurchaseItemEntrySheetState extends ConsumerState<PurchaseItemEntrySheet>
                   children: [
                     if (_qtyEntryModeSegmented() != null)
                       _qtyEntryModeSegmented()!,
-                    TextField(
+                    AppTextField(
                       controller: _qtyCtrl,
                       focusNode: _qtyFocus,
+                      label: _qtyFieldLabel(),
+                      errorText: _errQty,
                       keyboardType:
                           const TextInputType.numberWithOptions(decimal: true),
                       inputFormatters: [_decimalFormatter(3)],
                       textInputAction: TextInputAction.next,
-                      scrollPadding: _textFieldScrollPadding(),
-                      decoration: _deco(_qtyFieldLabel(), errorText: _errQty),
                       onChanged: (_) {
                         _clearFieldErrors();
                         _schedulePreviewRebuild();
@@ -3677,14 +3672,14 @@ class _PurchaseItemEntrySheetState extends ConsumerState<PurchaseItemEntrySheet>
         SizedBox(height: gapField),
         KeyedSubtree(
           key: _kgPerBagKey,
-          child: TextField(
+          child: AppTextField(
             controller: _kgPerBagCtrl,
             focusNode: _kgManualFocus,
+            label: 'Kg per bag *',
+            errorText: _errKgPerBag,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
             inputFormatters: [_decimalFormatter(3)],
             textInputAction: TextInputAction.next,
-            scrollPadding: _textFieldScrollPadding(),
-            decoration: _deco('Kg per bag *', errorText: _errKgPerBag),
             onSubmitted: (_) {
               FocusScope.of(context).requestFocus(_landingFocus);
             },
@@ -3712,82 +3707,73 @@ class _PurchaseItemEntrySheetState extends ConsumerState<PurchaseItemEntrySheet>
           Row(
             children: [
               Expanded(
-                child: TextField(
+                child: AppTextField(
                   controller: _itemsPerBoxCtrl,
+                  label: 'Items per box *',
+                  errorText: _errKgPerBag,
                   keyboardType:
                       const TextInputType.numberWithOptions(decimal: true),
                   inputFormatters: [_decimalFormatter(3)],
-                  decoration: _deco(
-                    'Items per box *',
-                    errorText: _errKgPerBag,
-                  ),
                   onChanged: (_) => _schedulePreviewRebuild(),
                 ),
               ),
               const SizedBox(width: 6),
               Expanded(
-                child: TextField(
+                child: AppTextField(
                   controller: _weightPerItemCtrl,
+                  label: 'Kg per item',
+                  errorText: _errKgPerBag,
                   keyboardType:
                       const TextInputType.numberWithOptions(decimal: true),
                   inputFormatters: [_decimalFormatter(3)],
-                  decoration: _deco(
-                    'Kg per item',
-                    errorText: _errKgPerBag,
-                  ),
                   onChanged: (_) => _schedulePreviewRebuild(),
                 ),
               ),
             ],
           )
         else if (cRow.type == UnitType.singlePack)
-          TextField(
+          AppTextField(
             controller: _kgPerBoxCtrl,
+            label: 'Kg per box',
+            errorText: _errKgPerBag,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
             inputFormatters: [_decimalFormatter(3)],
-            decoration: _deco(
-              'Kg per box',
-              errorText: _errKgPerBag,
-            ),
             onChanged: (_) => _schedulePreviewRebuild(),
           )
         else ...[
           if (_boxFixedWeight)
-            TextField(
+            AppTextField(
               controller: _kgPerBoxCtrl,
+              label: 'Kg per box *',
+              errorText: _errKgPerBag,
               keyboardType:
                   const TextInputType.numberWithOptions(decimal: true),
               inputFormatters: [_decimalFormatter(3)],
-              decoration: _deco('Kg per box *', errorText: _errKgPerBag),
               onChanged: (_) => _schedulePreviewRebuild(),
             )
           else
             Row(
               children: [
                 Expanded(
-                  child: TextField(
+                  child: AppTextField(
                     controller: _itemsPerBoxCtrl,
+                    label: 'Items per box *',
+                    errorText: _errKgPerBag,
                     keyboardType:
                         const TextInputType.numberWithOptions(decimal: true),
                     inputFormatters: [_decimalFormatter(3)],
-                    decoration: _deco(
-                      'Items per box *',
-                      errorText: _errKgPerBag,
-                    ),
                     onChanged: (_) => _schedulePreviewRebuild(),
                   ),
                 ),
                 const SizedBox(width: 6),
                 Expanded(
-                  child: TextField(
+                  child: AppTextField(
                     controller: _weightPerItemCtrl,
+                    label: 'Kg per item *',
+                    errorText: _errKgPerBag,
                     keyboardType:
                         const TextInputType.numberWithOptions(decimal: true),
                     inputFormatters: [_decimalFormatter(3)],
-                    decoration: _deco(
-                      'Kg per item *',
-                      errorText: _errKgPerBag,
-                    ),
                     onChanged: (_) => _schedulePreviewRebuild(),
                   ),
                 ),
@@ -3797,11 +3783,12 @@ class _PurchaseItemEntrySheetState extends ConsumerState<PurchaseItemEntrySheet>
       ],
       if (_PurchaseItemEntrySheetState._advancedInventoryEnabled && unitLow == 'tin') ...[
         SizedBox(height: gapField),
-        TextField(
+        AppTextField(
           controller: _weightPerTinCtrl,
+          label: 'Weight per tin *',
+          errorText: _errKgPerBag,
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
           inputFormatters: [_decimalFormatter(3)],
-          decoration: _deco('Weight per tin *', errorText: _errKgPerBag),
           onChanged: (_) => _schedulePreviewRebuild(),
         ),
       ],
@@ -3861,51 +3848,46 @@ class _PurchaseItemEntrySheetState extends ConsumerState<PurchaseItemEntrySheet>
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
                         if (widget.omitLineFreightDeliveredBilltyDiscount) ...[
-                          TextField(
+                          AppTextField(
                             controller: _taxCtrl,
+                            label: 'Tax %',
                             keyboardType: const TextInputType.numberWithOptions(
                                 decimal: true),
                             inputFormatters: [_decimalFormatter(2)],
-                            scrollPadding: _textFieldScrollPadding(),
-                            decoration: _deco('Tax %'),
                             onChanged: (_) {
                               _clearFieldErrors();
                               setState(() {});
                             },
                           ),
                           const SizedBox(height: 6),
-                          TextField(
+                          AppTextField(
                             controller: _lineNotesCtrl,
+                            label: 'Notes',
                             maxLines: 4,
-                            minLines: 1,
-                            scrollPadding: _textFieldScrollPadding(),
-                            decoration: _deco('Notes'),
                           ),
                         ] else ...[
                           Row(
                             children: [
                               Expanded(
-                                child: TextField(
+                                child: AppTextField(
                                   controller: _discCtrl,
+                                  label: 'Discount %',
                                   keyboardType:
                                       const TextInputType.numberWithOptions(
                                           decimal: true),
                                   inputFormatters: [_decimalFormatter(2)],
-                                  scrollPadding: _textFieldScrollPadding(),
-                                  decoration: _deco('Discount %'),
                                   onChanged: (_) => setState(() {}),
                                 ),
                               ),
                               const SizedBox(width: 6),
                               Expanded(
-                                child: TextField(
+                                child: AppTextField(
                                   controller: _taxCtrl,
+                                  label: 'Tax %',
                                   keyboardType:
                                       const TextInputType.numberWithOptions(
                                           decimal: true),
                                   inputFormatters: [_decimalFormatter(2)],
-                                  scrollPadding: _textFieldScrollPadding(),
-                                  decoration: _deco('Tax %'),
                                   onChanged: (_) {
                                     _clearFieldErrors();
                                     setState(() {});
@@ -3918,14 +3900,13 @@ class _PurchaseItemEntrySheetState extends ConsumerState<PurchaseItemEntrySheet>
                           Row(
                             children: [
                               Expanded(
-                                child: TextField(
+                                child: AppTextField(
                                   controller: _freightCtrl,
+                                  label: 'Freight value',
                                   keyboardType:
                                       const TextInputType.numberWithOptions(
                                           decimal: true),
                                   inputFormatters: [_decimalFormatter(2)],
-                                  scrollPadding: _textFieldScrollPadding(),
-                                  decoration: _deco('Freight value'),
                                   onChanged: (_) => setState(() {}),
                                 ),
                               ),
@@ -3961,39 +3942,35 @@ class _PurchaseItemEntrySheetState extends ConsumerState<PurchaseItemEntrySheet>
                           Row(
                             children: [
                               Expanded(
-                                child: TextField(
+                                child: AppTextField(
                                   controller: _deliveredCtrl,
+                                  label: 'Delivered rate',
                                   keyboardType:
                                       const TextInputType.numberWithOptions(
                                           decimal: true),
                                   inputFormatters: [_decimalFormatter(2)],
-                                  scrollPadding: _textFieldScrollPadding(),
-                                  decoration: _deco('Delivered rate'),
                                   onChanged: (_) => setState(() {}),
                                 ),
                               ),
                               const SizedBox(width: 6),
                               Expanded(
-                                child: TextField(
+                                child: AppTextField(
                                   controller: _billtyCtrl,
+                                  label: 'Billty rate',
                                   keyboardType:
                                       const TextInputType.numberWithOptions(
                                           decimal: true),
                                   inputFormatters: [_decimalFormatter(2)],
-                                  scrollPadding: _textFieldScrollPadding(),
-                                  decoration: _deco('Billty rate'),
                                   onChanged: (_) => setState(() {}),
                                 ),
                               ),
                             ],
                           ),
                           const SizedBox(height: 6),
-                          TextField(
+                          AppTextField(
                             controller: _lineNotesCtrl,
+                            label: 'Notes',
                             maxLines: 4,
-                            minLines: 1,
-                            scrollPadding: _textFieldScrollPadding(),
-                            decoration: _deco('Notes'),
                           ),
                         ],
                       ],

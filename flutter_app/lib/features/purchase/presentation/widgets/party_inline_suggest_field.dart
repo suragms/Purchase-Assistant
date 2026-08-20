@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../../../core/theme/hexa_colors.dart';
+import '../../../../core/widgets/form_field_scroll.dart';
 import '../../../../shared/widgets/inline_search_field.dart';
 import '../../../../shared/widgets/smart_search_field.dart';
 import '../../../../shared/widgets/keyboard_aware_suggestion_overlay.dart';
@@ -527,9 +528,12 @@ class _PartyInlineSuggestFieldState extends State<PartyInlineSuggestField> {
   }
 
   EdgeInsets _scrollPad(BuildContext context) {
-    final kb = MediaQuery.viewInsetsOf(context).bottom;
-    final safe = MediaQuery.paddingOf(context).bottom;
-    return EdgeInsets.only(bottom: kb + 240 + safe);
+    // Reserve space for the suggestion overlay (maxHeight 240) plus IME + safe
+    // area, computed from context (avoids hardcoded over/under-reservation).
+    return formFieldScrollPaddingForContext(
+      context,
+      reserveBelowField: 240,
+    );
   }
 
   /// Defense-in-depth only: after fixing dual Semantics+GestureDetector taps,

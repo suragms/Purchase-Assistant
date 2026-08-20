@@ -657,7 +657,7 @@ async def _query_items(
 ):
     stmt = (
         select(CatalogItem, ItemCategory.name, CategoryType.name)
-        .join(ItemCategory, CatalogItem.category_id == ItemCategory.id)
+        .outerjoin(ItemCategory, CatalogItem.category_id == ItemCategory.id)
         .outerjoin(CategoryType, CatalogItem.type_id == CategoryType.id)
         .where(
             CatalogItem.business_id == business_id,

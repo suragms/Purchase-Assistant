@@ -16,6 +16,7 @@ import 'widgets/stock_pagination_bar.dart';
 
 import 'widgets/opening_stock_sheets.dart';
 
+import '../../../core/design_system/widgets/app_text_field.dart';
 import '../../../core/theme/hexa_colors.dart';
 class OpeningStockSetupPage extends ConsumerStatefulWidget {
   const OpeningStockSetupPage({super.key});
@@ -401,28 +402,14 @@ class _OpeningStockSearchRow extends StatelessWidget {
       ),
       child: SizedBox(
         height: 40,
-        child: TextField(
+        child: AppTextField(
           controller: controller,
-          decoration: InputDecoration(
-            hintText: 'Search item, code, barcode…',
-            isDense: true,
-            prefixIcon: const Icon(Icons.search_rounded, size: 20),
-            suffixIcon: IconButton(
-              icon: const Icon(Icons.close_rounded, size: 20),
-              onPressed: onClear,
-              tooltip: 'Clear',
-            ),
-            filled: true,
-            fillColor: Colors.white,
-            contentPadding: const EdgeInsets.symmetric(vertical: 8),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8),
-              borderSide: const BorderSide(color: Color(0xFFD8D5D0)),
-            ),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8),
-              borderSide: const BorderSide(color: Color(0xFFD8D5D0)),
-            ),
+          label: 'Search item, code, barcode…',
+          prefixIcon: Icons.search_rounded,
+          suffix: IconButton(
+            icon: const Icon(Icons.close_rounded, size: 20),
+            onPressed: onClear,
+            tooltip: 'Clear',
           ),
         ),
       ),
@@ -669,40 +656,31 @@ class _BulkOpeningSetSheetBodyState
           style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900),
         ),
         const SizedBox(height: 10),
-        TextField(
+        AppTextField(
           controller: _qtyCtrl,
           enabled: !_saving,
+          label: 'Qty',
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
           inputFormatters: [
             FilteringTextInputFormatter.allow(RegExp(r'[\d.,]')),
           ],
-          decoration: InputDecoration(
-            labelText: 'Qty',
-            border: const OutlineInputBorder(),
-            errorText: _qtyError,
-          ),
+          errorText: _qtyError,
         ),
         const SizedBox(height: 10),
-        TextField(
+        AppTextField(
           controller: _notesCtrl,
           enabled: !_saving,
+          label: 'Notes (optional)',
           maxLines: 2,
-          decoration: const InputDecoration(
-            labelText: 'Notes (optional)',
-            border: OutlineInputBorder(),
-          ),
         ),
         if (widget.anyLocked) ...[
           const SizedBox(height: 10),
-          TextField(
+          AppTextField(
             controller: _reasonCtrl,
             enabled: !_saving,
+            label: 'Reason (required if locked value changes)',
             maxLines: 2,
-            decoration: InputDecoration(
-              labelText: 'Reason (required if locked value changes)',
-              border: const OutlineInputBorder(),
-              errorText: _reasonError,
-            ),
+            errorText: _reasonError,
           ),
         ],
         const SizedBox(height: 16),

@@ -11,6 +11,7 @@ from typing import Annotated, Literal
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import JSONResponse, Response
 from sqlalchemy import and_, case, desc, func, literal, or_, select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -157,7 +158,7 @@ async def _list_stock_page(
     missing_item_code: bool = Query(False),
     reorder_only: bool = Query(False),
     unit: str = Query(""),
-    include_ledger: bool = True,
+    include_ledger: bool = False,
 ):
     ps_raw, pe_raw = sh._resolve_period_query(
         period_start, period_end, date_from, date_to
@@ -338,8 +339,8 @@ async def list_stock(
     reorder_only: bool = Query(False),
     unit: str = Query(""),
     include_ledger: bool = Query(
-        True,
-        description="All-time ledger variance (expensive). Disable for list browsing.",
+        False,
+        description="All-time ledger variance (expensive). Enable only when needed.",
     ),
 ):
     gen = trade_read_cache_generation(business_id)
@@ -377,29 +378,39 @@ async def list_stock(
             headers={"ETag": etag, "Cache-Control": "private, max-age=0"},
         )
 
-    out = await _list_stock_page(
-        business_id=business_id,
-        db=db,
-        page=page,
-        per_page=per_page,
-        q=q,
-        category=category,
-        subcategory=subcategory,
-        status=status,
-        sort=sort,
-        include_period=include_period,
-        period_start=period_start,
-        period_end=period_end,
-        date_from=date_from,
-        date_to=date_to,
-        include_today=include_today,
-        purchased_in_period=purchased_in_period,
-        missing_barcode=missing_barcode,
-        missing_item_code=missing_item_code,
-        reorder_only=reorder_only,
-        unit=unit,
-        include_ledger=include_ledger,
-    )
+    try:
+        out = await _list_stock_page(
+            business_id=business_id,
+            db=db,
+            page=page,
+            per_page=per_page,
+            q=q,
+            category=category,
+            subcategory=subcategory,
+            status=status,
+            sort=sort,
+            include_period=include_period,
+            period_start=period_start,
+            period_end=period_end,
+            date_from=date_from,
+            date_to=date_to,
+            include_today=include_today,
+            purchased_in_period=purchased_in_period,
+            missing_barcode=missing_barcode,
+            missing_item_code=missing_item_code,
+            reorder_only=reorder_only,
+            unit=unit,
+            include_ledger=include_ledger,
+        )
+    except SQLAlchemyError:
+        logger.exception(
+            "list_stock failed business_id=%s page=%s per_page=%s q=%s",
+            business_id,
+            page,
+            per_page,
+            q,
+        )
+        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to load stock list")
     payload = out.model_dump(mode="json")
     set_cached(cache_key, payload, stock_list_ttl_s())
     body = json.dumps(payload, sort_keys=True, default=str).encode()
@@ -478,48 +489,56 @@ async def stock_shell_bundle(
         return StockShellBundleOut(**cached)
 
     # Sequential on shared AsyncSession — gather would raise isce under concurrency.
-    list_out = await _list_stock_page(
-        business_id=business_id,
-        db=db,
-        page=page,
-        per_page=per_page,
-        q=q,
-        category=category,
-        subcategory=subcategory,
-        status=status,
-        sort=sort,
-        include_period=include_period,
-        period_start=period_start,
-        period_end=period_end,
-        date_from=date_from,
-        date_to=date_to,
-        include_today=include_today,
-        purchased_in_period=purchased_in_period,
-        missing_barcode=missing_barcode,
-        missing_item_code=missing_item_code,
-        reorder_only=reorder_only,
-        unit=unit,
-        include_ledger=include_ledger,
-    )
-    status_counts = await compute_stock_alerts_summary(db, business_id)
-    delivery_counts = await _compute_delivery_indicator_counts(
-        db=db,
-        business_id=business_id,
-        q=q,
-        category=category,
-        subcategory=subcategory,
-        status=status,
-        sort=sort,
-        period_start=period_start,
-        period_end=period_end,
-        date_from=date_from,
-        date_to=date_to,
-        missing_barcode=missing_barcode,
-        missing_item_code=missing_item_code,
-        reorder_only=reorder_only,
-        unit=unit,
-    )
-    audit_recent = await fetch_recent_adjustments(db, business_id, limit=audit_limit)
+    try:
+        list_out = await _list_stock_page(
+            business_id=business_id,
+            db=db,
+            page=page,
+            per_page=per_page,
+            q=q,
+            category=category,
+            subcategory=subcategory,
+            status=status,
+            sort=sort,
+            include_period=include_period,
+            period_start=period_start,
+            period_end=period_end,
+            date_from=date_from,
+            date_to=date_to,
+            include_today=include_today,
+            purchased_in_period=purchased_in_period,
+            missing_barcode=missing_barcode,
+            missing_item_code=missing_item_code,
+            reorder_only=reorder_only,
+            unit=unit,
+            include_ledger=include_ledger,
+        )
+        status_counts = await compute_stock_alerts_summary(db, business_id)
+        delivery_counts = await _compute_delivery_indicator_counts(
+            db=db,
+            business_id=business_id,
+            q=q,
+            category=category,
+            subcategory=subcategory,
+            status=status,
+            sort=sort,
+            period_start=period_start,
+            period_end=period_end,
+            date_from=date_from,
+            date_to=date_to,
+            missing_barcode=missing_barcode,
+            missing_item_code=missing_item_code,
+            reorder_only=reorder_only,
+            unit=unit,
+        )
+        audit_recent = await fetch_recent_adjustments(db, business_id, limit=audit_limit)
+    except SQLAlchemyError:
+        logger.exception(
+            "stock_shell_bundle failed business_id=%s page=%s",
+            business_id,
+            page,
+        )
+        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to load stock overview")
     payload = StockShellBundleOut(
         list=list_out,
         status_counts=status_counts,

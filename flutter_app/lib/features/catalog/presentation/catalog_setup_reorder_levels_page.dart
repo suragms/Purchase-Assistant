@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/auth/session_notifier.dart';
 import '../../../core/design_system/hexa_ds_tokens.dart';
+import '../../../core/design_system/widgets/app_text_field.dart';
 import '../../../core/errors/user_facing_errors.dart';
 import '../../../core/providers/stock_providers.dart';
 import '../../../core/theme/hexa_colors.dart';
@@ -212,8 +213,9 @@ class _CatalogSetupReorderLevelsPageState
                       subtitle: Text(it['category_name']?.toString() ?? ''),
                       trailing: SizedBox(
                         width: 96,
-                        child: TextField(
+                        child: AppTextField(
                           controller: ctrl,
+                          label: unit.toUpperCase(),
                           keyboardType: const TextInputType.numberWithOptions(
                             decimal: true,
                           ),
@@ -222,12 +224,6 @@ class _CatalogSetupReorderLevelsPageState
                               RegExp(r'[\d.]'),
                             ),
                           ],
-                          decoration: InputDecoration(
-                            isDense: true,
-                            hintText: '0',
-                            suffixText: unit.toUpperCase(),
-                            border: const OutlineInputBorder(),
-                          ),
                         ),
                       ),
                     );

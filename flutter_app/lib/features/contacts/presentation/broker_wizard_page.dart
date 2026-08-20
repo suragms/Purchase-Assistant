@@ -490,14 +490,6 @@ class _BrokerWizardPageState extends ConsumerState<BrokerWizardPage> {
     if (keep == false && mounted) context.pop();
   }
 
-  InputDecoration _d(String label, {String? hint}) => InputDecoration(
-        isDense: true,
-        labelText: label,
-        hintText: hint,
-        border: const OutlineInputBorder(),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-      );
-
   Widget _step0(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -668,7 +660,6 @@ class _BrokerWizardPageState extends ConsumerState<BrokerWizardPage> {
   }
 
   Widget _step2(BuildContext context) {
-    final sp = formFieldScrollPaddingForContext(context, reserveBelowField: 200);
     final suppliersAsync = ref.watch(suppliersListProvider);
     final q = _searchSuppliers.text.trim().toLowerCase();
     return Column(
@@ -677,11 +668,11 @@ class _BrokerWizardPageState extends ConsumerState<BrokerWizardPage> {
         Row(
           children: [
             Expanded(
-              child: TextField(
+              child: AppTextField(
                 controller: _searchSuppliers,
                 focusNode: _brkSearchSuppliersFocus,
-                scrollPadding: sp,
-                decoration: _d('Search suppliers'),
+                label: 'Search suppliers',
+                textInputAction: TextInputAction.next,
                 onChanged: (_) => setState(() {}),
               ),
             ),
@@ -743,16 +734,15 @@ class _BrokerWizardPageState extends ConsumerState<BrokerWizardPage> {
   }
 
   Widget _step3(BuildContext context) {
-    final sp = formFieldScrollPaddingForContext(context, reserveBelowField: 200);
     final cats = ref.watch(itemCategoriesListProvider);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        TextField(
+        AppTextField(
           controller: _searchItems,
           focusNode: _brkSearchItemsFocus,
-          scrollPadding: sp,
-          decoration: _d('Search items / categories'),
+          label: 'Search items / categories',
+          textInputAction: TextInputAction.next,
           onChanged: (v) => _runItemSearch(v),
         ),
         const SizedBox(height: 8),

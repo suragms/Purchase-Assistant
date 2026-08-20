@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/auth/session_notifier.dart';
 import '../../../core/design_system/hexa_ds_tokens.dart';
 import '../../../core/design_system/hexa_responsive.dart';
+import '../../../core/design_system/widgets/app_text_field.dart';
 import '../../../core/errors/user_facing_errors.dart';
 import '../../../core/providers/business_users_provider.dart';
 import '../../../core/router/navigation_ext.dart';
@@ -222,28 +223,24 @@ class _UserProfilePageState extends ConsumerState<UserProfilePage>
               children: [
                 Text('Edit user', style: HexaDsType.h3(ctx)),
                 const SizedBox(height: 12),
-                TextField(
+                AppTextField(
                   controller: nameCtrl,
-                  decoration: const InputDecoration(
-                    labelText: 'Full name',
-                    border: OutlineInputBorder(),
-                  ),
+                  label: 'Full name',
+                  textInputAction: TextInputAction.next,
                 ),
                 const SizedBox(height: 10),
-                TextField(
+                AppTextField(
                   controller: emailCtrl,
-                  decoration: const InputDecoration(
-                    labelText: 'Email',
-                    border: OutlineInputBorder(),
-                  ),
+                  label: 'Email',
+                  keyboardType: TextInputType.emailAddress,
+                  textInputAction: TextInputAction.next,
                 ),
                 const SizedBox(height: 10),
-                TextField(
+                AppTextField(
                   controller: phoneCtrl,
-                  decoration: const InputDecoration(
-                    labelText: 'Phone',
-                    border: OutlineInputBorder(),
-                  ),
+                  label: 'Phone',
+                  keyboardType: TextInputType.phone,
+                  textInputAction: TextInputAction.done,
                 ),
                 const SizedBox(height: 10),
                 if ((user['role']?.toString() ?? '') != 'owner')

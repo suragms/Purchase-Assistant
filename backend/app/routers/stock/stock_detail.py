@@ -243,7 +243,7 @@ async def _activity_stock_item_header(
     """Lightweight catalog row for activity response (client also fetches full stock detail)."""
     r = await db.execute(
         select(CatalogItem, ItemCategory.name, CategoryType.name)
-        .join(ItemCategory, CatalogItem.category_id == ItemCategory.id)
+        .outerjoin(ItemCategory, CatalogItem.category_id == ItemCategory.id)
         .outerjoin(CategoryType, CatalogItem.type_id == CategoryType.id)
         .where(
             CatalogItem.id == item_id,
@@ -402,7 +402,7 @@ async def get_stock_intelligence(
 ):
     r = await db.execute(
         select(CatalogItem, ItemCategory.name, CategoryType.name)
-        .join(ItemCategory, CatalogItem.category_id == ItemCategory.id)
+        .outerjoin(ItemCategory, CatalogItem.category_id == ItemCategory.id)
         .outerjoin(CategoryType, CatalogItem.type_id == CategoryType.id)
         .where(
             CatalogItem.id == item_id,
@@ -572,7 +572,7 @@ async def get_stock_item(
 ):
     r = await db.execute(
         select(CatalogItem, ItemCategory.name, CategoryType.name)
-        .join(ItemCategory, CatalogItem.category_id == ItemCategory.id)
+        .outerjoin(ItemCategory, CatalogItem.category_id == ItemCategory.id)
         .outerjoin(CategoryType, CatalogItem.type_id == CategoryType.id)
         .where(
             CatalogItem.id == item_id,
@@ -1282,15 +1282,22 @@ async def notify_owner_about_item(
         dedupe_prefix = "reorder_request"
         cta = "purchase"
     inserted = 0
+    # Batch-check existing dedupes for all targets in one query (avoid N+1).
+    dedupe_keys: list[str] = [
+        f"{dedupe_prefix}:{item_id}:{uid}:{day}" for uid, _ in targets
+    ]
+    existing: set[str] = set()
+    if dedupe_keys:
+        er = await db.execute(
+            select(AppNotification.dedupe_key).where(
+                AppNotification.business_id == business_id,
+                AppNotification.dedupe_key.in_(dedupe_keys),
+            )
+        )
+        existing = {row[0] for row in er.all()}
     for uid, role in targets:
         dedupe = f"{dedupe_prefix}:{item_id}:{uid}:{day}"
-        ex = await db.execute(
-            select(AppNotification.id).where(
-                AppNotification.business_id == business_id,
-                AppNotification.dedupe_key == dedupe,
-            ).limit(1)
-        )
-        if ex.scalar_one_or_none() is not None:
+        if dedupe in existing:
             continue
         item_route = f"/catalog/item/{item_id}"
         db.add(

@@ -4,12 +4,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'dart:developer' as developer;
 import 'package:go_router/go_router.dart';
 
-import '../../../core/auth/auth_error_messages.dart';
-import '../../../core/auth/session_notifier.dart';
-import '../../../core/theme/hexa_colors.dart';
-import 'widgets/auth_input_styles.dart';
+import '../../../../core/design_system/widgets/app_text_field.dart';
+import '../../../../core/auth/auth_error_messages.dart';
+import '../../../../core/auth/session_notifier.dart';
+import '../../../../core/theme/hexa_colors.dart';
 import 'widgets/auth_network_error_banner.dart';
 import 'widgets/auth_page_shell.dart';
+import '../../../../shared/widgets/keyboard_safe_form_viewport.dart';
 
 /// Complete password reset using `?token=` from email (or dev flow).
 class ResetPasswordPage extends ConsumerStatefulWidget {
@@ -202,40 +203,37 @@ class _ResetPasswordPageState extends ConsumerState<ResetPasswordPage> {
         child: AuthPageShell(
           children: [
             AuthFormCard(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  const Text(
-                    'Choose a new password',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.w800,
-                      color: HexaColors.brandPrimary,
+              child: KeyboardSafeFormViewport(
+                fields: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const Text(
+                      'Choose a new password',
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w800,
+                        color: HexaColors.brandPrimary,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Use at least 8 characters.',
-                    style: TextStyle(fontSize: 13, color: Colors.grey.shade700),
-                  ),
-                  const SizedBox(height: 12),
-                  if (_showNetworkBanner)
-                    AuthNetworkErrorBanner(
-                      onRetry: _retry,
-                      title: authUnreachableBannerTitle(_lastNetworkError),
-                      detail: authServerUnreachableDetail(_lastNetworkError),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Use at least 8 characters.',
+                      style: TextStyle(fontSize: 13, color: Colors.grey.shade700),
                     ),
-                  TextField(
-                    controller: _pass,
-                    focusNode: _passFocus,
-                    obscureText: _obscure1,
-                    textInputAction: TextInputAction.next,
-                    autofillHints: const [AutofillHints.newPassword],
-                    onSubmitted: (_) => _pass2Focus.requestFocus(),
-                    decoration: authFilledDecoration(
-                      'New password',
-                      icon: Icons.key_rounded,
-                      err: p1 != null,
+                    const SizedBox(height: 12),
+                    if (_showNetworkBanner)
+                      AuthNetworkErrorBanner(
+                        onRetry: _retry,
+                        title: authUnreachableBannerTitle(_lastNetworkError),
+                        detail: authServerUnreachableDetail(_lastNetworkError),
+                      ),
+                    AppTextField(
+                      controller: _pass,
+                      focusNode: _passFocus,
+                      label: 'New password',
+                      obscureText: _obscure1,
+                      textInputAction: TextInputAction.next,
+                      autofillHints: const [AutofillHints.newPassword],
                       errorText: p1,
                       suffix: IconButton(
                         onPressed: () => setState(() => _obscure1 = !_obscure1),
@@ -247,22 +245,16 @@ class _ResetPasswordPageState extends ConsumerState<ResetPasswordPage> {
                         ),
                       ),
                     ),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: _pass2,
-                    focusNode: _pass2Focus,
-                    obscureText: _obscure2,
-                    textInputAction: TextInputAction.done,
-                    autofillHints: const [AutofillHints.newPassword],
-                    onSubmitted: (_) {
-                      if (_isFormValid) _submit();
-                    },
-                    decoration: authFilledDecoration(
-                      'Confirm password',
-                      icon: Icons.lock_outline_rounded,
-                      err: p2 != null,
+                    const SizedBox(height: 12),
+                    AppTextField(
+                      controller: _pass2,
+                      focusNode: _pass2Focus,
+                      label: 'Confirm password',
+                      obscureText: _obscure2,
+                      textInputAction: TextInputAction.done,
+                      autofillHints: const [AutofillHints.newPassword],
                       errorText: p2,
+                      onActionSubmit: _isFormValid ? _submit : null,
                       suffix: IconButton(
                         onPressed: () => setState(() => _obscure2 = !_obscure2),
                         icon: Icon(
@@ -273,58 +265,68 @@ class _ResetPasswordPageState extends ConsumerState<ResetPasswordPage> {
                         ),
                       ),
                     ),
-                  ),
-                  if (_inlineError != null) ...[
-                    const SizedBox(height: 8),
-                    Text(
-                      _inlineError!,
-                      style: TextStyle(color: Colors.red.shade700, fontSize: 13),
-                    ),
-                  ],
-                  if (_success != null) ...[
-                    const SizedBox(height: 12),
-                    Text(
-                      _success!,
-                      style: TextStyle(color: Colors.green.shade800, fontSize: 13),
-                    ),
-                    const SizedBox(height: 12),
-                    FilledButton(
-                      onPressed: () => context.go('/login'),
-                      child: const Text('Go to sign in'),
-                    ),
-                  ] else ...[
-                    const SizedBox(height: 12),
-                    SizedBox(
-                      width: double.infinity,
-                      height: 50,
-                      child: FilledButton(
-                        onPressed: _loading
-                            ? null
-                            : (_isFormValid
-                                ? _submit
-                                : () => setState(() => _showValidation = true)),
-                        style: FilledButton.styleFrom(
-                          backgroundColor: HexaColors.brandPrimary,
-                          foregroundColor: Colors.white,
-                          elevation: 0,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                        ),
-                        child: _loading
-                            ? const SizedBox(
-                                width: 22,
-                                height: 22,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: Colors.white,
-                                ),
-                              )
-                            : const Text('Update password'),
+                    if (_inlineError != null) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        _inlineError!,
+                        style: TextStyle(color: Colors.red.shade700, fontSize: 13),
                       ),
-                    ),
+                    ],
+                    if (_success != null) ...[
+                      const SizedBox(height: 12),
+                      Text(
+                        _success!,
+                        style: TextStyle(color: Colors.green.shade800, fontSize: 13),
+                      ),
+                    ],
                   ],
-                ],
+                ),
+                footer: _success != null
+                    ? Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          const SizedBox(height: 12),
+                          FilledButton(
+                            onPressed: () => context.go('/login'),
+                            child: const Text('Go to sign in'),
+                          ),
+                        ],
+                      )
+                    : Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          const SizedBox(height: 12),
+                          SizedBox(
+                            width: double.infinity,
+                            height: 50,
+                            child: FilledButton(
+                              onPressed: _loading
+                                  ? null
+                                  : (_isFormValid
+                                      ? _submit
+                                      : () => setState(() => _showValidation = true)),
+                              style: FilledButton.styleFrom(
+                                backgroundColor: HexaColors.brandPrimary,
+                                foregroundColor: Colors.white,
+                                elevation: 0,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                              ),
+                              child: _loading
+                                  ? const SizedBox(
+                                      width: 22,
+                                      height: 22,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: Colors.white,
+                                      ),
+                                    )
+                                  : const Text('Update password'),
+                            ),
+                          ),
+                        ],
+                      ),
               ),
             ),
           ],

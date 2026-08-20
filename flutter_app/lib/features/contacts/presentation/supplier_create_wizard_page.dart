@@ -143,12 +143,6 @@ class _SupplierCreateWizardPageState
     });
   }
 
-  /// Fixed reserve only — Scaffold `resizeToAvoidBottomInset` already shrinks
-  /// the body for the IME; adding viewInsets here over-scrolls on focus.
-  EdgeInsets _fieldScrollPad(BuildContext context) {
-    return const EdgeInsets.only(bottom: 120);
-  }
-
   void _unfocusForm() {
     FocusManager.instance.primaryFocus?.unfocus();
   }
@@ -606,18 +600,14 @@ class _SupplierCreateWizardPageState
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            TextField(
+            AppTextField(
               controller: name,
-              scrollPadding: _fieldScrollPad(context),
-              decoration: const InputDecoration(labelText: 'Name *'),
+              label: 'Name *',
             ),
-            TextField(
+            AppTextField(
               controller: comm,
-              scrollPadding: _fieldScrollPad(context),
+              label: 'Commission % (optional)',
               keyboardType: TextInputType.number,
-              decoration: const InputDecoration(
-                labelText: 'Commission % (optional)',
-              ),
             ),
           ],
         ),
@@ -687,17 +677,6 @@ class _SupplierCreateWizardPageState
         if (mounted) setState(() => _itemHits = []);
       }
     });
-  }
-
-  InputDecoration _dec(String label, {String? hint, String? error}) {
-    return InputDecoration(
-      labelText: label,
-      hintText: hint,
-      errorText: error,
-      isDense: true,
-      border: const OutlineInputBorder(),
-      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-    );
   }
 
   Widget _stepHeader(String t) {
@@ -995,11 +974,11 @@ class _SupplierCreateWizardPageState
         const SizedBox(height: 16),
         const Text('Frequently supplied items'),
         const SizedBox(height: 8),
-        TextField(
+        AppTextField(
           controller: _itemSearch,
           focusNode: _itemSearchFocus,
-          scrollPadding: _fieldScrollPad(context),
-          decoration: _dec('Search items or categories', hint: 'Type 2+ letters'),
+          label: 'Search items or categories',
+          helper: 'Type 2+ letters',
           textInputAction: TextInputAction.next,
           onChanged: _runItemSearch,
           onSubmitted: (_) => _unfocusForm(),

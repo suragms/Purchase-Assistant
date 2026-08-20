@@ -49,12 +49,18 @@ async def run_low_stock_notification_scan(db: AsyncSession) -> int:
     if not low_rows:
         return 0
 
+    # Batch membership queries by business_id (many low-stock items share the same business).
+    business_ids = {row[1] for row in low_rows}
+    membership_map: dict[uuid.UUID, list[uuid.UUID]] = {}
+    for bid in business_ids:
+        mems = await db.execute(
+            select(Membership.user_id).where(Membership.business_id == bid)
+        )
+        membership_map[bid] = [row[0] for row in mems.all()]
+
     inserted = 0
     for item_id, business_id, name, cur, reorder, stock_unit, default_unit in low_rows:
-        mems = await db.execute(
-            select(Membership.user_id).where(Membership.business_id == business_id)
-        )
-        user_ids = [row[0] for row in mems.all()]
+        user_ids = membership_map.get(business_id, [])
         unit = (stock_unit or default_unit or "units").strip()
         n = await emit_notification(
             db,

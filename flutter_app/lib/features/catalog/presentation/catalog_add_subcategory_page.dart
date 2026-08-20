@@ -6,10 +6,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/auth/session_notifier.dart';
+import '../../../core/design_system/widgets/app_text_field.dart';
 import '../../../core/providers/catalog_providers.dart';
 import '../catalog_taxonomy_utils.dart';
 import '../../../core/search/catalog_fuzzy.dart';
-import '../../../core/theme/hexa_colors.dart';
 import '../../../core/widgets/form_feedback.dart';
 import '../../../shared/widgets/keyboard_safe_form_viewport.dart';
 
@@ -145,25 +145,12 @@ class _CatalogAddSubcategoryPageState
                   horizontalPadding: 16,
                   topPadding: 16,
                   minFieldsHeight: c.hasBoundedHeight ? minFields : 200,
-                  fields: TextField(
+                  fields: AppTextField(
                     controller: _name,
                     autofocus: true,
+                    label: 'Name',
+                    errorText: err ? 'Enter a name' : null,
                     textCapitalization: TextCapitalization.words,
-                    decoration: InputDecoration(
-                      labelText: 'Name',
-                      hintText: 'e.g. Biriyani rice',
-                      errorText: err ? 'Enter a name' : null,
-                      border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12)),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide(
-                          color: err
-                              ? HexaColors.loss
-                              : Theme.of(context).colorScheme.outlineVariant,
-                        ),
-                      ),
-                    ),
                     onChanged: (_) {
                       if (_touched) setState(() {});
                     },

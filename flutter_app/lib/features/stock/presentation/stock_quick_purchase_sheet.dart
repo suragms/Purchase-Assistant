@@ -24,6 +24,7 @@ import '../../../core/providers/stock_providers.dart'
         stockItemActivityProvider;
 import '../../stock/stock_list_row_patch.dart' show stockStatusForPatchRow;
 import '../../../core/providers/suppliers_list_provider.dart';
+import '../../../core/design_system/widgets/app_text_field.dart';
 import '../../../core/theme/hexa_colors.dart';
 import '../../../core/utils/unit_utils.dart';
 import '../../../shared/widgets/hexa_empty_state.dart';
@@ -420,36 +421,6 @@ class _StockQuickPurchaseBodyState
     }
   }
 
-  InputDecoration _fieldDecoration({
-    required String hint,
-    Widget? prefixIcon,
-    String? suffixText,
-    String? errorText,
-  }) {
-    return InputDecoration(
-      hintText: hint,
-      isDense: true,
-      filled: true,
-      fillColor: HexaColors.brandBackground,
-      prefixIcon: prefixIcon,
-      suffixText: suffixText,
-      errorText: errorText,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-      border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(10),
-        borderSide: const BorderSide(color: HexaColors.brandBorder),
-      ),
-      enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(10),
-        borderSide: const BorderSide(color: HexaColors.brandBorder),
-      ),
-      focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(10),
-        borderSide: const BorderSide(color: HexaColors.brandAccent, width: 1.5),
-      ),
-    );
-  }
-
   Widget _fieldLabel(String text) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 4),
@@ -626,22 +597,19 @@ class _StockQuickPurchaseBodyState
         ],
         const SizedBox(height: 12),
         _fieldLabel('Purchase quantity'),
-        TextField(
+        AppTextField(
           controller: _qtyCtrl,
           focusNode: _qtyFocus,
           autofocus: true,
           enabled: !_saving,
+          label: 'e.g. 100',
+          errorText: _qtyError,
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
           textInputAction: TextInputAction.next,
           inputFormatters: [
             FilteringTextInputFormatter.allow(RegExp(r'[\d.,]')),
           ],
           onSubmitted: (_) => _supplierFocus.requestFocus(),
-          decoration: _fieldDecoration(
-            hint: 'e.g. 100',
-            suffixText: _unitLabel,
-            errorText: _qtyError,
-          ),
         ),
         const SizedBox(height: 10),
         _fieldLabel('Supplier'),
@@ -730,14 +698,13 @@ class _StockQuickPurchaseBodyState
           ),
         const SizedBox(height: 10),
         _fieldLabel('Notes (optional)'),
-        TextField(
+        AppTextField(
           controller: _notesCtrl,
           focusNode: _notesFocus,
           enabled: !_saving,
-          minLines: 2,
+          label: 'Optional notes…',
           maxLines: 3,
           textInputAction: TextInputAction.done,
-          decoration: _fieldDecoration(hint: 'Optional notes…'),
         ),
         const SizedBox(height: 14),
         if (desktop)

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import logging
 import re
 import time
@@ -62,6 +64,36 @@ async def _last_trade_purchase_date_for_broker(
         )
     )
     return r.scalar_one_or_none()
+
+
+async def _last_trade_purchase_dates_for_suppliers(
+    db: AsyncSession, business_id: uuid.UUID, supplier_ids: list[uuid.UUID]
+) -> dict[uuid.UUID, date]:
+    if not supplier_ids:
+        return {}
+    r = await db.execute(
+        select(TradePurchase.supplier_id, func.max(TradePurchase.purchase_date)).where(
+            TradePurchase.business_id == business_id,
+            TradePurchase.supplier_id.in_(supplier_ids),
+            TradePurchase.status.notin_(("deleted", "cancelled")),
+        ).group_by(TradePurchase.supplier_id)
+    )
+    return {sid: d for sid, d in r.all() if d is not None}
+
+
+async def _last_trade_purchase_dates_for_brokers(
+    db: AsyncSession, business_id: uuid.UUID, broker_ids: list[uuid.UUID]
+) -> dict[uuid.UUID, date]:
+    if not broker_ids:
+        return {}
+    r = await db.execute(
+        select(TradePurchase.broker_id, func.max(TradePurchase.purchase_date)).where(
+            TradePurchase.business_id == business_id,
+            TradePurchase.broker_id.in_(broker_ids),
+            TradePurchase.status.notin_(("deleted", "cancelled")),
+        ).group_by(TradePurchase.broker_id)
+    )
+    return {bid: d for bid, d in r.all() if d is not None}
 
 
 class SupplierPrefsIn(BaseModel):
@@ -286,6 +318,56 @@ async def _supplier_out(db: AsyncSession, s: Supplier) -> SupplierOut:
         db, s.business_id, s.id
     )
     return SupplierOut.model_validate(base)
+
+
+async def _suppliers_out_batch(
+    db: AsyncSession, business_id: uuid.UUID, suppliers: list[Supplier]
+) -> list[SupplierOut]:
+    """Batched version of _supplier_out for lists (e.g. search results)."""
+    if not suppliers:
+        return []
+    ids = [s.id for s in suppliers]
+    rb = await db.execute(
+        select(BrokerSupplierLink.supplier_id, BrokerSupplierLink.broker_id).where(
+            BrokerSupplierLink.supplier_id.in_(ids)
+        )
+    )
+    broker_map: dict[uuid.UUID, list[uuid.UUID]] = defaultdict(list)
+    for sid, bid in rb.all():
+        broker_map[sid].append(bid)
+    dates = await _last_trade_purchase_dates_for_suppliers(db, business_id, ids)
+    out: list[SupplierOut] = []
+    for s in suppliers:
+        base = SupplierOut.model_validate(s).model_dump()
+        base["broker_ids"] = list(broker_map.get(s.id, []))
+        base["last_purchase_date"] = dates.get(s.id)
+        out.append(SupplierOut.model_validate(base))
+    return out
+
+
+async def _brokers_out_batch(
+    db: AsyncSession, business_id: uuid.UUID, brokers: list[Broker]
+) -> "list[BrokerOut]":
+    """Batched version of _broker_out for lists (e.g. search results)."""
+    if not brokers:
+        return []
+    ids = [b.id for b in brokers]
+    rs = await db.execute(
+        select(BrokerSupplierLink.broker_id, BrokerSupplierLink.supplier_id).where(
+            BrokerSupplierLink.broker_id.in_(ids)
+        )
+    )
+    sup_map: dict[uuid.UUID, list[uuid.UUID]] = defaultdict(list)
+    for bid, sid in rs.all():
+        sup_map[bid].append(sid)
+    dates = await _last_trade_purchase_dates_for_brokers(db, business_id, ids)
+    out: list[BrokerOut] = []
+    for b in brokers:
+        base = BrokerOut.model_validate(b).model_dump()
+        base["supplier_ids"] = list(sup_map.get(b.id, []))
+        base["last_purchase_date"] = dates.get(b.id)
+        out.append(BrokerOut.model_validate(base))
+    return out
 
 
 @router.get(
@@ -556,14 +638,19 @@ async def update_supplier(
                 dedup_brokers.append(bid)
         if "broker_id" in data and data.get("broker_id") is None and "broker_ids" not in data:
             dedup_brokers = []
-        for bid in dedup_brokers:
-            ok = await db.scalar(
-                select(Broker.id).where(Broker.id == bid, Broker.business_id == business_id)
+        if dedup_brokers:
+            br = await db.execute(
+                select(Broker.id).where(
+                    Broker.business_id == business_id,
+                    Broker.id.in_(dedup_brokers),
+                )
             )
-            if ok is None:
+            found = set(br.scalars().all())
+            missing = [bid for bid in dedup_brokers if bid not in found]
+            if missing:
                 raise HTTPException(
                     status.HTTP_400_BAD_REQUEST,
-                    detail=f"Broker not in this business: {bid}",
+                    detail=f"Broker not in this business: {missing[0]}",
                 )
         await db.execute(delete(BrokerSupplierLink).where(BrokerSupplierLink.supplier_id == s.id))
         for bid in dedup_brokers:
@@ -858,14 +945,19 @@ async def update_broker(
         for sid in data["supplier_ids"] or []:
             if sid not in dedup_suppliers:
                 dedup_suppliers.append(sid)
-        for sid in dedup_suppliers:
-            ok = await db.scalar(
-                select(Supplier.id).where(Supplier.id == sid, Supplier.business_id == business_id)
+        if dedup_suppliers:
+            sr = await db.execute(
+                select(Supplier.id).where(
+                    Supplier.business_id == business_id,
+                    Supplier.id.in_(dedup_suppliers),
+                )
             )
-            if ok is None:
+            found = set(sr.scalars().all())
+            missing = [sid for sid in dedup_suppliers if sid not in found]
+            if missing:
                 raise HTTPException(
                     status.HTTP_400_BAD_REQUEST,
-                    detail=f"Supplier not in this business: {sid}",
+                    detail=f"Supplier not in this business: {missing[0]}",
                 )
         await db.execute(delete(BrokerSupplierLink).where(BrokerSupplierLink.broker_id == b.id))
         for sid in dedup_suppliers:
@@ -1201,8 +1293,7 @@ async def contacts_search(
                 str(s.name).strip().lower(),
             )
         )
-        for s in rows:
-            suppliers.append(await _supplier_out(db, s))
+        suppliers.extend(await _suppliers_out_batch(db, business_id, rows))
 
     brokers: list[BrokerOut] = []
     if bucket("brokers"):
@@ -1221,8 +1312,7 @@ async def contacts_search(
                 str(b.name).strip().lower(),
             )
         )
-        for b in brows:
-            brokers.append(await _broker_out(db, b))
+        brokers.extend(await _brokers_out_batch(db, business_id, brows))
 
     item_names: list[str] = []
     item_hits: list[ItemSearchHitOut] = []

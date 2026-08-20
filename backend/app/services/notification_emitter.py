@@ -94,17 +94,20 @@ async def emit_notification(
         return 0
 
     inserted = 0
-    for uid in targets:
-        if dedupe_key:
-            ex = await db.execute(
-                select(AppNotification.id).where(
-                    AppNotification.business_id == business_id,
-                    AppNotification.user_id == uid,
-                    AppNotification.dedupe_key == dedupe_key,
-                ).limit(1)
+    # Batch-resolve existing dedupes once (avoid per-target N+1).
+    existing_uids: set[uuid.UUID] = set()
+    if dedupe_key:
+        er = await db.execute(
+            select(AppNotification.user_id).where(
+                AppNotification.business_id == business_id,
+                AppNotification.dedupe_key == dedupe_key,
+                AppNotification.user_id.in_(targets),
             )
-            if ex.scalar_one_or_none() is not None:
-                continue
+        )
+        existing_uids = {row[0] for row in er.all()}
+    for uid in targets:
+        if dedupe_key and uid in existing_uids:
+            continue
         try:
             async with db.begin_nested():
                 db.add(

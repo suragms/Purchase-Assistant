@@ -788,16 +788,33 @@ async def _sync_purchase_memory(
         and body.supplier_id is not None
         and (body.status or "confirmed").lower() == "confirmed"
     )
-    for li in body.lines:
-        if li.catalog_item_id is None:
-            continue
-        ir = await db.execute(
-            select(CatalogItem).where(
-                CatalogItem.id == li.catalog_item_id,
-                CatalogItem.business_id == business_id,
+    line_items = [li for li in body.lines if li.catalog_item_id is not None]
+    if not line_items:
+        return
+    cids = list({li.catalog_item_id for li in line_items})
+    # Batch-fetch catalog items (1 query) and supplier defaults (1 query) up front,
+    # instead of 2 queries per purchase line.
+    ir = await db.execute(
+        select(CatalogItem).where(
+            CatalogItem.id.in_(cids),
+            CatalogItem.business_id == business_id,
+        )
+    )
+    items = {it.id: it for it in ir.scalars().all()}
+    defaults: dict[uuid.UUID, SupplierItemDefault] = {}
+    if body.supplier_id is not None:
+        dr = await db.execute(
+            select(SupplierItemDefault).where(
+                SupplierItemDefault.business_id == business_id,
+                SupplierItemDefault.supplier_id == body.supplier_id,
+                SupplierItemDefault.catalog_item_id.in_(cids),
             )
         )
-        item = ir.scalar_one_or_none()
+        for row in dr.scalars().all():
+            defaults[row.catalog_item_id] = row
+    for li in line_items:
+        cid = li.catalog_item_id
+        item = items.get(cid)
         if item is not None:
             item.last_purchase_price = dp.rate(li.landing_cost)
             if snap:
@@ -813,27 +830,22 @@ async def _sync_purchase_memory(
                 item.last_line_weight_kg = wt if wt > 0 else None
         if body.supplier_id is None:
             continue
-        dr = await db.execute(
-            select(SupplierItemDefault).where(
-                SupplierItemDefault.business_id == business_id,
-                SupplierItemDefault.supplier_id == body.supplier_id,
-                SupplierItemDefault.catalog_item_id == li.catalog_item_id,
-            )
-        )
-        row = dr.scalar_one_or_none()
+        row = defaults.get(cid)
         line_pd = li.payment_days if li.payment_days is not None else body.payment_days
         if row is None:
-            db.add(
-                SupplierItemDefault(
-                    business_id=business_id,
-                    supplier_id=body.supplier_id,
-                    catalog_item_id=li.catalog_item_id,
-                    last_price=dp.rate(li.landing_cost),
-                    last_discount=dp.percent(li.discount) if li.discount is not None else None,
-                    last_payment_days=line_pd,
-                    purchase_count=1,
-                )
+            new = SupplierItemDefault(
+                business_id=business_id,
+                supplier_id=body.supplier_id,
+                catalog_item_id=cid,
+                last_price=dp.rate(li.landing_cost),
+                last_discount=dp.percent(li.discount) if li.discount is not None else None,
+                last_payment_days=line_pd,
+                purchase_count=1,
             )
+            db.add(new)
+            # Cache the just-created default so a duplicate line for the same item
+            # in this purchase updates it instead of re-inserting (unique constraint).
+            defaults[cid] = new
         else:
             row.purchase_count = int(row.purchase_count or 0) + 1
             row.last_price = dp.rate(li.landing_cost)

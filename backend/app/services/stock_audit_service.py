@@ -230,6 +230,18 @@ async def complete_stock_audit(
 
     pending = 0
     applied = 0
+    # Batch-fetch all audit catalog items in one query (avoid per-line N+1).
+    line_item_ids = [ln.item_id for ln in audit.items if ln.item_id is not None]
+    items_by_id: dict[uuid.UUID, CatalogItem] = {}
+    if line_item_ids:
+        ir = await db.execute(
+            select(CatalogItem).where(
+                CatalogItem.id.in_(line_item_ids),
+                CatalogItem.business_id == business_id,
+                CatalogItem.deleted_at.is_(None),
+            )
+        )
+        items_by_id = {it.id: it for it in ir.scalars().all()}
     for line in audit.items:
         if line.line_status == "pending_approval":
             pending += 1
@@ -238,7 +250,9 @@ async def complete_stock_audit(
             if line.difference_qty == 0:
                 line.line_status = "matched"
             continue
-        item = await _get_catalog_item(db, business_id, line.item_id)
+        item = items_by_id.get(line.item_id)
+        if item is None:
+            item = await _get_catalog_item(db, business_id, line.item_id)
         await apply_audit_line_to_stock(
             db,
             business_id=business_id,

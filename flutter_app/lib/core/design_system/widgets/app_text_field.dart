@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -35,6 +36,8 @@ class AppTextField extends StatefulWidget {
     this.focusNode,
     this.inputFormatters,
     this.maxLines = 1,
+    // Optional callback when user presses Done/Go/Send — for form submission.
+    this.onActionSubmit,
   });
 
   final TextEditingController controller;
@@ -66,6 +69,10 @@ class AppTextField extends StatefulWidget {
   final List<TextInputFormatter>? inputFormatters;
   final int maxLines;
 
+  /// Called when user presses Done/Go/Send/Enter (submit actions).
+  /// If null and [textInputAction] is a submit action, falls back to [onSubmitted].
+  final VoidCallback? onActionSubmit;
+
   @override
   State<AppTextField> createState() => _AppTextFieldState();
 }
@@ -90,6 +97,25 @@ class _AppTextFieldState extends State<AppTextField> {
   void _onFocusListen() {
     widget.onFocusChanged?.call(_effectiveFocus.hasFocus);
     setState(() {});
+  }
+
+  void _handleEditingComplete() {
+    final action = widget.textInputAction;
+    final isSubmitAction = action == TextInputAction.done ||
+        action == TextInputAction.go ||
+        action == TextInputAction.send ||
+        action == TextInputAction.search;
+
+    if (isSubmitAction) {
+      // Priority: onActionSubmit > onSubmitted
+      widget.onActionSubmit?.call();
+      if (widget.onActionSubmit == null) {
+        widget.onSubmitted?.call(widget.controller.text);
+      }
+    } else if (action == TextInputAction.next) {
+      FocusScope.of(context).nextFocus();
+    }
+    // For other actions (previous, newline, etc.), let default behavior handle it.
   }
 
   @override
@@ -180,137 +206,156 @@ class _AppTextFieldState extends State<AppTextField> {
           BorderSide(color: borderColor, width: focused ? borderWidth : 1),
     );
 
-    return AnimatedScale(
-      scale: focused && widget.enabled ? 1.004 : 1.0,
-      duration: const Duration(milliseconds: 260),
+    // On web, disable AnimatedScale to prevent clipping issues with ClipRRect.
+    // The 1.004x focus scale can push content outside the rounded clip bounds.
+    final bool useScaleAnimation = !kIsWeb;
+
+    Widget field = AnimatedContainer(
+      duration: const Duration(milliseconds: 280),
       curve: Curves.easeOutCubic,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 280),
-        curve: Curves.easeOutCubic,
-        decoration: BoxDecoration(
-          borderRadius: HexaDsRadii.fieldShell,
-          boxShadow: shadow,
-        ),
-        child: ClipRRect(
-          borderRadius: HexaDsRadii.fieldShell,
-          child: TextField(
-            controller: widget.controller,
-            focusNode: _effectiveFocus,
-            enabled: widget.enabled,
-            autofocus: widget.autofocus,
-            obscureText: widget.obscureText,
-            keyboardType: widget.keyboardType,
-            textInputAction: widget.textInputAction,
-            autocorrect: widget.autocorrect,
-            textCapitalization: widget.textCapitalization,
-            inputFormatters: widget.inputFormatters,
-            maxLines: widget.obscureText ? 1 : widget.maxLines,
-            style: HexaDsType.body(
+      decoration: BoxDecoration(
+        borderRadius: HexaDsRadii.fieldShell,
+        boxShadow: shadow,
+      ),
+      child: ClipRRect(
+        borderRadius: HexaDsRadii.fieldShell,
+        child: TextField(
+          controller: widget.controller,
+          focusNode: _effectiveFocus,
+          enabled: widget.enabled,
+          autofocus: widget.autofocus,
+          obscureText: widget.obscureText,
+          keyboardType: widget.keyboardType,
+          textInputAction: widget.textInputAction,
+          autocorrect: widget.autocorrect,
+          textCapitalization: widget.textCapitalization,
+          inputFormatters: widget.inputFormatters,
+          maxLines: widget.obscureText ? 1 : widget.maxLines,
+          style: HexaDsType.body(
+            15,
+            color: widget.enabled ? HexaColors.inputText : hx.textMuted,
+          ),
+          onSubmitted: widget.onSubmitted,
+          onEditingComplete: _handleEditingComplete,
+          onChanged: widget.onChanged,
+          autofillHints: widget.autofillHints,
+          // Ensure native copy/paste/selectAll works on all platforms.
+          enableInteractiveSelection: true,
+          toolbarOptions: const ToolbarOptions(
+            copy: true,
+            cut: true,
+            paste: true,
+            selectAll: true,
+          ),
+          decoration: InputDecoration(
+            labelText: widget.label,
+            helperText: hasError ? null : helperOrSuccess,
+            errorText: hasError ? widget.errorText : null,
+            errorMaxLines: 3,
+            hintStyle: HexaDsType.body(
               15,
-              color: widget.enabled ? HexaColors.inputText : hx.textMuted,
+              color: Theme.of(context).brightness == Brightness.dark
+                  ? hx.textMuted.withValues(alpha: 0.92)
+                  : HexaColors.inputHint,
+            ).copyWith(fontWeight: FontWeight.w400),
+            prefixIcon: () {
+              final icon = widget.prefixIcon ?? _defaultLeadingIcon();
+              if (icon == null) return null;
+              return Icon(
+                icon,
+                color: !widget.enabled
+                    ? hx.textMuted.withValues(alpha: 0.55)
+                    : hasError
+                        ? HexaDsColors.error.withValues(alpha: 0.85)
+                        : success
+                            ? hx.success
+                            : focused
+                                ? HexaColors.brandAccent
+                                : hx.textMuted,
+                size: 22,
+              );
+            }(),
+            suffixIcon: widget.suffix,
+            filled: true,
+            fillColor: widget.enabled ? hx.inputFill : hx.surfaceCanvas,
+            contentPadding: const EdgeInsets.fromLTRB(
+              14,
+              // Extra top so floating label clears filled value on Flutter web (UX-195).
+              20,
+              14,
+              14,
             ),
-            onSubmitted: widget.onSubmitted,
-            onChanged: widget.onChanged,
-            autofillHints: widget.autofillHints,
-            decoration: InputDecoration(
-              labelText: widget.label,
-              helperText: hasError ? null : helperOrSuccess,
-              errorText: hasError ? widget.errorText : null,
-              errorMaxLines: 3,
-              hintStyle: HexaDsType.body(
-                15,
-                color: Theme.of(context).brightness == Brightness.dark
-                    ? hx.textMuted.withValues(alpha: 0.92)
-                    : HexaColors.inputHint,
-              ).copyWith(fontWeight: FontWeight.w400),
-              prefixIcon: () {
-                final icon = widget.prefixIcon ?? _defaultLeadingIcon();
-                if (icon == null) return null;
-                return Icon(
-                  icon,
-                  color: !widget.enabled
-                      ? hx.textMuted.withValues(alpha: 0.55)
-                      : hasError
-                          ? HexaDsColors.error.withValues(alpha: 0.85)
-                          : success
-                              ? hx.success
-                              : focused
-                                  ? HexaColors.brandAccent
-                                  : hx.textMuted,
-                  size: 22,
-                );
-              }(),
-              suffixIcon: widget.suffix,
-              filled: true,
-              fillColor: widget.enabled ? hx.inputFill : hx.surfaceCanvas,
-              contentPadding: const EdgeInsets.fromLTRB(
-                14,
-                // Extra top so floating label clears filled value on Flutter web (UX-195).
-                20,
-                14,
-                14,
+            labelStyle: HexaDsType.label(14, color: hx.textMuted)
+                .copyWith(fontWeight: FontWeight.w500, height: 1.2),
+            floatingLabelStyle:
+                HexaDsType.label(13, color: hx.textPrimary).copyWith(
+              fontWeight: FontWeight.w700,
+              height: 1.0,
+              color: hasError
+                  ? HexaDsColors.error
+                  : success
+                      ? hx.successForeground
+                      : focused
+                          ? HexaColors.brandAccent
+                          : hx.textPrimary,
+            ),
+            helperStyle: helperStyle,
+            errorStyle: HexaDsType.body(12,
+                color: HexaDsColors.error.withValues(alpha: 0.92)),
+            floatingLabelBehavior: FloatingLabelBehavior.auto,
+            border: success ? successBorder : normalBorder,
+            enabledBorder: success ? successBorder : normalBorder,
+            disabledBorder: OutlineInputBorder(
+              borderRadius: HexaDsRadii.input,
+              borderSide: BorderSide(
+                color: hx.borderSubtle.withValues(alpha: 0.65),
               ),
-              labelStyle: HexaDsType.label(14, color: hx.textMuted)
-                  .copyWith(fontWeight: FontWeight.w500, height: 1.2),
-              floatingLabelStyle:
-                  HexaDsType.label(13, color: hx.textPrimary).copyWith(
-                fontWeight: FontWeight.w700,
-                height: 1.0,
+            ),
+            focusedBorder: HexaOutlineInputBorder(
+              borderRadius: HexaDsRadii.input,
+              borderSide: BorderSide(
                 color: hasError
-                    ? HexaDsColors.error
+                    ? HexaDsColors.error.withValues(alpha: 0.95)
                     : success
-                        ? hx.successForeground
-                        : focused
-                            ? HexaColors.brandAccent
-                            : hx.textPrimary,
+                        ? hx.success
+                        : HexaColors.brandAccent,
+                width: 2,
               ),
-              helperStyle: helperStyle,
-              errorStyle: HexaDsType.body(12,
-                  color: HexaDsColors.error.withValues(alpha: 0.92)),
-              floatingLabelBehavior: FloatingLabelBehavior.auto,
-              border: success ? successBorder : normalBorder,
-              enabledBorder: success ? successBorder : normalBorder,
-              disabledBorder: OutlineInputBorder(
-                borderRadius: HexaDsRadii.input,
-                borderSide: BorderSide(
-                  color: hx.borderSubtle.withValues(alpha: 0.65),
-                ),
+              focusRing: true,
+              ringColor: hasError
+                  ? HexaColors.inputErrorFocusRing
+                  : HexaColors.inputFocusRing,
+            ),
+            errorBorder: OutlineInputBorder(
+              borderRadius: HexaDsRadii.input,
+              borderSide: BorderSide(
+                color: HexaDsColors.error.withValues(alpha: 0.85),
+                width: 1.2,
               ),
-              focusedBorder: HexaOutlineInputBorder(
-                borderRadius: HexaDsRadii.input,
-                borderSide: BorderSide(
-                  color: hasError
-                      ? HexaDsColors.error.withValues(alpha: 0.95)
-                      : success
-                          ? hx.success
-                          : HexaColors.brandAccent,
-                  width: 2,
-                ),
-                focusRing: true,
-                ringColor: hasError
-                    ? HexaColors.inputErrorFocusRing
-                    : HexaColors.inputFocusRing,
+            ),
+            focusedErrorBorder: HexaOutlineInputBorder(
+              borderRadius: HexaDsRadii.input,
+              borderSide: BorderSide(
+                color: HexaDsColors.error.withValues(alpha: 0.95),
+                width: 2,
               ),
-              errorBorder: OutlineInputBorder(
-                borderRadius: HexaDsRadii.input,
-                borderSide: BorderSide(
-                  color: HexaDsColors.error.withValues(alpha: 0.85),
-                  width: 1.2,
-                ),
-              ),
-              focusedErrorBorder: HexaOutlineInputBorder(
-                borderRadius: HexaDsRadii.input,
-                borderSide: BorderSide(
-                  color: HexaDsColors.error.withValues(alpha: 0.95),
-                  width: 2,
-                ),
-                focusRing: true,
-                ringColor: HexaColors.inputErrorFocusRing,
-              ),
+              focusRing: true,
+              ringColor: HexaColors.inputErrorFocusRing,
             ),
           ),
         ),
       ),
     );
+
+    if (useScaleAnimation) {
+      field = AnimatedScale(
+        scale: focused && widget.enabled ? 1.004 : 1.0,
+        duration: const Duration(milliseconds: 260),
+        curve: Curves.easeOutCubic,
+        child: field,
+      );
+    }
+
+    return field;
   }
 }
