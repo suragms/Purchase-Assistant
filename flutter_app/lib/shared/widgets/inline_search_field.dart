@@ -156,6 +156,10 @@ class _InlineSearchFieldState extends State<InlineSearchField> {
 
   KeyEventResult _onKey(FocusNode node, KeyEvent event) {
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
+    if (event.logicalKey == LogicalKeyboardKey.escape) {
+      _focus.unfocus();
+      return KeyEventResult.handled;
+    }
     if (event.logicalKey == LogicalKeyboardKey.enter ||
         event.logicalKey == LogicalKeyboardKey.numpadEnter) {
       final opts = _optionsForQuery(_ctrl.text).toList();
@@ -344,7 +348,9 @@ class _InlineSearchFieldState extends State<InlineSearchField> {
                         ),
                         itemBuilder: (BuildContext ctx, int i) {
                           final it = opts[i];
-                          return InkWell(
+                          return MouseRegion(
+                            cursor: SystemMouseCursors.click,
+                            child: InkWell(
                             onTapDown: (_) => _pendingSelection = it,
                             onTapCancel: () => _pendingSelection = null,
                             onTap: () {
@@ -390,6 +396,7 @@ class _InlineSearchFieldState extends State<InlineSearchField> {
                                     ),
                                 ],
                               ),
+                            ),
                             ),
                           );
                         },

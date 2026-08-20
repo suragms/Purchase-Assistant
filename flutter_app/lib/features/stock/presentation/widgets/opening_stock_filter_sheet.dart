@@ -32,6 +32,7 @@ class _OpeningStockFilterBodyState
   final _categoryCtrl = TextEditingController();
   final _subcategoryCtrl = TextEditingController();
   final _updatedByCtrl = TextEditingController();
+  late final TextEditingController _supplierCtrl;
 
   InlineSearchItem? _supplier;
   String _stockStatus = 'all';
@@ -50,6 +51,7 @@ class _OpeningStockFilterBodyState
     _stockStatus = q.stockStatus;
     _updatedToday = q.updatedToday;
     _pendingOnly = q.status == 'pending';
+    _supplierCtrl = TextEditingController();
   }
 
   @override
@@ -57,6 +59,7 @@ class _OpeningStockFilterBodyState
     _categoryCtrl.dispose();
     _subcategoryCtrl.dispose();
     _updatedByCtrl.dispose();
+    _supplierCtrl.dispose();
     super.dispose();
   }
 
@@ -115,10 +118,9 @@ class _OpeningStockFilterBodyState
             items: supplierItems,
             onSelected: (it) {
               setState(() => _supplier = it);
+              _supplierCtrl.text = it.label;
             },
-            controller: TextEditingController(
-              text: _supplier?.label ?? '',
-            ),
+            controller: _supplierCtrl,
             placeholder: 'Supplier (autocomplete)',
             minQueryLength: 1,
           ),

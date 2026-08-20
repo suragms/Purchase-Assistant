@@ -37,6 +37,7 @@ Widget hexaElevatedAutocompleteOptions<T extends Object>(
                 final opt = list[index];
                 return ListTile(
                   dense: true,
+                  mouseCursor: SystemMouseCursors.click,
                   visualDensity: VisualDensity.compact,
                   title: Text(
                     label(opt),

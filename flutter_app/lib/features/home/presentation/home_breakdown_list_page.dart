@@ -146,6 +146,8 @@ class HomeBreakdownListPage extends ConsumerStatefulWidget {
 class _HomeBreakdownListPageState extends ConsumerState<HomeBreakdownListPage> {
   final _breakdownSearchCtrl = TextEditingController();
   final _breakdownSearchFocus = FocusNode();
+  Timer? _searchDebounce;
+  String _appliedSearch = '';
 
   static const _dotColors = <Color>[
     HexaColors.brandTealBright,
@@ -161,12 +163,21 @@ class _HomeBreakdownListPageState extends ConsumerState<HomeBreakdownListPage> {
   @override
   void initState() {
     super.initState();
-    _breakdownSearchCtrl.addListener(() => setState(() {}));
+    _breakdownSearchCtrl.addListener(_onSearchCtrlTick);
     _breakdownSearchFocus.addListener(() => setState(() {}));
+  }
+
+  void _onSearchCtrlTick() {
+    _searchDebounce?.cancel();
+    _searchDebounce = Timer(const Duration(milliseconds: 300), () {
+      if (!mounted) return;
+      setState(() => _appliedSearch = _breakdownSearchCtrl.text);
+    });
   }
 
   @override
   void dispose() {
+    _searchDebounce?.cancel();
     _breakdownSearchCtrl.dispose();
     _breakdownSearchFocus.dispose();
     super.dispose();
@@ -262,15 +273,20 @@ class _HomeBreakdownListPageState extends ConsumerState<HomeBreakdownListPage> {
           borderRadius: BorderRadius.circular(12),
           borderSide: const BorderSide(color: HexaColors.brandBorder),
         ),
-        suffixIcon: _breakdownSearchCtrl.text.isEmpty
-            ? null
-            : IconButton(
-                icon: const Icon(Icons.clear_rounded),
-                onPressed: () {
-                  _breakdownSearchCtrl.clear();
-                  setState(() {});
-                },
-              ),
+        suffixIcon: ValueListenableBuilder<TextEditingValue>(
+          valueListenable: _breakdownSearchCtrl,
+          builder: (_, val, __) {
+            if (val.text.isEmpty) return const SizedBox.shrink();
+            return IconButton(
+              icon: const Icon(Icons.clear_rounded),
+              onPressed: () {
+                _searchDebounce?.cancel();
+                _breakdownSearchCtrl.clear();
+                setState(() => _appliedSearch = '');
+              },
+            );
+          },
+        ),
       ),
     );
     return ListView(
@@ -393,7 +409,7 @@ class _HomeBreakdownListPageState extends ConsumerState<HomeBreakdownListPage> {
         final pc = coerceToDouble(c['total_purchase']);
         return pc.compareTo(pa);
       });
-    final q = _breakdownSearchCtrl.text;
+    final q = _appliedSearch;
     final filtered = rows.where((a) {
       final typ = a['type_name']?.toString().trim() ?? '';
       final title = typ.isNotEmpty
@@ -455,7 +471,7 @@ class _HomeBreakdownListPageState extends ConsumerState<HomeBreakdownListPage> {
         final pc = coerceToDouble(c['total_purchase']);
         return pc.compareTo(pa);
       });
-    final q = _breakdownSearchCtrl.text;
+    final q = _appliedSearch;
     final filtered = rows.where((a) {
       final name = a['supplier_name']?.toString() ?? '—';
       return _breakdownRowMatchesQuery(
@@ -504,7 +520,7 @@ class _HomeBreakdownListPageState extends ConsumerState<HomeBreakdownListPage> {
         final pc = coerceToDouble(c['total_purchase']);
         return pc.compareTo(pa);
       });
-    final q = _breakdownSearchCtrl.text;
+    final q = _appliedSearch;
     final filtered = rows.where((a) {
       final name = a['item_name']?.toString() ?? '—';
       return _breakdownRowMatchesQuery(
@@ -554,7 +570,9 @@ class _HomeBreakdownListPageState extends ConsumerState<HomeBreakdownListPage> {
     ].join(' · ');
     return Material(
       color: Colors.transparent,
-      child: InkWell(
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        child: InkWell(
         onTap: onTap,
         child: Padding(
           padding: const EdgeInsets.symmetric(vertical: 10),
@@ -628,6 +646,7 @@ class _HomeBreakdownListPageState extends ConsumerState<HomeBreakdownListPage> {
               ),
             ],
           ),
+        ),
         ),
       ),
     );

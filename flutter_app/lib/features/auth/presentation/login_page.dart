@@ -9,6 +9,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/design_system/widgets/app_text_field.dart';
+import '../../../../core/design_system/widgets/hexa_dialog.dart';
 import '../../../../core/auth/auth_error_messages.dart';
 import '../../../../core/auth/biometric_login.dart';
 import '../../../../core/auth/auth_failure_policy.dart';
@@ -34,8 +35,8 @@ class LoginPage extends ConsumerStatefulWidget {
 
 class _LoginPageState extends ConsumerState<LoginPage>
     with TickerProviderStateMixin {
-  final _loginEmail = TextEditingController(text: 'anandu@gmail.com');
-  final _loginPass = TextEditingController(text: '123456789');
+  final _loginEmail = TextEditingController();
+  final _loginPass = TextEditingController();
   final _emailFocus = FocusNode();
   final _passFocus = FocusNode();
 
@@ -518,40 +519,12 @@ class _LoginPageState extends ConsumerState<LoginPage>
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 const SizedBox(height: 12),
-                SizedBox(
-                  width: double.infinity,
-                  height: 50,
-                  child: FilledButton(
-                    onPressed: _loading
-                        ? null
-                        : (_isFormValid
-                            ? _signIn
-                            : () => setState(() => _showValidation = true)),
-                    style: FilledButton.styleFrom(
-                      backgroundColor: HexaColors.brandPrimary,
-                      disabledBackgroundColor: HexaColors.inputBorderGrey,
-                      disabledForegroundColor: HexaColors.gray500,
-                      foregroundColor: Colors.white,
-                      elevation: 0,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      textStyle: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    child: _loading
-                        ? const SizedBox(
-                            width: 22,
-                            height: 22,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: Colors.white,
-                            ),
-                          )
-                        : const Text('Sign In'),
-                  ),
+                AppLoadingButton(
+                  label: 'Sign In',
+                  loading: _loading,
+                  onPressed: _isFormValid
+                      ? _signIn
+                      : () => setState(() => _showValidation = true),
                 ),
                 Align(
                   alignment: Alignment.centerLeft,
@@ -955,41 +928,12 @@ class _LoginPageState extends ConsumerState<LoginPage>
   }
 
   Widget _buildSignInButton() {
-    return SizedBox(
-      width: double.infinity,
-      height: 56,
-      child: FilledButton(
-        onPressed: _loading
-            ? null
-            : (_isFormValid
-                ? _signIn
-                : () => setState(() => _showValidation = true)),
-        style: FilledButton.styleFrom(
-          backgroundColor: HexaColors.brandPrimary,
-          disabledBackgroundColor: HexaColors.inputBorderGrey,
-          disabledForegroundColor: HexaColors.gray500,
-          foregroundColor: Colors.white,
-          elevation: 2,
-          shadowColor: HexaColors.brandPrimary.withValues(alpha: 0.3),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-          textStyle: const TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        child: _loading
-            ? const SizedBox(
-                width: 22,
-                height: 22,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: Colors.white,
-                ),
-              )
-            : const Text('Sign In'),
-      ),
+    return AppLoadingButton(
+      label: 'Sign In',
+      loading: _loading,
+      onPressed: _isFormValid
+          ? _signIn
+          : () => setState(() => _showValidation = true),
     );
   }
 }

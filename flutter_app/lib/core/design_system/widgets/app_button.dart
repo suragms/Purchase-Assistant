@@ -41,6 +41,7 @@ class _AppPrimaryButtonState extends State<AppPrimaryButton> {
       enabled: !disabled,
       label: widget.label,
       child: MouseRegion(
+        cursor: disabled ? SystemMouseCursors.basic : SystemMouseCursors.click,
         onEnter: (_) => setState(() => _hover = true),
         onExit: (_) => setState(() => _hover = false),
         child: Listener(
@@ -141,7 +142,11 @@ class AppSecondaryButton extends StatelessWidget {
       button: true,
       enabled: enabled && !busy,
       label: label,
-      child: SizedBox(
+      child: MouseRegion(
+        cursor: (enabled && !busy)
+            ? SystemMouseCursors.click
+            : SystemMouseCursors.basic,
+        child: SizedBox(
         width: double.infinity,
         height: dense ? 44 : 48,
         child: OutlinedButton(
@@ -187,6 +192,7 @@ class AppSecondaryButton extends StatelessWidget {
                           ),
                   ),
           ),
+        ),
         ),
       ),
     );

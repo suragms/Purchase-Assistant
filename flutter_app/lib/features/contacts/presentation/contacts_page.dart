@@ -9,6 +9,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/auth/auth_error_messages.dart';
 import '../../../core/design_system/hexa_responsive.dart';
+import '../../../core/design_system/widgets/app_text_field.dart';
 import '../../../core/theme/hexa_colors.dart';
 import '../../../core/widgets/focused_search_chrome.dart';
 import '../../../core/widgets/list_skeleton.dart';
@@ -1181,29 +1182,25 @@ class _ContactsPageState extends ConsumerState<ContactsPage>
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-            child: TextField(
+            child: AppTextField(
               controller: _searchCtrl,
               focusNode: _searchFocus,
+              label: 'Search contacts',
+              hintText: 'Search (name, phone, type…) — 1+ characters',
+              isSearch: true,
               onChanged: _scheduleSearch,
-              decoration: InputDecoration(
-                hintText: 'Search (name, phone, type…) — 1+ characters',
-                prefixIcon: const Icon(Icons.search_rounded),
-                suffixIcon: ValueListenableBuilder<TextEditingValue>(
-                  valueListenable: _searchCtrl,
-                  builder: (_, val, __) {
-                    if (val.text.isEmpty) return const SizedBox.shrink();
-                    return IconButton(
-                      icon: const Icon(Icons.clear_rounded),
-                      onPressed: () {
-                        _searchCtrl.clear();
-                        _scheduleSearch('');
-                      },
-                    );
-                  },
-                ),
-                border:
-                    OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                filled: true,
+              suffix: ValueListenableBuilder<TextEditingValue>(
+                valueListenable: _searchCtrl,
+                builder: (_, val, __) {
+                  if (val.text.isEmpty) return const SizedBox.shrink();
+                  return IconButton(
+                    icon: const Icon(Icons.clear_rounded),
+                    onPressed: () {
+                      _searchCtrl.clear();
+                      _scheduleSearch('');
+                    },
+                  );
+                },
               ),
             ),
           ),

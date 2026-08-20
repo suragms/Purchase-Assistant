@@ -12,6 +12,7 @@ import '../catalog_taxonomy_utils.dart';
 import '../../../core/search/catalog_fuzzy.dart';
 import '../../../core/search/search_highlight.dart';
 import '../../../core/design_system/hexa_responsive.dart';
+import '../../../core/design_system/widgets/app_text_field.dart';
 import '../../../core/theme/hexa_colors.dart';
 import '../../../core/widgets/list_skeleton.dart';
 import '../../../core/widgets/business_write_surface_listener.dart';
@@ -170,29 +171,26 @@ class _CatalogPageState extends ConsumerState<CatalogPage> {
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-            child: TextField(
+            child: AppTextField(
               controller: _searchCtrl,
-              decoration: InputDecoration(
-                hintText: 'Search categories (fuzzy)',
-                prefixIcon: const Icon(Icons.search_rounded),
-                suffixIcon: ValueListenableBuilder<TextEditingValue>(
-                  valueListenable: _searchCtrl,
-                  builder: (_, val, __) {
-                    if (val.text.isEmpty) return const SizedBox.shrink();
-                    return IconButton(
-                      icon: const Icon(Icons.close_rounded),
-                      onPressed: () {
-                        _searchDebounce?.cancel();
-                        _searchCtrl.clear();
-                        setState(() => _searchQuery = '');
-                      },
-                    );
-                  },
-                ),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                isDense: true,
-              ),
+              label: 'Search categories',
+              hintText: 'Search categories (fuzzy)',
+              isSearch: true,
               onChanged: (_) {},
+              suffix: ValueListenableBuilder<TextEditingValue>(
+                valueListenable: _searchCtrl,
+                builder: (_, val, __) {
+                  if (val.text.isEmpty) return const SizedBox.shrink();
+                  return IconButton(
+                    icon: const Icon(Icons.close_rounded),
+                    onPressed: () {
+                      _searchDebounce?.cancel();
+                      _searchCtrl.clear();
+                      setState(() => _searchQuery = '');
+                    },
+                  );
+                },
+              ),
             ),
           ),
           if (_searchQuery.trim().isNotEmpty)

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/design_system/widgets/app_text_field.dart';
 import '../../../core/theme/hexa_colors.dart';
 import '../presentation/widgets/reports_period_bar.dart';
 
@@ -147,34 +148,18 @@ class _ReportsTopBarState extends ConsumerState<ReportsTopBar> {
               ),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 8),
-                child: TextField(
+                child: AppTextField(
                   controller: widget.searchController,
+                  label: widget.searchHint,
+                  hintText: widget.searchHint,
+                  isSearch: true,
                   onChanged: widget.onSearchChanged,
-                  decoration: InputDecoration(
-                    hintText: widget.searchHint,
-                    prefixIcon: const Icon(Icons.search_rounded, size: 20),
-                    suffixIcon: widget.searchController.text.trim().isEmpty
-                        ? null
-                        : IconButton(
-                            icon: const Icon(Icons.close_rounded, size: 18),
-                            onPressed: widget.onClearSearch,
-                          ),
-                    isDense: true,
-                    filled: true,
-                    fillColor: HexaColors.brandCard,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
-                      borderSide: BorderSide(color: Colors.grey.shade300),
-                    ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
-                      borderSide: BorderSide(color: Colors.grey.shade300),
-                    ),
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 8,
-                    ),
-                  ),
+                  suffix: widget.searchController.text.trim().isEmpty
+                      ? null
+                      : IconButton(
+                          icon: const Icon(Icons.close_rounded, size: 18),
+                          onPressed: widget.onClearSearch,
+                        ),
                 ),
               ),
               if (showPeriod) ...[

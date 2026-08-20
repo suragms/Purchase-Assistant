@@ -635,7 +635,9 @@ class _PartyInlineSuggestFieldState extends State<PartyInlineSuggestField> {
     return Material(
       type: MaterialType.transparency,
       color: cs.surface,
-      child: InkWell(
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        child: InkWell(
         onTap: commit,
         child: ConstrainedBox(
           constraints: const BoxConstraints(
@@ -708,6 +710,7 @@ class _PartyInlineSuggestFieldState extends State<PartyInlineSuggestField> {
             ),
           ),
         ),
+        ),
       ),
     );
   }
@@ -733,7 +736,9 @@ class _PartyInlineSuggestFieldState extends State<PartyInlineSuggestField> {
     return Material(
       type: MaterialType.transparency,
       color: cs.surface,
-      child: InkWell(
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        child: InkWell(
         onTap: invoke,
         child: ConstrainedBox(
           constraints:
@@ -753,12 +758,18 @@ class _PartyInlineSuggestFieldState extends State<PartyInlineSuggestField> {
             ),
           ),
         ),
+        ),
       ),
     );
   }
 
   KeyEventResult _onKey(FocusNode node, KeyEvent event) {
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
+    if (event.logicalKey == LogicalKeyboardKey.escape) {
+      _hideSuggestionOverlay();
+      widget.focusNode.unfocus();
+      return KeyEventResult.handled;
+    }
     if (event.logicalKey == LogicalKeyboardKey.enter ||
         event.logicalKey == LogicalKeyboardKey.numpadEnter) {
       _flushFilterToLive();

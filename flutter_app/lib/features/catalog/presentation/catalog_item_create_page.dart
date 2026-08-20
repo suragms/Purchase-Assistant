@@ -805,7 +805,10 @@ class _CatalogItemCreatePageState extends ConsumerState<CatalogItemCreatePage> {
                             const SizedBox(height: 12),
                             Text(
                               _error!,
-                              style: const TextStyle(color: Colors.red),
+                              style: TextStyle(
+                                color: Theme.of(context).colorScheme.error,
+                                fontWeight: FontWeight.w600,
+                              ),
                             ),
                           ],
                         ],

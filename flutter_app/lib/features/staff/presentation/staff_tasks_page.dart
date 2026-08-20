@@ -111,71 +111,19 @@ class _StaffTasksPageState extends ConsumerState<StaffTasksPage> {
     final users =
         await ref.read(hexaApiProvider).listBusinessUsers(businessId: bid);
     if (!mounted) return;
-    final staffIdCtrl = TextEditingController();
-    final typeCtrl = TextEditingController(text: 'general');
-    final refCtrl = TextEditingController();
 
-    final ok = await showDialog<bool>(
+    final result = await showDialog<_AssignStaffTaskResult>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Assign task'),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              DropdownButtonFormField<String>(
-                decoration: const InputDecoration(labelText: 'Staff'),
-                items: [
-                  for (final u in users)
-                    DropdownMenuItem(
-                      value: '${u['id']}',
-                      child: Text(
-                        '${u['full_name'] ?? u['email'] ?? u['id']}',
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                ],
-                onChanged: (v) {
-                  if (v != null) staffIdCtrl.text = v;
-                },
-              ),
-              TextField(
-                controller: typeCtrl,
-                decoration: const InputDecoration(labelText: 'Task type'),
-              ),
-              TextField(
-                controller: refCtrl,
-                decoration:
-                    const InputDecoration(labelText: 'Reference (optional)'),
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Cancel')),
-          FilledButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Create')),
-        ],
-      ),
+      builder: (ctx) => _AssignStaffTaskDialog(users: users),
     );
-    if (ok != true || !mounted) return;
-    if (staffIdCtrl.text.isEmpty) {
-      showTopSnack(context, 'Select a staff member', isError: true);
-      return;
-    }
+    if (result == null || !mounted) return;
     setState(() => _busy = true);
     try {
       await ref.read(hexaApiProvider).createStaffTask(
             businessId: bid,
-            staffId: staffIdCtrl.text,
-            taskType: typeCtrl.text.trim().isEmpty
-                ? 'general'
-                : typeCtrl.text.trim(),
-            referenceId:
-                refCtrl.text.trim().isEmpty ? null : refCtrl.text.trim(),
+            staffId: result.staffId,
+            taskType: result.taskType,
+            referenceId: result.referenceId,
           );
       if (mounted) showTopSnack(context, 'Task assigned');
       await _load();
@@ -295,6 +243,103 @@ class StaffTasksEmpty extends StatelessWidget {
           : 'When a task is assigned to you, it will show here.',
       primaryActionLabel: canAssign ? 'Assign task' : 'Refresh',
       onPrimaryAction: canAssign ? onAssign : onRefresh,
+    );
+  }
+}
+
+class _AssignStaffTaskResult {
+  const _AssignStaffTaskResult({
+    required this.staffId,
+    required this.taskType,
+    this.referenceId,
+  });
+
+  final String staffId;
+  final String taskType;
+  final String? referenceId;
+}
+
+class _AssignStaffTaskDialog extends StatefulWidget {
+  const _AssignStaffTaskDialog({required this.users});
+
+  final List<dynamic> users;
+
+  @override
+  State<_AssignStaffTaskDialog> createState() => _AssignStaffTaskDialogState();
+}
+
+class _AssignStaffTaskDialogState extends State<_AssignStaffTaskDialog> {
+  final _typeCtrl = TextEditingController(text: 'general');
+  final _refCtrl = TextEditingController();
+  String? _staffId;
+
+  @override
+  void dispose() {
+    _typeCtrl.dispose();
+    _refCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Assign task'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            DropdownButtonFormField<String>(
+              initialValue: _staffId,
+              decoration: const InputDecoration(labelText: 'Staff'),
+              items: [
+                for (final u in widget.users)
+                  DropdownMenuItem(
+                    value: '${u['id']}',
+                    child: Text(
+                      '${u['full_name'] ?? u['email'] ?? u['id']}',
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+              ],
+              onChanged: (v) => setState(() => _staffId = v),
+            ),
+            TextField(
+              controller: _typeCtrl,
+              decoration: const InputDecoration(labelText: 'Task type'),
+            ),
+            TextField(
+              controller: _refCtrl,
+              decoration:
+                  const InputDecoration(labelText: 'Reference (optional)'),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: () {
+            final staff = _staffId?.trim() ?? '';
+            if (staff.isEmpty) return;
+            final type = _typeCtrl.text.trim().isEmpty
+                ? 'general'
+                : _typeCtrl.text.trim();
+            final ref = _refCtrl.text.trim();
+            Navigator.pop(
+              context,
+              _AssignStaffTaskResult(
+                staffId: staff,
+                taskType: type,
+                referenceId: ref.isEmpty ? null : ref,
+              ),
+            );
+          },
+          child: const Text('Create'),
+        ),
+      ],
     );
   }
 }

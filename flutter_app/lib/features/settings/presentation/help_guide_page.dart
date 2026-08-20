@@ -16,7 +16,12 @@ class HelpGuidePage extends StatelessWidget {
         title: const Text('How to use this app'),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_rounded),
-          onPressed: () => context.popOrGo('/settings'),
+          onPressed: () {
+            final loc = GoRouterState.of(context).uri.path;
+            context.popOrGo(
+              loc.startsWith('/staff') ? '/staff/home' : '/settings',
+            );
+          },
         ),
       ),
       body: HexaResponsiveCenter(

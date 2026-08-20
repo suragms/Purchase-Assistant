@@ -1411,7 +1411,7 @@ class PurchaseDetailBodyState extends ConsumerState<PurchaseDetailBody> {
     final paidPending = st == PurchaseStatus.paid ||
         (p.remaining <= 0.009 && st != PurchaseStatus.cancelled);
     final desktop =
-        MediaQuery.sizeOf(context).width >= kDesktopMin;
+        !widget.embedded && MediaQuery.sizeOf(context).width >= kDesktopMin;
     final biz = ref.read(invoiceBusinessProfileProvider);
 
     final api = ref.read(hexaApiProvider);

@@ -228,3 +228,39 @@ class DesktopSideNavFooter extends StatelessWidget {
     );
   }
 }
+
+/// Mobile full-screen detail — AppBar + single scroll owner. Do not squeeze
+/// desktop tables into this shell.
+class MobileDetailScaffold extends StatelessWidget {
+  const MobileDetailScaffold({
+    super.key,
+    required this.title,
+    required this.body,
+    this.actions,
+    this.floatingActionButton,
+    this.onBack,
+  });
+
+  final String title;
+  final Widget body;
+  final List<Widget>? actions;
+  final Widget? floatingActionButton;
+  final VoidCallback? onBack;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      resizeToAvoidBottomInset: true,
+      appBar: AppBar(
+        title: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_rounded),
+          onPressed: onBack ?? () => Navigator.maybePop(context),
+        ),
+        actions: actions,
+      ),
+      floatingActionButton: floatingActionButton,
+      body: body,
+    );
+  }
+}

@@ -11,6 +11,15 @@ import '../../../core/theme/hexa_colors.dart';
 import '../../../core/widgets/list_skeleton.dart';
 import '../../../shared/widgets/hexa_empty_state.dart';
 
+/// Stable per-id controllers — never allocate inside [ListView] itemBuilder.
+@visibleForTesting
+TextEditingController catalogReorderControllerFor(
+  Map<String, TextEditingController> values,
+  String id,
+) {
+  return values.putIfAbsent(id, TextEditingController.new);
+}
+
 /// Bulk set reorder thresholds for items that have none.
 class CatalogSetupReorderLevelsPage extends ConsumerStatefulWidget {
   const CatalogSetupReorderLevelsPage({super.key});
@@ -204,7 +213,7 @@ class _CatalogSetupReorderLevelsPageState
                     final name = it['name']?.toString() ?? '';
                     final unit =
                         (it['default_unit'] ?? it['unit'])?.toString() ?? 'bag';
-                    final ctrl = _values[id] ?? TextEditingController();
+                    final ctrl = catalogReorderControllerFor(_values, id);
                     return ListTile(
                       title: Text(
                         name,

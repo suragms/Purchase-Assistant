@@ -397,7 +397,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         leading: IconButton(
           tooltip: 'Back',
           icon: const Icon(Icons.arrow_back_rounded),
-          onPressed: () => context.popOrGo('/home'),
+          onPressed: () => context.popOrGo(isStaff ? '/staff/home' : '/home'),
         ),
       ),
       body: isDesktop

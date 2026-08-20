@@ -2433,13 +2433,10 @@ class _PurchaseItemEntrySheetState extends ConsumerState<PurchaseItemEntrySheet>
         padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
         child: StatefulBuilder(
               builder: (ctx2, setModal) {
-                return SingleChildScrollView(
-                  keyboardDismissBehavior:
-                      ScrollViewKeyboardDismissBehavior.onDrag,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
+                return Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
                       Text(
                         'Missing bag weight',
                         style: Theme.of(ctx2).textTheme.titleMedium?.copyWith(
@@ -2515,8 +2512,7 @@ class _PurchaseItemEntrySheetState extends ConsumerState<PurchaseItemEntrySheet>
                         ],
                       ),
                     ],
-                  ),
-                );
+                  );
               },
             ),
       );

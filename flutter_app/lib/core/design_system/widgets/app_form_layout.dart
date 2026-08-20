@@ -43,7 +43,7 @@ class AppFormLayout extends StatelessWidget {
     }
 
     return SingleChildScrollView(
-      physics: const BouncingScrollPhysics(),
+      physics: const ClampingScrollPhysics(),
       keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
       padding: padding,
       child: column,

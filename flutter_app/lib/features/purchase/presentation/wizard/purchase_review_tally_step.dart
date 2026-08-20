@@ -66,11 +66,13 @@ class PurchaseReviewTallyStep extends ConsumerWidget {
     required this.isEdit,
     required this.previewHumanId,
     required this.editHumanId,
+    this.embeddedInOuterScroll = false,
   });
 
   final bool isEdit;
   final String? previewHumanId;
   final String? editHumanId;
+  final bool embeddedInOuterScroll;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -189,10 +191,7 @@ class PurchaseReviewTallyStep extends ConsumerWidget {
       );
     }
 
-    return SingleChildScrollView(
-      keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-      padding: const EdgeInsets.only(bottom: 24),
-      child: Column(
+    final column = Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(
@@ -288,7 +287,15 @@ class PurchaseReviewTallyStep extends ConsumerWidget {
           const SizedBox(height: 12),
           termsSnapshot(),
         ],
-      ),
+    );
+
+    if (embeddedInOuterScroll) {
+      return column;
+    }
+    return SingleChildScrollView(
+      keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+      padding: const EdgeInsets.only(bottom: 24),
+      child: column,
     );
   }
 }

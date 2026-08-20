@@ -119,10 +119,9 @@ class _StockWarehouseFilterBodyState
 
   @override
   Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        mainAxisSize: MainAxisSize.min,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
         children: [
           Row(
               children: [
@@ -233,7 +232,6 @@ class _StockWarehouseFilterBodyState
               ],
             ),
           ],
-        ),
     );
   }
 

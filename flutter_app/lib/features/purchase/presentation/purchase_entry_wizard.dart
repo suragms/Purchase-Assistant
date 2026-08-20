@@ -2238,6 +2238,7 @@ class _PurchaseEntryWizardState extends ConsumerState<PurchaseEntryWizard>
             isEdit: isEdit,
             previewHumanId: _previewHumanId,
             editHumanId: _editHumanId,
+            embeddedInOuterScroll: true,
           ),
           const SizedBox(height: 24),
         ],

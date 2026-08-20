@@ -212,7 +212,9 @@ class _StaffItemGalleryPageState extends ConsumerState<StaffItemGalleryPage> {
                   },
                   onSelected: (v) => setState(() => _search = v),
                   fieldViewBuilder: (ctx, ctrl, focus, onFieldSubmitted) {
-                    if (ctrl.text != _search) ctrl.text = _search;
+                    if (!focus.hasFocus && ctrl.text != _search) {
+                      ctrl.text = _search;
+                    }
                     return TextField(
                       controller: ctrl,
                       focusNode: focus,

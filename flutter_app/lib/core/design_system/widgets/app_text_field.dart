@@ -36,6 +36,9 @@ class AppTextField extends StatefulWidget {
     this.focusNode,
     this.inputFormatters,
     this.maxLines = 1,
+    this.hintText,
+    this.scrollPadding = const EdgeInsets.all(20),
+    this.isSearch = false,
     // Optional callback when user presses Done/Go/Send — for form submission.
     this.onActionSubmit,
   });
@@ -68,6 +71,13 @@ class AppTextField extends StatefulWidget {
   final FocusNode? focusNode;
   final List<TextInputFormatter>? inputFormatters;
   final int maxLines;
+  final String? hintText;
+
+  /// Extra space below the field so IME + [Scrollable.ensureVisible] do not clip.
+  final EdgeInsets scrollPadding;
+
+  /// Search chrome: prefix search icon, denser hint, search action default.
+  final bool isSearch;
 
   /// Called when user presses Done/Go/Send/Enter (submit actions).
   /// If null and [textInputAction] is a submit action, falls back to [onSubmitted].
@@ -86,7 +96,8 @@ class _AppTextFieldState extends State<AppTextField> {
 
   void _onControllerTick() => setState(() {});
 
-  IconData? _defaultLeadingIcon() {
+    IconData? _defaultLeadingIcon() {
+    if (widget.isSearch) return Icons.search_rounded;
     if (widget.obscureText) return Icons.lock_outline_rounded;
     if (widget.keyboardType == TextInputType.emailAddress) {
       return Icons.mail_outline_rounded;
@@ -226,7 +237,8 @@ class _AppTextFieldState extends State<AppTextField> {
           autofocus: widget.autofocus,
           obscureText: widget.obscureText,
           keyboardType: widget.keyboardType,
-          textInputAction: widget.textInputAction,
+          textInputAction: widget.textInputAction ??
+              (widget.isSearch ? TextInputAction.search : null),
           autocorrect: widget.autocorrect,
           textCapitalization: widget.textCapitalization,
           inputFormatters: widget.inputFormatters,
@@ -239,16 +251,14 @@ class _AppTextFieldState extends State<AppTextField> {
           onEditingComplete: _handleEditingComplete,
           onChanged: widget.onChanged,
           autofillHints: widget.autofillHints,
-          // Ensure native copy/paste/selectAll works on all platforms.
           enableInteractiveSelection: true,
-          toolbarOptions: const ToolbarOptions(
-            copy: true,
-            cut: true,
-            paste: true,
-            selectAll: true,
-          ),
+          scrollPadding: widget.scrollPadding,
+          mouseCursor: widget.enabled
+              ? SystemMouseCursors.text
+              : SystemMouseCursors.basic,
           decoration: InputDecoration(
             labelText: widget.label,
+            hintText: widget.hintText,
             helperText: hasError ? null : helperOrSuccess,
             errorText: hasError ? widget.errorText : null,
             errorMaxLines: 3,
@@ -357,5 +367,43 @@ class _AppTextFieldState extends State<AppTextField> {
     }
 
     return field;
+  }
+}
+
+/// Canonical search field — parent owns [controller] / [focusNode] lifecycle.
+class AppSearchField extends StatelessWidget {
+  const AppSearchField({
+    super.key,
+    required this.controller,
+    this.focusNode,
+    this.hintText = 'Search',
+    this.onChanged,
+    this.onSubmitted,
+    this.enabled = true,
+    this.autofocus = false,
+  });
+
+  final TextEditingController controller;
+  final FocusNode? focusNode;
+  final String hintText;
+  final ValueChanged<String>? onChanged;
+  final ValueChanged<String>? onSubmitted;
+  final bool enabled;
+  final bool autofocus;
+
+  @override
+  Widget build(BuildContext context) {
+    return AppTextField(
+      controller: controller,
+      focusNode: focusNode,
+      label: hintText,
+      hintText: hintText,
+      isSearch: true,
+      enabled: enabled,
+      autofocus: autofocus,
+      onChanged: onChanged,
+      onSubmitted: onSubmitted,
+      textInputAction: TextInputAction.search,
+    );
   }
 }

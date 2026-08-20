@@ -804,13 +804,9 @@ class _BrokerWizardPageState extends ConsumerState<BrokerWizardPage> {
   Widget _body() {
     switch (_step) {
       case 0:
-        return SingleChildScrollView(
-          padding: EdgeInsets.only(
-            bottom: MediaQuery.paddingOf(context).bottom + 8,
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
               _step0(context),
               const SizedBox(height: 4),
               Theme(
@@ -855,8 +851,7 @@ class _BrokerWizardPageState extends ConsumerState<BrokerWizardPage> {
                 ),
               ),
             ],
-          ),
-        );
+          );
       default:
         return _step1(context);
     }

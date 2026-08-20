@@ -361,59 +361,63 @@ class _BackupPageState extends ConsumerState<BackupPage> {
     final bid = ref.read(sessionProvider)?.primaryBusiness.id;
     if (bid == null) return;
     final ctrl = TextEditingController();
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Restore dry-run'),
-        content: SizedBox(
-          width: 480,
-          child: AppTextField(
-            controller: ctrl,
-            maxLines: 12,
-            label: 'Paste backup JSON here (never commits)',
+    try {
+      final ok = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Restore dry-run'),
+          content: SizedBox(
+            width: 480,
+            child: AppTextField(
+              controller: ctrl,
+              maxLines: 12,
+              label: 'Paste backup JSON here (never commits)',
+            ),
           ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Validate'),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Validate'),
-          ),
-        ],
-      ),
-    );
-    if (ok != true || !mounted) return;
-    Map<String, dynamic> payload;
-    try {
-      final decoded = jsonDecode(ctrl.text);
-      if (decoded is! Map<String, dynamic>) {
-        throw const FormatException('JSON root must be an object');
-      }
-      payload = decoded;
-    } catch (_) {
-      showTopSnack(context, 'Invalid JSON', isError: true);
-      return;
-    }
-    setState(() => _busyDryRun = true);
-    try {
-      final out = await ref.read(hexaApiProvider).restoreDryRun(
-            businessId: bid,
-            payload: payload,
-          );
-      if (!mounted) return;
-      setState(() => _dryRunResult = out);
-      showTopSnack(
-        context,
-        out['ok'] == true ? 'Dry-run passed' : 'Dry-run failed',
-        isError: out['ok'] != true,
       );
-    } on DioException catch (e) {
-      if (mounted) showTopSnack(context, friendlyApiError(e), isError: true);
+      if (ok != true || !mounted) return;
+      Map<String, dynamic> payload;
+      try {
+        final decoded = jsonDecode(ctrl.text);
+        if (decoded is! Map<String, dynamic>) {
+          throw const FormatException('JSON root must be an object');
+        }
+        payload = decoded;
+      } catch (_) {
+        showTopSnack(context, 'Invalid JSON', isError: true);
+        return;
+      }
+      setState(() => _busyDryRun = true);
+      try {
+        final out = await ref.read(hexaApiProvider).restoreDryRun(
+              businessId: bid,
+              payload: payload,
+            );
+        if (!mounted) return;
+        setState(() => _dryRunResult = out);
+        showTopSnack(
+          context,
+          out['ok'] == true ? 'Dry-run passed' : 'Dry-run failed',
+          isError: out['ok'] != true,
+        );
+      } on DioException catch (e) {
+        if (mounted) showTopSnack(context, friendlyApiError(e), isError: true);
+      } finally {
+        if (mounted) setState(() => _busyDryRun = false);
+      }
     } finally {
-      if (mounted) setState(() => _busyDryRun = false);
+      ctrl.dispose();
     }
   }
 

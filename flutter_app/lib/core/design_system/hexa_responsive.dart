@@ -412,6 +412,11 @@ class HexaResponsiveSheetViewport extends StatelessWidget {
 }
 
 /// Standard bottom sheet host — compact sheets hug content (no top blank gap).
+///
+/// Contract: [compact] true → shrink-wrapped [ListView] (short forms). Do **not**
+/// wrap [child] in an expanding [SingleChildScrollView]. [compact] false → fixed
+/// height; [child] owns inner [ListView]/[Expanded]. Scaffold/dialog owns IME;
+/// do not add [MediaQuery.viewInsets] padding on the body.
 Future<T?> showHexaBottomSheet<T>({
   required BuildContext context,
   required Widget child,

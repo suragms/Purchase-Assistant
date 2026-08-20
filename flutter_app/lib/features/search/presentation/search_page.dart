@@ -271,9 +271,8 @@ class _SearchPageState extends ConsumerState<SearchPage> {
           ref.read(searchFocusRequestedProvider)) {
         ref.read(searchFocusRequestedProvider.notifier).state = false;
         _focus.requestFocus();
-      } else if (!widget.staffShellEmbedded) {
-        _focus.requestFocus();
-      } else {
+      } else if (GoRouterState.of(context).uri.queryParameters['autofocus'] ==
+          'true') {
         _focus.requestFocus();
       }
     });
