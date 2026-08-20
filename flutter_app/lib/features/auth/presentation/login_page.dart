@@ -23,7 +23,6 @@ import '../../../../core/theme/hexa_colors.dart';
 import 'auth_brand_assets.dart';
 import 'widgets/auth_network_error_banner.dart';
 import 'widgets/auth_page_shell.dart';
-import '../../../../shared/widgets/keyboard_safe_form_viewport.dart';
 
 /// Keyboard-safe, centered card login (no hero image) — iOS + web friendly.
 class LoginPage extends ConsumerStatefulWidget {
@@ -369,28 +368,33 @@ class _LoginPageState extends ConsumerState<LoginPage>
     final pErr = _passError();
 
     return Scaffold(
-      backgroundColor: const Color(0xFFE8F5F2),
-      resizeToAvoidBottomInset: true,
-      body: GestureDetector(
-        behavior: HitTestBehavior.deferToChild,
-        onTap: () => FocusScope.of(context).unfocus(),
-        child: context.isMobileLayout
-            ? _buildMobileLayout(eErr, pErr)
-            : _buildDesktopLayout(eErr, pErr),
+      backgroundColor: Colors.transparent,
+      resizeToAvoidBottomInset: HexaResponsive.shouldResizeScaffoldForIme(context),
+      body: MediaQuery(
+        data: !context.isMobileLayout
+            ? MediaQuery.of(context).copyWith(viewInsets: EdgeInsets.zero)
+            : MediaQuery.of(context),
+        child: GestureDetector(
+          behavior: HitTestBehavior.deferToChild,
+          onTap: () => FocusScope.of(context).unfocus(),
+          child: context.isMobileLayout
+              ? _buildMobileLayout(eErr, pErr)
+              : _buildDesktopLayout(eErr, pErr),
+        ),
       ),
     );
   }
 
   // ─────────────────────────────────────────────────────────────────────────────
-  // Desktop / Tablet layout — uses AppTextField + KeyboardSafeFormViewport
+  // Desktop / Tablet layout — single scroll owner (AuthPageShell); no nested KSFV
   // ─────────────────────────────────────────────────────────────────────────────
 
   Widget _buildDesktopLayout(String? eErr, String? pErr) {
     return AuthPageShell(
       children: [
         AuthFormCard(
-          child: KeyboardSafeFormViewport(
-            fields: AutofillGroup(
+          child: FocusTraversalGroup(
+            child: AutofillGroup(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
@@ -445,6 +449,7 @@ class _LoginPageState extends ConsumerState<LoginPage>
                     textInputAction: TextInputAction.next,
                     autofillHints: const [AutofillHints.email],
                     errorText: eErr,
+                    scrollPadding: HexaResponsive.authFieldScrollPadding(context),
                   ),
                   AppTextField(
                     controller: _loginPass,
@@ -454,6 +459,7 @@ class _LoginPageState extends ConsumerState<LoginPage>
                     textInputAction: TextInputAction.done,
                     autofillHints: const [AutofillHints.password],
                     errorText: pErr,
+                    scrollPadding: HexaResponsive.authFieldScrollPadding(context),
                     onActionSubmit: _isFormValid ? _signIn : null,
                     suffix: IconButton(
                       tooltip: _obscure ? 'Show password' : 'Hide password',
@@ -512,67 +518,62 @@ class _LoginPageState extends ConsumerState<LoginPage>
                       ),
                     ],
                   ],
-                ],
-              ),
-            ),
-            footer: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const SizedBox(height: 12),
-                AppLoadingButton(
-                  label: 'Sign In',
-                  loading: _loading,
-                  onPressed: _isFormValid
-                      ? _signIn
-                      : () => setState(() => _showValidation = true),
-                ),
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: TextButton(
-                    style: TextButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 4),
-                      minimumSize: Size.zero,
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  const SizedBox(height: 12),
+                  AppLoadingButton(
+                    label: 'Sign In',
+                    loading: _loading,
+                    onPressed: _isFormValid
+                        ? _signIn
+                        : () => setState(() => _showValidation = true),
+                  ),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: TextButton(
+                      style: TextButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 4),
+                        minimumSize: Size.zero,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                      onPressed: _loading
+                          ? null
+                          : () {
+                              context.go('/forgot-password');
+                            },
+                      child: Text(
+                        'Forgot password?',
+                        style: HexaDsType.body(12,
+                            color: HexaDsColors.textMuted,
+                            weight: FontWeight.w500),
+                      ),
                     ),
-                    onPressed: _loading
-                        ? null
-                        : () {
-                            context.go('/forgot-password');
-                          },
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
                     child: Text(
-                      'Forgot password?',
-                      style: HexaDsType.body(12,
-                          color: HexaDsColors.textMuted,
-                          weight: FontWeight.w500),
+                      'Contact your manager to reset password',
+                      style: HexaDsType.body(12, color: HexaDsColors.textMuted),
                     ),
                   ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: Text(
-                    'Contact your manager to reset password',
-                    style: HexaDsType.body(12, color: HexaDsColors.textMuted),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                if (AppConfig.buildSha.isNotEmpty)
+                  const SizedBox(height: 8),
+                  if (AppConfig.buildSha.isNotEmpty)
+                    Text(
+                      'Build ${AppConfig.buildSha}',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: Colors.grey.shade500,
+                      ),
+                    ),
                   Text(
-                    'Build ${AppConfig.buildSha}',
+                    '© 2026',
                     textAlign: TextAlign.center,
                     style: TextStyle(
-                      fontSize: 10,
-                      color: Colors.grey.shade500,
+                      fontSize: 11,
+                      color: Colors.grey.shade600,
                     ),
                   ),
-                Text(
-                  '© 2026',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: Colors.grey.shade600,
-                  ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
@@ -581,7 +582,7 @@ class _LoginPageState extends ConsumerState<LoginPage>
   }
 
   // ─────────────────────────────────────────────────────────────────────────────
-  // Mobile layout — uses AppTextField + KeyboardSafeFormViewport
+  // Mobile layout — single scroll + glass card (no nested KSFV)
   // ─────────────────────────────────────────────────────────────────────────────
 
   Widget _buildMobileLayout(String? eErr, String? pErr) {

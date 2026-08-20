@@ -272,6 +272,24 @@ abstract final class HexaResponsive {
     final ratio = landscape ? 0.92 : 0.86;
     return math.max(280, size.height * ratio);
   }
+
+  /// Phone-only: scaffold shrinks for soft keyboard. Tablet/desktop auth and
+  /// forms ignore spurious Flutter-web [viewInsets] on text focus.
+  static bool shouldResizeScaffoldForIme(BuildContext context) {
+    return context.isMobileLayout;
+  }
+
+  /// True when a soft keyboard is open on phone layouts only.
+  static bool isImeOpen(BuildContext context) {
+    if (!context.isMobileLayout) return false;
+    return MediaQuery.viewInsetsOf(context).bottom > 0;
+  }
+
+  /// [TextField.scrollPadding] for auth surfaces — zero on tablet/desktop web
+  /// so [Scrollable.ensureVisible] does not pan the page on focus/type.
+  static EdgeInsets authFieldScrollPadding(BuildContext context) {
+    return context.isMobileLayout ? const EdgeInsets.all(20) : EdgeInsets.zero;
+  }
 }
 
 class HexaResponsiveCenter extends StatelessWidget {

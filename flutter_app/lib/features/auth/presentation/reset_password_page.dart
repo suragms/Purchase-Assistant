@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'dart:developer' as developer;
 import 'package:go_router/go_router.dart';
 
+import '../../../../core/design_system/hexa_responsive.dart';
 import '../../../../core/design_system/widgets/app_text_field.dart';
 import '../../../../core/auth/auth_error_messages.dart';
 import '../../../../core/auth/session_notifier.dart';
@@ -184,10 +185,135 @@ class _ResetPasswordPageState extends ConsumerState<ResetPasswordPage> {
     final p1 = _passError();
     final p2 = _pass2Error();
 
+    final fields = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const Text(
+          'Choose a new password',
+          style: TextStyle(
+            fontSize: 20,
+            fontWeight: FontWeight.w800,
+            color: HexaColors.brandPrimary,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Use at least 8 characters.',
+          style: TextStyle(fontSize: 13, color: Colors.grey.shade700),
+        ),
+        const SizedBox(height: 12),
+        if (_showNetworkBanner)
+          AuthNetworkErrorBanner(
+            onRetry: _retry,
+            title: authUnreachableBannerTitle(_lastNetworkError),
+            detail: authServerUnreachableDetail(_lastNetworkError),
+          ),
+        AppTextField(
+          controller: _pass,
+          focusNode: _passFocus,
+          label: 'New password',
+          obscureText: _obscure1,
+          textInputAction: TextInputAction.next,
+          autofillHints: const [AutofillHints.newPassword],
+          errorText: p1,
+          suffix: IconButton(
+            onPressed: () => setState(() => _obscure1 = !_obscure1),
+            icon: Icon(
+              _obscure1
+                  ? Icons.visibility_outlined
+                  : Icons.visibility_off_outlined,
+              color: HexaColors.gray500,
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        AppTextField(
+          controller: _pass2,
+          focusNode: _pass2Focus,
+          label: 'Confirm password',
+          obscureText: _obscure2,
+          textInputAction: TextInputAction.done,
+          autofillHints: const [AutofillHints.newPassword],
+          errorText: p2,
+          onActionSubmit: _isFormValid ? _submit : null,
+          suffix: IconButton(
+            onPressed: () => setState(() => _obscure2 = !_obscure2),
+            icon: Icon(
+              _obscure2
+                  ? Icons.visibility_outlined
+                  : Icons.visibility_off_outlined,
+              color: HexaColors.gray500,
+            ),
+          ),
+        ),
+        if (_inlineError != null) ...[
+          const SizedBox(height: 8),
+          Text(
+            _inlineError!,
+            style: TextStyle(color: Colors.red.shade700, fontSize: 13),
+          ),
+        ],
+        if (_success != null) ...[
+          const SizedBox(height: 12),
+          Text(
+            _success!,
+            style: TextStyle(color: Colors.green.shade800, fontSize: 13),
+          ),
+        ],
+      ],
+    );
+
+    final footer = _success != null
+        ? Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const SizedBox(height: 12),
+              FilledButton(
+                onPressed: () => context.go('/login'),
+                child: const Text('Go to sign in'),
+              ),
+            ],
+          )
+        : Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                height: 50,
+                child: FilledButton(
+                  onPressed: _loading
+                      ? null
+                      : (_isFormValid
+                          ? _submit
+                          : () => setState(() => _showValidation = true)),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: HexaColors.brandPrimary,
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                  child: _loading
+                      ? const SizedBox(
+                          width: 22,
+                          height: 22,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Text('Update password'),
+                ),
+              ),
+            ],
+          );
+
     return Scaffold(
       backgroundColor: Colors.transparent,
       extendBodyBehindAppBar: true,
-      resizeToAvoidBottomInset: true,
+      resizeToAvoidBottomInset: HexaResponsive.shouldResizeScaffoldForIme(context),
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
@@ -203,131 +329,20 @@ class _ResetPasswordPageState extends ConsumerState<ResetPasswordPage> {
         child: AuthPageShell(
           children: [
             AuthFormCard(
-              child: KeyboardSafeFormViewport(
-                fields: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    const Text(
-                      'Choose a new password',
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.w800,
-                        color: HexaColors.brandPrimary,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Use at least 8 characters.',
-                      style: TextStyle(fontSize: 13, color: Colors.grey.shade700),
-                    ),
-                    const SizedBox(height: 12),
-                    if (_showNetworkBanner)
-                      AuthNetworkErrorBanner(
-                        onRetry: _retry,
-                        title: authUnreachableBannerTitle(_lastNetworkError),
-                        detail: authServerUnreachableDetail(_lastNetworkError),
-                      ),
-                    AppTextField(
-                      controller: _pass,
-                      focusNode: _passFocus,
-                      label: 'New password',
-                      obscureText: _obscure1,
-                      textInputAction: TextInputAction.next,
-                      autofillHints: const [AutofillHints.newPassword],
-                      errorText: p1,
-                      suffix: IconButton(
-                        onPressed: () => setState(() => _obscure1 = !_obscure1),
-                        icon: Icon(
-                          _obscure1
-                              ? Icons.visibility_outlined
-                              : Icons.visibility_off_outlined,
-                          color: HexaColors.gray500,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    AppTextField(
-                      controller: _pass2,
-                      focusNode: _pass2Focus,
-                      label: 'Confirm password',
-                      obscureText: _obscure2,
-                      textInputAction: TextInputAction.done,
-                      autofillHints: const [AutofillHints.newPassword],
-                      errorText: p2,
-                      onActionSubmit: _isFormValid ? _submit : null,
-                      suffix: IconButton(
-                        onPressed: () => setState(() => _obscure2 = !_obscure2),
-                        icon: Icon(
-                          _obscure2
-                              ? Icons.visibility_outlined
-                              : Icons.visibility_off_outlined,
-                          color: HexaColors.gray500,
-                        ),
-                      ),
-                    ),
-                    if (_inlineError != null) ...[
-                      const SizedBox(height: 8),
-                      Text(
-                        _inlineError!,
-                        style: TextStyle(color: Colors.red.shade700, fontSize: 13),
-                      ),
-                    ],
-                    if (_success != null) ...[
-                      const SizedBox(height: 12),
-                      Text(
-                        _success!,
-                        style: TextStyle(color: Colors.green.shade800, fontSize: 13),
-                      ),
-                    ],
-                  ],
-                ),
-                footer: _success != null
-                    ? Column(
+              child: context.isMobileLayout
+                  ? KeyboardSafeFormViewport(
+                      fields: fields,
+                      footer: footer,
+                    )
+                  : FocusTraversalGroup(
+                      child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          const SizedBox(height: 12),
-                          FilledButton(
-                            onPressed: () => context.go('/login'),
-                            child: const Text('Go to sign in'),
-                          ),
-                        ],
-                      )
-                    : Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          const SizedBox(height: 12),
-                          SizedBox(
-                            width: double.infinity,
-                            height: 50,
-                            child: FilledButton(
-                              onPressed: _loading
-                                  ? null
-                                  : (_isFormValid
-                                      ? _submit
-                                      : () => setState(() => _showValidation = true)),
-                              style: FilledButton.styleFrom(
-                                backgroundColor: HexaColors.brandPrimary,
-                                foregroundColor: Colors.white,
-                                elevation: 0,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                              ),
-                              child: _loading
-                                  ? const SizedBox(
-                                      width: 22,
-                                      height: 22,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                        color: Colors.white,
-                                      ),
-                                    )
-                                  : const Text('Update password'),
-                            ),
-                          ),
+                          fields,
+                          footer,
                         ],
                       ),
-              ),
+                    ),
             ),
           ],
         ),

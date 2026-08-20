@@ -14,12 +14,30 @@ html.EventListener? _vvListener;
       return (width: w, height: h);
     }
   }
+  return readBrowserLayoutViewport();
+}
+
+/// Layout viewport (window.inner*) — stable when visualViewport shrinks on
+/// desktop text focus (Flutter web IME artifact).
+({double width, double height})? readBrowserLayoutViewport() {
   final w = html.window.innerWidth?.toDouble();
   final h = html.window.innerHeight?.toDouble();
   if (w == null || h == null || !w.isFinite || !h.isFinite || w <= 0 || h <= 0) {
     return null;
   }
   return (width: w, height: h);
+}
+
+/// Phone: visual viewport. Desktop/tablet-wide: layout viewport only so focus
+/// does not halve [MediaQuery.size] and expose the HTML body band.
+({double width, double height})? readBrowserCssViewportForBinder({
+  required double flutterWidth,
+  required double desktopMinWidth,
+}) {
+  if (flutterWidth >= desktopMinWidth) {
+    return readBrowserLayoutViewport();
+  }
+  return readBrowserCssViewport();
 }
 
 void listenBrowserCssViewport(void Function() onChange) {

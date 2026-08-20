@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
+import '../design_system/hexa_responsive.dart';
 import 'hexa_web_viewport_size_stub.dart'
     if (dart.library.html) 'hexa_web_viewport_size_web.dart' as browser_vp;
 
@@ -29,8 +30,18 @@ class _HexaWebViewportBinderState extends State<HexaWebViewportBinder> {
   void initState() {
     super.initState();
     if (!kIsWeb) return;
-    _browser = browser_vp.readBrowserCssViewport();
+    _browser = _readBrowser(null);
     browser_vp.listenBrowserCssViewport(_onBrowserViewportChanged);
+  }
+
+  ({double width, double height})? _readBrowser(double? flutterWidth) {
+    if (flutterWidth != null && flutterWidth > 0) {
+      return browser_vp.readBrowserCssViewportForBinder(
+        flutterWidth: flutterWidth,
+        desktopMinWidth: kDesktopMin,
+      );
+    }
+    return browser_vp.readBrowserCssViewport();
   }
 
   @override
@@ -40,7 +51,9 @@ class _HexaWebViewportBinderState extends State<HexaWebViewportBinder> {
   }
 
   void _onBrowserViewportChanged() {
-    final next = browser_vp.readBrowserCssViewport();
+    final mq = MediaQuery.maybeOf(context);
+    final flutterW = mq?.size.width ?? 0;
+    final next = _readBrowser(flutterW > 0 ? flutterW : null);
     if (next == null) return;
     final prev = _browser;
     if (prev != null &&
@@ -55,19 +68,28 @@ class _HexaWebViewportBinderState extends State<HexaWebViewportBinder> {
   @override
   Widget build(BuildContext context) {
     if (!kIsWeb) return widget.child;
-    final browser = _browser ?? browser_vp.readBrowserCssViewport();
-    if (browser == null) return widget.child;
 
     final mq = MediaQuery.of(context);
+    final browser = _browser ??
+        _readBrowser(mq.size.width > 0 ? mq.size.width : null);
+    if (browser == null) return widget.child;
+
     final flutterW = mq.size.width;
     final flutterH = mq.size.height;
     final mismatchW = (flutterW - browser.width).abs() >= _mismatchPx;
     final mismatchH = (flutterH - browser.height).abs() >= _mismatchPx;
-    if (!mismatchW && !mismatchH) return widget.child;
+    final desktopWide = browser.width >= kDesktopMin;
+    final stripIme = desktopWide || !context.isMobileLayout;
+
+    if (!mismatchW && !mismatchH && !stripIme) return widget.child;
 
     return MediaQuery(
       data: mq.copyWith(
-        size: Size(browser.width, browser.height),
+        size: Size(
+          mismatchW ? browser.width : flutterW,
+          mismatchH ? browser.height : flutterH,
+        ),
+        viewInsets: stripIme ? EdgeInsets.zero : mq.viewInsets,
       ),
       child: widget.child,
     );

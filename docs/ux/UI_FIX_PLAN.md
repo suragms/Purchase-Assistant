@@ -197,5 +197,6 @@ Verified in source (not claimed “works” until tests below):
 - **Shared:** `AppSearchField`, `AppSelectField`, `AppTooltip`, `showHexaConfirmDialog`, `AppClickTarget`, `MobileDetailScaffold`; IME still owned by Scaffold + `KeyboardSafeFormViewport` default `useViewInsetBottom: false`.
 - **Foundation (2026-08-20 slice):** barrel re-exports empty/error/skeleton; confirm dialog uses `AppSecondaryButton` / `AppPrimaryButton`; autocomplete overlay rows use click cursor.
 - **Login:** Sign In uses `AppLoadingButton`; email/password controllers remain empty (no prefill). `VERIFIED_TEST` login keyboard viewport.
+- **Desktop auth IME (2026-08-20):** `HexaResponsive.shouldResizeScaffoldForIme` / `isImeOpen`; `AuthPageShell` stays centered on desktop; login/forgot/reset flatten nested `KeyboardSafeFormViewport` on tablet+desktop; login scaffold transparent. `VERIFIED_TEST` login desktop card center + shell fill.
 - **Purchase Batch 1:** bag-weight compact sheet is shrink `Column` (host owns scroll); `kgCtrl` disposed in `finally` (`VERIFIED_CODE`). Desktop review already `embeddedInOuterScroll`.
 

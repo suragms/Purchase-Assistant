@@ -65,6 +65,57 @@ void main() {
     expect(topLeft.dy, lessThan(size.height));
   }
 
+  void expectDesktopCardCentered(WidgetTester tester, Size size) {
+    final card = find.byType(AuthFormCard);
+    expect(card, findsOneWidget);
+    final cardBox = tester.renderObject<RenderBox>(card);
+    final cardTop = cardBox.localToGlobal(Offset.zero).dy;
+    final cardCenterY = cardTop + cardBox.size.height / 2;
+    final lowerBound = size.height * 0.2;
+    final upperBound = size.height * 0.8;
+    expect(
+      cardCenterY,
+      inInclusiveRange(lowerBound, upperBound),
+      reason: 'Auth card center Y ($cardCenterY) should stay in middle 60% '
+          'of viewport ($lowerBound–$upperBound) on desktop',
+    );
+  }
+
+  void expectAuthShellFillsViewport(WidgetTester tester, Size size) {
+    final shell = find.byType(AuthPageShell);
+    expect(shell, findsOneWidget);
+    final shellBox = tester.renderObject<RenderBox>(shell);
+    expect(
+      shellBox.size.height,
+      greaterThanOrEqualTo(size.height * 0.95),
+      reason: 'AuthPageShell height (${shellBox.size.height}) must fill viewport '
+          '(${size.height}) — shrunk scaffold body exposes blank band',
+    );
+  }
+
+  testWidgets(
+      'desktop login: typing in email keeps card centered with IME inset',
+      (tester) async {
+    const desktop = Size(1536, 776);
+    final insets = ValueNotifier(EdgeInsets.zero);
+    addTearDown(insets.dispose);
+
+    await pumpLogin(tester, size: desktop, insets: insets);
+
+    final email = _fieldByDecoration('Email');
+    await tester.tap(email);
+    await tester.pump();
+    await tester.enterText(email, 'a');
+    await tester.pump();
+
+    insets.value = const EdgeInsets.only(bottom: 320);
+    await tester.pumpAndSettle();
+
+    expectEmailFieldTopInViewport(tester, desktop);
+    expectDesktopCardCentered(tester, desktop);
+    expectAuthShellFillsViewport(tester, desktop);
+  });
+
   testWidgets(
       'desktop login: password focus + IME keeps email within viewport',
       (tester) async {
@@ -84,6 +135,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expectEmailFieldTopInViewport(tester, desktop);
+    expectDesktopCardCentered(tester, desktop);
+    expectAuthShellFillsViewport(tester, desktop);
     final card = find.byType(AuthFormCard);
     expect(card, findsOneWidget);
     final cardTop =

@@ -2,6 +2,7 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 
+import '../../../../core/design_system/hexa_responsive.dart';
 import '../../../../core/theme/hexa_colors.dart';
 import '../auth_brand_assets.dart';
 
@@ -16,8 +17,10 @@ class AuthPageShell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final keyboardOpen = MediaQuery.viewInsetsOf(context).bottom > 0;
-    return Stack(
+    final keyboardOpen = HexaResponsive.isImeOpen(context);
+    final useAuthDesktopChrome = !context.isMobileLayout;
+
+    Widget shell = Stack(
       fit: StackFit.expand,
       children: [
         Positioned.fill(
@@ -52,6 +55,21 @@ class AuthPageShell extends StatelessWidget {
         SafeArea(
           child: LayoutBuilder(
             builder: (context, constraints) {
+              final form = ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 420),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: children,
+                ),
+              );
+
+              // Desktop: centered card, no scroll — avoids focus-driven scroll
+              // clipping the email field and exposing the HTML body below.
+              if (useAuthDesktopChrome) {
+                return Center(child: form);
+              }
+
               return Align(
                 alignment: keyboardOpen
                     ? Alignment.topCenter
@@ -65,10 +83,10 @@ class AuthPageShell extends StatelessWidget {
                   child: ConstrainedBox(
                     constraints: BoxConstraints(
                       maxWidth: 420,
-                      // When centered, fill min height so Align can center the card.
                       minHeight: keyboardOpen
                           ? 0
-                          : (constraints.maxHeight - 40).clamp(0.0, double.infinity),
+                          : (constraints.maxHeight - 40)
+                              .clamp(0.0, double.infinity),
                     ),
                     child: Column(
                       mainAxisAlignment: keyboardOpen
@@ -85,6 +103,18 @@ class AuthPageShell extends StatelessWidget {
         ),
       ],
     );
+
+    // Web can inject viewInsets on text focus even without a soft keyboard.
+    // Strip on desktop so descendants never shrink or top-align spuriously.
+    if (useAuthDesktopChrome) {
+      final mq = MediaQuery.of(context);
+      shell = MediaQuery(
+        data: mq.copyWith(viewInsets: EdgeInsets.zero),
+        child: shell,
+      );
+    }
+
+    return shell;
   }
 }
 
