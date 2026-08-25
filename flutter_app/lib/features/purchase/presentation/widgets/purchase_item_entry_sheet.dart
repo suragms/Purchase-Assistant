@@ -1,4 +1,5 @@
 ﻿import 'dart:async';
+import 'purchase_item_entry_primary_form.dart';
 import 'purchase_sheet_ui_helpers.dart';
 
 import 'dart:math' as math;
@@ -81,6 +82,13 @@ class PurchaseItemEntrySheet extends ConsumerStatefulWidget {
     /// Full-screen [Scaffold] (ENTRY Prompt 1) instead of a bottom sheet.
     this.fullPage = false,
 
+    /// When true, fills an external host (desktop drawer / tablet panel).
+    /// Skips Navigator pop and `HexaResponsiveCenter` form max — host owns chrome.
+    this.embedded = false,
+
+    /// Called instead of [popImperativeOrGo] when [embedded] is true.
+    this.onEmbeddedDismiss,
+
     /// When true, line payload omits freight / delivered / billty / line discount (purchase header carries these).
     this.omitLineFreightDeliveredBilltyDiscount = false,
 
@@ -106,6 +114,8 @@ class PurchaseItemEntrySheet extends ConsumerStatefulWidget {
       resolveLastDefaults;
   final void Function(Map<String, dynamic> defaults)? onDefaultsResolved;
   final bool fullPage;
+  final bool embedded;
+  final ValueChanged<Object?>? onEmbeddedDismiss;
   final bool omitLineFreightDeliveredBilltyDiscount;
   final Future<Map<String, dynamic>?> Function()? navigateCatalogQuickAddItem;
   final PersistCatalogBagWeight? persistCatalogBagWeight;
@@ -448,6 +458,12 @@ class _PurchaseItemEntrySheetState extends ConsumerState<PurchaseItemEntrySheet>
       setState(() => _taxMode = saved);
       _taxModeNotifier.value = saved;
     });
+    if (widget.embedded && !widget.isEdit) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _itemFocus.requestFocus();
+      });
+    }
   }
 
   void _syncKgStateFromCatalogRow() {
@@ -809,7 +825,7 @@ class _PurchaseItemEntrySheetState extends ConsumerState<PurchaseItemEntrySheet>
         if (!ordered.contains(x)) x,
     ];
     return KeyedSubtree(
-      key: ValueKey<String>('unit|$v'),
+      key: const ValueKey<String>('unit-field'),
       child: Theme(
         data: Theme.of(context).copyWith(
           hoverColor: HexaColors.primaryLight.withValues(alpha: 0.35),
@@ -1591,6 +1607,10 @@ class _PurchaseItemEntrySheetState extends ConsumerState<PurchaseItemEntrySheet>
 
   void _popSheet<T extends Object?>([T? result]) {
     if (!mounted) return;
+    if (widget.embedded) {
+      widget.onEmbeddedDismiss?.call(result);
+      return;
+    }
     popImperativeOrGo(
       context,
       fallbackGo: '/purchase',
@@ -2107,6 +2127,14 @@ class _PurchaseItemEntrySheetState extends ConsumerState<PurchaseItemEntrySheet>
           unawaited(PurchaseSmartDefaults.recordQtyForItem(itemId, qty));
         }
       }
+      if (widget.embedded) {
+        if (closeSheet) {
+          _popSheet(false);
+        } else {
+          _resetAfterAdd();
+        }
+        return;
+      }
       if (!widget.fullPage) {
         if (closeSheet) {
           _popSheet();
@@ -2115,8 +2143,12 @@ class _PurchaseItemEntrySheetState extends ConsumerState<PurchaseItemEntrySheet>
         }
         return;
       }
-      // Full-screen page: caller may chain another add via pop result.
-      _popSheet<bool>(!closeSheet);
+      // Full-screen mobile page: stay on form for DONE +; pop only on SAVE LINE.
+      if (!closeSheet) {
+        _resetAfterAdd();
+        return;
+      }
+      _popSheet<bool>(false);
     } finally {
       if (mounted) {
         setState(() => _commitInFlight = false);
@@ -3204,6 +3236,27 @@ class _PurchaseItemEntrySheetState extends ConsumerState<PurchaseItemEntrySheet>
     );
   }
 
+  /// Compact line total for embedded desktop editor footer (no card chrome).
+  Widget _embeddedLineTotalStrip(ThemeData theme) {
+    final line = _currentLine();
+    final net = lineNetTaxableDecimal(line, taxMode: _taxMode).toDouble();
+    final tax = lineTaxAmount(line, taxMode: _taxMode);
+    final tot = lineMoney(line, taxMode: _taxMode);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Text(
+        'Net ${formatRupee(net, decimals: true)} · '
+        'Tax ${formatRupee(tax, decimals: true)} · '
+        'Total ${formatRupee(tot, decimals: true)}',
+        style: theme.textTheme.bodySmall?.copyWith(
+          fontWeight: FontWeight.w800,
+          fontSize: 12,
+          color: HexaColors.textOnLightSurface,
+        ),
+      ),
+    );
+  }
+
   Widget? _buildStockPreviewBar() {
     final id = _selectedCatalogItemId;
     if (id == null || id.isEmpty) return null;
@@ -3298,8 +3351,12 @@ class _PurchaseItemEntrySheetState extends ConsumerState<PurchaseItemEntrySheet>
 
     const teal = HexaColors.brandTealSoft;
     const ink = HexaColors.textOnLightSurface;
-    final gapField = widget.fullPage ? 12.0 : 6.0;
-    final gapSection = widget.fullPage ? 16.0 : 8.0;
+    final gapField = widget.embedded
+        ? 8.0
+        : (widget.fullPage ? 12.0 : 6.0);
+    final gapSection = widget.embedded
+        ? 10.0
+        : (widget.fullPage ? 16.0 : 8.0);
     final rateBasisSeg = _rateEntryBasisSegmented(k, showPerKgFields);
 
     final ratesAndGstChildren = <Widget>[
@@ -3310,35 +3367,37 @@ class _PurchaseItemEntrySheetState extends ConsumerState<PurchaseItemEntrySheet>
       ),
       SizedBox(height: widget.fullPage ? 10 : 8),
       _buildTaxModeChips(theme),
-      SizedBox(height: widget.fullPage ? 10 : 8),
-      ListenableBuilder(
-        listenable: _lineTotalsListenable,
-        builder: (ctx, _) {
-          final l = _currentLine();
-          final net = lineNetTaxableDecimal(l, taxMode: _taxMode).toDouble();
-          final tax = lineTaxAmount(l, taxMode: _taxMode);
-          final tot = lineMoney(l, taxMode: _taxMode);
-          return Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: HexaColors.tealWashAlt,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: HexaColors.tealBorderSoft),
-            ),
-            child: Text(
-              'Live preview · Net ${formatRupee(net, decimals: true)} · '
-              'GST ${formatRupee(tax, decimals: true)} · '
-              'Line total ${formatRupee(tot, decimals: true)}',
-              style: const TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
-                color: HexaColors.textOnLightSurface,
+      if (!widget.embedded) ...[
+        SizedBox(height: widget.fullPage ? 10 : 8),
+        ListenableBuilder(
+          listenable: _lineTotalsListenable,
+          builder: (ctx, _) {
+            final l = _currentLine();
+            final net = lineNetTaxableDecimal(l, taxMode: _taxMode).toDouble();
+            final tax = lineTaxAmount(l, taxMode: _taxMode);
+            final tot = lineMoney(l, taxMode: _taxMode);
+            return Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: HexaColors.tealWashAlt,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: HexaColors.tealBorderSoft),
               ),
-            ),
-          );
-        },
-      ),
+              child: Text(
+                'Live preview · Net ${formatRupee(net, decimals: true)} · '
+                'GST ${formatRupee(tax, decimals: true)} · '
+                'Line total ${formatRupee(tot, decimals: true)}',
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: HexaColors.textOnLightSurface,
+                ),
+              ),
+            );
+          },
+        ),
+      ],
     ];
 
     final formChildren = <Widget>[
@@ -3401,7 +3460,9 @@ class _PurchaseItemEntrySheetState extends ConsumerState<PurchaseItemEntrySheet>
                   minQueryLength: 1,
                   maxMatches: 8,
                   dense: true,
-                  minFieldHeight: widget.fullPage ? 52 : 0,
+                  minFieldHeight: widget.embedded
+                      ? 40
+                      : (widget.fullPage ? 52 : 0),
                   suggestionsAsOverlay: true,
                   items: _catalogSearchItems,
                   textInputAction: TextInputAction.next,
@@ -3468,7 +3529,8 @@ class _PurchaseItemEntrySheetState extends ConsumerState<PurchaseItemEntrySheet>
             ),
           ),
         ),
-      if (_selectedCatalogItemId != null &&
+      if (!widget.embedded &&
+          _selectedCatalogItemId != null &&
           _selectedCatalogItemId!.isNotEmpty) ...[
         SizedBox(height: gapField),
         ListenableBuilder(
@@ -3637,33 +3699,36 @@ class _PurchaseItemEntrySheetState extends ConsumerState<PurchaseItemEntrySheet>
             ),
           ],
         ),
-      ListenableBuilder(
-        listenable: _lineTotalsListenable,
-        builder: (cx, _) {
-          final chips = <Widget>[
-            for (final w in [
-              _catalogLooseKgMisconfigFixBanner(),
-              _nameImpliesBagButKgUnitBanner(),
-              _suggestOneBagInsteadOfKgBanner(),
-              _didYouMeanKgNotBagsBanner(),
-            ])
-              if (w != null) w,
-          ];
-          if (chips.isEmpty) return const SizedBox.shrink();
-          return Padding(
-            padding: EdgeInsets.only(top: gapField * 0.5),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                for (var i = 0; i < chips.length; i++) ...[
-                  if (i > 0) SizedBox(height: gapField * 0.35),
-                  chips[i],
+      if (!widget.embedded)
+        ListenableBuilder(
+          listenable: _lineTotalsListenable,
+          builder: (cx, _) {
+            final chips = <Widget>[
+              for (final w in [
+                _catalogLooseKgMisconfigFixBanner(),
+                _nameImpliesBagButKgUnitBanner(),
+                _suggestOneBagInsteadOfKgBanner(),
+                _didYouMeanKgNotBagsBanner(),
+              ])
+                if (w != null) w,
+            ];
+            if (chips.isEmpty) return const SizedBox.shrink();
+            return Padding(
+              padding: EdgeInsets.only(top: gapField * 0.5),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  for (var i = 0; i < chips.length; i++) ...[
+                    if (i > 0) SizedBox(height: gapField * 0.35),
+                    chips[i],
+                  ],
                 ],
-              ],
-            ),
-          );
-        },
-      ),
+              ),
+            );
+          },
+        )
+      else
+        const SizedBox.shrink(),
       if (showManualKgField) ...[
         SizedBox(height: gapField),
         KeyedSubtree(
@@ -4068,39 +4133,68 @@ class _PurchaseItemEntrySheetState extends ConsumerState<PurchaseItemEntrySheet>
               padding: footerPad,
               child: Row(
                 children: [
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed:
-                          _commitInFlight ? null : () => _commit(closeSheet: false),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: teal,
-                        side: const BorderSide(color: teal),
-                        minimumSize: const Size(double.infinity, 50),
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: const RoundedRectangleBorder(
-                          borderRadius: BorderRadius.all(Radius.circular(12)),
+                  if (widget.embedded) ...[
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: _commitInFlight
+                            ? null
+                            : () async {
+                                if (_isDirtySheet()) {
+                                  await _confirmDiscardAndPop();
+                                } else {
+                                  _popSheet();
+                                }
+                              },
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: teal,
+                          side: const BorderSide(color: teal),
+                          minimumSize: const Size(double.infinity, 44),
+                          padding: const EdgeInsets.symmetric(vertical: 12),
                         ),
+                        child: const Text('Cancel'),
                       ),
-                      child: _commitInFlight
-                          ? SizedBox(
-                              height: 22,
-                              width: 22,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2.5,
-                                color: teal,
-                              ),
-                            )
-                          : const Text('DONE +'),
                     ),
-                  ),
-                  const SizedBox(width: 12),
+                    const SizedBox(width: 10),
+                  ] else ...[
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed:
+                            _commitInFlight ? null : () => _commit(closeSheet: false),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: teal,
+                          side: const BorderSide(color: teal),
+                          minimumSize: const Size(double.infinity, 50),
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: const RoundedRectangleBorder(
+                            borderRadius: BorderRadius.all(Radius.circular(12)),
+                          ),
+                        ),
+                        child: _commitInFlight
+                            ? SizedBox(
+                                height: 22,
+                                width: 22,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2.5,
+                                  color: teal,
+                                ),
+                              )
+                            : const Text('DONE +'),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                  ],
                   Expanded(
                     child: FilledButton(
                       onPressed: _commitInFlight ? null : () => _commit(closeSheet: true),
                       style: FilledButton.styleFrom(
                         backgroundColor: teal,
-                        minimumSize: const Size(double.infinity, 50),
-                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        minimumSize: Size(
+                          double.infinity,
+                          widget.embedded ? 44 : 50,
+                        ),
+                        padding: EdgeInsets.symmetric(
+                          vertical: widget.embedded ? 12 : 14,
+                        ),
                         shape: const RoundedRectangleBorder(
                           borderRadius: BorderRadius.all(Radius.circular(12)),
                         ),
@@ -4114,9 +4208,9 @@ class _PurchaseItemEntrySheetState extends ConsumerState<PurchaseItemEntrySheet>
                                 color: Colors.white,
                               ),
                             )
-                          : const Text(
-                              'SAVE LINE',
-                              style: TextStyle(
+                          : Text(
+                              widget.embedded ? 'Save line' : 'SAVE LINE',
+                              style: const TextStyle(
                                 fontSize: 16,
                                 fontWeight: FontWeight.w800,
                               ),
@@ -4127,7 +4221,23 @@ class _PurchaseItemEntrySheetState extends ConsumerState<PurchaseItemEntrySheet>
               ),
             );
 
-      return Theme(
+      return Shortcuts(
+        shortcuts: <ShortcutActivator, Intent>{
+          const SingleActivator(LogicalKeyboardKey.enter, control: true):
+              const _SaveLineIntent(),
+          const SingleActivator(LogicalKeyboardKey.enter, meta: true):
+              const _SaveLineIntent(),
+        },
+        child: Actions(
+          actions: <Type, Action<Intent>>{
+            _SaveLineIntent: CallbackAction<_SaveLineIntent>(
+              onInvoke: (_) {
+                if (!_commitInFlight) _commit(closeSheet: true);
+                return null;
+              },
+            ),
+          },
+          child: Theme(
         data: sheetTheme,
         child: PopScope(
           canPop: !_isDirtySheet(),
@@ -4135,90 +4245,156 @@ class _PurchaseItemEntrySheetState extends ConsumerState<PurchaseItemEntrySheet>
             if (didPop) return;
             await _confirmDiscardAndPop();
           },
-          child: Scaffold(
-            resizeToAvoidBottomInset: true,
-            backgroundColor: Colors.white,
-            appBar: AppBar(
-              backgroundColor: Colors.white,
-              foregroundColor: ink,
-              elevation: 0,
-              title: Text(widget.isEdit ? 'Edit item' : 'Add item'),
-              leading: IconButton(
-                icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
-                onPressed: _handleLeadingBack,
-              ),
-            ),
-            body: LayoutBuilder(
-              builder: (context, c) {
-                final safeBottom = MediaQuery.paddingOf(context).bottom;
-                final double previewBottomPad =
-                    safeBottom > 0 ? safeBottom + 6.0 : 10.0;
-                final kbd = _keyboardVisible ||
-                    MediaQuery.viewInsetsOf(context).bottom > 20;
-                final windowW = MediaQuery.sizeOf(context).width;
-                final formMax = HexaResponsive.desktopFormMax(windowW);
-
-                final previewPinned = Material(
-                  elevation: 8,
+          child: widget.embedded
+              ? Material(
                   color: Colors.white,
-                  shadowColor: Colors.black26,
-                  child: Padding(
-                    padding: EdgeInsets.fromLTRB(
-                      12,
-                      kbd ? 4 : 8,
-                      12,
-                      kbd ? 4 : previewBottomPad,
-                    ),
-                    child: kbd
-                        ? _buildKeyboardAccessoryRow(theme)
-                        : Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              ListenableBuilder(
-                                listenable: _lineTotalsListenable,
-                                builder: (context, _) => RepaintBoundary(
-                                  child: _fpShell(_liveTotalsCard(theme)),
-                                ),
-                              ),
-                              footer,
-                            ],
+                  child: LayoutBuilder(
+                    builder: (context, c) {
+                      final safeBottom = MediaQuery.paddingOf(context).bottom;
+                      final double previewBottomPad =
+                          safeBottom > 0 ? safeBottom + 6.0 : 10.0;
+                      final kbd = _keyboardVisible ||
+                          MediaQuery.viewInsetsOf(context).bottom > 20;
+
+                      final previewPinned = Material(
+                        elevation: 8,
+                        color: Colors.white,
+                        shadowColor: Colors.black26,
+                        child: Padding(
+                          padding: EdgeInsets.fromLTRB(
+                            12,
+                            kbd ? 4 : 8,
+                            12,
+                            kbd ? 4 : previewBottomPad,
                           ),
-                  ),
-                );
-                final column = Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Expanded(
-                      child: KeyboardSafeFormViewport(
-                        dismissKeyboardOnTap: true,
-                        scrollController: _scrollController,
-                        horizontalPadding: 16,
-                        topPadding: 4,
-                        bottomExtraInset: 8,
-                        minFieldsHeight: 0,
-                        fields: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          mainAxisSize: MainAxisSize.min,
-                          children: formChildren,
+                          child: kbd
+                              ? _buildKeyboardAccessoryRow(theme)
+                              : Column(
+                                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    ListenableBuilder(
+                                      listenable: _lineTotalsListenable,
+                                      builder: (context, _) => RepaintBoundary(
+                                        child: _embeddedLineTotalStrip(theme),
+                                      ),
+                                    ),
+                                    footer,
+                                  ],
+                                ),
                         ),
-                        footer: const SizedBox.shrink(),
-                      ),
+                      );
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Expanded(
+                            child: FocusTraversalGroup(
+                              policy: OrderedTraversalPolicy(),
+                              child: SingleChildScrollView(
+                                controller: _scrollController,
+                                physics: _moreSectionExpanded
+                                    ? const ClampingScrollPhysics()
+                                    : const ClampingScrollPhysics(),
+                                padding:
+                                    const EdgeInsets.fromLTRB(12, 4, 12, 8),
+                            child: PurchaseItemEntryPrimaryForm(
+                              children: formChildren,
+                            ),
+                              ),
+                            ),
+                          ),
+                          previewPinned,
+                        ],
+                      );
+                    },
+                  ),
+                )
+              : Scaffold(
+                  resizeToAvoidBottomInset: true,
+                  backgroundColor: Colors.white,
+                  appBar: AppBar(
+                    backgroundColor: Colors.white,
+                    foregroundColor: ink,
+                    elevation: 0,
+                    title: Text(widget.isEdit ? 'Edit item' : 'Add item'),
+                    leading: IconButton(
+                      icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
+                      onPressed: _handleLeadingBack,
                     ),
-                    previewPinned,
-                  ],
-                );
-                if (windowW >= HexaBreakpoints.desktop) {
-                  return HexaResponsiveCenter(
-                    maxWidth: formMax,
-                    padding: EdgeInsets.zero,
-                    child: column,
-                  );
-                }
-                return column;
-              },
-            ),
-          ),
+                  ),
+                  body: LayoutBuilder(
+                    builder: (context, c) {
+                      final safeBottom = MediaQuery.paddingOf(context).bottom;
+                      final double previewBottomPad =
+                          safeBottom > 0 ? safeBottom + 6.0 : 10.0;
+                      final kbd = _keyboardVisible ||
+                          MediaQuery.viewInsetsOf(context).bottom > 20;
+                      final windowW = MediaQuery.sizeOf(context).width;
+                      final formMax = HexaResponsive.desktopFormMax(windowW);
+
+                      final previewPinned = Material(
+                        elevation: 8,
+                        color: Colors.white,
+                        shadowColor: Colors.black26,
+                        child: Padding(
+                          padding: EdgeInsets.fromLTRB(
+                            12,
+                            kbd ? 4 : 8,
+                            12,
+                            kbd ? 4 : previewBottomPad,
+                          ),
+                          child: kbd
+                              ? _buildKeyboardAccessoryRow(theme)
+                              : Column(
+                                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    ListenableBuilder(
+                                      listenable: _lineTotalsListenable,
+                                      builder: (context, _) => RepaintBoundary(
+                                        child: _fpShell(_liveTotalsCard(theme)),
+                                      ),
+                                    ),
+                                    footer,
+                                  ],
+                                ),
+                        ),
+                      );
+                      final column = Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Expanded(
+                            child: KeyboardSafeFormViewport(
+                              dismissKeyboardOnTap: true,
+                              scrollController: _scrollController,
+                              horizontalPadding: 16,
+                              topPadding: 4,
+                              bottomExtraInset: 8,
+                              minFieldsHeight: 0,
+                              fields: Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                mainAxisSize: MainAxisSize.min,
+                                children: formChildren,
+                              ),
+                              footer: const SizedBox.shrink(),
+                            ),
+                          ),
+                          previewPinned,
+                        ],
+                      );
+                      if (windowW >= HexaBreakpoints.desktop) {
+                        return HexaResponsiveCenter(
+                          maxWidth: formMax,
+                          padding: EdgeInsets.zero,
+                          child: column,
+                        );
+                      }
+                      return column;
+                    },
+                  ),
+                ),
+        ),
+      ),
         ),
       );
     }
@@ -4488,6 +4664,10 @@ class _PurchaseItemEntrySheetState extends ConsumerState<PurchaseItemEntrySheet>
       },
     );
   }
+}
+
+class _SaveLineIntent extends Intent {
+  const _SaveLineIntent();
 }
 
 /// Purchase line entry stock preview load failure (UX-125).

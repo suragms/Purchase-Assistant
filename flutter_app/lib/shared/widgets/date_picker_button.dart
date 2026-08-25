@@ -15,6 +15,7 @@ class DatePickerButton extends StatelessWidget {
     this.firstDate,
     this.lastDate,
     this.enabled = true,
+    this.height = 56,
   });
 
   final DateTime? value;
@@ -23,6 +24,9 @@ class DatePickerButton extends StatelessWidget {
   final DateTime? firstDate;
   final DateTime? lastDate;
   final bool enabled;
+
+  /// Visual height (desktop voucher uses ~36).
+  final double height;
 
   Future<void> _selectDate(BuildContext context) async {
     if (!enabled) return;
@@ -100,7 +104,7 @@ class DatePickerButton extends StatelessWidget {
         onTap: enabled ? () => _selectDate(context) : null,
         borderRadius: HexaDsRadii.input,
         child: Ink(
-          height: 56,
+          height: height,
           decoration: BoxDecoration(
             color: enabled ? HexaDsColors.inputFill : Colors.grey.shade50,
             borderRadius: HexaDsRadii.input,
@@ -110,12 +114,12 @@ class DatePickerButton extends StatelessWidget {
             ),
           ),
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
+            padding: EdgeInsets.symmetric(horizontal: height < 44 ? 10 : 16),
             child: Row(
               children: [
                 Icon(
                   Icons.calendar_today_rounded,
-                  size: 20,
+                  size: height < 44 ? 16 : 20,
                   color: enabled
                       ? (hasValue
                           ? HexaColors.brandPrimary

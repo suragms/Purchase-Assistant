@@ -240,6 +240,9 @@ class _PartyInlineSuggestFieldState extends State<PartyInlineSuggestField> {
   /// Overlay mode: after IME dismiss (focus lost), keep the panel until Close or pick.
   bool _overlayStayOpenUntilDismiss = false;
 
+  /// Keyboard highlight index in the suggestion list (-1 = none).
+  int _keyboardHighlightIndex = -1;
+
   final GlobalKey _revealKey = GlobalKey(debugLabel: 'partyInlineSuggest');
   final GlobalKey _fieldMeasureKey = GlobalKey(debugLabel: 'partyInlineField');
   final OverlayPortalController _overlayController = OverlayPortalController();
@@ -373,6 +376,7 @@ class _PartyInlineSuggestFieldState extends State<PartyInlineSuggestField> {
       _cancelSuggestPanelGrace();
       _overlayStayOpenUntilDismiss = false;
       _suppressPanelAfterPick = false;
+      _keyboardHighlightIndex = -1;
       _filterDebounceTimer?.cancel();
       _revealDebounceTimer?.cancel();
       if (!mounted) return;
@@ -389,23 +393,12 @@ class _PartyInlineSuggestFieldState extends State<PartyInlineSuggestField> {
       _scheduleOverlaySync();
       return;
     }
-    // Full-page overlay: keep suggestions open after keyboard dismiss until user
-    // picks, taps Close, or focuses the field again.
+    // Tab / focus away: close overlay so keyboard traversal stays predictable.
+    _flushFilterToLive();
     if (widget.suggestionsAsOverlay) {
-      _flushFilterToLive();
-      final rows = _listRowsForUi(live: true);
-      final canAdd =
-          widget.showAddRow && widget.onAddRow != null;
-      if (rows.isNotEmpty || canAdd) {
-        _overlayStayOpenUntilDismiss = true;
-      }
-      if (mounted) setState(() {});
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted || widget.focusNode.hasFocus) return;
-        setState(() {});
-        _scheduleOverlaySync();
-      });
-      return;
+      _overlayStayOpenUntilDismiss = false;
+      _keyboardHighlightIndex = -1;
+      _hideSuggestionOverlay();
     }
     _armSuggestPanelGraceIfNeeded();
     if (mounted) setState(() {});
@@ -628,13 +621,17 @@ class _PartyInlineSuggestFieldState extends State<PartyInlineSuggestField> {
     }
   }
 
-  Widget _buildSuggestionTile(ColorScheme cs, InlineSearchItem it) {
+  Widget _buildSuggestionTile(
+    ColorScheme cs,
+    InlineSearchItem it, {
+    bool highlighted = false,
+  }) {
     void commit() => _pick(it, keepFocus: false);
 
     // Single interactive surface — InkWell supplies button semantics (no outer Semantics).
     return Material(
       type: MaterialType.transparency,
-      color: cs.surface,
+      color: highlighted ? cs.primaryContainer.withValues(alpha: 0.35) : cs.surface,
       child: MouseRegion(
         cursor: SystemMouseCursors.click,
         child: InkWell(
@@ -770,10 +767,34 @@ class _PartyInlineSuggestFieldState extends State<PartyInlineSuggestField> {
       widget.focusNode.unfocus();
       return KeyEventResult.handled;
     }
+    _flushFilterToLive();
+    final data = _listRowsForUi(live: true);
+    if (event.logicalKey == LogicalKeyboardKey.arrowDown && data.isNotEmpty) {
+      setState(() {
+        _keyboardHighlightIndex =
+            (_keyboardHighlightIndex + 1).clamp(0, data.length - 1);
+      });
+      _scheduleOverlaySync();
+      return KeyEventResult.handled;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.arrowUp && data.isNotEmpty) {
+      setState(() {
+        if (_keyboardHighlightIndex <= 0) {
+          _keyboardHighlightIndex = 0;
+        } else {
+          _keyboardHighlightIndex -= 1;
+        }
+      });
+      _scheduleOverlaySync();
+      return KeyEventResult.handled;
+    }
     if (event.logicalKey == LogicalKeyboardKey.enter ||
         event.logicalKey == LogicalKeyboardKey.numpadEnter) {
-      _flushFilterToLive();
-      final data = _listRowsForUi(live: true);
+      if (_keyboardHighlightIndex >= 0 &&
+          _keyboardHighlightIndex < data.length) {
+        _pick(data[_keyboardHighlightIndex], keepFocus: false);
+        return KeyEventResult.handled;
+      }
       if (data.length == 1) {
         _pick(data.first, keepFocus: false);
         return KeyEventResult.handled;
@@ -785,6 +806,11 @@ class _PartyInlineSuggestFieldState extends State<PartyInlineSuggestField> {
   void _onFieldSubmitted(String _) {
     _flushFilterToLive();
     final data = _listRowsForUi(live: true);
+    if (_keyboardHighlightIndex >= 0 &&
+        _keyboardHighlightIndex < data.length) {
+      _pick(data[_keyboardHighlightIndex], keepFocus: false);
+      return;
+    }
     if (data.length == 1) {
       _pick(data.first, keepFocus: false);
       return;
@@ -924,7 +950,12 @@ class _PartyInlineSuggestFieldState extends State<PartyInlineSuggestField> {
                     padding: EdgeInsets.zero,
                     clipBehavior: Clip.hardEdge,
                     children: [
-                      for (final it in rows) _buildSuggestionTile(cs, it),
+                      for (var i = 0; i < rows.length; i++)
+                        _buildSuggestionTile(
+                          cs,
+                          rows[i],
+                          highlighted: i == _keyboardHighlightIndex,
+                        ),
                       if (showDivider)
                         Divider(height: 1, thickness: 1, color: borderColor),
                       if (showAddFocused && widget.onAddRow != null)
@@ -1198,8 +1229,12 @@ class _PartyInlineSuggestFieldState extends State<PartyInlineSuggestField> {
                               physics: const ClampingScrollPhysics(),
                               padding: EdgeInsets.zero,
                               children: [
-                                for (final it in rows)
-                                  _buildSuggestionTile(cs, it),
+                                for (var i = 0; i < rows.length; i++)
+                                  _buildSuggestionTile(
+                                    cs,
+                                    rows[i],
+                                    highlighted: i == _keyboardHighlightIndex,
+                                  ),
                                 if (showDivider)
                                   Divider(
                                     height: 1,

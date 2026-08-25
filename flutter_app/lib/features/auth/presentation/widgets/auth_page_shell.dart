@@ -1,15 +1,17 @@
-import 'dart:ui';
-
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 
 import '../../../../core/design_system/hexa_responsive.dart';
 import '../../../../core/theme/hexa_colors.dart';
 import '../auth_brand_assets.dart';
 
-/// Blurred hero image + light scrim, keyboard-safe scroll. Max width 420.
+/// Hero image + scrim, keyboard-safe scroll. Max width 420.
 ///
 /// Keyboard lift is owned by the parent [Scaffold]'s `resizeToAvoidBottomInset`
 /// — do **not** add [MediaQuery.viewInsets] to scroll padding (double-lift bounce).
+///
+/// Web: no [BackdropFilter] — live blur under focused TextFields causes typing/paste
+/// lag on CanvasKit. Static gradient scrim keeps brand atmosphere.
 class AuthPageShell extends StatelessWidget {
   const AuthPageShell({super.key, required this.children});
 
@@ -23,19 +25,18 @@ class AuthPageShell extends StatelessWidget {
     Widget shell = Stack(
       fit: StackFit.expand,
       children: [
+        // Solid base so half-viewport canvas never shows empty HTML body.
+        const Positioned.fill(
+          child: ColoredBox(color: HexaColors.brandBackground),
+        ),
         Positioned.fill(
           child: Image.asset(
             AuthBrandAssets.background,
             fit: BoxFit.cover,
+            alignment: Alignment.center,
             errorBuilder: (_, __, ___) => DecoratedBox(
               decoration: BoxDecoration(gradient: HexaColors.atmosphereGradient),
             ),
-          ),
-        ),
-        Positioned.fill(
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-            child: const ColoredBox(color: Color(0x00000000)),
           ),
         ),
         Positioned.fill(
@@ -45,9 +46,11 @@ class AuthPageShell extends StatelessWidget {
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
                 colors: [
-                  Colors.white.withValues(alpha: 0.35),
-                  HexaColors.brandBackground.withValues(alpha: 0.75),
+                  const Color(0xFF062E28).withValues(alpha: kIsWeb ? 0.45 : 0.35),
+                  HexaColors.brandPrimary.withValues(alpha: kIsWeb ? 0.55 : 0.40),
+                  HexaColors.brandBackground.withValues(alpha: 0.92),
                 ],
+                stops: const [0.0, 0.45, 1.0],
               ),
             ),
           ),
@@ -166,7 +169,7 @@ class AuthSmallLogo extends StatelessWidget {
   }
 }
 
-/// Frosted card on top of blurred hero — form stays primary focus.
+/// Opaque card on hero — form stays primary focus (no BackdropFilter on web).
 class AuthFormCard extends StatelessWidget {
   const AuthFormCard({super.key, required this.child});
 
@@ -174,28 +177,22 @@ class AuthFormCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(16),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-        child: Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.86),
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.65)),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.06),
-                blurRadius: 20,
-                offset: const Offset(0, 8),
-              ),
-            ],
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: kIsWeb ? 0.96 : 0.92),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.85)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.10),
+            blurRadius: 24,
+            offset: const Offset(0, 10),
           ),
-          child: child,
-        ),
+        ],
       ),
+      child: child,
     );
   }
 }

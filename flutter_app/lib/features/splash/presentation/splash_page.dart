@@ -57,7 +57,7 @@ class _SplashPageState extends ConsumerState<SplashPage>
         _warmupRetried = true;
         setState(() {
           _busy = true;
-          _error = 'Server is warming up. Retrying in 10 seconds…';
+          _error = 'Still connecting. Retrying in 10 seconds…';
         });
         await Future<void>.delayed(const Duration(seconds: 10));
         if (mounted) return _boot();

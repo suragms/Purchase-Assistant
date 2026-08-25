@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:developer' as developer;
-import 'dart:ui';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -635,17 +634,12 @@ class _LoginPageState extends ConsumerState<LoginPage>
     return Stack(
       fit: StackFit.expand,
       children: [
+        const ColoredBox(color: HexaColors.brandBackground),
         Image.asset(
           AuthBrandAssets.background,
           fit: BoxFit.cover,
           errorBuilder: (_, __, ___) => DecoratedBox(
             decoration: BoxDecoration(gradient: HexaColors.atmosphereGradient),
-          ),
-        ),
-        Positioned.fill(
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
-            child: const ColoredBox(color: Color(0x00000000)),
           ),
         ),
         Positioned.fill(
@@ -657,7 +651,7 @@ class _LoginPageState extends ConsumerState<LoginPage>
                 colors: [
                   const Color(0xFF062E28).withValues(alpha: 0.55),
                   HexaColors.brandPrimary.withValues(alpha: 0.65),
-                  HexaColors.brandBackground.withValues(alpha: 0.80),
+                  HexaColors.brandBackground.withValues(alpha: 0.88),
                 ],
               ),
             ),
@@ -672,156 +666,150 @@ class _LoginPageState extends ConsumerState<LoginPage>
     String? pErr, {
     bool compact = false,
   }) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(compact ? 20 : 28),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
-        child: Container(
-          width: double.infinity,
-          padding: EdgeInsets.all(compact ? 16 : 24),
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.86),
-            borderRadius: BorderRadius.circular(compact ? 20 : 28),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.65)),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.15),
-                blurRadius: 30,
-                offset: const Offset(0, 10),
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.all(compact ? 16 : 24),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: kIsWeb ? 0.96 : 0.92),
+        borderRadius: BorderRadius.circular(compact ? 20 : 28),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.85)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.15),
+            blurRadius: 30,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
+      child: AutofillGroup(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (!compact) ...[
+              _buildLogoSection(),
+              const SizedBox(height: 32),
+              Text(
+                'Sign In',
+                textAlign: TextAlign.center,
+                style: HexaDsType.heading(28,
+                    color: HexaDsColors.textPrimary),
+              ),
+              const SizedBox(height: 32),
+            ] else ...[
+              // Short chrome so password focus need not scroll header off-screen.
+              Text(
+                key: _headerKey,
+                'Harisree Agency',
+                textAlign: TextAlign.center,
+                style: HexaDsType.heading(18,
+                    color: HexaDsColors.textPrimary),
+              ),
+              const SizedBox(height: 12),
+            ],
+            if (_showNetworkBanner)
+              AuthNetworkErrorBanner(
+                onRetry: _retryAfterNetwork,
+                title: authUnreachableBannerTitle(_lastNetworkError),
+                detail: authServerUnreachableDetail(_lastNetworkError),
+              ),
+            AppTextField(
+              controller: _loginEmail,
+              focusNode: _emailFocus,
+              label: 'Email',
+              keyboardType: TextInputType.emailAddress,
+              textInputAction: TextInputAction.next,
+              autofillHints: const [AutofillHints.email],
+              errorText: eErr,
+            ),
+            SizedBox(height: compact ? 12 : 16),
+            AppTextField(
+              controller: _loginPass,
+              focusNode: _passFocus,
+              label: 'Password',
+              obscureText: _obscure,
+              textInputAction: TextInputAction.done,
+              autofillHints: const [AutofillHints.password],
+              errorText: pErr,
+              onActionSubmit: _isFormValid ? _signIn : null,
+              suffix: _buildPasswordToggle(),
+            ),
+            if (_inlineAuthError != null) ...[
+              const SizedBox(height: 8),
+              Text(
+                _inlineAuthError!,
+                style: TextStyle(
+                  color: Colors.red.shade700,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                ),
               ),
             ],
-          ),
-          child: AutofillGroup(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                if (!compact) ...[
-                  _buildLogoSection(),
-                  const SizedBox(height: 32),
-                  Text(
-                    'Sign In',
-                    textAlign: TextAlign.center,
-                    style: HexaDsType.heading(28,
-                        color: HexaDsColors.textPrimary),
+            if (!compact && _bioReady) ...[
+              const SizedBox(height: 16),
+              _buildBiometricButton(),
+              if (_bioEmail != null) ...[
+                const SizedBox(height: 4),
+                Text(
+                  _bioEmail!,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: HexaColors.gray500,
                   ),
-                  const SizedBox(height: 32),
-                ] else ...[
-                  // Short chrome so password focus need not scroll header off-screen.
-                  Text(
-                    key: _headerKey,
-                    'Harisree Agency',
-                    textAlign: TextAlign.center,
-                    style: HexaDsType.heading(18,
-                        color: HexaDsColors.textPrimary),
-                  ),
-                  const SizedBox(height: 12),
-                ],
-                if (_showNetworkBanner)
-                  AuthNetworkErrorBanner(
-                    onRetry: _retryAfterNetwork,
-                    title: authUnreachableBannerTitle(_lastNetworkError),
-                    detail: authServerUnreachableDetail(_lastNetworkError),
-                  ),
-                AppTextField(
-                  controller: _loginEmail,
-                  focusNode: _emailFocus,
-                  label: 'Email',
-                  keyboardType: TextInputType.emailAddress,
-                  textInputAction: TextInputAction.next,
-                  autofillHints: const [AutofillHints.email],
-                  errorText: eErr,
                 ),
-                SizedBox(height: compact ? 12 : 16),
-                AppTextField(
-                  controller: _loginPass,
-                  focusNode: _passFocus,
-                  label: 'Password',
-                  obscureText: _obscure,
-                  textInputAction: TextInputAction.done,
-                  autofillHints: const [AutofillHints.password],
-                  errorText: pErr,
-                  onActionSubmit: _isFormValid ? _signIn : null,
-                  suffix: _buildPasswordToggle(),
-                ),
-                if (_inlineAuthError != null) ...[
-                  const SizedBox(height: 8),
-                  Text(
-                    _inlineAuthError!,
-                    style: TextStyle(
-                      color: Colors.red.shade700,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ],
-                if (!compact && _bioReady) ...[
-                  const SizedBox(height: 16),
-                  _buildBiometricButton(),
-                  if (_bioEmail != null) ...[
-                    const SizedBox(height: 4),
-                    Text(
-                      _bioEmail!,
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: HexaColors.gray500,
-                      ),
-                    ),
-                  ],
-                ],
-                SizedBox(height: compact ? 16 : 24),
-                _buildSignInButton(),
-                if (!compact) ...[
-                  const SizedBox(height: 16),
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: TextButton(
-                      style: TextButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 4),
-                        minimumSize: Size.zero,
-                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      ),
-                      onPressed: _loading
-                          ? null
-                          : () => context.go('/forgot-password'),
-                      child: Text(
-                        'Forgot password?',
-                        style: HexaDsType.body(14,
-                            color: HexaDsColors.textMuted,
-                            weight: FontWeight.w500),
-                      ),
-                    ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: Text(
-                      'Contact your manager to reset password',
-                      style:
-                          HexaDsType.body(12, color: HexaDsColors.textMuted),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  if (AppConfig.buildSha.isNotEmpty)
-                    Text(
-                      'Build ${AppConfig.buildSha}',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 10,
-                        color: Colors.grey.shade500,
-                      ),
-                    ),
-                  Text(
-                    '© 2026',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.grey.shade600,
-                    ),
-                  ),
-                ],
               ],
-            ),
-          ),
+            ],
+            SizedBox(height: compact ? 16 : 24),
+            _buildSignInButton(),
+            if (!compact) ...[
+              const SizedBox(height: 16),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton(
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    minimumSize: Size.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                  onPressed: _loading
+                      ? null
+                      : () => context.go('/forgot-password'),
+                  child: Text(
+                    'Forgot password?',
+                    style: HexaDsType.body(14,
+                        color: HexaDsColors.textMuted,
+                        weight: FontWeight.w500),
+                  ),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Text(
+                  'Contact your manager to reset password',
+                  style:
+                      HexaDsType.body(12, color: HexaDsColors.textMuted),
+                ),
+              ),
+              const SizedBox(height: 8),
+              if (AppConfig.buildSha.isNotEmpty)
+                Text(
+                  'Build ${AppConfig.buildSha}',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 10,
+                    color: Colors.grey.shade500,
+                  ),
+                ),
+              Text(
+                '© 2026',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.grey.shade600,
+                ),
+              ),
+            ],
+          ],
         ),
       ),
     );

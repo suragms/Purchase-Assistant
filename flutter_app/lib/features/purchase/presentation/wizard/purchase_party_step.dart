@@ -13,7 +13,10 @@ import '../../state/purchase_draft_provider.dart';
 import '../widgets/party_inline_suggest_field.dart';
 
 import '../../../../core/theme/hexa_colors.dart';
+import 'purchase_wizard_shared.dart';
+
 /// Party step — full-width supplier, then broker, stacked vertically.
+/// Desktop voucher mode: dense Tally-like header row.
 class PurchasePartyStep extends ConsumerWidget {
   const PurchasePartyStep({
     super.key,
@@ -395,8 +398,8 @@ class PurchasePartyStep extends ConsumerWidget {
           minQueryLength: 1,
           maxMatches: 6,
           dense: true,
-          fieldBorderRadius: 12,
-          minFieldHeight: 56,
+          fieldBorderRadius: desktop ? 4 : 12,
+          minFieldHeight: desktop ? kPurchaseVoucherFieldHeight : 56,
           idleOutlineColor: Colors.grey.shade200,
           lockedSelectionLabel: supplierLock,
           onLockedSelectionClear: onSupplierClear,
@@ -439,8 +442,8 @@ class PurchasePartyStep extends ConsumerWidget {
             minQueryLength: 1,
             maxMatches: 6,
             dense: true,
-            fieldBorderRadius: 12,
-            minFieldHeight: 56,
+            fieldBorderRadius: desktop ? 4 : 12,
+            minFieldHeight: desktop ? kPurchaseVoucherFieldHeight : 56,
             idleOutlineColor: Colors.grey.shade200,
             lockedSelectionLabel: supplierLock,
             onLockedSelectionClear: onSupplierClear,
@@ -499,8 +502,8 @@ class PurchasePartyStep extends ConsumerWidget {
             minQueryLength: 1,
             maxMatches: 6,
             dense: true,
-            fieldBorderRadius: 12,
-            minFieldHeight: 56,
+            fieldBorderRadius: desktop ? 4 : 12,
+            minFieldHeight: desktop ? kPurchaseVoucherFieldHeight : 56,
             idleOutlineColor: Colors.grey.shade200,
             lockedSelectionLabel: supplierLock,
             onLockedSelectionClear: onSupplierClear,
@@ -590,8 +593,8 @@ class PurchasePartyStep extends ConsumerWidget {
                   minQueryLength: 1,
                   maxMatches: 8,
                   dense: true,
-                  fieldBorderRadius: 12,
-                  minFieldHeight: 56,
+                  fieldBorderRadius: desktop ? 4 : 12,
+                  minFieldHeight: desktop ? kPurchaseVoucherFieldHeight : 56,
                   idleOutlineColor: Colors.grey.shade200,
                   lockedSelectionLabel: brokerLock,
                   onLockedSelectionClear: clearBrokerOnly,
@@ -632,8 +635,8 @@ class PurchasePartyStep extends ConsumerWidget {
                     minQueryLength: 1,
                     maxMatches: 8,
                     dense: true,
-                    fieldBorderRadius: 12,
-                    minFieldHeight: 56,
+                    fieldBorderRadius: desktop ? 4 : 12,
+                    minFieldHeight: desktop ? kPurchaseVoucherFieldHeight : 56,
                     idleOutlineColor: Colors.grey.shade200,
                     lockedSelectionLabel: brokerLock,
                     onLockedSelectionClear: clearBrokerOnly,
@@ -717,8 +720,8 @@ class PurchasePartyStep extends ConsumerWidget {
                     minQueryLength: 0,
                     maxMatches: 8,
                     dense: true,
-                    fieldBorderRadius: 12,
-                    minFieldHeight: 56,
+                    fieldBorderRadius: desktop ? 4 : 12,
+                    minFieldHeight: desktop ? kPurchaseVoucherFieldHeight : 56,
                     idleOutlineColor: Colors.grey.shade200,
                     lockedSelectionLabel: brokerLock,
                     onLockedSelectionClear: clearBrokerOnly,
@@ -830,72 +833,59 @@ class PurchasePartyStep extends ConsumerWidget {
     );
   }
 
-  /// Desktop: Supplier | Broker | Invoice Date in one grid row.
+  /// Desktop: Supplier | Broker | Invoice Date in one dense voucher row.
   Widget _partyFieldsRowDesktop(BuildContext context, WidgetRef ref) {
     final c = _partyCells(context, ref);
+    final labelStyle = TextStyle(
+      fontSize: 11,
+      fontWeight: FontWeight.w700,
+      color: Theme.of(context).colorScheme.onSurfaceVariant,
+    );
+    Widget labeled(String label, Widget field) => Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(label, style: labelStyle),
+            const SizedBox(height: 2),
+            field,
+          ],
+        );
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                'Supplier',
-                style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                      fontWeight: FontWeight.w700,
-                    ),
-              ),
-              const SizedBox(height: 8),
-              c.supplier,
-            ],
-          ),
-        ),
-        const SizedBox(width: 16),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text(
-                'Broker (optional)',
-                style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.black54),
-              ),
-              const SizedBox(height: 8),
-              c.broker,
-            ],
-          ),
-        ),
-        const SizedBox(width: 16),
-        Expanded(child: _dateColumn(context, ref)),
+        Expanded(flex: 3, child: labeled('Supplier', c.supplier)),
+        const SizedBox(width: 8),
+        Expanded(flex: 2, child: labeled('Broker', c.broker)),
+        const SizedBox(width: 8),
+        Expanded(flex: 2, child: _dateColumn(context, ref)),
       ],
     );
   }
 
   Widget _dateColumn(BuildContext context, WidgetRef ref) {
     final draft = ref.watch(purchaseDraftProvider);
+    final labelStyle = TextStyle(
+      fontSize: 11,
+      fontWeight: FontWeight.w700,
+      color: Theme.of(context).colorScheme.onSurfaceVariant,
+    );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text(
-          'Invoice Date',
-          style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                fontWeight: FontWeight.w700,
-              ),
-        ),
-        const SizedBox(height: 8),
-        DatePickerButton(
-          value: draft.purchaseDate,
-          onChanged: (dt) {
-            ref.read(purchaseDraftProvider.notifier).setPurchaseDate(dt);
-            onDraftChanged();
-          },
-          label: 'Select Purchase Date',
+        Text('Invoice date', style: labelStyle),
+        const SizedBox(height: 2),
+        SizedBox(
+          height: kPurchaseVoucherFieldHeight,
+          child: DatePickerButton(
+            value: draft.purchaseDate,
+            onChanged: (dt) {
+              ref.read(purchaseDraftProvider.notifier).setPurchaseDate(dt);
+              onDraftChanged();
+            },
+            label: 'Date',
+            height: kPurchaseVoucherFieldHeight,
+          ),
         ),
       ],
     );
@@ -910,29 +900,31 @@ class PurchasePartyStep extends ConsumerWidget {
     return Row(
       children: [
         Text(
-          'Invoice Ref',
-          style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                fontWeight: FontWeight.w700,
-              ),
+          'No.',
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w700,
+            color: sub,
+          ),
         ),
-        const SizedBox(width: 8),
+        const SizedBox(width: 6),
         Flexible(
           child: Text(
             idVal,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w700,
+              fontSize: 12,
+              fontWeight: FontWeight.w800,
               color: isEdit ? Colors.black87 : sub,
             ),
           ),
         ),
         const Spacer(),
         Text(
-          warehouse.isEmpty ? 'Warehouse: —' : 'Warehouse: $warehouse',
+          warehouse.isEmpty ? 'Wh: —' : warehouse,
           style: TextStyle(
-            fontSize: 12,
+            fontSize: 11,
             fontWeight: FontWeight.w600,
             color: sub,
           ),
@@ -959,16 +951,22 @@ class PurchasePartyStep extends ConsumerWidget {
               'Payment: $loadedDerivedStatus · Bal ₹${(loadedRemaining ?? 0).toStringAsFixed(2)}',
               style: const TextStyle(fontSize: 11),
             ),
-            const SizedBox(height: 4),
+            const SizedBox(height: 2),
           ],
           _desktopMetaLine(context, ref),
-          const SizedBox(height: 12),
+          const SizedBox(height: 6),
           _partyFieldsRowDesktop(context, ref),
           if (showClearSupplier)
-            Padding(
-              padding: const EdgeInsets.only(top: 6),
-              child: GestureDetector(
-                onTap: onSupplierClear,
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton(
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 0, vertical: 0),
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  visualDensity: VisualDensity.compact,
+                ),
+                onPressed: onSupplierClear,
                 child: Text(
                   'Clear supplier',
                   style: TextStyle(
@@ -979,7 +977,6 @@ class PurchasePartyStep extends ConsumerWidget {
                 ),
               ),
             ),
-          const SizedBox(height: 12),
         ],
       );
     }

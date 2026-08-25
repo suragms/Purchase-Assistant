@@ -83,15 +83,25 @@ class _InlineSearchFieldState extends State<InlineSearchField> {
   void initState() {
     super.initState();
     _focus.addListener(_onFocusChange);
-    _ctrl.addListener(() {
-      if (!mounted) return;
-      setState(() {});
-    });
+    // Only rebuild when clear-suffix visibility flips — not every keystroke.
+    // RawAutocomplete already rebuilds options from [optionsBuilder].
+    _emptySuffix = _ctrl.text.isEmpty;
+    _ctrl.addListener(_onTextForSuffix);
+  }
+
+  bool _emptySuffix = true;
+
+  void _onTextForSuffix() {
+    final empty = _ctrl.text.isEmpty;
+    if (empty == _emptySuffix) return;
+    _emptySuffix = empty;
+    if (mounted) setState(() {});
   }
 
   @override
   void dispose() {
     _focus.removeListener(_onFocusChange);
+    _ctrl.removeListener(_onTextForSuffix);
     if (_disposeFocus) _ownedFocus.dispose();
     if (widget.controller == null) _ctrl.dispose();
     super.dispose();

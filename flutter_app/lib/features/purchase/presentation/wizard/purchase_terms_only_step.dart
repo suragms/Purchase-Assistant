@@ -106,7 +106,9 @@ class PurchaseTermsOnlyStep extends ConsumerWidget {
       int maxLines = 1,
       void Function(String)? onChanged,
       InputDecoration? decoration,
+      bool voucher = false,
     }) {
+      final h = voucher ? kPurchaseVoucherFieldHeight : kPurchaseFieldHeight;
       final tf = TextField(
         controller: c,
         focusNode: focusNode,
@@ -115,62 +117,66 @@ class PurchaseTermsOnlyStep extends ConsumerWidget {
         minLines: maxLines > 1 ? 1 : null,
         scrollPadding: formFieldScrollPaddingForContext(
           context,
-          reserveBelowField: 280,
+          reserveBelowField: voucher ? 120 : 280,
         ),
         textInputAction: textInputAction,
         onSubmitted: onSubmitted != null ? (_) => onSubmitted() : null,
         textCapitalization: maxLines > 1
             ? TextCapitalization.sentences
             : TextCapitalization.none,
-        decoration: decoration ?? densePurchaseFieldDecoration(label),
+        style: voucher ? const TextStyle(fontSize: 13) : null,
+        decoration: decoration ??
+            densePurchaseFieldDecoration(label, voucher: voucher),
         onChanged: onChanged,
       );
       return FocusTraversalOrder(
         order: NumericFocusOrder(order.toDouble()),
         child: Padding(
-          padding: const EdgeInsets.only(bottom: 4),
+          padding: EdgeInsets.only(bottom: voucher ? 0 : 4),
           child: ConstrainedBox(
-            constraints: const BoxConstraints(minHeight: kPurchaseFieldHeight),
+            constraints: BoxConstraints(minHeight: h),
             child: tf,
           ),
         ),
       );
     }
 
+    final paymentDaysField = orderedField(
+      order: 10,
+      c: paymentDaysCtrl,
+      label: 'Payment days',
+      focusNode: paymentDaysFocus,
+      keyboard: TextInputType.number,
+      voucher: desktop,
+      onChanged: (s) {
+        ref.read(purchaseDraftProvider.notifier).setPaymentDaysText(s);
+        onDraftChanged();
+      },
+    );
     final paymentDaysCol = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
       children: [
-        orderedField(
-          order: 10,
-          c: paymentDaysCtrl,
-          label: 'Payment days',
-          focusNode: paymentDaysFocus,
-          keyboard: TextInputType.number,
-          onChanged: (s) {
-            ref
-                .read(purchaseDraftProvider.notifier)
-                .setPaymentDaysText(s);
-            onDraftChanged();
-          },
-        ),
-        ListenableBuilder(
-          listenable: paymentDaysCtrl,
-          builder: (_, __) {
-            final t = paymentDaysCtrl.text.trim();
-            if (t.isEmpty) return const SizedBox.shrink();
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 4),
-              child: Text(
-                _duePreview(ref, paymentDaysCtrl),
-                style: const TextStyle(
-                  fontSize: 12,
-                  color: HexaColors.brandTealBright,
-                  fontWeight: FontWeight.w600,
+        paymentDaysField,
+        if (!desktop)
+          ListenableBuilder(
+            listenable: paymentDaysCtrl,
+            builder: (_, __) {
+              final t = paymentDaysCtrl.text.trim();
+              if (t.isEmpty) return const SizedBox.shrink();
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: Text(
+                  _duePreview(ref, paymentDaysCtrl),
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: HexaColors.brandTealBright,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
-              ),
-            );
-          },
-        ),
+              );
+            },
+          ),
       ],
     );
     final discountField = orderedField(
@@ -178,8 +184,8 @@ class PurchaseTermsOnlyStep extends ConsumerWidget {
       c: headerDiscCtrl,
       label: 'Discount %',
       focusNode: headerDiscFocus,
-      keyboard:
-          const TextInputType.numberWithOptions(decimal: true),
+      keyboard: const TextInputType.numberWithOptions(decimal: true),
+      voucher: desktop,
       onChanged: (s) {
         ref
             .read(purchaseDraftProvider.notifier)
@@ -193,7 +199,8 @@ class PurchaseTermsOnlyStep extends ConsumerWidget {
       label: 'Narration / ref (optional)',
       focusNode: narrationFocus,
       keyboard: TextInputType.text,
-      maxLines: 2,
+      maxLines: desktop ? 1 : 2,
+      voucher: desktop,
       textInputAction: TextInputAction.done,
       onSubmitted: () => FocusManager.instance.primaryFocus?.unfocus(),
       onChanged: (s) {
@@ -201,6 +208,291 @@ class PurchaseTermsOnlyStep extends ConsumerWidget {
         onDraftChanged();
       },
     );
+
+    Widget brokerCommissionBlock() {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            'Broker commission',
+            style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                  fontWeight: FontWeight.w700,
+                  fontSize: desktop ? 12 : null,
+                ),
+          ),
+          const SizedBox(height: 6),
+          SegmentedButton<String>(
+            style: const ButtonStyle(
+              visualDensity: VisualDensity.compact,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+            showSelectedIcon: false,
+            segments: const [
+              ButtonSegment<String>(
+                value: kPurchaseCommissionModePercent,
+                label: Text('Commission %'),
+                icon: Icon(Icons.percent_rounded, size: 18),
+              ),
+              ButtonSegment<String>(
+                value: '_figure',
+                label: Text('Fixed ₹'),
+                icon: Icon(Icons.currency_rupee_rounded, size: 18),
+              ),
+            ],
+            emptySelectionAllowed: false,
+            selected: <String>{
+              if (mode == kPurchaseCommissionModePercent)
+                kPurchaseCommissionModePercent
+              else
+                '_figure',
+            },
+            onSelectionChanged: (Set<String> next) {
+              final v = next.first;
+              if (v == kPurchaseCommissionModePercent) {
+                ref
+                    .read(purchaseDraftProvider.notifier)
+                    .setCommissionMode(kPurchaseCommissionModePercent);
+              } else {
+                final sug = suggestedBrokerFigureModeFromLines(draftLines);
+                ref.read(purchaseDraftProvider.notifier).setCommissionMode(sug);
+              }
+              onDraftChanged();
+            },
+          ),
+          if (mode == kPurchaseCommissionModePercent) ...[
+            const SizedBox(height: 6),
+            Text(
+              '% of each line ₹ total after purchase discount. '
+              'For ₹ per kg / bag / tin, switch to Fixed ₹.',
+              style: TextStyle(fontSize: 11, height: 1.25, color: sub),
+            ),
+            const SizedBox(height: 8),
+            orderedField(
+              order: 20,
+              c: commissionCtrl,
+              label: 'Commission %',
+              focusNode: commissionFocus,
+              keyboard: const TextInputType.numberWithOptions(decimal: true),
+              voucher: desktop,
+              decoration: densePurchaseFieldDecoration(
+                'Commission %',
+                voucher: desktop,
+              ).copyWith(suffixText: '%'),
+              onChanged: (s) {
+                ref.read(purchaseDraftProvider.notifier).setCommissionText(s);
+                onDraftChanged();
+              },
+            ),
+          ] else ...[
+            Builder(
+              builder: (context) {
+                final figOpts = brokerFigureUiOptions(draftLines);
+                final allowed = figOpts.map((e) => e.$1).toSet();
+                final coerced = allowed.contains(mode)
+                    ? mode
+                    : clampFigureModeToUiOptions(mode, draftLines);
+                if (coerced != mode) {
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    if (!context.mounted) return;
+                    ref
+                        .read(purchaseDraftProvider.notifier)
+                        .setCommissionMode(coerced);
+                    onDraftChanged();
+                  });
+                }
+
+                final hint = brokerFigureBasisLineHint(draftLines, coerced);
+
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const SizedBox(height: 6),
+                    Text(
+                      'Choose what the ₹ amount multiplies by. '
+                      'You can set this before adding items; hints update after lines exist.',
+                      style: TextStyle(
+                        fontSize: 11,
+                        height: 1.3,
+                        color: sub,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    orderedField(
+                      order: 20,
+                      c: commissionCtrl,
+                      label: 'Amount (₹)',
+                      focusNode: commissionFocus,
+                      keyboard: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
+                      voucher: desktop,
+                      decoration: densePurchaseFieldDecoration(
+                        'Amount (₹)',
+                        voucher: desktop,
+                      ),
+                      onChanged: (s) {
+                        ref
+                            .read(purchaseDraftProvider.notifier)
+                            .setCommissionText(s);
+                        onDraftChanged();
+                      },
+                    ),
+                    const SizedBox(height: 8),
+                    FocusTraversalOrder(
+                      order: const NumericFocusOrder(30),
+                      child: InputDecorator(
+                        decoration: densePurchaseFieldDecoration(
+                          'Commission applies to',
+                          voucher: desktop,
+                        ),
+                        child: DropdownButtonHideUnderline(
+                          child: DropdownButton<String>(
+                            value: coerced,
+                            isExpanded: true,
+                            isDense: true,
+                            items: [
+                              for (final o in figOpts)
+                                DropdownMenuItem<String>(
+                                  value: o.$1,
+                                  child: Text(
+                                    _unitDropdownLabel(o.$1),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                            ],
+                            onChanged: (v) {
+                              if (v == null) return;
+                              ref
+                                  .read(purchaseDraftProvider.notifier)
+                                  .setCommissionMode(v);
+                              onDraftChanged();
+                            },
+                          ),
+                        ),
+                      ),
+                    ),
+                    if (hint != null)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 6),
+                        child: Text(
+                          hint,
+                          style: TextStyle(
+                            fontSize: 11,
+                            height: 1.25,
+                            color: sub,
+                          ),
+                        ),
+                      ),
+                  ],
+                );
+              },
+            ),
+          ],
+        ],
+      );
+    }
+
+    // ── Desktop voucher: payment + discount always visible; rest collapsed ──
+    if (desktop) {
+      final moreOpen = narrationCtrl.text.trim().isNotEmpty ||
+          (hasBroker && commissionCtrl.text.trim().isNotEmpty);
+      final voucherColumn = Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (needsSupplierLink)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 4),
+              child: Text(
+                'Pick a supplier above to link catalog rates.',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.orange.shade900,
+                ),
+              ),
+            )
+          else if (supplierNameTrimmed.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 4),
+              child: Text(
+                'Defaults from $supplierNameTrimmed',
+                style: const TextStyle(
+                  fontSize: 11,
+                  color: HexaColors.brandTealBright,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(child: paymentDaysCol),
+              const SizedBox(width: 8),
+              Expanded(child: discountField),
+              const SizedBox(width: 8),
+              Expanded(
+                child: ListenableBuilder(
+                  listenable: paymentDaysCtrl,
+                  builder: (_, __) {
+                    final t = paymentDaysCtrl.text.trim();
+                    if (t.isEmpty) {
+                      return const SizedBox(height: kPurchaseVoucherFieldHeight);
+                    }
+                    return Padding(
+                      padding: const EdgeInsets.only(top: 18),
+                      child: Text(
+                        _duePreview(ref, paymentDaysCtrl),
+                        style: const TextStyle(
+                          fontSize: 11,
+                          color: HexaColors.brandTealBright,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+          Theme(
+            data: Theme.of(context)
+                .copyWith(dividerColor: Colors.transparent),
+            child: ExpansionTile(
+              initiallyExpanded: moreOpen,
+              tilePadding: EdgeInsets.zero,
+              childrenPadding: const EdgeInsets.only(bottom: 4),
+              visualDensity: VisualDensity.compact,
+              title: Text(
+                'More terms',
+                style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 12,
+                    ),
+              ),
+              subtitle: Text(
+                hasBroker
+                    ? 'Narration · broker commission'
+                    : 'Narration / ref',
+                style: TextStyle(fontSize: 10, color: sub),
+              ),
+              children: [
+                narrationField,
+                if (hasBroker) ...[
+                  const SizedBox(height: 8),
+                  brokerCommissionBlock(),
+                ],
+              ],
+            ),
+          ),
+        ],
+      );
+      return FocusTraversalGroup(
+        policy: OrderedTraversalPolicy(),
+        child: voucherColumn,
+      );
+    }
 
     final column = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -278,32 +570,21 @@ class PurchaseTermsOnlyStep extends ConsumerWidget {
               ),
         ),
         const SizedBox(height: 6),
-        // Primary terms field always visible; keep first-screen scroll short.
         paymentDaysCol,
-        // Progressive disclosure: discount + narration stay behind an expand
-        // when empty (UX-004). Auto-open when either already has a value.
         Builder(
           builder: (context) {
             final hasOptionalTerms = headerDiscCtrl.text.trim().isNotEmpty ||
                 narrationCtrl.text.trim().isNotEmpty;
-            final optionalBody = desktop
-                ? Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(child: discountField),
-                      const SizedBox(width: 16),
-                      Expanded(child: narrationField),
-                    ],
-                  )
-                : Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      discountField,
-                      narrationField,
-                    ],
-                  );
+            final optionalBody = Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                discountField,
+                narrationField,
+              ],
+            );
             return Theme(
-              data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+              data:
+                  Theme.of(context).copyWith(dividerColor: Colors.transparent),
               child: ExpansionTile(
                 key: ValueKey<String>(
                   'terms-optional-${hasOptionalTerms ? 'open' : 'closed'}',
@@ -330,175 +611,8 @@ class PurchaseTermsOnlyStep extends ConsumerWidget {
           },
         ),
         if (hasBroker) ...[
-          Text(
-            'Broker commission',
-            style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                  fontWeight: FontWeight.w700,
-                ),
-          ),
-          const SizedBox(height: 6),
-          SegmentedButton<String>(
-            style: const ButtonStyle(
-              visualDensity: VisualDensity.compact,
-              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            ),
-            showSelectedIcon: false,
-            segments: const [
-              ButtonSegment<String>(
-                value: kPurchaseCommissionModePercent,
-                label: Text('Commission %'),
-                icon: Icon(Icons.percent_rounded, size: 18),
-              ),
-              ButtonSegment<String>(
-                value: '_figure',
-                label: Text('Fixed ₹'),
-                icon: Icon(Icons.currency_rupee_rounded, size: 18),
-              ),
-            ],
-            emptySelectionAllowed: false,
-            selected: <String>{
-              if (mode == kPurchaseCommissionModePercent)
-                kPurchaseCommissionModePercent
-              else
-                '_figure',
-            },
-            onSelectionChanged: (Set<String> next) {
-              final v = next.first;
-              if (v == kPurchaseCommissionModePercent) {
-                ref
-                    .read(purchaseDraftProvider.notifier)
-                    .setCommissionMode(kPurchaseCommissionModePercent);
-              } else {
-                final sug =
-                    suggestedBrokerFigureModeFromLines(draftLines);
-                ref.read(purchaseDraftProvider.notifier).setCommissionMode(sug);
-              }
-              onDraftChanged();
-            },
-          ),
-          if (mode == kPurchaseCommissionModePercent) ...[
-            const SizedBox(height: 6),
-            Text(
-              '% of each line ₹ total after purchase discount. '
-              'For ₹ per kg / bag / tin, switch to Fixed ₹.',
-              style: TextStyle(fontSize: 11, height: 1.25, color: sub),
-            ),
-            const SizedBox(height: 8),
-            orderedField(
-              order: 20,
-              c: commissionCtrl,
-              label: 'Commission %',
-              focusNode: commissionFocus,
-              keyboard:
-                  const TextInputType.numberWithOptions(decimal: true),
-              decoration: densePurchaseFieldDecoration('Commission %')
-                  .copyWith(suffixText: '%'),
-              onChanged: (s) {
-                ref.read(purchaseDraftProvider.notifier).setCommissionText(s);
-                onDraftChanged();
-              },
-            ),
-          ] else ...[
-            Builder(
-              builder: (context) {
-                final figOpts = brokerFigureUiOptions(draftLines);
-                final allowed = figOpts.map((e) => e.$1).toSet();
-                final coerced = allowed.contains(mode)
-                    ? mode
-                    : clampFigureModeToUiOptions(mode, draftLines);
-                if (coerced != mode) {
-                  WidgetsBinding.instance.addPostFrameCallback((_) {
-                    if (!context.mounted) return;
-                    ref
-                        .read(purchaseDraftProvider.notifier)
-                        .setCommissionMode(coerced);
-                    onDraftChanged();
-                  });
-                }
-
-                final hint =
-                    brokerFigureBasisLineHint(draftLines, coerced);
-
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    const SizedBox(height: 6),
-                    Text(
-                      'Choose what the ₹ amount multiplies by. '
-                      'You can set this before adding items; hints update after lines exist.',
-                      style: TextStyle(
-                        fontSize: 11,
-                        height: 1.3,
-                        color: sub,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    orderedField(
-                      order: 20,
-                      c: commissionCtrl,
-                      label: 'Amount (₹)',
-                      focusNode: commissionFocus,
-                      keyboard: const TextInputType.numberWithOptions(
-                          decimal: true),
-                      decoration:
-                          densePurchaseFieldDecoration('Amount (₹)'),
-                      onChanged: (s) {
-                        ref
-                            .read(purchaseDraftProvider.notifier)
-                            .setCommissionText(s);
-                        onDraftChanged();
-                      },
-                    ),
-                    const SizedBox(height: 8),
-                    FocusTraversalOrder(
-                      order: const NumericFocusOrder(30),
-                      child: InputDecorator(
-                        decoration: densePurchaseFieldDecoration(
-                          'Commission applies to',
-                        ),
-                        child: DropdownButtonHideUnderline(
-                          child: DropdownButton<String>(
-                            value: coerced,
-                            isExpanded: true,
-                            isDense: true,
-                            items: [
-                              for (final o in figOpts)
-                                DropdownMenuItem<String>(
-                                  value: o.$1,
-                                  child: Text(
-                                    _unitDropdownLabel(o.$1),
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                            ],
-                            onChanged: (v) {
-                              if (v == null) return;
-                              ref
-                                  .read(purchaseDraftProvider.notifier)
-                                  .setCommissionMode(v);
-                              onDraftChanged();
-                            },
-                          ),
-                        ),
-                      ),
-                    ),
-                    if (hint != null)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 6),
-                        child: Text(
-                          hint,
-                          style: TextStyle(
-                            fontSize: 11,
-                            height: 1.25,
-                            color: sub,
-                          ),
-                        ),
-                      ),
-                  ],
-                );
-              },
-            ),
-          ],
+          const SizedBox(height: 8),
+          brokerCommissionBlock(),
           const SizedBox(height: 8),
         ],
       ],

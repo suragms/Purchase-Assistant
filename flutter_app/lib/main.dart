@@ -199,11 +199,12 @@ Future<void> main() async {
   if (kIsWeb) {
     usePathUrlStrategy();
   }
-  // Cursor IDE / Playwright snapshots read the web a11y tree. Flutter web
-  // otherwise defers full semantics until a screen reader opts in (the
-  // "Enable accessibility" overlay), so snapshots look empty even when the
-  // canvas UI is fine. Debug + profile only — release keeps default behavior.
-  if (kIsWeb && !kReleaseMode) {
+  // Cursor IDE / Playwright snapshots need the web a11y tree. Enabling full
+  // semantics on every debug session is expensive on Flutter web (typing lag).
+  // Opt in: --dart-define=HEXA_A11Y_SEMANTICS=true
+  if (kIsWeb &&
+      !kReleaseMode &&
+      const bool.fromEnvironment('HEXA_A11Y_SEMANTICS', defaultValue: false)) {
     WidgetsBinding.instance.ensureSemantics();
   }
   // Do not await Hive / prefs / restore here: on web, flutter_bootstrap.js awaits
@@ -223,7 +224,7 @@ class _HexaBootstrapState extends State<_HexaBootstrap> {
   ProviderContainer? _container;
   Object? _error;
   String? _errorStackTrace;
-  String _splashStatus = 'Connecting to server…';
+  String _splashStatus = 'Starting…';
   /// UID-001: release HTML splash only after bootstrap UI is in the tree.
   bool _bootOverlayReleaseScheduled = false;
   Timer? _splashSlowTimer;
@@ -251,10 +252,12 @@ class _HexaBootstrapState extends State<_HexaBootstrap> {
   @override
   void initState() {
     super.initState();
-    _splashSlowTimer = Timer(const Duration(seconds: 10), () {
+    _splashSlowTimer = Timer(const Duration(seconds: 8), () {
       if (!mounted || _container != null) return;
       setState(() {
-        _splashStatus = 'Server waking up, please wait…';
+        _splashStatus = AppConfig.apiBasePointsToLoopback
+            ? 'Still starting local storage…'
+            : 'Still connecting — check your network…';
       });
     });
     unawaited(_prepare());
@@ -271,19 +274,16 @@ class _HexaBootstrapState extends State<_HexaBootstrap> {
     final cap = kIsWeb ? const Duration(seconds: 15) : const Duration(minutes: 2);
 
     try {
-      await OfflineStore.init().timeout(cap);
-      _bootstrapLog('OfflineStore.init OK');
-      final prefs = await SharedPreferences.getInstance().timeout(cap);
+      // Parallel local init — neither needs the other.
+      late final SharedPreferences prefs;
+      await Future.wait<void>([
+        OfflineStore.init().timeout(cap),
+        SharedPreferences.getInstance().timeout(cap).then((p) {
+          prefs = p;
+        }),
+      ]);
       PrefsHelper.init(prefs);
-      _bootstrapLog('SharedPreferences OK');
-      await LocalNotificationsService.instance.init();
-      final notifOptIn = prefs.getBool(kNotificationsOptInKey) ?? false;
-      await LocalNotificationsService.instance.setOptIn(notifOptIn);
-
-      if (!kIsWeb) {
-        await LocalNotificationsService.instance
-            .scheduleHarisreeReminders(enabled: notifOptIn);
-      }
+      _bootstrapLog('OfflineStore + SharedPreferences OK');
 
       final container = ProviderContainer(
         observers: [_AppProviderObserver()],
@@ -292,18 +292,38 @@ class _HexaBootstrapState extends State<_HexaBootstrap> {
       registerRootProviderContainer(container);
       _bootstrapLog('ProviderContainer OK');
 
-      try {
-        await container.read(sessionProvider.notifier).restore().timeout(
-              kIsWeb ? const Duration(seconds: 20) : const Duration(seconds: 25),
-            );
-        _bootstrapLog('session.restore OK');
-      } catch (_) {
-        // Offline / timeout — splash/login handle retry.
-        _bootstrapLog('session.restore skipped or failed (non-fatal)');
-      }
+      // Mount HexaApp immediately — do not block first usable frame on session
+      // restore or health. Splash/login own auth restore with timeouts + retry.
+      if (!mounted) return;
+      _splashSlowTimer?.cancel();
+      _bootstrapLog('starting HexaApp (restore deferred)');
+      setState(() => _container = container);
+      _scheduleBootOverlayRelease(force: true);
 
-      // Health warm-up runs below (non-blocking) so HexaApp mounts immediately on web
-      // release — blocking here left a blank gray page after the HTML splash timed out.
+      unawaited(() async {
+        try {
+          await LocalNotificationsService.instance.init();
+          final notifOptIn = prefs.getBool(kNotificationsOptInKey) ?? false;
+          await LocalNotificationsService.instance.setOptIn(notifOptIn);
+          if (!kIsWeb) {
+            await LocalNotificationsService.instance
+                .scheduleHarisreeReminders(enabled: notifOptIn);
+          }
+        } catch (_) {}
+      }());
+
+      unawaited(() async {
+        try {
+          await container.read(sessionProvider.notifier).restore().timeout(
+                kIsWeb
+                    ? const Duration(seconds: 12)
+                    : const Duration(seconds: 25),
+              );
+          _bootstrapLog('session.restore OK (background)');
+        } catch (_) {
+          _bootstrapLog('session.restore skipped or failed (non-fatal)');
+        }
+      }());
 
       unawaited(() async {
         try {
@@ -314,7 +334,9 @@ class _HexaBootstrapState extends State<_HexaBootstrap> {
             onSlow: () {
               WidgetsBinding.instance.addPostFrameCallback((_) {
                 container.read(apiDegradedProvider.notifier).notifyDegraded(
-                      'Waking server (~30s) — first load may take a moment',
+                      AppConfig.apiBasePointsToLoopback
+                          ? 'API slow at ${AppConfig.resolvedApiBaseUrl}'
+                          : 'API slow — first responses may take a moment',
                     );
               });
             },
@@ -334,19 +356,11 @@ class _HexaBootstrapState extends State<_HexaBootstrap> {
             container.read(apiDegradedProvider.notifier).clear();
           });
           ApiWarmupService.startPeriodicHealth(api);
-          // pingHealth already probed /health/ready — do not duplicate here.
         } catch (_) {}
       }());
 
-      // Offline queue sync (best-effort): pushes queued writes when connectivity returns.
       OfflineSyncService.start(container);
 
-      if (!mounted) return;
-      _splashSlowTimer?.cancel();
-      _bootstrapLog('starting HexaApp');
-      setState(() => _container = container);
-      _scheduleBootOverlayRelease(force: true);
-      // Defer PDF locale setup: avoids blocking cold start path.
       unawaited(() async {
         try {
           await ensurePdfLocalesInitialized().timeout(const Duration(seconds: 8));

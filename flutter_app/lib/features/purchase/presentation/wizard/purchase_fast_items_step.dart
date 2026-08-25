@@ -1,7 +1,5 @@
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../../../core/theme/hexa_colors.dart';
@@ -14,7 +12,7 @@ import '../../state/purchase_draft_provider.dart';
 import '../../state/purchase_trade_preview_provider.dart';
 
 import '../../../../core/design_system/hexa_ds_tokens.dart';
-import '../../../../core/design_system/widgets/app_form_layout.dart';
+import '../widgets/purchase_line_actions.dart';
 import '../../../../shared/widgets/hexa_empty_state.dart';
 
 String _inr0(num n) =>
@@ -50,37 +48,26 @@ class PurchaseFastItemsStep extends ConsumerStatefulWidget {
 
 class _PurchaseFastItemsStepState extends ConsumerState<PurchaseFastItemsStep> {
   void _removeAt(int i) {
-    ref.read(purchaseDraftProvider.notifier).removeLineAt(i);
-    widget.onDraftChanged();
+    final line = ref.read(purchaseDraftProvider).lines[i];
+    removePurchaseLineWithUndo(
+      context: context,
+      ref: ref,
+      index: i,
+      line: line,
+      onDraftChanged: widget.onDraftChanged,
+    );
     setState(() {});
   }
 
   Future<void> _confirmClearAll() async {
-    final ok = await showCupertinoDialog<bool>(
-          context: context,
-          builder: (ctx) => CupertinoAlertDialog(
-            title: const Text('Clear all items?'),
-            content: const Text(
-              'This removes every line from this purchase.',
-            ),
-            actions: [
-              CupertinoDialogAction(
-                onPressed: () => ctx.pop(false),
-                child: const Text('Cancel'),
-              ),
-              CupertinoDialogAction(
-                isDestructiveAction: true,
-                onPressed: () => ctx.pop(true),
-                child: const Text('Clear all'),
-              ),
-            ],
-          ),
-        ) ??
-        false;
-    if (!ok || !mounted) return;
-    ref.read(purchaseDraftProvider.notifier).setLinesFromMaps([]);
-    widget.onDraftChanged();
-    setState(() {});
+    await clearPurchaseLinesWithConfirm(
+      context: context,
+      ref: ref,
+      onDraftChanged: () {
+        widget.onDraftChanged();
+        setState(() {});
+      },
+    );
   }
 
   String _qtyHuman(PurchaseLineDraft l) {
@@ -101,14 +88,6 @@ class _PurchaseFastItemsStepState extends ConsumerState<PurchaseFastItemsStep> {
     final r = tradePurchaseLineDisplayPurchaseRate(tl);
     final d = unit_lbl.purchaseRateSuffix(tl);
     return 'P ₹${r.toStringAsFixed(1)}/$d';
-  }
-
-  String _sRateQuick(PurchaseLineDraft l, Map<String, dynamic>? rateContext) {
-    final tl = tradeLineForDisplay(l, rateContext: rateContext);
-    final r = tradePurchaseLineDisplaySellingRate(tl);
-    if (r == null || r <= 0) return 'S —';
-    final d = unit_lbl.sellingRateSuffix(tl);
-    return 'S ₹${r.toStringAsFixed(1)}/$d';
   }
 
   Future<void> _editAdvanced(int i) async {
@@ -149,6 +128,119 @@ class _PurchaseFastItemsStepState extends ConsumerState<PurchaseFastItemsStep> {
           ),
           const SizedBox(height: 10),
         ],
+        Row(
+          children: [
+            Text(
+              'Items (${lines.length})',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w900,
+                    color: HexaColors.textOnLightSurface,
+                  ),
+            ),
+            const Spacer(),
+            if (lines.isNotEmpty)
+              TextButton(
+                onPressed: blocked ? null : _confirmClearAll,
+                child: const Text('Clear all'),
+              ),
+          ],
+        ),
+        const Divider(height: 16),
+        Expanded(
+          child: lines.isEmpty
+              ? PurchaseFastItemsEmpty(
+                  blocked: blocked,
+                  onAddItem: () => widget.openAdvancedItemEditor(),
+                )
+              : ListView.separated(
+                  controller: widget.listScrollController,
+                  padding: const EdgeInsets.only(bottom: 8),
+                  itemCount: lines.length,
+                  separatorBuilder: (_, __) => const SizedBox(height: 8),
+                  itemBuilder: (ctx, i) {
+                    final ln = lines[i];
+                    final rc = tradePreviewLineRateContext(preview, i);
+                    final buy = ln.landingApprox;
+                    final tax = ln.taxPercent ?? 0;
+                    return Material(
+                      color: Colors.white,
+                      elevation: 0,
+                      shape: Border(
+                        bottom: BorderSide(color: Colors.grey.shade200),
+                      ),
+                      child: InkWell(
+                        onTap: () => _editAdvanced(i),
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(4, 10, 0, 10),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      ln.itemName,
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.w800,
+                                        fontSize: 15,
+                                        color: HexaColors.textOnLightSurface,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      '${_qtyHuman(ln)}  ·  ${_pRateQuick(ln, rc)}'
+                                      '${tax > 0 ? '  ·  GST ${tax.toStringAsFixed(tax == tax.roundToDouble() ? 0 : 1)}%' : ''}',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w600,
+                                        fontSize: 13,
+                                        color: HexaColors.slate400,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      _inr0(buy),
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.w900,
+                                        fontSize: 16,
+                                        color: HexaColors.textOnLightSurface,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              IconButton(
+                                tooltip: 'Remove',
+                                icon: const Icon(
+                                  Icons.delete_outline_rounded,
+                                  size: 20,
+                                ),
+                                onPressed: () => _removeAt(i),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+        ),
+        if (lines.isNotEmpty) ...[
+          const SizedBox(height: 4),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              onPressed:
+                  blocked ? null : () => widget.openAdvancedItemEditor(),
+              icon: const Icon(Icons.add, size: 18),
+              label: const Text(
+                '+ Add item',
+                style: TextStyle(fontWeight: FontWeight.w800),
+              ),
+            ),
+          ),
+        ],
+        const SizedBox(height: 8),
         Consumer(
           builder: (cx, rf, _) {
             final bd = rf.watch(purchaseStrictBreakdownProvider);
@@ -169,213 +261,87 @@ class _PurchaseFastItemsStepState extends ConsumerState<PurchaseFastItemsStep> {
               }
             });
             final qtyLine = unitBits.isEmpty ? '—' : unitBits.join(' • ');
-            return Material(
-              color: Colors.white,
-              elevation: 0,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-                side: const BorderSide(color: HexaColors.brandBorder),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Text(
-                      'TOTAL',
-                      style: Theme.of(cx).textTheme.labelMedium?.copyWith(
-                            fontWeight: FontWeight.w900,
-                            color: Colors.black54,
-                          ),
-                    ),
-                    const SizedBox(height: 4),
-                    AppFormRow(
-                      children: [
-                        Text(
-                          _inr0(bd.grand),
-                          style:
-                              Theme.of(cx).textTheme.headlineSmall?.copyWith(
-                                    fontWeight: FontWeight.w900,
-                                    color: HexaColors.textOnLightSurface,
-                                  ),
+            return Padding(
+              padding: const EdgeInsets.fromLTRB(4, 8, 4, 4),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _MobileSummaryRow(label: 'Qty', value: qtyLine),
+                  _MobileSummaryRow(
+                    label: 'Subtotal',
+                    value: _inr0(bd.subtotalGross),
+                  ),
+                  _MobileSummaryRow(
+                    label: 'Tax',
+                    value: _inr0(bd.taxTotal),
+                  ),
+                  _MobileSummaryRow(
+                    label: 'Charges',
+                    value: _inr0(bd.freight + bd.commission),
+                  ),
+                  const SizedBox(height: 6),
+                  Row(
+                    children: [
+                      const Text(
+                        'GRAND TOTAL',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w800,
+                          fontSize: 13,
+                          color: HexaColors.slate400,
                         ),
-                        Text(
-                          qtyLine,
-                          style: Theme.of(cx).textTheme.titleSmall?.copyWith(
-                                fontWeight: FontWeight.w900,
-                                color: HexaColors.textOnLightSurface,
-                              ),
+                      ),
+                      const Spacer(),
+                      Text(
+                        _inr0(bd.grand),
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w900,
+                          fontSize: 22,
+                          color: HexaColors.textOnLightSurface,
                         ),
-                      ],
-                    ),
-                  ],
-                ),
+                      ),
+                    ],
+                  ),
+                ],
               ),
             );
           },
         ),
-        const SizedBox(height: 14),
-        Row(
-          children: [
-            Text(
-              'Items (${lines.length})',
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w900,
-                    color: HexaColors.textOnLightSurface,
-                  ),
-            ),
-            const Spacer(),
-            TextButton(
-              onPressed: blocked || lines.isEmpty ? null : _confirmClearAll,
-              child: const Text('Clear all'),
-            ),
-          ],
-        ),
-        const Divider(height: 16),
-        Expanded(
-          child: lines.isEmpty
-              ? PurchaseFastItemsEmpty(
-                  blocked: blocked,
-                  onAddItem: () => widget.openAdvancedItemEditor(),
-                )
-              : ListView.separated(
-                  controller: widget.listScrollController,
-                  padding: const EdgeInsets.only(bottom: 8),
-                  itemCount: lines.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: 12),
-                  itemBuilder: (ctx, i) {
-                    final ln = lines[i];
-                    final rc = tradePreviewLineRateContext(preview, i);
-                    final buy = ln.landingApprox;
-                    return Material(
-                      color: Colors.white,
-                      elevation: 0,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
-                        side: BorderSide(color: Colors.grey.shade300),
-                      ),
-                      child: InkWell(
-                        borderRadius: BorderRadius.circular(10),
-                        onTap: () => _editAdvanced(i),
-                        child: Padding(
-                          padding: const EdgeInsets.fromLTRB(12, 10, 8, 10),
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                '${i + 1}.',
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w900,
-                                  fontSize: 16,
-                                  color: HexaColors.textOnLightSurface,
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      ln.itemName,
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.w900,
-                                        fontSize: 16,
-                                        color: HexaColors.textOnLightSurface,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      _qtyHuman(ln),
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.w800,
-                                        fontSize: 15,
-                                        color: HexaColors.textOnLightSurface,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 6),
-                                    Wrap(
-                                      spacing: 6,
-                                      runSpacing: 4,
-                                      children: [
-                                        Chip(
-                                          visualDensity: VisualDensity.compact,
-                                          label: Text(
-                                            _pRateQuick(ln, rc),
-                                            style: const TextStyle(
-                                              fontSize: 12,
-                                              fontWeight: FontWeight.w800,
-                                            ),
-                                          ),
-                                          backgroundColor:
-                                              HexaColors.slate100,
-                                          side: BorderSide.none,
-                                          padding: EdgeInsets.zero,
-                                          materialTapTargetSize:
-                                              MaterialTapTargetSize.shrinkWrap,
-                                        ),
-                                        Chip(
-                                          visualDensity: VisualDensity.compact,
-                                          label: Text(
-                                            _sRateQuick(ln, rc),
-                                            style: const TextStyle(
-                                              fontSize: 12,
-                                              fontWeight: FontWeight.w800,
-                                            ),
-                                          ),
-                                          backgroundColor:
-                                              HexaDsColors.successSurface,
-                                          side: BorderSide.none,
-                                          padding: EdgeInsets.zero,
-                                          materialTapTargetSize:
-                                              MaterialTapTargetSize.shrinkWrap,
-                                        ),
-                                      ],
-                                    ),
-                                    const SizedBox(height: 6),
-                                    Text(
-                                      _inr0(buy),
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.w900,
-                                        fontSize: 18,
-                                        color: HexaColors.brandTealBright,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              IconButton(
-                                tooltip: 'Remove',
-                                icon: const Icon(Icons.delete_outline_rounded),
-                                onPressed: () => _removeAt(i),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    );
-                  },
-                ),
-        ),
-        const SizedBox(height: 8),
-        SizedBox(
-          height: 52,
-          width: double.infinity,
-          child: OutlinedButton.icon(
-            onPressed: blocked
-                ? null
-                : () => widget.openAdvancedItemEditor(),
-            icon: const Icon(Icons.add_circle_outline_rounded, size: 22),
-            label: const Text(
-              '+ Add Item',
-              style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16),
-            ),
-            style: OutlinedButton.styleFrom(
-              minimumSize: const Size.fromHeight(52),
-              side: const BorderSide(color: HexaColors.brandPrimary, width: 1.5),
+      ],
+    );
+  }
+}
+
+class _MobileSummaryRow extends StatelessWidget {
+  const _MobileSummaryRow({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 4),
+      child: Row(
+        children: [
+          Text(
+            label,
+            style: const TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: HexaColors.slate400,
             ),
           ),
-        ),
-      ],
+          const Spacer(),
+          Text(
+            value,
+            style: const TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+              color: HexaColors.textOnLightSurface,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -386,18 +352,72 @@ class PurchaseFastItemsEmpty extends StatelessWidget {
     super.key,
     required this.blocked,
     required this.onAddItem,
+    this.compact = false,
   });
 
   final bool blocked;
   final VoidCallback onAddItem;
 
+  /// Dense ERP empty row (desktop/tablet table) — no giant icon chrome.
+  final bool compact;
+
   @override
   Widget build(BuildContext context) {
     if (blocked) {
+      if (compact) {
+        return Padding(
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          child: Text(
+            'Pick a supplier first so catalog links and rates work.',
+            style: TextStyle(
+              fontWeight: FontWeight.w600,
+              color: Colors.orange.shade900,
+              fontSize: 13,
+            ),
+          ),
+        );
+      }
       return const HexaEmptyState(
         icon: Icons.storefront_outlined,
         title: 'Supplier required',
         subtitle: 'Pick a supplier first so catalog links and rates work.',
+      );
+    }
+    if (compact) {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(0, 8, 0, 4),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'No items added yet.',
+              style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w800,
+                    color: HexaColors.textOnLightSurface,
+                  ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Add your first purchase line.',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: HexaColors.slate400,
+                    fontWeight: FontWeight.w600,
+                  ),
+            ),
+            const SizedBox(height: 10),
+            SizedBox(
+              height: 40,
+              child: OutlinedButton.icon(
+                onPressed: onAddItem,
+                icon: const Icon(Icons.add, size: 18),
+                label: const Text(
+                  'Add item',
+                  style: TextStyle(fontWeight: FontWeight.w800),
+                ),
+              ),
+            ),
+          ],
+        ),
       );
     }
     return HexaEmptyState(

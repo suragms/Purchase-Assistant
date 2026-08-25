@@ -56,9 +56,10 @@ import 'wizard/purchase_fast_items_step.dart';
 import 'wizard/purchase_party_step.dart';
 import 'wizard/purchase_review_tally_step.dart';
 import 'wizard/purchase_terms_only_step.dart';
+import 'tablet/purchase_tablet_item_list.dart';
+import 'widgets/purchase_entry_summary_strip.dart';
 import 'widgets/purchase_fast_items_table.dart';
 import 'widgets/purchase_item_entry_sheet.dart';
-import 'widgets/purchase_summary_sidebar.dart';
 import 'widgets/purchase_saved_sheet.dart';
 
 enum _WizardExitDraftChoice { keepEditing, saveDraft, discard }
@@ -90,6 +91,16 @@ class PurchaseEntryWizard extends ConsumerStatefulWidget {
       _PurchaseEntryWizardState();
 }
 
+enum _DraftUiState { clean, dirty, saving, saved }
+
+class _SaveDraftIntent extends Intent {
+  const _SaveDraftIntent();
+}
+
+class _ConfirmSaveIntent extends Intent {
+  const _ConfirmSaveIntent();
+}
+
 class _PurchaseEntryWizardState extends ConsumerState<PurchaseEntryWizard>
     with WidgetsBindingObserver {
   bool _isBootstrapping = false;
@@ -101,6 +112,7 @@ class _PurchaseEntryWizardState extends ConsumerState<PurchaseEntryWizard>
   bool _isSaving = false;
   bool _itemSheetInFlight = false;
   bool _formDirty = false;
+  _DraftUiState _draftUiState = _DraftUiState.clean;
   String? _previewHumanId;
   String? _editHumanId;
   String? _loadedDerivedStatus;
@@ -576,7 +588,10 @@ class _PurchaseEntryWizardState extends ConsumerState<PurchaseEntryWizard>
       ref.read(purchaseDraftProvider.notifier).applyFromPrefsMap(o);
       if (!mounted) return;
       _syncControllersFromDraft();
-      setState(() => _formDirty = true);
+      setState(() {
+        _formDirty = true;
+        _draftUiState = _DraftUiState.dirty;
+      });
     }
 
     if (fromHive != null && fromHive.isNotEmpty) {
@@ -613,10 +628,16 @@ class _PurchaseEntryWizardState extends ConsumerState<PurchaseEntryWizard>
   void _onDraftChanged() {
     if (widget.editingId != null && widget.editingId!.isNotEmpty) return;
     if (!mounted) return;
-    if (!_formDirty) setState(() => _formDirty = true);
+    if (!_formDirty || _draftUiState != _DraftUiState.dirty) {
+      setState(() {
+        _formDirty = true;
+        _draftUiState = _DraftUiState.dirty;
+      });
+    }
     _draftDebounce?.cancel();
     _draftDebounce = Timer(const Duration(milliseconds: 800), () {
       if (!mounted) return;
+      setState(() => _draftUiState = _DraftUiState.saving);
       _flushDraftToPrefs();
     });
   }
@@ -652,11 +673,19 @@ class _PurchaseEntryWizardState extends ConsumerState<PurchaseEntryWizard>
     _cachedDraftJson = json;
     unawaited(p.setString(k, json));
     unawaited(OfflineStore.putPurchaseWizardDraft(bid, json));
+    if (mounted &&
+        (widget.editingId == null || widget.editingId!.isEmpty)) {
+      setState(() => _draftUiState = _DraftUiState.saved);
+    }
   }
 
   /// Immediate save for party-step footer (still debounces on normal edits via [_onDraftChanged]).
   void _saveDraftNow({bool notify = false}) {
     _draftDebounce?.cancel();
+    if (mounted &&
+        (widget.editingId == null || widget.editingId!.isEmpty)) {
+      setState(() => _draftUiState = _DraftUiState.saving);
+    }
     _flushDraftToPrefs();
     if (!mounted || widget.editingId != null) return;
     if (notify) {
@@ -1343,106 +1372,184 @@ class _PurchaseEntryWizardState extends ConsumerState<PurchaseEntryWizard>
         ? await _recentCatalogItemIdsForSupplier(supplierId)
         : const <String>[];
     if (!mounted) return;
+
+    Future<void> afterEditorClosed() async {
+      if (mounted && _wizStep == 1) {
+        _scrollWizardItemsStepToBottom();
+      }
+    }
+
+    // Desktop + tablet: modal sheet host (no permanent side drawer).
+    // Mobile <600: fullscreen form.
+    if (context.isDesktopLayout || context.isTabletLayout) {
+      final sheetH = MediaQuery.sizeOf(context).height * 0.88;
+      await showHexaBottomSheet<void>(
+        context: context,
+        compact: false,
+        maxWidth: context.isDesktopLayout ? 720 : 640,
+        padding: EdgeInsets.zero,
+        child: SizedBox(
+          height: sheetH,
+          child: _buildPurchaseItemEntrySheet(
+            catalogForSheet: catalogForSheet,
+            initial: initial,
+            editIndex: editIndex,
+            priorityIds: priorityIds,
+            preferredSupplierId:
+                supplierId != null && supplierId.isNotEmpty ? supplierId : null,
+            embedded: true,
+            fullPage: true,
+            hostContext: context,
+            onEmbeddedDismiss: (result) {
+              if (context.mounted && Navigator.of(context).canPop()) {
+                Navigator.of(context).pop(result);
+              }
+            },
+          ),
+        ),
+      );
+      await afterEditorClosed();
+      return;
+    }
+
     await Navigator.of(context).push<void>(
       MaterialPageRoute(
         fullscreenDialog: true,
-        builder: (ctx) => PurchaseItemEntrySheet(
-          catalog: catalogForSheet,
+        builder: (ctx) => _buildPurchaseItemEntrySheet(
+          catalogForSheet: catalogForSheet,
           initial: initial,
-          isEdit: editIndex != null,
-          fullPage: true,
-          gstPrefs: ref.read(sharedPreferencesProvider),
+          editIndex: editIndex,
+          priorityIds: priorityIds,
           preferredSupplierId:
               supplierId != null && supplierId.isNotEmpty ? supplierId : null,
-          priorityCatalogItemIds: priorityIds,
-          omitLineFreightDeliveredBilltyDiscount: false,
-          navigateCatalogQuickAddItem: session == null
-              ? null
-              : () async {
-                  final supId = draft.supplierId?.trim();
-                  final broId = draft.brokerId?.trim();
-                  final q = <String, String>{
-                    if (supId != null && supId.isNotEmpty)
-                      'defaultSupplierId': supId,
-                    if (broId != null && broId.isNotEmpty)
-                      'defaultBrokerId': broId,
-                    'returnToPurchase': '1',
-                  };
-                  final uri = Uri(
-                    path: '/catalog/quick-add',
-                    queryParameters: q.isEmpty ? null : q,
-                  );
-                  final res = await ctx.push<Map<String, dynamic>?>(uri.toString());
-                  if (!ctx.mounted) return null;
-                  if (res != null &&
-                      (res['id']?.toString().trim().isNotEmpty ?? false)) {
-                    ref.invalidate(catalogItemsListProvider);
-                    try {
-                      await ref.read(catalogItemsListProvider.future);
-                    } catch (_) {}
-                  }
-                  return res;
-                },
-          onDefaultsResolved: session == null
-              ? null
-              : _applyHeaderDefaultsFromLastTrade,
-          resolveCatalogItem: session == null
-              ? null
-              : (String catalogItemId) =>
-                  ref.read(hexaApiProvider).getCatalogItem(
-                        businessId: session.primaryBusiness.id,
-                        itemId: catalogItemId,
-                      ),
-          resolveLastDefaults: session == null
-              ? null
-              : (String catalogItemId) {
-                  final d = ref.read(purchaseDraftProvider);
-                  return ref.read(hexaApiProvider).lastTradePurchaseDefaults(
-                        businessId: session.primaryBusiness.id,
-                        catalogItemId: catalogItemId,
-                        supplierId: d.supplierId,
-                        brokerId: d.brokerId,
-                      );
-                },
-          persistCatalogBagWeight: session == null
-              ? null
-              : ({
-                  required String catalogItemId,
-                  required String newName,
-                  required double defaultKgPerBag,
-                }) async {
-                  await ref.read(hexaApiProvider).updateCatalogItem(
-                        businessId: session.primaryBusiness.id,
-                        itemId: catalogItemId,
-                        name: newName,
-                        patchDefaultKgPerBag: true,
-                        defaultKgPerBag: defaultKgPerBag,
-                        includeDefaultUnit: true,
-                        defaultUnit: 'bag',
-                      );
-                  ref.invalidate(catalogItemsListProvider);
-                },
-          onCommitted: (line) {
-            final p = PurchaseLineDraft.fromLineMap(
-              Map<String, dynamic>.from(line),
-            );
-            ref.read(purchaseDraftProvider.notifier).addOrReplaceLine(
-                  p,
-                  editIndex: editIndex,
-                );
-            setState(() {
-              _inlineSaveError = null;
-              _lineJustAdded = p;
-            });
-            _onDraftChanged();
-            unawaited(_learnCatalogPackDefaultsIfNeeded(catalogForSheet, p));
-          },
+          embedded: false,
+          fullPage: true,
+          hostContext: ctx,
         ),
       ),
     );
-    if (mounted && _wizStep == 1) {
-      _scrollWizardItemsStepToBottom();
-    }
+    await afterEditorClosed();
+  }
+
+  PurchaseItemEntrySheet _buildPurchaseItemEntrySheet({
+    required List<Map<String, dynamic>> catalogForSheet,
+    required Map<String, dynamic>? initial,
+    required int? editIndex,
+    required List<String> priorityIds,
+    required String? preferredSupplierId,
+    required bool embedded,
+    required bool fullPage,
+    required BuildContext hostContext,
+    ValueChanged<Object?>? onEmbeddedDismiss,
+  }) {
+    final session = ref.read(sessionProvider);
+    final draft = ref.read(purchaseDraftProvider);
+    return PurchaseItemEntrySheet(
+      catalog: catalogForSheet,
+      initial: initial,
+      isEdit: editIndex != null,
+      fullPage: fullPage,
+      embedded: embedded,
+      onEmbeddedDismiss: onEmbeddedDismiss,
+      gstPrefs: ref.read(sharedPreferencesProvider),
+      preferredSupplierId: preferredSupplierId,
+      priorityCatalogItemIds: priorityIds,
+      omitLineFreightDeliveredBilltyDiscount: false,
+      navigateCatalogQuickAddItem: session == null
+          ? null
+          : () async {
+              final supId = draft.supplierId?.trim();
+              final broId = draft.brokerId?.trim();
+              final q = <String, String>{
+                if (supId != null && supId.isNotEmpty)
+                  'defaultSupplierId': supId,
+                if (broId != null && broId.isNotEmpty)
+                  'defaultBrokerId': broId,
+                'returnToPurchase': '1',
+              };
+              final uri = Uri(
+                path: '/catalog/quick-add',
+                queryParameters: q.isEmpty ? null : q,
+              );
+              final res =
+                  await hostContext.push<Map<String, dynamic>?>(uri.toString());
+              if (!hostContext.mounted) return null;
+              if (res != null &&
+                  (res['id']?.toString().trim().isNotEmpty ?? false)) {
+                ref.invalidate(catalogItemsListProvider);
+                try {
+                  await ref.read(catalogItemsListProvider.future);
+                } catch (_) {}
+              }
+              return res;
+            },
+      onDefaultsResolved: session == null
+          ? null
+          : _applyHeaderDefaultsFromLastTrade,
+      resolveCatalogItem: session == null
+          ? null
+          : (String catalogItemId) => ref.read(hexaApiProvider).getCatalogItem(
+                businessId: session.primaryBusiness.id,
+                itemId: catalogItemId,
+              ),
+      resolveLastDefaults: session == null
+          ? null
+          : (String catalogItemId) {
+              final d = ref.read(purchaseDraftProvider);
+              return ref.read(hexaApiProvider).lastTradePurchaseDefaults(
+                    businessId: session.primaryBusiness.id,
+                    catalogItemId: catalogItemId,
+                    supplierId: d.supplierId,
+                    brokerId: d.brokerId,
+                  );
+            },
+      persistCatalogBagWeight: session == null
+          ? null
+          : ({
+              required String catalogItemId,
+              required String newName,
+              required double defaultKgPerBag,
+            }) async {
+              await ref.read(hexaApiProvider).updateCatalogItem(
+                    businessId: session.primaryBusiness.id,
+                    itemId: catalogItemId,
+                    name: newName,
+                    patchDefaultKgPerBag: true,
+                    defaultKgPerBag: defaultKgPerBag,
+                    includeDefaultUnit: true,
+                    defaultUnit: 'bag',
+                  );
+              ref.invalidate(catalogItemsListProvider);
+            },
+      onCommitted: (line) {
+        final p = PurchaseLineDraft.fromLineMap(
+          Map<String, dynamic>.from(line),
+        );
+        final wasEdit = editIndex != null;
+        ref.read(purchaseDraftProvider.notifier).addOrReplaceLine(
+              p,
+              editIndex: editIndex,
+            );
+        setState(() {
+          _inlineSaveError = null;
+          _lineJustAdded = wasEdit ? null : p;
+        });
+        _onDraftChanged();
+        unawaited(_learnCatalogPackDefaultsIfNeeded(catalogForSheet, p));
+        if (hostContext.mounted) {
+          ScaffoldMessenger.of(hostContext).hideCurrentSnackBar();
+          ScaffoldMessenger.of(hostContext).showSnackBar(
+            SnackBar(
+              content: Text(
+                wasEdit ? 'Item updated' : 'Added ${p.itemName}',
+              ),
+              behavior: SnackBarBehavior.floating,
+              duration: const Duration(seconds: 2),
+            ),
+          );
+        }
+      },
+    );
   }
 
   bool _isEditMode() =>
@@ -2117,7 +2224,7 @@ class _PurchaseEntryWizardState extends ConsumerState<PurchaseEntryWizard>
   }
 
   /// Party + Terms composition (shared by the mobile step and the desktop
-  /// single page). `desktop` arranges each step's fields into a 3-column grid.
+  /// voucher header). `desktop` uses dense Tally-like chrome (no section titles).
   Widget _step0Content(
     BuildContext context,
     List<Map<String, dynamic>> catalog,
@@ -2126,6 +2233,7 @@ class _PurchaseEntryWizardState extends ConsumerState<PurchaseEntryWizard>
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
       children: [
         PurchasePartyStep(
           isEdit: isEdit,
@@ -2137,8 +2245,7 @@ class _PurchaseEntryWizardState extends ConsumerState<PurchaseEntryWizard>
           brokerCtrl: _brokerCtrl,
           supplierFocusNode: _partySupplierFocus,
           brokerFocusNode: _partyBrokerFocus,
-          // Desktop single page has no step to advance to — broker submit just
-          // dismisses the keyboard instead of scrolling the whole page.
+          // Desktop voucher — broker submit dismisses focus; items stay visible.
           onProceedFromParty: desktop ? () {} : _partyAdvanceIfValid,
           supplierFieldError: _supplierFieldError,
           brokerFieldError: _brokerFieldError,
@@ -2178,17 +2285,19 @@ class _PurchaseEntryWizardState extends ConsumerState<PurchaseEntryWizard>
           supplierBalanceById: _supplierBalanceById,
           desktop: desktop,
         ),
-        const SizedBox(height: 20),
-        Divider(height: 1, color: Colors.grey.shade300),
-        const SizedBox(height: 16),
-        Text(
-          'Terms & charges',
-          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.w800,
-                color: HexaColors.textOnLightSurface,
-              ),
-        ),
-        const SizedBox(height: 12),
+        SizedBox(height: desktop ? 6 : 20),
+        if (!desktop) ...[
+          Divider(height: 1, color: Colors.grey.shade300),
+          const SizedBox(height: 16),
+          Text(
+            'Terms & charges',
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w800,
+                  color: HexaColors.textOnLightSurface,
+                ),
+          ),
+          const SizedBox(height: 12),
+        ],
         PurchaseTermsOnlyStep(
           paymentDaysFocus: _termsPaymentDaysFocus,
           paymentDaysCtrl: _paymentDaysCtrl,
@@ -2206,23 +2315,111 @@ class _PurchaseEntryWizardState extends ConsumerState<PurchaseEntryWizard>
     );
   }
 
-  /// Desktop-only single scroll page: Party & Terms grid → items table →
-  /// review section (replaces the 3-step wizard on ≥1024px).
+  /// Desktop voucher: compact header + Expanded items table + summary strip.
   Widget _desktopSingleScrollPage(
     BuildContext context,
     List<Map<String, dynamic>> catalog,
     bool isEdit,
   ) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+      child: Align(
+        alignment: Alignment.topCenter,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 1280),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _step0Content(context, catalog, isEdit, desktop: true),
+              const SizedBox(height: 8),
+              Divider(height: 1, color: Colors.grey.shade300),
+              const SizedBox(height: 4),
+              Expanded(
+                child: PurchaseFastItemsTable(
+                  catalog: catalog,
+                  fillHeight: true,
+                  preferredSupplierId:
+                      ref.read(purchaseDraftProvider).supplierId,
+                  onDraftChanged: _onDraftChanged,
+                  openAdvancedItemEditor: ({editIndex, initialOverride}) =>
+                      _openItemSheet(
+                    catalog,
+                    editIndex: editIndex,
+                    initialOverride: initialOverride,
+                  ),
+                  lineJustAdded: _lineJustAdded,
+                  onDismissLineJustAdded: () =>
+                      setState(() => _lineJustAdded = null),
+                ),
+              ),
+              PurchaseEntrySummaryStrip(
+                onDraftChanged: _onDraftChanged,
+                compact: true,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Tablet (600–1023): voucher layout when width ≥768; else scroll + list.
+  Widget _tabletSingleScrollPage(
+    BuildContext context,
+    List<Map<String, dynamic>> catalog,
+    bool isEdit,
+  ) {
+    final w = MediaQuery.sizeOf(context).width;
+    final useInlineTable = w >= 768;
+    final supplierId = ref.read(purchaseDraftProvider).supplierId;
+
+    if (useInlineTable) {
+      // Same voucher chrome as desktop — table fills remaining height.
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _step0Content(context, catalog, isEdit, desktop: true),
+            const SizedBox(height: 8),
+            Divider(height: 1, color: Colors.grey.shade300),
+            const SizedBox(height: 4),
+            Expanded(
+              child: PurchaseFastItemsTable(
+                catalog: catalog,
+                fillHeight: true,
+                preferredSupplierId: supplierId,
+                onDraftChanged: _onDraftChanged,
+                openAdvancedItemEditor: ({editIndex, initialOverride}) =>
+                    _openItemSheet(
+                  catalog,
+                  editIndex: editIndex,
+                  initialOverride: initialOverride,
+                ),
+                lineJustAdded: _lineJustAdded,
+                onDismissLineJustAdded: () =>
+                    setState(() => _lineJustAdded = null),
+              ),
+            ),
+            PurchaseEntrySummaryStrip(
+              onDraftChanged: _onDraftChanged,
+              compact: true,
+            ),
+          ],
+        ),
+      );
+    }
+
     return SingleChildScrollView(
       controller: _wizardBodyScrollController,
       keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.manual,
-      padding: const EdgeInsets.fromLTRB(24, 16, 24, 48),
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 48),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _step0Content(context, catalog, isEdit, desktop: true),
+          _step0Content(context, catalog, isEdit, desktop: false),
           const Divider(height: 28),
-          PurchaseFastItemsTable(
+          PurchaseTabletItemList(
             onDraftChanged: _onDraftChanged,
             openAdvancedItemEditor: ({editIndex, initialOverride}) =>
                 _openItemSheet(
@@ -2231,17 +2428,77 @@ class _PurchaseEntryWizardState extends ConsumerState<PurchaseEntryWizard>
               initialOverride: initialOverride,
             ),
             lineJustAdded: _lineJustAdded,
-            onDismissLineJustAdded: () => setState(() => _lineJustAdded = null),
+            onDismissLineJustAdded: () =>
+                setState(() => _lineJustAdded = null),
           ),
-          const Divider(height: 28),
-          PurchaseReviewTallyStep(
-            isEdit: isEdit,
-            previewHumanId: _previewHumanId,
-            editHumanId: _editHumanId,
-            embeddedInOuterScroll: true,
-          ),
+          const SizedBox(height: 20),
+          PurchaseEntrySummaryStrip(onDraftChanged: _onDraftChanged),
           const SizedBox(height: 24),
         ],
+      ),
+    );
+  }
+
+  Widget _tabletSaveChrome({required bool isEdit}) {
+    final saveVal = ref.watch(purchaseSaveValidationProvider);
+    return Material(
+      color: Colors.white,
+      elevation: 6,
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (_inlineSaveError != null)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Text(
+                    _inlineSaveError!,
+                    style: TextStyle(color: Colors.red[900], fontSize: 12),
+                  ),
+                ),
+              if (!saveVal.isOk)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 6),
+                  child: Text(
+                    saveVal.errorMessage ??
+                        (saveVal.lineErrors.isNotEmpty
+                            ? saveVal.lineErrors.values.first
+                            : ''),
+                    style: TextStyle(color: Colors.red[800], fontSize: 11),
+                  ),
+                ),
+              SizedBox(
+                height: 48,
+                child: FilledButton(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: HexaColors.brandAccent,
+                  ),
+                  onPressed: _isSaving ? null : _validateAndSave,
+                  child: _isSaving
+                      ? const SizedBox(
+                          height: 18,
+                          width: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : Text(
+                          isEdit ? 'Update purchase' : 'Save purchase',
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w800,
+                            fontSize: 15,
+                          ),
+                        ),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -2421,50 +2678,62 @@ class _PurchaseEntryWizardState extends ConsumerState<PurchaseEntryWizard>
       child: LayoutBuilder(
         builder: (ctx, _) {
           final kbInset = MediaQuery.viewInsetsOf(ctx).bottom;
-          // Desktop (≥1024px): 70/30 split — single scroll page left, sticky
-          // summary sidebar right. Mobile path below stays byte-identical.
+          // Desktop (≥1024): full-width single scroll + sticky save.
+          // No permanent Add Item drawer / right summary sidebar (Tally shell).
           if (context.isDesktopLayout) {
-            return Row(
+            return Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Expanded(
-                  flex: 7,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      if (_inlineSaveError != null)
-                        Material(
-                          color: Colors.red[50],
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 12, vertical: 8),
-                            child: Text(
-                              _inlineSaveError!,
-                              style: TextStyle(
-                                color: Colors.red[900],
-                                fontSize: 12,
-                              ),
-                            ),
-                          ),
+                if (_inlineSaveError != null)
+                  Material(
+                    color: Colors.red[50],
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 8),
+                      child: Text(
+                        _inlineSaveError!,
+                        style: TextStyle(
+                          color: Colors.red[900],
+                          fontSize: 12,
                         ),
-                      Expanded(
-                        child: _desktopSingleScrollPage(context, catalog, isEdit),
                       ),
-                    ],
+                    ),
                   ),
-                ),
-                const VerticalDivider(width: 1, thickness: 1),
                 Expanded(
-                  flex: 3,
-                  child: PurchaseSummarySidebar(
-                    onConfirmSave: _validateAndSave,
-                    isSaving: _isSaving,
-                    onDraftChanged: _onDraftChanged,
-                  ),
+                  child: _desktopSingleScrollPage(context, catalog, isEdit),
                 ),
+                _tabletSaveChrome(isEdit: isEdit),
               ],
             );
           }
+          // Tablet (600–1023): single-scroll workspace + sticky save.
+          if (context.isTabletLayout) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (_inlineSaveError != null)
+                  Material(
+                    color: Colors.red[50],
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 8),
+                      child: Text(
+                        _inlineSaveError!,
+                        style: TextStyle(
+                          color: Colors.red[900],
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                  ),
+                Expanded(
+                  child: _tabletSingleScrollPage(context, catalog, isEdit),
+                ),
+                _tabletSaveChrome(isEdit: isEdit),
+              ],
+            );
+          }
+          // Mobile <600: stepped wizard (unchanged).
             final stepScroll = wizStep == 2
               ? Padding(
                   padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
@@ -2604,7 +2873,9 @@ class _PurchaseEntryWizardState extends ConsumerState<PurchaseEntryWizard>
         _lastCatalogSnapshot ??
         const <Map<String, dynamic>>[];
 
-    final appBarTitle = !isEdit
+    final appBarTitle = (context.isDesktopLayout || context.isTabletLayout)
+        ? (isEdit ? 'Edit purchase' : 'New purchase')
+        : !isEdit
             ? switch (_wizStep) {
               0 => 'New purchase — Party & terms',
               1 => 'New purchase — Items',
@@ -2739,7 +3010,42 @@ class _PurchaseEntryWizardState extends ConsumerState<PurchaseEntryWizard>
       );
     }
 
-    return PopScope(
+    return Shortcuts(
+      shortcuts: <ShortcutActivator, Intent>{
+        const SingleActivator(LogicalKeyboardKey.keyS, control: true):
+            const _SaveDraftIntent(),
+        const SingleActivator(LogicalKeyboardKey.keyS, meta: true):
+            const _SaveDraftIntent(),
+        const SingleActivator(LogicalKeyboardKey.enter, control: true):
+            const _ConfirmSaveIntent(),
+        const SingleActivator(LogicalKeyboardKey.enter, meta: true):
+            const _ConfirmSaveIntent(),
+      },
+      child: Actions(
+        actions: <Type, Action<Intent>>{
+          _SaveDraftIntent: CallbackAction<_SaveDraftIntent>(
+            onInvoke: (_) {
+              if (!_isSaving &&
+                  (widget.editingId == null || widget.editingId!.isEmpty)) {
+                setState(() {
+                  _formDirty = true;
+                  _draftUiState = _DraftUiState.dirty;
+                });
+                _saveDraftNow(notify: true);
+              }
+              return null;
+            },
+          ),
+          _ConfirmSaveIntent: CallbackAction<_ConfirmSaveIntent>(
+            onInvoke: (_) {
+              if (!_isSaving) {
+                _validateAndSave();
+              }
+              return null;
+            },
+          ),
+        },
+        child: PopScope(
       canPop: isEdit || !_formDirty,
       onPopInvokedWithResult: (didPop, _) async {
         if (didPop) return;
@@ -2763,16 +3069,24 @@ class _PurchaseEntryWizardState extends ConsumerState<PurchaseEntryWizard>
             onPressed: _isSaving ? null : () => _wizBack(),
           ),
           actions: [
-            if (!isEdit)
+            if (!isEdit) ...[
+              Padding(
+                padding: const EdgeInsets.only(right: 4),
+                child: Center(child: _draftStatusChip()),
+              ),
               TextButton(
                 onPressed: _isSaving
                     ? null
                     : () {
-                        setState(() => _formDirty = true);
+                        setState(() {
+                          _formDirty = true;
+                          _draftUiState = _DraftUiState.dirty;
+                        });
                         _saveDraftNow(notify: true);
                       },
                 child: const Text('Save draft'),
               ),
+            ],
           ],
         ),
         body: SafeArea(
@@ -2811,6 +3125,14 @@ class _PurchaseEntryWizardState extends ConsumerState<PurchaseEntryWizard>
                     ),
                   );
                 }
+                // Tablet: full body width (ERP list). Mobile: form max center.
+                if (context.isTabletLayout) {
+                  return SizedBox(
+                    width: w,
+                    height: h,
+                    child: content,
+                  );
+                }
                 return SizedBox(
                   width: w,
                   height: h,
@@ -2823,6 +3145,44 @@ class _PurchaseEntryWizardState extends ConsumerState<PurchaseEntryWizard>
               },
             ),
           ),
+        ),
+      ),
+        ),
+      ),
+    );
+  }
+
+  Widget _draftStatusChip() {
+    if (widget.editingId != null && widget.editingId!.isNotEmpty) {
+      return const SizedBox.shrink();
+    }
+    final String? label;
+    final Color color;
+    switch (_draftUiState) {
+      case _DraftUiState.clean:
+        return const SizedBox.shrink();
+      case _DraftUiState.dirty:
+        label = 'Unsaved changes';
+        color = Colors.orange.shade800;
+      case _DraftUiState.saving:
+        label = 'Saving…';
+        color = HexaColors.slate400;
+      case _DraftUiState.saved:
+        label = 'Saved';
+        color = HexaColors.successEmerald;
+    }
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w700,
+          color: color,
         ),
       ),
     );

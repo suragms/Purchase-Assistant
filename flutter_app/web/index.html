@@ -220,13 +220,17 @@
       // empty/transparent, which left a blank gray body on desktop. Dart removes
       // #splash via removeBootOverlayIfPresent() once bootstrap UI is painted.
       window.setTimeout(function () {
-        setBoot('Connecting to server…');
+        setBoot('Loading app…');
       }, 3000);
       window.setTimeout(function () {
-        setBoot('Loading app (large download on first visit)…');
+        setBoot('Still loading the app bundle (first visit can be large)…');
       }, 12000);
       window.setTimeout(function () {
-        setBoot('Still loading — server may be waking up. Please wait…');
+        var host = location.hostname;
+        var local = host === 'localhost' || host === '127.0.0.1' || host === '[::1]';
+        setBoot(local
+          ? 'Still loading — check the Flutter/dev console if this persists…'
+          : 'Still loading — connection may be slow. Please wait…');
       }, 45000);
       // Safety: if Dart never calls removeBootOverlayIfPresent (dev server / stale tab),
       // do not leave #splash blocking the Flutter canvas forever.
